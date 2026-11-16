@@ -1,0 +1,17 @@
+.archive-list { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.archive-item { margin: 0; min-width: 0; }
+.archive-item h2 { margin: 0; overflow-wrap: anywhere; }
+.archive-series { margin: 0 0 4px; color: #aab3c2; overflow-wrap: anywhere; }
+.archive-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 16px; font-size: 13px; }
+.archive-episode { color: #aab3c2; font-weight: 500; }
+.archive-path { margin: 6px 0 0; font-family: ui-monospace, monospace; font-size: 13px; color: #aab3c2; overflow-wrap: anywhere; }
+.archive-section h3 { margin: 0 0 8px; font-size: 15px; }
+.archive-section ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.archive-section li { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 0; border-bottom: 1px solid #303641; overflow-wrap: anywhere; }
+.archive-section li time { margin-left: auto; color: #aab3c2; }
+.archive-section .muted-copy { margin: 0; }
+@media (max-width: 420px) {
+  .archive-pagination .button-row { width: 100%; }
+  .archive-pagination button { flex: 1; }
+  .archive-section li time { margin-left: 0; flex-basis: 100%; }
+}

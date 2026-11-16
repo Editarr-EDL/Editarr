@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "requestProfile": "editarr-community-request-v1",
+  "confirmationDomain": "editarr-enrollment-confirmation-v1:",
+  "authorizationLifetimeMilliseconds": 600000,
+  "routes": {
+    "start": "/v1/discord/recovery-start",
+    "complete": "/v1/keys/recover",
+    "status": "/v1/keys/recovery-status",
+    "operation": "/v1/key-operations/key_recovery/{operationId}"
+  },
+  "startFields": ["installationId", "keyId", "publicKey", "confirmationHash", "operationId", "oldKeyId"],
+  "bodyFields": ["version", "stateId", "operationId", "installationId", "oldKeyId", "confirmationSecret"],
+  "envelopeFields": ["version", "state", "result"],
+  "resultFields": ["version", "kind", "operationId", "stateId", "contributorId", "installationId", "oldKeyId", "newKeyId", "committedAt"],
+  "operationKind": "key_recovery",
+  "retirementScope": "affected_installation_key_only",
+  "candidateChangesOnRetry": false,
+  "normalEnrollmentCanReplace": false
+}

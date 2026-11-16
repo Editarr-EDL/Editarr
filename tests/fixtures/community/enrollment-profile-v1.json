@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "startRequiredFields": ["installationId", "keyId", "publicKey", "confirmationHash"],
+  "completionPath": "/v1/enrollments/complete",
+  "completionRequiredFields": ["version", "stateId", "installationId", "confirmationSecret"],
+  "completionIdempotencyKey": "stateId",
+  "confirmationHashDomain": "editarr-enrollment-confirmation-v1:",
+  "retryWindowSeconds": 600,
+  "profileRequiredFields": ["contributorId", "shortId", "installationId", "keyId", "keyState", "displayName", "profileRevision", "policyVersion", "protocolVersion", "allowedOperations"],
+  "renamePath": "/v1/identity",
+  "renameMethod": "PATCH",
+  "renameRequiredFields": ["displayName"],
+  "nameMinCodePoints": 3,
+  "nameMaxCodePoints": 40,
+  "nameUniqueness": "NFC-Unicode-lowercase-NFC",
+  "clientRefresh": "Replace cached displayName and profileRevision from every successful enrollment, identity or rename response; refresh signed identity on connection and profile views. Never use a name as an ownership key."
+}

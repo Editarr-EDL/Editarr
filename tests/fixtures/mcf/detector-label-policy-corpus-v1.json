@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "corpus_id": "editarr-mcf12-detector-label-policy-v1",
+  "license": "CC0-1.0",
+  "purpose": "complete-active-producer-label-policy",
+  "cases": [
+    {"id": "nudenet-buttocks", "producer": "nudenet", "family": "nudity", "label": "BUTTOCKS_EXPOSED", "confidence": 0.9, "expected_subcategory": "bareButtocks"},
+    {"id": "nudenet-female-genitalia", "producer": "nudenet", "family": "nudity", "label": "FEMALE_GENITALIA_EXPOSED", "confidence": 0.9, "expected_subcategory": "exposedGenitalia"},
+    {"id": "nudenet-male-genitalia", "producer": "nudenet", "family": "nudity", "label": "MALE_GENITALIA_EXPOSED", "confidence": 0.9, "expected_subcategory": "exposedGenitalia"},
+    {"id": "nudenet-breast-counterexample", "producer": "nudenet", "family": "nudity", "label": "FEMALE_BREAST_EXPOSED", "confidence": 0.9, "expected_subcategory": "nudity"},
+    {"id": "nudenet-anus-counterexample", "producer": "nudenet", "family": "nudity", "label": "ANUS_EXPOSED", "confidence": 0.9, "expected_subcategory": "nudity"},
+    {"id": "nudenet-covered-counterexample", "producer": "nudenet", "family": "nudity", "label": "BUTTOCKS_COVERED", "confidence": 0.9, "expected_subcategory": "nudity"},
+    {"id": "image-safety-gate-nsfw", "producer": "image_safety_gate", "family": "nudity", "label": "image_safety_gate_nsfw", "confidence": 0.8, "expected_subcategory": "nudity"},
+    {"id": "image-safety-gate-nsfl", "producer": "image_safety_gate", "family": "violence", "label": "image_safety_gate_nsfl", "confidence": 0.8, "expected_subcategory": "violence"},
+    {"id": "siglip-nsfw", "producer": "siglip2_moderation_nsfw", "family": "nudity", "label": "siglip2_moderation_nsfw", "confidence": 0.8, "expected_subcategory": "nudity"},
+    {"id": "siglip-violence", "producer": "siglip2_moderation_violence", "family": "violence", "label": "siglip2_moderation_violence", "confidence": 0.8, "expected_subcategory": "violence"},
+    {"id": "better-profanity", "producer": "better_profanity", "family": "language", "label": "detected-token", "confidence": 0.9, "expected_subcategory": "swearing"},
+    {"id": "glin-profanity", "producer": "glin_profanity", "family": "language", "label": "detected-token", "confidence": 0.9, "expected_subcategory": "swearing"},
+    {"id": "alt-profanity-check", "producer": "alt_profanity_check", "family": "language", "label": "detected-token", "confidence": 0.9, "expected_subcategory": "swearing"}
+  ]
+}

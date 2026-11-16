@@ -1,0 +1,10 @@
+{
+  "format": "compressed-stream-samples-1",
+  "origin": "independent-node-crypto-synthetic-vectors",
+  "configuration_hex": "636f6e666967",
+  "samples_hex": [["6669727374"], ["7365636f6e64", "7061636b6574"], ["6c617374"]],
+  "vectors": [
+    {"channel": "audio", "codec": "aac", "algorithm": "editarr-community-audio-sha256-sampled-1", "digest": "5941272f34d46b3805f87e3a3dbe55995409e34ed4fb13be0cca602603e338d2"},
+    {"channel": "video", "codec": "h264", "algorithm": "editarr-community-video-sha256-sampled-1", "digest": "93325d6dbe71665db73825c02bf935d9e51f60c72cb78e3aa8ddcbd52c99ec82"}
+  ]
+}

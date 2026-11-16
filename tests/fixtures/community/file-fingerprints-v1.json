@@ -1,0 +1,15 @@
+{
+  "algorithm": "editarr-community-file-sha256-sampled-1",
+  "content": "byte at offset i is i modulo 256",
+  "vectors": [
+    {"size_bytes": 0, "ranges": [], "sampled_sha256": "930386cbf473af3fef09f0eb191ca75e6753ce73e639b18c4db2d4bd236d646e", "full_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"size_bytes": 3, "ranges": [[0, 3]], "sampled_sha256": "9d86c06b9032a4283d1af65a9be095f8fd6418a0aac4c837ea52c78a09f73ee0", "full_sha256": "ae4b3280e56e2faf83f414a6e3dabe9d5fbe18976544c05fed121accb85b53fc"},
+    {"size_bytes": 1048575, "ranges": [[0, 1048575]], "sampled_sha256": "28a2e991d1f138b62e24ff0639cb3a8dfd2ec7e05ee83aa851e23e3ba493d78a", "full_sha256": "d8222d77ac43a9391cb348ce3a3bb3c0221a4a666e907b5bc77de56a41f37848"},
+    {"size_bytes": 1048576, "ranges": [[0, 1048576]], "sampled_sha256": "cd23138a5b55ff8be176e2fb44d4d1cd0286924e8a096db233584435bc050838", "full_sha256": "fbbab289f7f94b25736c58be46a994c441fd02552cc6022352e3d86d2fab7c83"},
+    {"size_bytes": 1048577, "ranges": [[0, 1048577]], "sampled_sha256": "82fed0ae59a77b988e1c8fef2266fbb234230e6aa897c03eb3ddb53a81bcf67d", "full_sha256": "607deb6eccbc844880b9d7b523751a4cdba0452727b885c74264bfe1fb7843e2"},
+    {"size_bytes": 9437183, "ranges": [[0, 9437183]], "sampled_sha256": "d40e9fb352f11fcfb95e04bb1b0988efde433d19bd988d2e99591f8a60672e62", "full_sha256": "1f5ea85e1bfe85114f4a0d054ff48718f2953c0063ac347b4841fe44597e1201"},
+    {"size_bytes": 9437184, "ranges": [[0, 9437184]], "sampled_sha256": "6a17507bd4a4296be8d1260ae874b09c9981798dd2ecd094dee07287f11d6c85", "full_sha256": "b8b5dabaa3454f7fa46a97c51cec9ccd118ffc0d61df6e46d845ef200a2fd1bb"},
+    {"size_bytes": 9437185, "ranges": [[0, 8388608], [8388609, 1048576]], "sampled_sha256": "bdb119395153f4fbd59166bd1b57f1d2ffeaea84d3facfb4aadf5b93e9decd9c", "full_sha256": "448c4b90a7df58975ad9192137a9074a3be765421df32b2214ff8bfe37a70152"},
+    {"size_bytes": 17825792, "ranges": [[0, 1048576], [2097152, 1048576], [4194304, 1048576], [6291456, 1048576], [8388608, 1048576], [10485760, 1048576], [12582912, 1048576], [14680064, 1048576], [16777216, 1048576]], "sampled_sha256": "7a0ee8bfbf16a41db1045463bd49e2a8eadc294c2880b6f758e64bde4163f3f5", "full_sha256": "ec50baf7fce21cbdb746f461b49328154ecce497b9fb1f5675ee13704c605bc4"}
+  ]
+}

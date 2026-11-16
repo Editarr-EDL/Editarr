@@ -1,0 +1,55 @@
+syntax = "proto3";
+package bench;
+
+message Interval {
+  double start_seconds = 1;
+  double end_seconds = 2;
+}
+message Stage {
+  string stage = 1;
+  string execution_id = 2;
+  string status = 3;
+  optional string model_id = 4;
+  optional string model_revision = 5;
+  string settings_json = 6;
+  repeated Interval intervals = 7;
+  string release_version = 8;
+  string scanner_behavior_version = 9;
+  optional string build_revision = 10;
+  optional string model_digest = 11;
+  optional string quantization = 12;
+  optional double sampling_seconds = 13;
+  string source = 14;
+}
+message Event {
+  string event_id = 1;
+  double start_seconds = 2;
+  double end_seconds = 3;
+  string category = 4;
+  string subcategory = 5;
+  string severity = 6;
+  string source = 7;
+  string note = 8;
+}
+message Artifact {
+  string schema_version = 1;
+  string submission_id = 2;
+  string kind = 3;
+  string work_id = 4;
+  string release = 5;
+  string scanner_version = 6;
+  optional string parent_digest = 7;
+  repeated Stage stages = 8;
+  repeated Event events = 9;
+}
+message Summary {
+  string schema_version = 1;
+  string submission_id = 2;
+  string kind = 3;
+  string work_id = 4;
+  string release = 5;
+  string scanner_version = 6;
+  optional string parent_digest = 7;
+  repeated Stage stages = 8;
+  uint32 event_count = 9;
+}

@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+if (process.env.CSS59_AUTH_FAIL) {
+  process.stderr.write('secret.header.signature');
+  process.exitCode = 1;
+} else if (process.argv[2] !== 'access' || process.argv[3] !== 'token' ||
+  process.argv[4] !== '-app=https://operator.example.test/admin/') {
+  process.exitCode = 1;
+} else process.stdout.write('secret.header.signature\n');

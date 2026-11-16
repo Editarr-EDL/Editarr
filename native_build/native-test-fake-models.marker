@@ -1,0 +1,2 @@
+This marker is collected only by scripts/build_release.py --test-fake-models.
+It authorizes the EDITARR_TEST_FAKE_MODELS test adapter in a disposable frozen build.

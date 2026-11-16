@@ -1,0 +1,33 @@
+{
+  "path": "/v1/import-receipts",
+  "operationId": "import-94140e495f3aa9e61f2f5fb17b19ca2a8aaa3ca703b51e73b1605e53babe9da4",
+  "publicKey": "zRSzf5VulTGU/3+3Oz2B3MVh1hp1OAlLfD4aZD7l86o=",
+  "request": {
+    "version": 1,
+    "receipt": {
+      "receipt": {
+        "schemaVersion": "community-download-receipt-1",
+        "service": "https://community.example",
+        "serviceKeyId": "sha256:519cae93e93ad011d785355894405ed8fa8162c6e54ada133bbb6dbb932df57b",
+        "contributorId": "reader-vector",
+        "revisionId": "revision-vector",
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "receiptId": "94140e495f3aa9e61f2f5fb17b19ca2a8aaa3ca703b51e73b1605e53babe9da4",
+        "issuedAt": 1700000030
+      },
+      "signature": "izpk/MUsPhmLfj7KUJgQhmp49Qf/iG2Qn1JArz7Rgt8f/GB1T1xZ2ye68mlQsllYSH8uw4i0Ko1OY8lVgmxoDA=="
+    }
+  },
+  "response": {
+    "version": 1,
+    "state": "completed",
+    "result": {
+      "version": 1,
+      "operationId": "import-94140e495f3aa9e61f2f5fb17b19ca2a8aaa3ca703b51e73b1605e53babe9da4",
+      "revisionId": "revision-vector",
+      "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "receiptId": "94140e495f3aa9e61f2f5fb17b19ca2a8aaa3ca703b51e73b1605e53babe9da4",
+      "counted": true
+    }
+  }
+}

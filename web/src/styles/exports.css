@@ -1,0 +1,90 @@
+.scan-popover.export-dialog,
+.scan-popover.review-deletion-dialog {
+  box-sizing: border-box;
+  width: min(640px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
+.export-section { display: grid; gap: 10px; min-width: 0; }
+.export-section h3, .export-confirmation h4, .published-files h3 { margin: 0; }
+.export-section .muted-copy, .published-files .muted-copy { margin: 0; font-size: 14px; }
+
+.export-destinations,
+.review-deletion-files {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #394252;
+  border-radius: 8px;
+}
+.export-destinations legend, .review-deletion-files legend { padding: 0 4px; color: #c9d2df; font-weight: 700; }
+.scan-popover .export-destinations label { font-weight: 600; overflow-wrap: anywhere; }
+
+.export-format-list, .published-files ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.export-format-list > li,
+.published-files li,
+.review-deletion-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #394252;
+  border-radius: 7px;
+}
+.export-format-list > li > div:first-child,
+.published-files li > div:first-child,
+.review-deletion-file > div:first-child { display: grid; gap: 4px; min-width: 0; }
+.export-format-list > li > button, .published-files li > button { flex: none; }
+
+.export-condition { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.export-condition small, .published-files small { color: #aeb7c5; overflow-wrap: anywhere; }
+.export-badge.export-current { color: #e5fff5; background: #145a4e; }
+.export-badge.export-outdated, .export-badge.export-regenerating { color: #fff0c7; background: #75520f; }
+.export-badge.export-regeneration_failed, .export-badge.export-withdrawn { color: #ffe1df; background: #6c302f; }
+.export-badge.export-deleted { color: #d6dce6; background: #3a4352; }
+
+.export-confirmation {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #8a6a2a;
+  border-radius: 8px;
+  background: #2a2416;
+}
+.export-confirmation p { margin: 0; color: #e8dfc8; }
+
+.published-files { display: grid; gap: 10px; margin-block: 16px; min-width: 0; }
+
+.review-deletion-choices { display: flex; flex-wrap: wrap; gap: 6px 14px; flex: none; }
+.scan-popover .review-deletion-choices label { font-weight: 600; }
+.scan-popover input[type="radio"] { width: auto; accent-color: #8dafef; }
+
+.export-dialog button:focus-visible,
+.review-deletion-dialog button:focus-visible,
+.published-files button:focus-visible,
+.export-dialog input:focus-visible,
+.review-deletion-dialog input:focus-visible {
+  outline: 2px solid #8dafef;
+  outline-offset: 2px;
+}
+
+@media (max-width: 620px) {
+  .scan-popover.export-dialog, .scan-popover.review-deletion-dialog { width: calc(100vw - 24px); padding: 16px; }
+  .export-format-list > li,
+  .published-files li,
+  .review-deletion-file { align-items: stretch; flex-direction: column; }
+  .export-format-list > li > button,
+  .published-files li > button,
+  .published-files li > .button-row { align-self: flex-start; }
+}

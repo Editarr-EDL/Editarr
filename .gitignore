@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Database
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Xcode and Swift Package Manager local state
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Samwise runtime
+data/
+frames/
+exports/
+*.edl
+!/tests/fixtures/multi-user/export-layout-v1/payloads/*.edl
+
+# Node
+node_modules/
+web/dist/
+web/dist-operator/
+scanner/frontend/
+.pnpm-store/
+web/test-results/
+web/playwright-report/
+web/coverage/
+.coverage
+
+# Environment
+.env
+.env.local
+
+# ML models cache
+.cache/
+models/
+
+# Test files
+*.mkv
+*.wav

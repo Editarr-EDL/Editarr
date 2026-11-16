@@ -1,0 +1,37 @@
+{
+  "name": "editarr-community-service",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": { "node": ">=24 <27" },
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "assets": "pnpm --dir ../web build:operator",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm run test:unit && pnpm run test:operator-cli && pnpm run test:runtime",
+    "test:unit": "pnpm run assets && vitest run",
+    "operator": "node scripts/operator-cli.mjs",
+    "test:operator-cli": "node --test test/operator-cli/*.test.mjs",
+    "build": "pnpm run build:container",
+    "build:container": "pnpm run assets && node scripts/build-container.mjs",
+    "test:runtime": "node --test test/runtime/*.test.mjs",
+    "test:e2e": "node --test --test-name-pattern=multi-instance test/runtime/journeys.test.mjs",
+    "test:container": "node --test test/container/*.test.mjs",
+    "start:container": "node dist/runtime/server.mjs",
+    "preflight:container": "node scripts/check-container.mjs",
+    "dev": "pnpm run build:container && pnpm run start:container"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "2.11.0",
+    "@types/node": "24.12.0",
+    "esbuild": "0.28.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  },
+  "dependencies": {
+    "jose": "6.2.3",
+    "jsonc-parser": "3.3.1",
+    "structured-headers": "2.1.0",
+    "zod": "4.1.12"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "source_versions": ["1.0.0", "1.1.0"],
+  "families": [
+    {
+      "token": "commercial_content",
+      "display_label": "Commercial content",
+      "categories": [
+        ["commercial", "Commercial content (General)"],
+        ["advertBreak", "Advert break"],
+        ["consumerism", "Consumerism"],
+        ["productPlacement", "Product placement"]
+      ]
+    },
+    {
+      "token": "discrimination",
+      "display_label": "Discrimination",
+      "categories": [
+        ["discrimination", "Discrimination (General)"],
+        ["adultism", "Adultism"],
+        ["antisemitism", "Antisemitism"],
+        ["genderism", "Genderism"],
+        ["homophobia", "Homophobia"],
+        ["misandry", "Misandry"],
+        ["misogyny", "Misogyny"],
+        ["racism", "Racism"],
+        ["sexism", "Sexism"],
+        ["supremacism", "Supremacism"],
+        ["transphobia", "Transphobia"],
+        ["xenophobia", "Xenophobia"]
+      ]
+    },
+    {
+      "token": "dispensable_scenes",
+      "display_label": "Dispensable scenes",
+      "categories": [
+        ["dispensable", "Dispensable scenes (General)"],
+        ["idiocy", "Idiocy"],
+        ["tedious", "Tedious scene"]
+      ]
+    },
+    {
+      "token": "drugs",
+      "display_label": "Drugs",
+      "categories": [
+        ["drugs", "Drugs (General)"],
+        ["alcohol", "Alcohol"],
+        ["antipsychotics", "Antipsychotics"],
+        ["cigarettes", "Cigarettes"],
+        ["depressants", "Depressants"],
+        ["gambling", "Gambling"],
+        ["hallucinogens", "Hallucinogens"],
+        ["stimulants", "Stimulants"]
+      ]
+    },
+    {
+      "token": "fear",
+      "display_label": "Fear",
+      "categories": [
+        ["fear", "Fear (General)"],
+        ["accident", "Accident"],
+        ["acrophobia", "Acrophobia"],
+        ["aliens", "Aliens"],
+        ["arachnophobia", "Arachnophobia"],
+        ["astraphobia", "Astraphobia"],
+        ["aviophobia", "Aviophobia"],
+        ["chemophobia", "Chemophobia"],
+        ["claustrophobia", "Claustrophobia"],
+        ["coulrophobia", "Coulrophobia"],
+        ["cynophobia", "Cynophobia"],
+        ["death", "Death"],
+        ["dentophobia", "Dentophobia"],
+        ["emetophobia", "Emetophobia"],
+        ["enochlophobia", "Enochlophobia"],
+        ["explosion", "Explosion"],
+        ["fire", "Fire"],
+        ["gerascophobia", "Gerascophobia"],
+        ["ghosts", "Ghosts"],
+        ["grave", "Grave"],
+        ["hemophobia", "Hemophobia"],
+        ["hylophobia", "Hylophobia"],
+        ["melissophobia", "Melissophobia"],
+        ["misophonia", "Misophonia"],
+        ["musophobia", "Musophobia"],
+        ["mysophobia", "Mysophobia"],
+        ["nosocomephobia", "Nosocomephobia"],
+        ["nyctophobia", "Nyctophobia"],
+        ["siderodromophobia", "Siderodromophobia"],
+        ["thalassophobia", "Thalassophobia"],
+        ["vampires", "Vampires"]
+      ]
+    },
+    {
+      "token": "language",
+      "display_label": "Language",
+      "categories": [
+        ["language", "Language (General)"],
+        ["blasphemy", "Blasphemy"],
+        ["nameCalling", "Name-calling"],
+        ["sexualDialogue", "Sexual dialogue"],
+        ["swearing", "Swearing"],
+        ["vulgarity", "Vulgarity"]
+      ]
+    },
+    {
+      "token": "nudity",
+      "display_label": "Nudity",
+      "categories": [
+        ["nudity", "Nudity (General)"],
+        ["bareButtocks", "Bare buttocks"],
+        ["exposedGenitalia", "Exposed genitalia"],
+        ["fullNudity", "Full nudity"],
+        ["toplessness", "Toplessness"]
+      ]
+    },
+    {
+      "token": "sex",
+      "display_label": "Sex",
+      "categories": [
+        ["sex", "Sex (General)"],
+        ["adultery", "Adultery"],
+        ["analSex", "Anal sex"],
+        ["coitus", "Coitus"],
+        ["kissing", "Kissing"],
+        ["masturbation", "Masturbation"],
+        ["objectification", "Objectification"],
+        ["oralSex", "Oral sex"],
+        ["premaritalSex", "Premarital sex"],
+        ["promiscuity", "Promiscuity"],
+        ["prostitution", "Prostitution"]
+      ]
+    },
+    {
+      "token": "violence",
+      "display_label": "Violence",
+      "categories": [
+        ["violence", "Violence (General)"],
+        ["choking", "Choking"],
+        ["crueltyToAnimals", "Cruelty to animals"],
+        ["culturalViolence", "Cultural violence"],
+        ["desecration", "Desecration"],
+        ["emotionalViolence", "Emotional violence"],
+        ["kicking", "Kicking"],
+        ["massacre", "Massacre"],
+        ["murder", "Murder"],
+        ["punching", "Punching"],
+        ["rape", "Rape"],
+        ["slapping", "Slapping"],
+        ["slavery", "Slavery"],
+        ["stabbing", "Stabbing"],
+        ["torture", "Torture"],
+        ["warfare", "Warfare"],
+        ["weapons", "Weapons"]
+      ]
+    }
+  ]
+}

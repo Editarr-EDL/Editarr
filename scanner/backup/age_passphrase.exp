@@ -1,0 +1,32 @@
+#!/usr/bin/expect -f
+if {$argc != 4} { exit 2 }
+lassign $argv executable action input output
+if {$action ni {encrypt decrypt}} { exit 2 }
+set secret [read stdin 4097]
+if {[string length $secret] < 1 || [string length $secret] > 4096 ||
+    [string first "\n" $secret] >= 0 || [string first "\r" $secret] >= 0} { exit 2 }
+set timeout 30
+log_user 0
+if {$action eq "encrypt"} {
+    spawn -noecho $executable -p -o $output $input
+} else {
+    spawn -noecho $executable -d -o $output $input
+}
+expect {
+    -re {Enter passphrase.*:} {send -- "$secret\r"}
+    timeout {exit 3}
+    eof {exit 3}
+}
+if {$action eq "encrypt"} {
+    expect {
+        -re {Confirm passphrase:} {send -- "$secret\r"}
+        timeout {exit 3}
+        eof {exit 3}
+    }
+}
+expect {
+    eof {}
+    timeout {exit 3}
+}
+set result [wait]
+exit [lindex $result 3]

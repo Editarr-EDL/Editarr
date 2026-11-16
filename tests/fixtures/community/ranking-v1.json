@@ -1,0 +1,17 @@
+{
+  "policyVersion": "community-ranking-wilson-1",
+  "z": 1.96,
+  "priorLikes": 1,
+  "priorDislikes": 1,
+  "scoreScale": 1000000000,
+  "uploaderBoost": 0,
+  "decay": false,
+  "cases": [
+    {"id": "new", "likes": 0, "dislikes": 0, "score": 0.094528655},
+    {"id": "sparse_positive", "likes": 1, "dislikes": 0, "score": 0.207654955},
+    {"id": "established_positive", "likes": 10, "dislikes": 0, "score": 0.646114078},
+    {"id": "popular_positive", "likes": 100, "dislikes": 0, "score": 0.94654078},
+    {"id": "negative", "likes": 0, "dislikes": 10, "score": 0.014864709},
+    {"id": "mixed", "likes": 5, "dislikes": 5, "score": 0.25377817}
+  ]
+}

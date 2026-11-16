@@ -1,0 +1,18 @@
+{
+  "syntheticSeedHex": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+  "publicKey": "zRSzf5VulTGU/3+3Oz2B3MVh1hp1OAlLfD4aZD7l86o=",
+  "signingBytesSha256": "30227c17fb0b87ae46756032e815b661dbf15ad3ab955cdb66b8d1832476c65d",
+  "envelope": {
+    "receipt": {
+      "schemaVersion": "community-download-receipt-1",
+      "service": "https://community.example",
+      "serviceKeyId": "sha256:519cae93e93ad011d785355894405ed8fa8162c6e54ada133bbb6dbb932df57b",
+      "contributorId": "reader-vector",
+      "revisionId": "revision-vector",
+      "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "receiptId": "94140e495f3aa9e61f2f5fb17b19ca2a8aaa3ca703b51e73b1605e53babe9da4",
+      "issuedAt": 1700000030
+    },
+    "signature": "izpk/MUsPhmLfj7KUJgQhmp49Qf/iG2Qn1JArz7Rgt8f/GB1T1xZ2ye68mlQsllYSH8uw4i0Ko1OY8lVgmxoDA=="
+  }
+}

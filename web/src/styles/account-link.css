@@ -1,0 +1,26 @@
+.link-dialog { display: grid; gap: 16px; }
+.link-dialog form, .link-review, .link-stopped, .link-finished, .link-preview { display: grid; gap: 14px; min-width: 0; }
+.link-dialog h3 { margin: 0; font-size: 15px; }
+.link-target { color: #a4adbb; }
+.link-hint, .link-expiry { color: #a4adbb; font-size: 13px; }
+.link-basis { padding: 10px 12px; border-left: 3px solid #8dafef; background: #1d222b; }
+.link-basis-admin_attested { border-left-color: #e0b354; }
+.link-blockers { display: grid; gap: 8px; padding: 12px; border: 1px solid #c4664f; border-radius: 6px; }
+.link-blockers ul, .link-exports { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.link-changes { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: 10px 18px; margin: 0; font-size: 13px; }
+.link-changes > div { display: contents; }
+.link-changes dt { color: #a4adbb; }
+.link-changes dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.link-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.link-exports li { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.link-conflict { color: #f0a08c; }
+.link-status-outage_grace, .link-status-outage_expired, .link-status-server_replaced { padding: 10px 12px; border-left: 3px solid #e0b354; background: #1d222b; }
+.link-receipt, .link-cleanup { padding: 10px 12px; border-left: 3px solid #7bc58f; background: #1d222b; }
+.link-cleanup-removing { border-left-color: #e0b354; }
+.account-link-section .button-row button:focus-visible, .link-dialog button:focus-visible, .link-dialog input:focus-visible { outline: 2px solid #8dafef; outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .link-changes { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .link-changes dd { margin-bottom: 8px; }
+  .link-dialog .account-fields { grid-template-columns: minmax(0, 1fr); }
+}

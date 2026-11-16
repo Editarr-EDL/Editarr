@@ -1,0 +1,20 @@
+.audit-page .page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-right: 60px; }
+.audit-page .page-header h1 { font-size: 28px; letter-spacing: 0; }
+.audit-page a, .audit-page a:visited { color: #b9d1ff; }
+.audit-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color, #444); }
+.audit-filters .field { min-width: 0; }
+.audit-filters .button-row { grid-column: 1 / -1; }
+.audit-filters input, .audit-filters select { min-width: 0; width: 100%; box-sizing: border-box; }
+.audit-summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; }
+.audit-table-scroll { overflow-x: auto; max-width: 100%; }
+.audit-table-scroll table { width: 100%; min-width: 620px; text-align: left; border-collapse: collapse; }
+.audit-table-scroll th, .audit-table-scroll td { padding: 12px 10px; vertical-align: top; border-bottom: 1px solid var(--border-color, #444); overflow-wrap: anywhere; }
+.audit-media { display: block; }
+.audit-pagination { justify-content: flex-end; align-items: center; margin-top: 20px; }
+.audit-detail { display: grid; grid-template-columns: minmax(90px, 160px) minmax(0, 1fr); gap: 12px; }
+.audit-detail dd { margin: 0; overflow-wrap: anywhere; }
+.audit-detail-field { display: contents; }
+@media (max-width: 420px) {
+  .audit-filters { grid-template-columns: minmax(0, 1fr); }
+  .audit-pagination { justify-content: flex-start; }
+}

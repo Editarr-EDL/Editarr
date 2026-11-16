@@ -1,0 +1,36 @@
+"""Register connected catalog routes and preserve their public entry points."""
+
+from fastapi import APIRouter
+
+from . import catalog_candidates_api, catalog_library_api, catalog_settings_api
+
+router = APIRouter()
+router.include_router(catalog_settings_api.router)
+router.include_router(catalog_candidates_api.router)
+router.include_router(catalog_library_api.router)
+
+_test_jellyfin_connection = catalog_settings_api._test_jellyfin_connection
+_candidate_jellyfin_credentials = catalog_settings_api._candidate_jellyfin_credentials
+api_get_jellyfin_settings = catalog_settings_api.api_get_jellyfin_settings
+api_test_jellyfin_settings = catalog_settings_api.api_test_jellyfin_settings
+api_update_jellyfin_settings = catalog_settings_api.api_update_jellyfin_settings
+api_disconnect_jellyfin = catalog_settings_api.api_disconnect_jellyfin
+api_find_filter_candidates = catalog_candidates_api.api_find_filter_candidates
+api_associate_filter_candidates = catalog_candidates_api.api_associate_filter_candidates
+api_get_filter_defaults_settings = catalog_settings_api.api_get_filter_defaults_settings
+api_update_filter_defaults_settings = catalog_settings_api.api_update_filter_defaults_settings
+api_apply_filter_defaults = catalog_settings_api.api_apply_filter_defaults
+
+api_list_jellyfin_libraries = catalog_library_api.api_list_jellyfin_libraries
+_library_sort_value = catalog_library_api._library_sort_value
+_normalized_title = catalog_library_api._normalized_title
+_library_browse_items = catalog_library_api._library_browse_items
+_with_library_item_state = catalog_library_api._with_library_item_state
+_cached_library_items = catalog_library_api._cached_library_items
+_cached_jellyfin_item = catalog_library_api._cached_jellyfin_item
+api_list_jellyfin_library_items = catalog_library_api.api_list_jellyfin_library_items
+api_get_jellyfin_library_item = catalog_library_api.api_get_jellyfin_library_item
+api_list_jellyfin_library_item_children = (
+    catalog_library_api.api_list_jellyfin_library_item_children
+)
+api_list_jellyfin_series_seasons = catalog_library_api.api_list_jellyfin_series_seasons

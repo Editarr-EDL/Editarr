@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "corpus_id": "editarr-mcf12-parser-conformance-v1",
+  "license": "CC0-1.0",
+  "purpose": "parser-conformance-only-not-model-quality",
+  "minimum_confidence": 0.9,
+  "cases": [
+    {
+      "id": "accepted-bare-buttocks",
+      "families": ["nudity"],
+      "response": "{\"version\":1,\"objectionable\":true,\"summary\":\"Bare buttocks are visible.\",\"classifications\":[{\"family\":\"nudity\",\"subcategory\":\"bareButtocks\",\"confidence\":0.96,\"evidence\":\"Bare buttocks are visibly exposed.\"}]}",
+      "expected": {"nudity": "bareButtocks"},
+      "model_latency_ms": 12.0
+    },
+    {
+      "id": "accepted-weapons",
+      "families": ["violence"],
+      "response": "{\"version\":1,\"objectionable\":true,\"summary\":\"A firearm is visible.\",\"classifications\":[{\"family\":\"violence\",\"subcategory\":\"weapons\",\"confidence\":0.94,\"evidence\":\"A person visibly holds a firearm.\"}]}",
+      "expected": {"violence": "weapons"},
+      "model_latency_ms": 14.0
+    },
+    {
+      "id": "low-confidence-fallback",
+      "families": ["nudity"],
+      "response": "{\"version\":1,\"objectionable\":true,\"summary\":\"Exposure is unclear.\",\"classifications\":[{\"family\":\"nudity\",\"subcategory\":\"toplessness\",\"confidence\":0.6,\"evidence\":\"The upper body is partially obscured.\"}]}",
+      "expected": {"nudity": "nudity"},
+      "model_latency_ms": 10.0
+    },
+    {
+      "id": "malformed-output-fallback",
+      "families": ["violence"],
+      "response": "Violence: a fight is visible.",
+      "expected": {"violence": "violence"},
+      "model_latency_ms": 9.0
+    },
+    {
+      "id": "out-of-family-fallback",
+      "families": ["nudity"],
+      "response": "{\"version\":1,\"objectionable\":true,\"summary\":\"A weapon is visible.\",\"classifications\":[{\"family\":\"nudity\",\"subcategory\":\"weapons\",\"confidence\":0.99,\"evidence\":\"A firearm is visible.\"}]}",
+      "expected": {"nudity": "nudity"},
+      "model_latency_ms": 11.0
+    },
+    {
+      "id": "clean-mixed-family-fallback",
+      "families": ["nudity", "violence"],
+      "response": "{\"version\":1,\"objectionable\":false,\"summary\":\"No objectionable content.\",\"classifications\":[]}",
+      "expected": {"nudity": "nudity", "violence": "violence"},
+      "model_latency_ms": 13.0
+    }
+  ]
+}

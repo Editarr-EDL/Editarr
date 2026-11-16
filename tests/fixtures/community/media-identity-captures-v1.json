@@ -1,0 +1,71 @@
+{
+  "capture_date": "2026-10-02",
+  "origin": "live_provider_responses",
+  "sanitization": "allowlisted fields; names and all ID values replaced; field presence, types and identifier equality preserved within each provider",
+  "providers": {
+    "radarr": {
+      "version": "6.4.4.10685",
+      "movie": {
+        "runtime": 123,
+        "hasFile": true,
+        "id": 1,
+        "tmdbId": 2,
+        "imdbId": "tt0000003",
+        "title": "Sanitized item",
+        "movieFile": {
+          "id": 4,
+          "size": 54455793366,
+          "sceneName": "Sanitized",
+          "releaseGroup": "Sanitized",
+          "edition": "",
+          "quality": {"quality": {"name": "Remux-2160p"}}
+        }
+      }
+    },
+    "sonarr": {
+      "version": "4.0.20.3014",
+      "series": {"runtime": 25, "id": 1, "tmdbId": 2, "tvdbId": 3, "imdbId": "tt0000004", "title": "Sanitized item"},
+      "episodes": [
+        {
+          "seasonNumber": 1,
+          "episodeNumber": 1,
+          "runtime": 25,
+          "hasFile": true,
+          "id": 5,
+          "seriesId": 1,
+          "episodeFileId": 6,
+          "tvdbId": 7,
+          "title": "Sanitized item",
+          "episodeFile": {
+            "id": 6,
+            "seriesId": 1,
+            "size": 1430984537,
+            "sceneName": "Sanitized",
+            "releaseGroup": "Sanitized",
+            "quality": {"quality": {"name": "WEBDL-1080p"}}
+          }
+        }
+      ],
+      "shared_file_observed": false,
+      "special": {"seasonNumber": 0, "episodeNumber": 1, "runtime": 25, "hasFile": false, "id": 8, "seriesId": 1, "episodeFileId": 0, "tvdbId": 9, "title": "Sanitized item"}
+    },
+    "jellyfin": {
+      "version": "12.1.0",
+      "movie": {
+        "Type": "Movie", "Name": "Sanitized item", "Id": "1", "RunTimeTicks": 57074560000,
+        "ProviderIds": {"Tmdb": "2", "Imdb": "tt0000003"},
+        "MediaSources": [{"RunTimeTicks": 57074560000, "Size": 11980085714, "Name": "Sanitized"}]
+      },
+      "series": {
+        "Type": "Series", "Name": "Sanitized item", "Id": "4", "RunTimeTicks": 14400000000,
+        "ProviderIds": {"Tmdb": "5", "Tvdb": "6", "Imdb": "tt0000007"}
+      },
+      "episode": {
+        "Type": "Episode", "Name": "Sanitized item", "Id": "8", "SeriesId": "4",
+        "ParentIndexNumber": 0, "IndexNumber": 1, "RunTimeTicks": 16095608160,
+        "ProviderIds": {"Tvdb": "9", "Imdb": "tt0000010"},
+        "MediaSources": [{"RunTimeTicks": 16095608160, "Size": 156830326, "Name": "Sanitized"}]
+      }
+    }
+  }
+}

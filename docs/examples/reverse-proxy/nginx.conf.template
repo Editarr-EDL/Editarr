@@ -1,0 +1,35 @@
+# Render with scripts/proxy_fixture.py; no global includes or cache zones.
+worker_processes 1;
+pid "@@ROOT@@/nginx.pid";
+error_log "@@ROOT@@/nginx-error.log";
+events { worker_connections 128; }
+http {
+    access_log off;
+    client_body_temp_path "@@ROOT@@/body";
+    proxy_temp_path "@@ROOT@@/proxy-temp";
+    server {
+        listen 127.0.0.1:@@PORT@@ ssl;
+        listen [::1]:@@PORT@@ ssl;
+        server_name @@HOST@@;
+        ssl_certificate "@@CERT@@";
+        ssl_certificate_key "@@KEY@@";
+        ssl_protocols TLSv1.2 TLSv1.3;
+        location ~ @@MATCH@@ {
+            # No URI/trailing slash: preserve the complete prefix and query.
+            proxy_pass http://127.0.0.1:@@UPSTREAM@@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header Connection "";
+            proxy_set_header Forwarded "";
+            proxy_set_header X-Real-IP "";
+            proxy_set_header X-Forwarded-Host "";
+            proxy_set_header X-Forwarded-Port "";
+            proxy_set_header X-Forwarded-Prefix "";
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_redirect off;
+            proxy_cache off;
+        }
+        location / { return 404; }
+    }
+}

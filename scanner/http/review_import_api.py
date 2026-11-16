@@ -1,0 +1,33 @@
+"""Register credits and import routes while preserving their public entry points."""
+
+from fastapi import APIRouter
+
+from . import credits_api, review_import_helpers_api, review_import_routes_api
+
+router = APIRouter()
+router.include_router(credits_api.router)
+router.include_router(review_import_routes_api.router)
+
+_safe_import_basename = review_import_helpers_api._safe_import_basename
+_safe_mcf_import_basename = review_import_helpers_api._safe_mcf_import_basename
+_ImportMediaUnavailable = review_import_helpers_api._ImportMediaUnavailable
+_McfImportIssues = review_import_helpers_api._McfImportIssues
+_import_error_line = review_import_helpers_api._import_error_line
+_import_target_media = review_import_helpers_api._import_target_media
+
+_credits_target_media = credits_api._credits_target_media
+_credits_model_consent = credits_api._credits_model_consent
+_credits_consent_if_required = credits_api._credits_consent_if_required
+api_start_credits_detection = credits_api.api_start_credits_detection
+api_get_credits_detection = credits_api.api_get_credits_detection
+_run_credits_model_acquisition = credits_api._run_credits_model_acquisition
+api_credits_detection_model_consent = credits_api.api_credits_detection_model_consent
+api_accept_credits_detection = credits_api.api_accept_credits_detection
+api_credits_detection_clip = credits_api.api_credits_detection_clip
+
+_run_edl_import = review_import_routes_api._run_edl_import
+_run_mcf_import = review_import_routes_api._run_mcf_import
+_mcf_parse_http_error = review_import_routes_api._mcf_parse_http_error
+_mcf_import_issues_http_error = review_import_routes_api._mcf_import_issues_http_error
+api_import_mcf_upload = review_import_routes_api.api_import_mcf_upload
+api_import_edl_upload = review_import_routes_api.api_import_edl_upload

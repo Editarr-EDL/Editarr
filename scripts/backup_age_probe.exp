@@ -1,0 +1,42 @@
+#!/usr/bin/expect -f
+# CSS-15 experiment only. The passphrase is a public dummy fixture, never a user secret.
+if {$argc != 3} {
+    puts stderr "usage: backup_age_probe.exp encrypt|decrypt|decrypt-wrong input output"
+    exit 2
+}
+lassign $argv action input output
+if {$action eq "encrypt"} {
+    set args [list -p -o $output $input]
+} elseif {$action eq "decrypt" || $action eq "decrypt-wrong"} {
+    set args [list -d -o $output $input]
+} else {
+    exit 2
+}
+set timeout 30
+log_user 0
+spawn -noecho age {*}$args
+if {$action eq "encrypt"} {
+    expect {
+        -re {Enter passphrase.*:} {send -- "css15-dummy-fixture-only\r"}
+        timeout {exit 3}
+        eof {exit 3}
+    }
+    expect {
+        -re {Confirm passphrase:} {send -- "css15-dummy-fixture-only\r"}
+        timeout {exit 3}
+        eof {exit 3}
+    }
+} else {
+    set passphrase "css15-dummy-fixture-only"
+    if {$action eq "decrypt-wrong"} {
+        set passphrase "css15-incorrect-fixture"
+    }
+    expect {
+        -re {Enter passphrase:} {send -- "$passphrase\r"}
+        timeout {exit 3}
+        eof {exit 3}
+    }
+}
+expect eof
+set result [wait]
+exit [lindex $result 3]

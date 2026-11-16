@@ -1,0 +1,335 @@
+{
+  "version": "mts-contract-v1",
+  "enums": {
+    "SynchronizationEndMode": ["before_credits", "file_end"],
+    "ScanMode": ["content", "credits_detection"],
+    "CreditsDetectionMethod": ["chapters", "visual_text", "hybrid", "hybrid_qwen"],
+    "CreditsEvidenceKind": [
+      "chapter_marker",
+      "scene_boundary",
+      "text_density",
+      "credit_motion",
+      "black_frame",
+      "qwen"
+    ],
+    "CreditsConfidenceBand": ["low", "medium", "high"]
+  },
+  "confidence_bands": {
+    "low": [0.0, 0.6],
+    "medium": [0.6, 0.8],
+    "high": [0.8, 1.0]
+  },
+  "confidence_band_intervals": "low:[0,.6);medium:[.6,.8);high:[.8,1];unrounded",
+  "affine_vectors": [
+    {
+      "id": "identity",
+      "source": [0.0, 100.0],
+      "target": [0.0, 100.0],
+      "ranges": [[20.0, 40.0]],
+      "expected": [[20.0, 40.0]]
+    },
+    {
+      "id": "offset-and-stretch",
+      "source": [10.0, 110.0],
+      "target": [20.0, 220.0],
+      "ranges": [[20.0, 40.0]],
+      "expected": [[40.0, 80.0]]
+    },
+    {
+      "id": "stretch",
+      "source": [0.0, 100.0],
+      "target": [0.0, 250.0],
+      "ranges": [[20.0, 40.0]],
+      "expected": [[50.0, 100.0]]
+    },
+    {
+      "id": "compression",
+      "source": [0.0, 250.0],
+      "target": [10.0, 110.0],
+      "ranges": [[50.0, 200.0]],
+      "expected": [[30.0, 90.0]]
+    },
+    {
+      "id": "outlying-endpoints-not-clamped",
+      "source": [10.0, 110.0],
+      "target": [20.0, 220.0],
+      "ranges": [[0.0, 120.0]],
+      "expected": [[0.0, 240.0]]
+    },
+    {
+      "id": "shared-ranges-preserve-order",
+      "source": [0.0, 100.0],
+      "target": [10.0, 210.0],
+      "ranges": [[20.0, 40.0], [20.0, 40.0], [60.0, 80.0]],
+      "expected": [[50.0, 90.0], [50.0, 90.0], [130.0, 170.0]]
+    },
+    {
+      "id": "binary64-no-intermediate-rounding",
+      "source": [0.0, 3.0],
+      "target": [10.0, 11.0],
+      "ranges": [[1.0, 2.0]],
+      "expected": [[10.333333333333334, 10.666666666666666]]
+    }
+  ],
+  "repeated_mapping": {
+    "initial_range": [20.0, 40.0],
+    "steps": [
+      {
+        "source": [0.0, 100.0],
+        "target": [10.0, 210.0],
+        "expected": [50.0, 90.0]
+      },
+      {
+        "source": [10.0, 210.0],
+        "target": [0.0, 100.0],
+        "expected": [20.0, 40.0]
+      }
+    ]
+  },
+  "validation_order": [
+    "finite_numbers",
+    "source_interval",
+    "target_interval",
+    "authoritative_runtime",
+    "input_ranges",
+    "map_endpoints",
+    "finite_results",
+    "mapped_ranges_and_runtime"
+  ],
+  "fatal_source_bounds": ["missing", "malformed", "equal", "reversed", "recovered"],
+  "models": {
+    "ReviewSynchronization": ["start_seconds", "end_seconds", "end_mode"],
+    "AcceptedCreditsReference": ["scan_id", "candidate_id", "accepted_boundary_seconds"],
+    "AcceptedCreditsProvenance": [
+      "scan_id",
+      "source_finding_id",
+      "candidate_id",
+      "detected_boundary_seconds",
+      "accepted_boundary_seconds",
+      "confidence",
+      "method",
+      "accepted_at"
+    ],
+    "McfImportOptions": [
+      "target",
+      "name",
+      "ignore_errors",
+      "synchronization",
+      "mcf_material_end_seconds",
+      "accepted_credits"
+    ],
+    "ReviewRetimeRequest": [
+      "revision",
+      "memberships",
+      "current_synchronization",
+      "proposed_synchronization",
+      "mcf_document",
+      "filters",
+      "accepted_credits",
+      "new_manual_filters"
+    ],
+    "ReviewRetimeResult": [
+      "synchronization",
+      "mcf_document",
+      "filters",
+      "accepted_credits",
+      "new_manual_filters"
+    ],
+    "CreditsDetectionConfiguration": [
+      "detector_version",
+      "tail_window_seconds",
+      "frame_sample_interval_seconds",
+      "qwen_model"
+    ],
+    "CreditsEvidence": ["kind", "timestamp_seconds", "score", "detail_code", "details"],
+    "CreditsCandidate": [
+      "id",
+      "boundary_seconds",
+      "range_start_seconds",
+      "range_end_seconds",
+      "confidence",
+      "confidence_band",
+      "method",
+      "evidence"
+    ],
+    "CreditsDetectionResult": ["outcome", "candidates", "best_candidate_id"],
+    "CreditsDetection": [
+      "configuration",
+      "detector_version",
+      "cache_key",
+      "result",
+      "completed_at"
+    ],
+    "CreditsDetectionStartRequest": ["target", "qwen_model"],
+    "CreditsDetectionStartResult": ["scan", "queue_id", "model_consent"],
+    "CreditsModelConsent": [
+      "backend_id",
+      "artifact_ids",
+      "expected_size",
+      "availability",
+      "device",
+      "license_spdx",
+      "license_status"
+    ],
+    "CreditsModelConsentRequest": ["decision"],
+    "CreditsAcceptanceRequest": ["context", "accepted_boundary_seconds"],
+    "CreditsAcceptanceResult": ["accepted_credits", "membership", "filter"]
+  },
+  "routes": [
+    ["POST", "/api/reviews/{review_id}/retime", 200],
+    ["POST", "/api/credits-detections", 202],
+    ["GET", "/api/credits-detections/{scan_id}", 200],
+    ["POST", "/api/credits-detections/{scan_id}/model-consent", 202],
+    ["POST", "/api/credits-detections/{scan_id}/accept", 200],
+    ["GET", "/api/credits-detections/{scan_id}/clip", 200],
+    ["DELETE", "/api/scans/queue/{queue_id}", 200]
+  ],
+  "queue_transitions": {
+    "awaiting_model_consent": ["acquiring_model", "queued", "cancelled"],
+    "acquiring_model": ["queued", "cancelling", "failed"],
+    "queued": ["scanning", "cancelled"],
+    "scanning": ["complete", "cancelling", "failed", "orphaned"],
+    "cancelling": ["cancelled", "failed"],
+    "orphaned": ["queued", "cancelled"]
+  },
+  "queue_id_behavior": "created_before_start_response_including_awaiting_model_consent",
+  "wire_examples": {
+    "mcf_import_options": {
+      "target": {"source": "jellyfin", "item_id": "test", "media_source_id": null},
+      "name": "Synchronized import",
+      "ignore_errors": false,
+      "synchronization": {
+        "start_seconds": 0.0,
+        "end_seconds": 6000.0,
+        "end_mode": "file_end"
+      },
+      "mcf_material_end_seconds": 5700.0,
+      "accepted_credits": null
+    },
+    "review_retime_request": {
+      "revision": 4,
+      "memberships": [],
+      "current_synchronization": {
+        "start_seconds": 0.0,
+        "end_seconds": 100.0,
+        "end_mode": "before_credits"
+      },
+      "proposed_synchronization": {
+        "start_seconds": 10.0,
+        "end_seconds": 210.0,
+        "end_mode": "file_end"
+      },
+      "mcf_document": {
+        "title": null,
+        "year": null,
+        "work_type": null,
+        "season": null,
+        "episode": null,
+        "source_url": null,
+        "imdb_url": null,
+        "release": null,
+        "comment": null,
+        "material_start_seconds": 0.0,
+        "material_end_seconds": 90.0
+      },
+      "filters": [],
+      "accepted_credits": null,
+      "new_manual_filters": []
+    },
+    "candidate_result": {
+      "outcome": "candidate",
+      "candidates": [
+        {
+          "id": "candidate-1",
+          "boundary_seconds": 5700.0,
+          "range_start_seconds": 5694.0,
+          "range_end_seconds": 5706.0,
+          "confidence": 0.8,
+          "confidence_band": "high",
+          "method": "hybrid",
+          "evidence": [
+            {
+              "kind": "chapter_marker",
+              "timestamp_seconds": 5700.0,
+              "score": 0.9,
+              "detail_code": "credits_chapter",
+              "details": "Credits"
+            },
+            {
+              "kind": "text_density",
+              "timestamp_seconds": 5701.0,
+              "score": 0.7,
+              "detail_code": "dense_credit_text",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "best_candidate_id": "candidate-1"
+    },
+    "low_confidence_result": {
+      "outcome": "candidate",
+      "candidates": [
+        {
+          "id": "candidate-low",
+          "boundary_seconds": 5700.0,
+          "range_start_seconds": 5694.0,
+          "range_end_seconds": 5706.0,
+          "confidence": 0.59,
+          "confidence_band": "low",
+          "method": "visual_text",
+          "evidence": [
+            {
+              "kind": "text_density",
+              "timestamp_seconds": 5700.0,
+              "score": 0.55,
+              "detail_code": "dense_credit_text",
+              "details": null
+            },
+            {
+              "kind": "credit_motion",
+              "timestamp_seconds": 5702.0,
+              "score": 0.51,
+              "detail_code": "vertical_credit_motion",
+              "details": null
+            },
+            {
+              "kind": "scene_boundary",
+              "timestamp_seconds": 5698.0,
+              "score": -0.6,
+              "detail_code": "conflicting_scene_change",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "best_candidate_id": "candidate-low"
+    },
+    "no_candidate_result": {
+      "outcome": "no_candidate",
+      "candidates": [],
+      "best_candidate_id": null
+    }
+  },
+  "typescript_unions": {
+    "CreditsDetectionResult": {
+      "discriminator": "outcome",
+      "values": ["candidate", "no_candidate"]
+    },
+    "CreditsAcceptanceContext": {
+      "discriminator": "kind",
+      "values": ["import", "review"]
+    },
+    "CreditsModelConsentRequest": {
+      "discriminator": "decision",
+      "values": ["acquire", "continue_without_qwen"]
+    }
+  },
+  "clip": {
+    "mime_type": "video/mp4",
+    "maximum_duration_seconds": 12.0,
+    "maximum_size_bytes": 16777216,
+    "content_disposition": "inline; filename=\"credits-preview.mp4\"",
+    "cache_control": "no-store"
+  }
+}

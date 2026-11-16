@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "authority": "community.example",
+  "operationId": "rotation-vector-1",
+  "oldPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "newKeyId": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f",
+  "intent": {
+    "version": 1,
+    "installationId": "00000000-0000-4000-8000-000000000031",
+    "oldKeyId": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9",
+    "newPublicKey": "PUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=",
+    "oldProof": "ZFTVz/Gw8apASdGxp0TxR15u5FfelaJDwNhgtGZQjpvEoI3MFZtWQqQHZT4nddLEcd8IUnNS+UjaWgw3D0HzDQ==",
+    "newProof": "hPvEUhU3+M2O+QP6Ux8v9lfSoqE/3WivNkpGYnWXH8jvKn5JQLmnQFIVdXWLFd+QiPVB9gfB09r1hPN8RpxBCg=="
+  },
+  "proofMessages": {
+    "old": "[\"editarr-key-rotation-v1\",\"old\",\"community.example\",\"rotation-vector-1\",\"00000000-0000-4000-8000-000000000031\",\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f\",\"PUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=\"]",
+    "new": "[\"editarr-key-rotation-v1\",\"new\",\"community.example\",\"rotation-vector-1\",\"00000000-0000-4000-8000-000000000031\",\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f\",\"PUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=\"]"
+  },
+  "requestBody": "{\"version\":1,\"installationId\":\"00000000-0000-4000-8000-000000000031\",\"oldKeyId\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"newPublicKey\":\"PUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=\",\"oldProof\":\"ZFTVz/Gw8apASdGxp0TxR15u5FfelaJDwNhgtGZQjpvEoI3MFZtWQqQHZT4nddLEcd8IUnNS+UjaWgw3D0HzDQ==\",\"newProof\":\"hPvEUhU3+M2O+QP6Ux8v9lfSoqE/3WivNkpGYnWXH8jvKn5JQLmnQFIVdXWLFd+QiPVB9gfB09r1hPN8RpxBCg==\"}"
+}

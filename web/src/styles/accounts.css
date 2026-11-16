@@ -1,0 +1,62 @@
+.account-page { width: min(1280px, 100%); margin: 0 auto; display: grid; gap: 22px; min-width: 0; }
+.account-page h1, .account-page h2, .account-page h3, .account-page p, .account-dialog h2, .account-dialog h3, .account-dialog p { margin: 0; overflow-wrap: anywhere; }
+.account-page > .section-heading, .account-dialog > .section-heading { flex-wrap: wrap; gap: 14px; }
+.account-page h1 { font-size: 26px; }
+.users-page > .section-heading { padding-right: 64px; }
+.account-page .button-row, .account-dialog .button-row { flex-wrap: wrap; align-items: center; }
+.account-section, .profile-editor { display: grid; gap: 18px; min-width: 0; padding: 22px 0; border-top: 1px solid #303641; }
+.account-page > .settings-card { border: 0; border-top: 1px solid #303641; border-radius: 0; background: none; padding: 22px 0; margin: 0; }
+.account-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 18px 0; }
+.account-field-label { color: #c6cdd9; font-size: 13px; font-weight: 650; }
+.account-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.account-identity h2 { font-size: 20px; }
+.account-identity p { color: #a4adbb; margin-top: 4px; }
+.account-avatar { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
+.account-avatar-placeholder { display: grid; place-items: center; background: #303641; color: #e2e8f3; font-size: 20px; }
+.profile-avatar-controls { display: grid; gap: 12px; }
+.account-page .field, .account-dialog .field { min-width: 0; }
+.account-page input, .account-page select, .account-dialog input, .account-dialog select { min-width: 0; max-width: 100%; }
+.account-dialog { width: min(760px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; }
+.account-dialog label.field { display: grid; align-items: stretch; }
+.account-page .confirmation-dialog .field { display: grid; align-items: stretch; }
+.account-page .confirmation-dialog form { display: grid; gap: 16px; min-width: 0; }
+.account-dialog .settings-card { border: 0; border-top: 1px solid #303641; border-radius: 0; padding: 22px 0; background: none; margin: 0; }
+.account-dialog .section-heading h2 { font-size: 20px; }
+.account-dialog .confirmation-dialog { width: min(440px, 100%); }
+.account-dialog .confirmation-dialog label.field { display: grid; }
+.account-facts { display: flex; flex-wrap: wrap; gap: 16px 28px; margin: 0; font-size: 13px; }
+.account-facts dt { color: #a4adbb; margin-bottom: 4px; }
+.account-facts dd { margin: 0; overflow-wrap: anywhere; }
+.users-search { display: flex; align-items: end; gap: 12px; }
+.users-search .field { flex: 1; max-width: 480px; }
+.users-table-scroll { width: 100%; overflow-x: auto; }
+.users-table { width: 100%; min-width: 1040px; border-collapse: collapse; text-align: left; font-size: 13px; }
+.users-table th, .users-table td { padding: 12px 10px; border-bottom: 1px solid #303641; vertical-align: middle; }
+.users-table thead th { color: #a4adbb; font-size: 12px; white-space: nowrap; }
+.users-table th[scope="row"] { max-width: 220px; overflow-wrap: anywhere; }
+.users-table input[type="checkbox"], .account-checkbox input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 18px; accent-color: #8dafef; }
+.users-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+.jellyfin-import-list { list-style: none; padding: 0; display: grid; gap: 10px; max-height: 35dvh; overflow-y: auto; }
+.account-checkbox { display: flex; align-items: center; gap: 10px; overflow-wrap: anywhere; }
+.jellyfin-sync { display: grid; gap: 16px; min-width: 0; }
+.jellyfin-sync > ul { padding-left: 20px; display: grid; gap: 14px; }
+.account-policy-section { border-top: 1px solid #303641; padding: 18px 0; min-width: 0; overflow-wrap: anywhere; }
+.account-policy-section > summary { cursor: pointer; font-weight: 650; padding: 8px 0; }
+.account-policy-section form, .account-policy-section fieldset, .account-policy-section section { display: grid; gap: 12px; min-width: 0; }
+.account-policy-section fieldset { margin: 12px 0; padding: 12px; border: 1px solid #495261; }
+.account-policy-section .checkbox-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.account-policy-section .checkbox-row input { width: 18px; height: 18px; flex: 0 0 18px; margin: 0; }
+.account-policy-section .field { display: grid; gap: 6px; margin: 12px 0; }
+.account-policy-section select, .account-policy-section input { width: 100%; min-width: 0; max-width: 100%; }
+.account-policy-section p, .account-policy-section details { margin: 12px 0; }
+.account-policy-section ul { padding-left: 22px; }
+@media (max-width: 640px) {
+  .account-fields { grid-template-columns: minmax(0, 1fr); }
+  .account-dialog { padding: 18px; max-height: calc(100dvh - 24px); }
+  .account-page .section-heading { align-items: start; }
+  .users-search { flex-wrap: wrap; }
+  .users-search .field { flex-basis: 100%; max-width: none; }
+  .users-pagination .button-row { width: 100%; }
+  .users-pagination button { flex: 1; }
+  .account-page button, .account-dialog button { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+}

@@ -1,0 +1,46 @@
+{
+  "public_key_base64": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "vectors": [
+    {
+      "name": "empty",
+      "method": "GET",
+      "url": "https://community.example/v1/lookup?title=a%2Fb&title=c+d",
+      "body_base64": "",
+      "headers": {
+        "signature-input": "editarr=(\"@method\" \"@scheme\" \"@authority\" \"@path\" \"@query\" \"content-digest\");created=1700000000;expires=1700000060;nonce=\"AQIDBAUGBwgJCgsMDQ4PEA\";keyid=\"fixture-key\";alg=\"ed25519\";tag=\"editarr-community-request-v1\"",
+        "signature": "editarr=:IUBjmMUV1BjDikMLxDR1bP+HH8lSjMUfyOW4FP7RHSrYF+Pw5OyUgu5sZkCf7KsmCgVN3mgXbT5TZMk4uQFWAg==:",
+        "content-digest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:"
+      },
+      "signature_base": "\"@method\": GET\n\"@scheme\": https\n\"@authority\": community.example\n\"@path\": /v1/lookup\n\"@query\": ?title=a%2Fb&title=c+d\n\"content-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"@signature-params\": (\"@method\" \"@scheme\" \"@authority\" \"@path\" \"@query\" \"content-digest\");created=1700000000;expires=1700000060;nonce=\"AQIDBAUGBwgJCgsMDQ4PEA\";keyid=\"fixture-key\";alg=\"ed25519\";tag=\"editarr-community-request-v1\""
+    },
+    {
+      "name": "json",
+      "method": "POST",
+      "url": "https://community.example/v1/contributions",
+      "body_base64": "eyJ2YWx1ZSI6IDF9",
+      "headers": {
+        "signature-input": "editarr=(\"@method\" \"@scheme\" \"@authority\" \"@path\" \"@query\" \"content-digest\" \"content-type\" \"idempotency-key\");created=1700000000;expires=1700000060;nonce=\"AQIDBAUGBwgJCgsMDQ4PEA\";keyid=\"fixture-key\";alg=\"ed25519\";tag=\"editarr-community-request-v1\"",
+        "signature": "editarr=:SaTPTAH3NMXMs9M+jCCTnFTPChmtR2JyrfpckqS3XW1k5LDs+8rhYuGv0pO/+SUiLp6Gwhy6+wk/dxxC/Xu8Cw==:",
+        "content-digest": "sha-256=:4dcKGMwSn8yBLrvjCbxRl99v+iIox3pKe5hlPsVgU1Q=:",
+        "content-type": "application/json",
+        "idempotency-key": "operation-001"
+      },
+      "signature_base": "\"@method\": POST\n\"@scheme\": https\n\"@authority\": community.example\n\"@path\": /v1/contributions\n\"@query\": ?\n\"content-digest\": sha-256=:4dcKGMwSn8yBLrvjCbxRl99v+iIox3pKe5hlPsVgU1Q=:\n\"content-type\": application/json\n\"idempotency-key\": operation-001\n\"@signature-params\": (\"@method\" \"@scheme\" \"@authority\" \"@path\" \"@query\" \"content-digest\" \"content-type\" \"idempotency-key\");created=1700000000;expires=1700000060;nonce=\"AQIDBAUGBwgJCgsMDQ4PEA\";keyid=\"fixture-key\";alg=\"ed25519\";tag=\"editarr-community-request-v1\""
+    },
+    {
+      "name": "gzip",
+      "method": "POST",
+      "url": "https://community.example/v1/contributions?format=gzip",
+      "body_base64": "H4sIAAAAAAACE6tWyssvSVWyUipJLS5RqgUAgvaqdg8AAAA=",
+      "headers": {
+        "signature-input": "editarr=(\"@method\" \"@scheme\" \"@authority\" \"@path\" \"@query\" \"content-digest\" \"content-type\" \"idempotency-key\" \"content-encoding\");created=1700000000;expires=1700000060;nonce=\"AQIDBAUGBwgJCgsMDQ4PEA\";keyid=\"fixture-key\";alg=\"ed25519\";tag=\"editarr-community-request-v1\"",
+        "signature": "editarr=:qIyzOsRZOugK0nOpWodkOvRyG2cq5IhDTJAaF9/xQ6bAlO5atEFKBEL0pM8qGP4vsMKygVBcEVJjQNb7TyiJDA==:",
+        "content-digest": "sha-256=:IHEnGrTD+aviz8XNFNyenM+5kHZoxTonaEDXXfB9S/U=:",
+        "content-type": "application/json",
+        "idempotency-key": "operation-002",
+        "content-encoding": "gzip"
+      },
+      "signature_base": "\"@method\": POST\n\"@scheme\": https\n\"@authority\": community.example\n\"@path\": /v1/contributions\n\"@query\": ?format=gzip\n\"content-digest\": sha-256=:IHEnGrTD+aviz8XNFNyenM+5kHZoxTonaEDXXfB9S/U=:\n\"content-type\": application/json\n\"idempotency-key\": operation-002\n\"content-encoding\": gzip\n\"@signature-params\": (\"@method\" \"@scheme\" \"@authority\" \"@path\" \"@query\" \"content-digest\" \"content-type\" \"idempotency-key\" \"content-encoding\");created=1700000000;expires=1700000060;nonce=\"AQIDBAUGBwgJCgsMDQ4PEA\";keyid=\"fixture-key\";alg=\"ed25519\";tag=\"editarr-community-request-v1\""
+    }
+  ]
+}

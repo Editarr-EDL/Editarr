@@ -1,0 +1,62 @@
+@media (max-width: 760px) {
+  .managed-export-list > section { align-items: stretch; flex-direction: column; }
+  .managed-export-list > section > button { align-self: flex-start; }
+  .saved-review-current-header { align-items: flex-start; flex-direction: column; }
+  .saved-review-current-actions { justify-content: flex-start; }
+  .review-timing-header { flex-direction: column; }
+  .mcf-import-timing, .timing-summary { grid-template-columns: minmax(0, 1fr); }
+  .mcf-document-editor > summary { align-items: flex-start; flex-direction: column; }
+  .mcf-document-fields, .mcf-source-comparison dl, .mcf-classification-fields { grid-template-columns: minmax(0, 1fr); }
+  .mcf-metadata-comment, .mcf-comment-field { grid-column: 1; }
+  .combined-scan-filter-table th, .combined-scan-filter-table td { padding-inline: 7px; }
+  .combined-scan-filter-table th:first-child, .combined-scan-filter-table td:first-child { width: 34px; }
+  .combined-scan-filter-table th:nth-child(2), .combined-scan-filter-table td:nth-child(2), .combined-scan-filter-table.has-video-preview th:nth-child(2), .combined-scan-filter-table.has-video-preview td:nth-child(2) { width: 76px; }
+  .auth-page { align-items: start; padding: 16px; }
+  .auth-panel { margin-top: 16px; padding: 24px 18px; }
+  .editarr-shell { grid-template-columns: 1fr; }
+  .app-sidebar { position: static; height: auto; padding: 15px; border-right: 0; border-bottom: 1px solid #2d313c; }
+  .brand { padding-bottom: 13px; padding-right: 64px; }
+  .app-sidebar nav { grid-template-columns: 1fr; gap: 5px; }
+  .sidebar-scroll { flex: none; overflow: visible; }
+  .settings-link { margin-top: 0; }
+  .sidebar-error { margin-top: 12px; }
+  .app-main { padding: 26px 18px; }
+  .editarr-shell, .saved-review-panel { overflow-x: clip; }
+  .content-page, .media-detail, .settings-card, .saved-review-panel, .mcf-review-metadata, .mcf-document-editor { min-width: 0; max-width: 100%; }
+  .settings-card { grid-template-columns: minmax(0, 1fr); }
+  .settings-card .section-heading, .settings-card .button-row { flex-wrap: wrap; }
+  .settings-card .field, .settings-card .field input { min-width: 0; max-width: 100%; }
+  .backup-settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .media-detail { overflow-x: clip; }
+  .media-detail .library-table-wrap, .saved-review-table-wrap { max-width: 100%; overflow-x: auto; }
+  .saved-review-filter-editor-row .saved-review-filter { position: sticky; left: 0; width: min(calc(100vw - 88px), 100%); }
+  .general-settings-page-header { align-items: stretch; flex-direction: column; }
+  .general-restart-action-slot { min-width: 0; }
+  .restart-editarr-action { justify-items: start; text-align: left; }
+  .restart-editarr-status { justify-content: flex-start; }
+  .deployment-snapshots { grid-template-columns: 1fr; }
+  .scans-floating-control { top: 14px; right: 16px; }
+  .scans-floating-popover { top: 60px; width: min(680px, calc(100vw - 24px)); max-height: calc(100vh - 82px); padding: 14px; }
+  .mapping-form, .resolution-test { grid-template-columns: 1fr; }
+  .model-details { grid-template-columns: 1fr; }
+  .mapping-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .filter-row-item { grid-template-columns: minmax(0, 1fr); }
+  .filter-row-item .icon-button { justify-self: start; }
+  .selection-rule-row { grid-template-columns: minmax(0, 1fr); }
+  .rule-label-clause { grid-column: 1; }
+  .library-toolbar { align-items: stretch; }
+  .search-control { width: 100%; margin-left: 0; }
+  .detail-summary { grid-template-columns: 100px minmax(0, 1fr); gap: 18px; }
+  .scan-history-row { min-height: 70px; }
+  .scan-review-heading { align-items: stretch; flex-direction: column; }
+  .scan-review-summary { justify-items: start; }
+  .scan-review-sort-row { justify-content: flex-start; width: 100%; margin: 6px 0 4px; flex-wrap: wrap; }
+  .scan-review-sort-row > button { max-width: 100%; white-space: normal; }
+  .saved-review-editor .button-row { flex-wrap: wrap; }
+  .timeline-actions { align-items: stretch; flex-direction: column; }
+  .finding-row { grid-template-columns: auto 82px minmax(0, 1fr); }
+  .scan-finding-table > summary { align-items: flex-start; flex-direction: column; justify-content: center; padding-block: 9px; }
+  .audio-finding-group-actions, .video-finding-group-actions { align-items: flex-start; flex-direction: column; }
+  .queue-status-column, .queue-status-cell { width: auto; max-width: 280px; }
+  .queue-status-cell { min-width: 210px; }
+}

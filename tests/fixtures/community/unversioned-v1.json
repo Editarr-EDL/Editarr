@@ -1,0 +1,3328 @@
+{
+  "required_seeds": {
+    "filter_settings": [
+      [
+        1,
+        0
+      ]
+    ],
+    "mcf_severity_defaults": [
+      [
+        1,
+        "commercial",
+        0,
+        "medium"
+      ],
+      [
+        1,
+        "advertBreak",
+        1,
+        "medium"
+      ],
+      [
+        1,
+        "consumerism",
+        2,
+        "medium"
+      ],
+      [
+        1,
+        "productPlacement",
+        3,
+        "medium"
+      ],
+      [
+        1,
+        "discrimination",
+        4,
+        "medium"
+      ],
+      [
+        1,
+        "adultism",
+        5,
+        "medium"
+      ],
+      [
+        1,
+        "antisemitism",
+        6,
+        "medium"
+      ],
+      [
+        1,
+        "genderism",
+        7,
+        "medium"
+      ],
+      [
+        1,
+        "homophobia",
+        8,
+        "medium"
+      ],
+      [
+        1,
+        "misandry",
+        9,
+        "medium"
+      ],
+      [
+        1,
+        "misogyny",
+        10,
+        "medium"
+      ],
+      [
+        1,
+        "racism",
+        11,
+        "medium"
+      ],
+      [
+        1,
+        "sexism",
+        12,
+        "medium"
+      ],
+      [
+        1,
+        "supremacism",
+        13,
+        "medium"
+      ],
+      [
+        1,
+        "transphobia",
+        14,
+        "medium"
+      ],
+      [
+        1,
+        "xenophobia",
+        15,
+        "medium"
+      ],
+      [
+        1,
+        "dispensable",
+        16,
+        "medium"
+      ],
+      [
+        1,
+        "idiocy",
+        17,
+        "medium"
+      ],
+      [
+        1,
+        "tedious",
+        18,
+        "medium"
+      ],
+      [
+        1,
+        "drugs",
+        19,
+        "medium"
+      ],
+      [
+        1,
+        "alcohol",
+        20,
+        "medium"
+      ],
+      [
+        1,
+        "antipsychotics",
+        21,
+        "medium"
+      ],
+      [
+        1,
+        "cigarettes",
+        22,
+        "medium"
+      ],
+      [
+        1,
+        "depressants",
+        23,
+        "medium"
+      ],
+      [
+        1,
+        "gambling",
+        24,
+        "medium"
+      ],
+      [
+        1,
+        "hallucinogens",
+        25,
+        "medium"
+      ],
+      [
+        1,
+        "stimulants",
+        26,
+        "medium"
+      ],
+      [
+        1,
+        "fear",
+        27,
+        "medium"
+      ],
+      [
+        1,
+        "accident",
+        28,
+        "medium"
+      ],
+      [
+        1,
+        "acrophobia",
+        29,
+        "medium"
+      ],
+      [
+        1,
+        "aliens",
+        30,
+        "medium"
+      ],
+      [
+        1,
+        "arachnophobia",
+        31,
+        "medium"
+      ],
+      [
+        1,
+        "astraphobia",
+        32,
+        "medium"
+      ],
+      [
+        1,
+        "aviophobia",
+        33,
+        "medium"
+      ],
+      [
+        1,
+        "chemophobia",
+        34,
+        "medium"
+      ],
+      [
+        1,
+        "claustrophobia",
+        35,
+        "medium"
+      ],
+      [
+        1,
+        "coulrophobia",
+        36,
+        "medium"
+      ],
+      [
+        1,
+        "cynophobia",
+        37,
+        "medium"
+      ],
+      [
+        1,
+        "death",
+        38,
+        "medium"
+      ],
+      [
+        1,
+        "dentophobia",
+        39,
+        "medium"
+      ],
+      [
+        1,
+        "emetophobia",
+        40,
+        "medium"
+      ],
+      [
+        1,
+        "enochlophobia",
+        41,
+        "medium"
+      ],
+      [
+        1,
+        "explosion",
+        42,
+        "medium"
+      ],
+      [
+        1,
+        "fire",
+        43,
+        "medium"
+      ],
+      [
+        1,
+        "gerascophobia",
+        44,
+        "medium"
+      ],
+      [
+        1,
+        "ghosts",
+        45,
+        "medium"
+      ],
+      [
+        1,
+        "grave",
+        46,
+        "medium"
+      ],
+      [
+        1,
+        "hemophobia",
+        47,
+        "medium"
+      ],
+      [
+        1,
+        "hylophobia",
+        48,
+        "medium"
+      ],
+      [
+        1,
+        "melissophobia",
+        49,
+        "medium"
+      ],
+      [
+        1,
+        "misophonia",
+        50,
+        "medium"
+      ],
+      [
+        1,
+        "musophobia",
+        51,
+        "medium"
+      ],
+      [
+        1,
+        "mysophobia",
+        52,
+        "medium"
+      ],
+      [
+        1,
+        "nosocomephobia",
+        53,
+        "medium"
+      ],
+      [
+        1,
+        "nyctophobia",
+        54,
+        "medium"
+      ],
+      [
+        1,
+        "siderodromophobia",
+        55,
+        "medium"
+      ],
+      [
+        1,
+        "thalassophobia",
+        56,
+        "medium"
+      ],
+      [
+        1,
+        "vampires",
+        57,
+        "medium"
+      ],
+      [
+        1,
+        "language",
+        58,
+        "medium"
+      ],
+      [
+        1,
+        "blasphemy",
+        59,
+        "medium"
+      ],
+      [
+        1,
+        "nameCalling",
+        60,
+        "medium"
+      ],
+      [
+        1,
+        "sexualDialogue",
+        61,
+        "medium"
+      ],
+      [
+        1,
+        "swearing",
+        62,
+        "medium"
+      ],
+      [
+        1,
+        "vulgarity",
+        63,
+        "medium"
+      ],
+      [
+        1,
+        "nudity",
+        64,
+        "medium"
+      ],
+      [
+        1,
+        "bareButtocks",
+        65,
+        "medium"
+      ],
+      [
+        1,
+        "exposedGenitalia",
+        66,
+        "medium"
+      ],
+      [
+        1,
+        "fullNudity",
+        67,
+        "medium"
+      ],
+      [
+        1,
+        "toplessness",
+        68,
+        "medium"
+      ],
+      [
+        1,
+        "sex",
+        69,
+        "medium"
+      ],
+      [
+        1,
+        "adultery",
+        70,
+        "medium"
+      ],
+      [
+        1,
+        "analSex",
+        71,
+        "medium"
+      ],
+      [
+        1,
+        "coitus",
+        72,
+        "medium"
+      ],
+      [
+        1,
+        "kissing",
+        73,
+        "medium"
+      ],
+      [
+        1,
+        "masturbation",
+        74,
+        "medium"
+      ],
+      [
+        1,
+        "objectification",
+        75,
+        "medium"
+      ],
+      [
+        1,
+        "oralSex",
+        76,
+        "medium"
+      ],
+      [
+        1,
+        "premaritalSex",
+        77,
+        "medium"
+      ],
+      [
+        1,
+        "promiscuity",
+        78,
+        "medium"
+      ],
+      [
+        1,
+        "prostitution",
+        79,
+        "medium"
+      ],
+      [
+        1,
+        "violence",
+        80,
+        "medium"
+      ],
+      [
+        1,
+        "choking",
+        81,
+        "medium"
+      ],
+      [
+        1,
+        "crueltyToAnimals",
+        82,
+        "medium"
+      ],
+      [
+        1,
+        "culturalViolence",
+        83,
+        "medium"
+      ],
+      [
+        1,
+        "desecration",
+        84,
+        "medium"
+      ],
+      [
+        1,
+        "emotionalViolence",
+        85,
+        "medium"
+      ],
+      [
+        1,
+        "kicking",
+        86,
+        "medium"
+      ],
+      [
+        1,
+        "massacre",
+        87,
+        "medium"
+      ],
+      [
+        1,
+        "murder",
+        88,
+        "medium"
+      ],
+      [
+        1,
+        "punching",
+        89,
+        "medium"
+      ],
+      [
+        1,
+        "rape",
+        90,
+        "medium"
+      ],
+      [
+        1,
+        "slapping",
+        91,
+        "medium"
+      ],
+      [
+        1,
+        "slavery",
+        92,
+        "medium"
+      ],
+      [
+        1,
+        "stabbing",
+        93,
+        "medium"
+      ],
+      [
+        1,
+        "torture",
+        94,
+        "medium"
+      ],
+      [
+        1,
+        "warfare",
+        95,
+        "medium"
+      ],
+      [
+        1,
+        "weapons",
+        96,
+        "medium"
+      ]
+    ]
+  },
+  "tables": {
+    "admin_users": {
+      "checks": [
+        {
+          "name": "ck_admin_users_singleton_id",
+          "sqltext": "id = 1"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "username",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "normalized_username",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "password_hash",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "password_changed_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "normalized_username"
+          ],
+          "name": "uq_admin_users_normalized_username"
+        }
+      ]
+    },
+    "arr_settings": {
+      "checks": [],
+      "columns": [
+        {
+          "default": null,
+          "name": "service",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "server_url",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "api_key",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "last_checked_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "last_error",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "service"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "auth_sessions": {
+      "checks": [],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "admin_user_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "token_digest",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "csrf_token_digest",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "csrf_token_ciphertext",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "last_used_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "absolute_expires_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "idle_expires_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "remember_me",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "revoked_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "admin_user_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "admin_users"
+        }
+      ],
+      "indexes": [
+        {
+          "column_names": [
+            "absolute_expires_at"
+          ],
+          "dialect_options": {},
+          "name": "ix_auth_sessions_absolute_expires_at",
+          "unique": 0
+        },
+        {
+          "column_names": [
+            "idle_expires_at"
+          ],
+          "dialect_options": {},
+          "name": "ix_auth_sessions_idle_expires_at",
+          "unique": 0
+        }
+      ],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "token_digest"
+          ],
+          "name": null
+        }
+      ]
+    },
+    "auth_settings": {
+      "checks": [
+        {
+          "name": "ck_auth_settings_method",
+          "sqltext": "method IN ('forms', 'external')"
+        },
+        {
+          "name": "ck_auth_settings_required_mode",
+          "sqltext": "authentication_required IN ('enabled', 'disabled_for_local_addresses')"
+        },
+        {
+          "name": "ck_auth_settings_singleton_id",
+          "sqltext": "id = 1"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "method",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "authentication_required",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "credits_detection_runs": {
+      "checks": [
+        {
+          "name": "ck_credits_detection_cache",
+          "sqltext": "cache_key IS NULL OR length(cache_key) > 0"
+        },
+        {
+          "name": "ck_credits_detection_configuration",
+          "sqltext": "length(configuration_json) > 0"
+        },
+        {
+          "name": "ck_credits_detection_result",
+          "sqltext": "result_json IS NULL OR length(result_json) > 0"
+        },
+        {
+          "name": "ck_credits_detection_version",
+          "sqltext": "length(detector_version) > 0"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "configuration_json",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "detector_version",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "cache_key",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "result_json",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "completed_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "scan_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "scan_id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "filter_selection_rules": {
+      "checks": [
+        {
+          "name": "ck_filter_rules_channel",
+          "sqltext": "mcf_channel IS NULL OR mcf_channel IN ('both', 'video', 'audio')"
+        },
+        {
+          "name": "ck_filter_rules_disposition",
+          "sqltext": "disposition IN ('allow', 'deny')"
+        },
+        {
+          "name": "ck_filter_rules_has_matcher",
+          "sqltext": "evidence_source IS NOT NULL OR category IS NOT NULL OR subcategory IS NOT NULL OR label_contains IS NOT NULL OR severity IS NOT NULL OR mcf_channel IS NOT NULL"
+        },
+        {
+          "name": "ck_filter_rules_position",
+          "sqltext": "position >= 0"
+        },
+        {
+          "name": "ck_filter_rules_source",
+          "sqltext": "evidence_source IS NULL OR evidence_source IN ('audio', 'visual')"
+        },
+        {
+          "name": "ck_filter_rules_subcategory_family",
+          "sqltext": "subcategory IS NULL OR (category IS NOT NULL AND ((category = 'commercial_content' AND subcategory IN ('commercial', 'advertBreak', 'consumerism', 'productPlacement')) OR (category = 'discrimination' AND subcategory IN ('discrimination', 'adultism', 'antisemitism', 'genderism', 'homophobia', 'misandry', 'misogyny', 'racism', 'sexism', 'supremacism', 'transphobia', 'xenophobia')) OR (category = 'dispensable_scenes' AND subcategory IN ('dispensable', 'idiocy', 'tedious')) OR (category = 'drugs' AND subcategory IN ('drugs', 'alcohol', 'antipsychotics', 'cigarettes', 'depressants', 'gambling', 'hallucinogens', 'stimulants')) OR (category = 'fear' AND subcategory IN ('fear', 'accident', 'acrophobia', 'aliens', 'arachnophobia', 'astraphobia', 'aviophobia', 'chemophobia', 'claustrophobia', 'coulrophobia', 'cynophobia', 'death', 'dentophobia', 'emetophobia', 'enochlophobia', 'explosion', 'fire', 'gerascophobia', 'ghosts', 'grave', 'hemophobia', 'hylophobia', 'melissophobia', 'misophonia', 'musophobia', 'mysophobia', 'nosocomephobia', 'nyctophobia', 'siderodromophobia', 'thalassophobia', 'vampires')) OR (category = 'language' AND subcategory IN ('language', 'blasphemy', 'nameCalling', 'sexualDialogue', 'swearing', 'vulgarity')) OR (category = 'nudity' AND subcategory IN ('nudity', 'bareButtocks', 'exposedGenitalia', 'fullNudity', 'toplessness')) OR (category = 'sex' AND subcategory IN ('sex', 'adultery', 'analSex', 'coitus', 'kissing', 'masturbation', 'objectification', 'oralSex', 'premaritalSex', 'promiscuity', 'prostitution')) OR (category = 'violence' AND subcategory IN ('violence', 'choking', 'crueltyToAnimals', 'culturalViolence', 'desecration', 'emotionalViolence', 'kicking', 'massacre', 'murder', 'punching', 'rape', 'slapping', 'slavery', 'stabbing', 'torture', 'warfare', 'weapons'))))"
+        },
+        {
+          "name": "mcfcategoryfamily",
+          "sqltext": "category IN ('commercial_content', 'discrimination', 'dispensable_scenes', 'drugs', 'fear', 'language', 'nudity', 'sex', 'violence')"
+        },
+        {
+          "name": "mcfchannel",
+          "sqltext": "mcf_channel IN ('both', 'video', 'audio')"
+        },
+        {
+          "name": "severity",
+          "sqltext": "severity IN ('low', 'medium', 'high')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "settings_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "position",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "disposition",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "evidence_source",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "category",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(18)"
+        },
+        {
+          "default": null,
+          "name": "subcategory",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "label_contains",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "severity",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(6)"
+        },
+        {
+          "default": null,
+          "name": "mcf_channel",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(5)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "settings_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "filter_settings"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "settings_id",
+            "position"
+          ],
+          "name": "uq_filter_rules_position"
+        }
+      ]
+    },
+    "filter_settings": {
+      "checks": [
+        {
+          "name": "ck_filter_settings_revision",
+          "sqltext": "revision >= 0"
+        },
+        {
+          "name": "ck_filter_settings_singleton_id",
+          "sqltext": "id = 1"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": "'0'",
+          "name": "revision",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "jellyfin_settings": {
+      "checks": [],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "server_url",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "api_key",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "last_checked_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "last_error",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "mcf_severity_defaults": {
+      "checks": [
+        {
+          "name": "ck_mcf_severity_position",
+          "sqltext": "position >= 0"
+        },
+        {
+          "name": "severity",
+          "sqltext": "severity IN ('low', 'medium', 'high')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "settings_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "subcategory",
+          "nullable": false,
+          "primary_key": 2,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "position",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "severity",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR(6)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "settings_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "filter_settings"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "settings_id",
+          "subcategory"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "settings_id",
+            "position"
+          ],
+          "name": "uq_mcf_severity_position"
+        },
+        {
+          "column_names": [
+            "settings_id",
+            "subcategory"
+          ],
+          "name": "uq_mcf_severity_subcategory"
+        }
+      ]
+    },
+    "media_item_export_scans": {
+      "checks": [
+        {
+          "name": "ck_export_scans_role",
+          "sqltext": "role IN ('audio', 'video', 'both')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "media_item_export_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "role",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "media_item_export_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "media_item_exports"
+        },
+        {
+          "constrained_columns": [
+            "scan_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "media_item_export_id",
+            "scan_id"
+          ],
+          "name": null
+        }
+      ]
+    },
+    "media_item_exports": {
+      "checks": [
+        {
+          "name": "ck_media_item_exports_format",
+          "sqltext": "format IN ('edl', 'mcf')"
+        },
+        {
+          "name": "ck_media_item_exports_review_provenance",
+          "sqltext": "(review_id IS NULL AND exported_format_revision IS NULL) OR (review_id IS NOT NULL AND exported_format_revision IS NOT NULL AND exported_format_revision >= 0)"
+        },
+        {
+          "name": "exportformat",
+          "sqltext": "format IN ('edl', 'mcf')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "media_item_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_source_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "format",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR(3)"
+        },
+        {
+          "default": null,
+          "name": "exported_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "review_id",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "exported_format_revision",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "media_item_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "media_items"
+        },
+        {
+          "constrained_columns": [
+            "review_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "saved_reviews"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "media_item_id",
+            "media_source_id",
+            "format"
+          ],
+          "name": null
+        }
+      ]
+    },
+    "media_items": {
+      "checks": [],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "server_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "jellyfin_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "library_id",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "item_type",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "name",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "path",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "server_id",
+            "jellyfin_id"
+          ],
+          "name": null
+        }
+      ]
+    },
+    "path_mappings": {
+      "checks": [],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "remote_path",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "local_path",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "sort_order",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "review_accepted_credits": {
+      "checks": [
+        {
+          "name": "ck_review_accepted_credits_accepted_boundary",
+          "sqltext": "accepted_boundary_seconds >= 0 AND accepted_boundary_seconds < 1e308"
+        },
+        {
+          "name": "ck_review_accepted_credits_candidate",
+          "sqltext": "length(candidate_id) > 0"
+        },
+        {
+          "name": "ck_review_accepted_credits_confidence",
+          "sqltext": "confidence >= 0 AND confidence <= 1"
+        },
+        {
+          "name": "ck_review_accepted_credits_detected_boundary",
+          "sqltext": "detected_boundary_seconds >= 0 AND detected_boundary_seconds < 1e308"
+        },
+        {
+          "name": "ck_review_accepted_credits_method",
+          "sqltext": "method IN ('chapters', 'visual_text', 'hybrid', 'hybrid_qwen')"
+        },
+        {
+          "name": "creditsdetectionmethod",
+          "sqltext": "method IN ('chapters', 'visual_text', 'hybrid', 'hybrid_qwen')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "review_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "source_finding_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "candidate_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "detected_boundary_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "accepted_boundary_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "confidence",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "method",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR(11)"
+        },
+        {
+          "default": null,
+          "name": "accepted_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "review_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "saved_reviews"
+        },
+        {
+          "constrained_columns": [
+            "source_finding_id",
+            "scan_id"
+          ],
+          "name": "fk_review_accepted_credits_finding_scan",
+          "options": {},
+          "referred_columns": [
+            "id",
+            "scan_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scan_findings"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "review_id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "review_filters": {
+      "checks": [
+        {
+          "name": "ck_review_filters_action",
+          "sqltext": "edit_action IN ('mute', 'skip')"
+        },
+        {
+          "name": "ck_review_filters_classification_pair",
+          "sqltext": "(category IS NULL AND subcategory IS NULL) OR (category IS NOT NULL AND subcategory IS NOT NULL AND ((category = 'commercial_content' AND subcategory IN ('commercial', 'advertBreak', 'consumerism', 'productPlacement')) OR (category = 'discrimination' AND subcategory IN ('discrimination', 'adultism', 'antisemitism', 'genderism', 'homophobia', 'misandry', 'misogyny', 'racism', 'sexism', 'supremacism', 'transphobia', 'xenophobia')) OR (category = 'dispensable_scenes' AND subcategory IN ('dispensable', 'idiocy', 'tedious')) OR (category = 'drugs' AND subcategory IN ('drugs', 'alcohol', 'antipsychotics', 'cigarettes', 'depressants', 'gambling', 'hallucinogens', 'stimulants')) OR (category = 'fear' AND subcategory IN ('fear', 'accident', 'acrophobia', 'aliens', 'arachnophobia', 'astraphobia', 'aviophobia', 'chemophobia', 'claustrophobia', 'coulrophobia', 'cynophobia', 'death', 'dentophobia', 'emetophobia', 'enochlophobia', 'explosion', 'fire', 'gerascophobia', 'ghosts', 'grave', 'hemophobia', 'hylophobia', 'melissophobia', 'misophonia', 'musophobia', 'mysophobia', 'nosocomephobia', 'nyctophobia', 'siderodromophobia', 'thalassophobia', 'vampires')) OR (category = 'language' AND subcategory IN ('language', 'blasphemy', 'nameCalling', 'sexualDialogue', 'swearing', 'vulgarity')) OR (category = 'nudity' AND subcategory IN ('nudity', 'bareButtocks', 'exposedGenitalia', 'fullNudity', 'toplessness')) OR (category = 'sex' AND subcategory IN ('sex', 'adultery', 'analSex', 'coitus', 'kissing', 'masturbation', 'objectification', 'oralSex', 'premaritalSex', 'promiscuity', 'prostitution')) OR (category = 'violence' AND subcategory IN ('violence', 'choking', 'crueltyToAnimals', 'culturalViolence', 'desecration', 'emotionalViolence', 'kicking', 'massacre', 'murder', 'punching', 'rape', 'slapping', 'slavery', 'stabbing', 'torture', 'warfare', 'weapons'))))"
+        },
+        {
+          "name": "ck_review_filters_confidence",
+          "sqltext": "confidence >= 0 AND confidence <= 1"
+        },
+        {
+          "name": "ck_review_filters_end",
+          "sqltext": "end_seconds IS NULL OR end_seconds > start_seconds"
+        },
+        {
+          "name": "ck_review_filters_mcf_channel",
+          "sqltext": "mcf_channel IS NULL OR mcf_channel IN ('both', 'video', 'audio')"
+        },
+        {
+          "name": "ck_review_filters_mcf_comment",
+          "sqltext": "mcf_comment IS NULL OR (length(mcf_comment) > 0 AND instr(mcf_comment, char(10)) = 0 AND instr(mcf_comment, char(13)) = 0 AND instr(mcf_comment, '-->') = 0)"
+        },
+        {
+          "name": "ck_review_filters_position",
+          "sqltext": "position >= 0"
+        },
+        {
+          "name": "ck_review_filters_source",
+          "sqltext": "source IN ('audio', 'visual')"
+        },
+        {
+          "name": "ck_review_filters_start",
+          "sqltext": "start_seconds >= 0"
+        },
+        {
+          "name": "mcfcategoryfamily",
+          "sqltext": "category IN ('commercial_content', 'discrimination', 'dispensable_scenes', 'drugs', 'fear', 'language', 'nudity', 'sex', 'violence')"
+        },
+        {
+          "name": "mcfchannel",
+          "sqltext": "mcf_channel IN ('both', 'video', 'audio')"
+        },
+        {
+          "name": "severity",
+          "sqltext": "severity IN ('low', 'medium', 'high')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "review_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 2,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "source_scan_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "source_finding_id",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "position",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "source",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "category",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(18)"
+        },
+        {
+          "default": null,
+          "name": "subcategory",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "severity",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(6)"
+        },
+        {
+          "default": null,
+          "name": "mcf_channel",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(5)"
+        },
+        {
+          "default": null,
+          "name": "mcf_comment",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "label",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "details",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "group_key",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "start_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "end_seconds",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "confidence",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "edit_action",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "selected",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "review_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "saved_reviews"
+        },
+        {
+          "constrained_columns": [
+            "source_finding_id",
+            "source_scan_id"
+          ],
+          "name": "fk_review_filters_source_finding_scan",
+          "options": {},
+          "referred_columns": [
+            "id",
+            "scan_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scan_findings"
+        },
+        {
+          "constrained_columns": [
+            "source_scan_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "review_id",
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "review_id",
+            "source_finding_id"
+          ],
+          "name": "uq_review_filters_finding"
+        },
+        {
+          "column_names": [
+            "review_id",
+            "position"
+          ],
+          "name": "uq_review_filters_position"
+        }
+      ]
+    },
+    "review_mcf_documents": {
+      "checks": [
+        {
+          "name": "ck_review_mcf_end",
+          "sqltext": "material_start_seconds IS NULL OR material_end_seconds IS NULL OR material_end_seconds > material_start_seconds"
+        },
+        {
+          "name": "ck_review_mcf_episode",
+          "sqltext": "episode IS NULL OR episode > 0"
+        },
+        {
+          "name": "ck_review_mcf_positive_end",
+          "sqltext": "material_end_seconds IS NULL OR material_end_seconds > 0"
+        },
+        {
+          "name": "ck_review_mcf_season",
+          "sqltext": "season IS NULL OR season > 0"
+        },
+        {
+          "name": "ck_review_mcf_start",
+          "sqltext": "material_start_seconds IS NULL OR material_start_seconds >= 0"
+        },
+        {
+          "name": "ck_review_mcf_year",
+          "sqltext": "year IS NULL OR year >= 0"
+        },
+        {
+          "name": "mcfworktype",
+          "sqltext": "work_type IN ('movie', 'series', 'episode')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "review_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "title",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "year",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "work_type",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(7)"
+        },
+        {
+          "default": null,
+          "name": "season",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "episode",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "source_url",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "imdb_url",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "release",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "comment",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "material_start_seconds",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "material_end_seconds",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "FLOAT"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "review_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "saved_reviews"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "review_id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "review_scan_memberships": {
+      "checks": [
+        {
+          "name": "ck_review_memberships_position",
+          "sqltext": "position >= 0"
+        },
+        {
+          "name": "ck_review_memberships_role",
+          "sqltext": "role IN ('audio', 'video', 'both')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "review_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 2,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "role",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "position",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "review_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "saved_reviews"
+        },
+        {
+          "constrained_columns": [
+            "scan_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "review_id",
+          "scan_id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "review_id",
+            "position"
+          ],
+          "name": "uq_review_memberships_position"
+        }
+      ]
+    },
+    "review_synchronizations": {
+      "checks": [
+        {
+          "name": "ck_review_synchronization_end",
+          "sqltext": "end_seconds > start_seconds AND end_seconds < 1e308"
+        },
+        {
+          "name": "ck_review_synchronization_end_mode",
+          "sqltext": "end_mode IN ('before_credits', 'file_end')"
+        },
+        {
+          "name": "ck_review_synchronization_start",
+          "sqltext": "start_seconds >= 0 AND start_seconds < 1e308"
+        },
+        {
+          "name": "synchronizationendmode",
+          "sqltext": "end_mode IN ('before_credits', 'file_end')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "review_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "start_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "end_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "end_mode",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR(14)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "review_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "saved_reviews"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "review_id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "saved_reviews": {
+      "checks": [
+        {
+          "name": "ck_saved_reviews_content_revision",
+          "sqltext": "content_revision >= 0"
+        },
+        {
+          "name": "ck_saved_reviews_edl_revision",
+          "sqltext": "edl_content_revision >= 0"
+        },
+        {
+          "name": "ck_saved_reviews_mcf_revision",
+          "sqltext": "mcf_content_revision >= 0"
+        },
+        {
+          "name": "ck_saved_reviews_name",
+          "sqltext": "length(name) >= 1 AND length(name) <= 100 AND name = trim(name, ' ') AND instr(name, char(0)) = 0 AND NOT (name GLOB '*[\u0001- \u007f-\u009f]*')"
+        },
+        {
+          "name": "ck_saved_reviews_revision",
+          "sqltext": "revision >= 0"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_item_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": "''",
+          "name": "media_source_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "name",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": "'0'",
+          "name": "revision",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "'0'",
+          "name": "content_revision",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "'0'",
+          "name": "edl_content_revision",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "'0'",
+          "name": "mcf_content_revision",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "media_item_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "media_items"
+        }
+      ],
+      "indexes": [
+        {
+          "column_names": [
+            "media_item_id",
+            "media_source_id"
+          ],
+          "dialect_options": {},
+          "name": "ix_saved_reviews_target",
+          "unique": 0
+        }
+      ],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "scan_findings": {
+      "checks": [
+        {
+          "name": "ck_scan_findings_classification_pair",
+          "sqltext": "(category IS NULL AND subcategory IS NULL) OR (category IS NOT NULL AND subcategory IS NOT NULL AND ((category = 'commercial_content' AND subcategory IN ('commercial', 'advertBreak', 'consumerism', 'productPlacement')) OR (category = 'discrimination' AND subcategory IN ('discrimination', 'adultism', 'antisemitism', 'genderism', 'homophobia', 'misandry', 'misogyny', 'racism', 'sexism', 'supremacism', 'transphobia', 'xenophobia')) OR (category = 'dispensable_scenes' AND subcategory IN ('dispensable', 'idiocy', 'tedious')) OR (category = 'drugs' AND subcategory IN ('drugs', 'alcohol', 'antipsychotics', 'cigarettes', 'depressants', 'gambling', 'hallucinogens', 'stimulants')) OR (category = 'fear' AND subcategory IN ('fear', 'accident', 'acrophobia', 'aliens', 'arachnophobia', 'astraphobia', 'aviophobia', 'chemophobia', 'claustrophobia', 'coulrophobia', 'cynophobia', 'death', 'dentophobia', 'emetophobia', 'enochlophobia', 'explosion', 'fire', 'gerascophobia', 'ghosts', 'grave', 'hemophobia', 'hylophobia', 'melissophobia', 'misophonia', 'musophobia', 'mysophobia', 'nosocomephobia', 'nyctophobia', 'siderodromophobia', 'thalassophobia', 'vampires')) OR (category = 'language' AND subcategory IN ('language', 'blasphemy', 'nameCalling', 'sexualDialogue', 'swearing', 'vulgarity')) OR (category = 'nudity' AND subcategory IN ('nudity', 'bareButtocks', 'exposedGenitalia', 'fullNudity', 'toplessness')) OR (category = 'sex' AND subcategory IN ('sex', 'adultery', 'analSex', 'coitus', 'kissing', 'masturbation', 'objectification', 'oralSex', 'premaritalSex', 'promiscuity', 'prostitution')) OR (category = 'violence' AND subcategory IN ('violence', 'choking', 'crueltyToAnimals', 'culturalViolence', 'desecration', 'emotionalViolence', 'kicking', 'massacre', 'murder', 'punching', 'rape', 'slapping', 'slavery', 'stabbing', 'torture', 'warfare', 'weapons'))))"
+        },
+        {
+          "name": "ck_scan_findings_mcf_channel",
+          "sqltext": "mcf_channel IS NULL OR mcf_channel IN ('both', 'video', 'audio')"
+        },
+        {
+          "name": "ck_scan_findings_mcf_comment",
+          "sqltext": "mcf_comment IS NULL OR (length(mcf_comment) > 0 AND instr(mcf_comment, char(10)) = 0 AND instr(mcf_comment, char(13)) = 0 AND instr(mcf_comment, '-->') = 0)"
+        },
+        {
+          "name": "mcfcategoryfamily",
+          "sqltext": "category IN ('commercial_content', 'discrimination', 'dispensable_scenes', 'drugs', 'fear', 'language', 'nudity', 'sex', 'violence')"
+        },
+        {
+          "name": "mcfchannel",
+          "sqltext": "mcf_channel IN ('both', 'video', 'audio')"
+        },
+        {
+          "name": "severity",
+          "sqltext": "severity IN ('low', 'medium', 'high')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "category",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(18)"
+        },
+        {
+          "default": null,
+          "name": "subcategory",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "severity",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(6)"
+        },
+        {
+          "default": null,
+          "name": "mcf_channel",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(5)"
+        },
+        {
+          "default": null,
+          "name": "mcf_comment",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "start_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "end_seconds",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "confidence",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "label",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "details",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "source",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "selected",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "edit_action",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "group_key",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "scan_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "id",
+            "scan_id"
+          ],
+          "name": "uq_scan_findings_id_scan"
+        }
+      ]
+    },
+    "scan_mcf_documents": {
+      "checks": [
+        {
+          "name": "ck_scan_mcf_end",
+          "sqltext": "material_end_seconds > material_start_seconds"
+        },
+        {
+          "name": "ck_scan_mcf_episode",
+          "sqltext": "episode IS NULL OR episode > 0"
+        },
+        {
+          "name": "ck_scan_mcf_season",
+          "sqltext": "season IS NULL OR season > 0"
+        },
+        {
+          "name": "ck_scan_mcf_start",
+          "sqltext": "material_start_seconds >= 0"
+        },
+        {
+          "name": "ck_scan_mcf_year",
+          "sqltext": "year IS NULL OR year >= 0"
+        },
+        {
+          "name": "mcfsourceversion",
+          "sqltext": "source_version IN ('1.0.0', '1.1.0')"
+        },
+        {
+          "name": "mcfworktype",
+          "sqltext": "work_type IN ('movie', 'series', 'episode')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "source_version",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR(5)"
+        },
+        {
+          "default": null,
+          "name": "title",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "year",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "work_type",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR(7)"
+        },
+        {
+          "default": null,
+          "name": "season",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "episode",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "source_url",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "imdb_url",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "release",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "comment",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "material_start_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "material_end_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "scan_id"
+          ],
+          "name": null,
+          "options": {
+            "ondelete": "CASCADE"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "scan_id"
+        ],
+        "name": null
+      },
+      "unique_constraints": []
+    },
+    "scan_media_item_associations": {
+      "checks": [],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_item_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "media_item_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "media_items"
+        },
+        {
+          "constrained_columns": [
+            "scan_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "scan_id",
+            "media_item_id"
+          ],
+          "name": null
+        }
+      ]
+    },
+    "scan_queue": {
+      "checks": [],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "scan_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "sort_order",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "scan_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "scans"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "scan_id"
+          ],
+          "name": null
+        }
+      ]
+    },
+    "scans": {
+      "checks": [
+        {
+          "name": "ck_scans_mode",
+          "sqltext": "scan_mode IN ('content', 'credits_detection')"
+        },
+        {
+          "name": "ck_scans_name",
+          "sqltext": "name IS NULL OR length(name) >= 1 AND length(name) <= 100 AND name = trim(name, ' ') AND instr(name, char(0)) = 0 AND NOT (name GLOB '*[\u0001- \u007f-\u009f]*')"
+        },
+        {
+          "name": "ck_scans_origin",
+          "sqltext": "origin IN ('generated', 'manual', 'imported')"
+        },
+        {
+          "name": "scanmode",
+          "sqltext": "scan_mode IN ('content', 'credits_detection')"
+        }
+      ],
+      "columns": [
+        {
+          "default": null,
+          "name": "id",
+          "nullable": false,
+          "primary_key": 1,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_item_id",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "scan_number",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "name",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": "'generated'",
+          "name": "origin",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "import_source_name",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "imported_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": "'content'",
+          "name": "scan_mode",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR(17)"
+        },
+        {
+          "default": null,
+          "name": "source_path",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_source_id",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_source_name",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "resolved_local_path",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "video_hash",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "scene_name",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "release_group",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_format",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "media_provider_id",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "duration_seconds",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "status",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "scan_audio",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "audio_model",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "audio_filter",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "scan_video",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "video_model",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "frame_interval",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "speed_up",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "qwen_model",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "qwen_summaries_per_segment",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "qwen_segment_join_gap_seconds",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "error_message",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "selection_revision",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "progress_percent",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "FLOAT"
+        },
+        {
+          "default": null,
+          "name": "progress_stage",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "progress_message",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "worker_pid",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "worker_pgid",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "worker_token",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "worker_started_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "worker_heartbeat_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "visual_checkpoint_complete",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "audio_extraction_checkpoint_complete",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "audio_checkpoint_complete",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "BOOLEAN"
+        },
+        {
+          "default": null,
+          "name": "checkpoint_stage",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "VARCHAR"
+        },
+        {
+          "default": null,
+          "name": "checkpoint_state",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "checkpoint_updated_at",
+          "nullable": true,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": 0,
+          "type": "DATETIME"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constrained_columns": [
+            "media_item_id"
+          ],
+          "name": null,
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "referred_schema": null,
+          "referred_table": "media_items"
+        }
+      ],
+      "indexes": [],
+      "primary_key": {
+        "constrained_columns": [
+          "id"
+        ],
+        "name": null
+      },
+      "unique_constraints": [
+        {
+          "column_names": [
+            "media_item_id",
+            "scan_number"
+          ],
+          "name": null
+        }
+      ]
+    }
+  },
+  "version": "unversioned-v1"
+}

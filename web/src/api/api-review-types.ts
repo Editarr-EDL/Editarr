@@ -1,0 +1,244 @@
+/** Review editing, synchronization, and import requests. */
+
+import type { ExportFormat, ExportPublication, ExportStatus, McfCategory, McfCategoryFamily, McfChannel, McfSourceVersion, McfWorkType, Severity } from "./api-mcf-types";
+import type { Scan } from "./api-scan-types";
+
+export type ReviewSource = "jellyfin";
+export type ReviewScanRole = "audio" | "video" | "both";
+export type ReviewFilterSource = "audio" | "visual";
+export type ReviewEditAction = "mute" | "skip";
+export type ScanMode = "content" | "credits_detection";
+export type SynchronizationEndMode = "before_credits" | "file_end";
+export type CreditsDetectionMethod = "chapters" | "visual_text" | "hybrid" | "hybrid_qwen";
+export type CreditsEvidenceKind = "chapter_marker" | "scene_boundary" | "text_density" | "credit_motion" | "black_frame" | "qwen";
+export type CreditsConfidenceBand = "low" | "medium" | "high";
+
+export interface ReviewSynchronization {
+  start_seconds: number;
+  end_seconds: number;
+  end_mode: SynchronizationEndMode;
+}
+
+export interface AcceptedCreditsReference {
+  scan_id: string;
+  candidate_id: string;
+  accepted_boundary_seconds: number;
+}
+
+export interface AcceptedCreditsProvenance extends AcceptedCreditsReference {
+  source_finding_id: number;
+  detected_boundary_seconds: number;
+  confidence: number;
+  method: CreditsDetectionMethod;
+  accepted_at: string;
+}
+
+export interface ReviewTarget {
+  source: ReviewSource;
+  item_id: string;
+  media_source_id: string | null;
+}
+
+export interface ReviewScanMembership {
+  scan_id: string;
+  role: ReviewScanRole;
+}
+
+export interface ReviewScanReference {
+  scan: Scan;
+  role: ReviewScanRole;
+}
+
+export interface ReviewFilter {
+  id: string;
+  source_scan_id: string;
+  source_finding_id: number | null;
+  source: ReviewFilterSource;
+  category: McfCategoryFamily | null;
+  subcategory: McfCategory | null;
+  severity: Severity | null;
+  mcf_channel: McfChannel | null;
+  mcf_comment: string | null;
+  label: string | null;
+  details: string | null;
+  group_key: string | null;
+  start_seconds: number;
+  end_seconds: number | null;
+  confidence: number | null;
+  edit_action: ReviewEditAction;
+  selected: boolean;
+}
+
+export interface McfMetadata {
+  title: string | null;
+  year: number | null;
+  work_type: McfWorkType | null;
+  season: number | null;
+  episode: number | null;
+  source_url: string | null;
+  imdb_url: string | null;
+  release: string | null;
+  comment: string | null;
+}
+export interface ReviewMcfDocument extends McfMetadata { material_start_seconds: number | null; material_end_seconds: number | null; }
+export interface ScanMcfDocument extends McfMetadata { source_version: McfSourceVersion; material_start_seconds: number; material_end_seconds: number; }
+export type McfMetadataSeedRequest = { kind: "scan"; scan_id: string } | { kind: "catalog" };
+export interface McfMetadataSeedCandidate { kind: "scan" | "catalog"; scan_id: string | null; label: string; mcf_document: ReviewMcfDocument; }
+
+export interface ReviewRepairSummary {
+  message: string;
+  missing_scan_ids: string[];
+  detected_at: string;
+  recover: { kept_cues: number; removed_memberships: number; removed_accepted_credits: number };
+  community: { available: boolean; unavailable_reason: string | null } | null;
+}
+
+export interface SavedReviewSummary {
+  id: string;
+  media_item_id: string;
+  target: ReviewTarget;
+  name: string;
+  revision: number;
+  content_revision: number;
+  edl_content_revision: number;
+  mcf_content_revision: number;
+  created_at: string;
+  updated_at: string;
+  exports: ExportStatus;
+  repair: ReviewRepairSummary | null;
+}
+
+export interface ReviewPolicyToken {
+  policy_owner_id?: number | null;
+  policy_revision?: number;
+}
+
+export interface SavedReview extends SavedReviewSummary, ReviewPolicyToken {
+  owner_id?: number | null;
+  original_author_id?: number | null;
+  policy_required_filter_ids?: string[];
+  policy_locked_severities?: Record<string, Severity>;
+  memberships: ReviewScanMembership[];
+  scans: ReviewScanReference[];
+  filters: ReviewFilter[];
+  base_filters?: ReviewFilter[];
+  policy_missing_evidence?: ReviewFilter[];
+  mcf_document: ReviewMcfDocument;
+  synchronization: ReviewSynchronization;
+  accepted_credits: AcceptedCreditsProvenance | null;
+}
+
+export interface ReviewCreate {
+  name: string;
+  memberships?: ReviewScanMembership[];
+  filters?: ReviewFilterInput[] | null;
+  new_manual_filters?: NewManualReviewFilter[];
+  mcf_metadata_seed?: McfMetadataSeedRequest | null;
+}
+
+export interface ReviewFilterInput extends ReviewFilter {}
+
+export interface NewManualReviewFilter {
+  id: string;
+  source: ReviewFilterSource;
+  category: McfCategoryFamily;
+  subcategory: McfCategory;
+  severity: Severity | null;
+  mcf_channel: McfChannel | null;
+  mcf_comment: string | null;
+  label: string | null;
+  details: string | null;
+  group_key: string | null;
+  start_seconds: number;
+  end_seconds: number;
+  confidence?: number | null;
+  edit_action: ReviewEditAction;
+  selected?: boolean;
+}
+
+export interface ReviewSave extends ReviewPolicyToken {
+  filter_basis?: "base" | "effective";
+  revision: number;
+  name: string;
+  memberships: ReviewScanMembership[];
+  filters: ReviewFilterInput[];
+  mcf_document: ReviewMcfDocument;
+  synchronization: ReviewSynchronization;
+  accepted_credits?: AcceptedCreditsReference | null;
+  new_manual_filters?: NewManualReviewFilter[];
+}
+
+export interface ReviewRetimeRequest extends ReviewPolicyToken {
+  filter_basis?: "base" | "effective";
+  revision: number;
+  memberships: ReviewScanMembership[];
+  current_synchronization: ReviewSynchronization;
+  proposed_synchronization: ReviewSynchronization;
+  mcf_document: ReviewMcfDocument;
+  filters: ReviewFilterInput[];
+  accepted_credits: AcceptedCreditsReference | null;
+  new_manual_filters: NewManualReviewFilter[];
+}
+
+export interface ReviewRetimeResult extends ReviewPolicyToken {
+  synchronization: ReviewSynchronization;
+  mcf_document: ReviewMcfDocument;
+  filters: ReviewFilterInput[];
+  base_filters?: ReviewFilterInput[];
+  accepted_credits: AcceptedCreditsReference | null;
+  new_manual_filters: NewManualReviewFilter[];
+}
+
+export interface ReviewRename { revision: number; name: string; }
+export interface ReviewDuplicate extends ReviewPolicyToken { revision: number; name: string; }
+export interface ReviewExportRequest extends ReviewPolicyToken { revision: number; }
+export type ReviewFileChoice = "retain" | "remove";
+export interface ReviewDeletionFile { publication: ExportPublication; choices: ReviewFileChoice[]; }
+/** Files the caller may see for a review deletion; `confirmation` binds the whole preview. */
+export interface ReviewDeletionPreview {
+  review_id: string;
+  revision: number;
+  confirmation: string;
+  files: ReviewDeletionFile[];
+  legacy_formats: ExportFormat[];
+  scan_ids: string[];
+}
+export interface ReviewDeletionRequest { revision: number; confirmation: string; files: { export_id: number; choice: ReviewFileChoice }[]; }
+export interface ReviewDeletionResult { review_id: string; retained: number[]; removed: number[]; }
+export interface McfMetadataNotice { code: "metadata_mismatch"; fields: string[]; mcf_metadata: ReviewMcfDocument; catalog_metadata: ReviewMcfDocument; }
+export interface McfImportResult { review: SavedReview; scan: Scan; source_version: McfSourceVersion; notices: McfMetadataNotice[]; }
+export interface McfImportIssue { code: string; message: string; line_number: number; line_text: string; }
+export type McfPreflightIssueCode = "missing_category" | "missing_subcategory" | "missing_severity" | "invalid_category" | "invalid_subcategory" | "invalid_category_pair" | "invalid_severity" | "invalid_mcf_channel" | "invalid_mcf_comment" | "invalid_mcf_metadata" | "invalid_material_bounds";
+export interface McfPreflightIssue { code: McfPreflightIssueCode; field: string; filter_id: string | null; filter_position: number | null; message: string; }
+export interface McfPreflight { review_id: string; revision: number; eligible: boolean; issues: McfPreflightIssue[]; }
+export interface EdlImportWarning {
+  code: "unsupported_actions_ignored";
+  message: string;
+  ignored_action_count: number;
+}
+export interface EdlImportResult { review: SavedReview; scan: Scan; warning: EdlImportWarning | null; }
+export interface ReviewReference { id: string; name: string; updated_at: string; }
+export interface ScanReferences { scan_id: string; active_exports: ExportFormat[]; reviews: ReviewReference[]; community_in_progress: boolean; }
+export interface ReviewErrorDetail {
+  code: string;
+  message: string;
+  reason?: string | null;
+  repair: ReviewRepairSummary | null;
+  line_number: number | null;
+  line_text: string | null;
+  references: unknown | null;
+  filter_ids: string[];
+  document_fields: string[];
+  metadata_candidates: McfMetadataSeedCandidate[];
+  import_issues: McfImportIssue[];
+}
+export interface ReviewTargetRequest { source: ReviewSource; item_id: string; media_source_id?: string | null; }
+export interface EdlImportOptions { target: ReviewTargetRequest; name: string; }
+export interface McfImportOptions {
+  target: ReviewTargetRequest;
+  name: string;
+  ignore_errors?: boolean;
+  synchronization: ReviewSynchronization;
+  mcf_material_end_seconds: number | null;
+  accepted_credits?: AcceptedCreditsReference | null;
+}

@@ -1,0 +1,183 @@
+{
+  "fixture": "editarr-jellyfin-users-1",
+  "provenance": {
+    "kind": "synthetic",
+    "assumedJellyfinVersion": "12.0.0",
+    "shapes": "PublicSystemInfo, UserDto, UserPolicy, UserConfiguration, AuthenticationResult, and BaseItemDtoQueryResult as served by Jellyfin 12.0.0",
+    "note": "Hand-written synthetic responses for a controlled local HTTP boundary. They are not captured from a live server, and tests that serve them do not prove live Jellyfin behavior.",
+    "liveObservations": "MU-08 checked these routes once against jellyfin/jellyfin@sha256:baba630419915985442f315f08b0cf46d9f4c8a0cc4bd38e94a6d35751dd5ef5 (Version 12.0.0) with synthetic users. The batch query with Ids and userId applied parental rating and tag limits but not library access, with or without ParentId. idsQueryItems records that result."
+  },
+  "routes": {
+    "serverInfo": "GET /System/Info/Public (anonymous)",
+    "signIn": "POST /Users/AuthenticateByName with MediaBrowser Client, Device, DeviceId, Version; 401 wrong name or password, 403 disabled",
+    "signOut": "POST /Sessions/Logout with the issued token; 204",
+    "user": "GET /Users/{userId}; 404 when the ID does not exist",
+    "users": "GET /Users; every user, including disabled users",
+    "userItem": "GET /Items/{itemId}?userId=...; 200 when the user may open the item, 404 for library, rating, or tag restrictions",
+    "items": "GET /Items?Ids=...&Limit=n; the server key sees every item. Adding userId applies rating and tag limits only (idsQueryItems)",
+    "avatar": "GET /UserImage?userId=...[&tag=...]; 404 when the user has no image"
+  },
+  "servers": {
+    "primary": {
+      "LocalAddress": "http://127.0.0.1:8096",
+      "ServerName": "Synthetic Jellyfin",
+      "Version": "12.0.0",
+      "ProductName": "Jellyfin Server",
+      "OperatingSystem": "",
+      "Id": "5e1f0a2b3c4d4e5f8a9b0c1d2e3f4a5b",
+      "StartupWizardCompleted": true
+    },
+    "replacement": {
+      "LocalAddress": "http://127.0.0.1:8096",
+      "ServerName": "Synthetic Jellyfin",
+      "Version": "12.0.0",
+      "ProductName": "Jellyfin Server",
+      "OperatingSystem": "",
+      "Id": "9a8b7c6d5e4f40312a1b2c3d4e5f6071",
+      "StartupWizardCompleted": true
+    }
+  },
+  "libraries": {
+    "Movies": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "Family": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+  },
+  "items": {
+    "c3000000000000000000000000000001": {"Name": "Synthetic Feature", "Type": "Movie", "Library": "Movies", "OfficialRating": "G", "Tags": []},
+    "c3000000000000000000000000000002": {"Name": "Synthetic Family Film", "Type": "Movie", "Library": "Family", "OfficialRating": "G", "Tags": []},
+    "c3000000000000000000000000000003": {"Name": "Synthetic Late Show", "Type": "Movie", "Library": "Family", "OfficialRating": "PG", "Tags": ["late-night"]},
+    "c3000000000000000000000000000004": {"Name": "Synthetic Mature Film", "Type": "Movie", "Library": "Family", "OfficialRating": "R", "Tags": []}
+  },
+  "userDtoTemplate": {
+    "Name": "",
+    "ServerId": "",
+    "Id": "",
+    "HasPassword": true,
+    "HasConfiguredPassword": true,
+    "HasConfiguredEasyPassword": false,
+    "EnableAutoLogin": false,
+    "LastLoginDate": "2026-10-01T12:00:00.0000000Z",
+    "LastActivityDate": "2026-10-01T12:00:00.0000000Z",
+    "Configuration": {
+      "PlayDefaultAudioTrack": true,
+      "SubtitleLanguagePreference": "",
+      "DisplayMissingEpisodes": false,
+      "GroupedFolders": [],
+      "SubtitleMode": "Default",
+      "DisplayCollectionsView": false,
+      "EnableLocalPassword": false,
+      "OrderedViews": [],
+      "LatestItemsExcludes": [],
+      "MyMediaExcludes": [],
+      "HidePlayedInLatest": true,
+      "RememberAudioSelections": true,
+      "RememberSubtitleSelections": true,
+      "EnableNextEpisodeAutoPlay": true,
+      "CastReceiverId": "F007D354"
+    },
+    "Policy": {
+      "IsAdministrator": false,
+      "IsHidden": true,
+      "EnableCollectionManagement": false,
+      "EnableSubtitleManagement": false,
+      "EnableLyricManagement": false,
+      "IsDisabled": false,
+      "BlockedTags": [],
+      "AllowedTags": [],
+      "EnableUserPreferenceAccess": true,
+      "AccessSchedules": [],
+      "BlockUnratedItems": [],
+      "EnableRemoteControlOfOtherUsers": false,
+      "EnableSharedDeviceControl": true,
+      "EnableRemoteAccess": true,
+      "EnableLiveTvManagement": false,
+      "EnableLiveTvAccess": true,
+      "EnableMediaPlayback": true,
+      "EnableAudioPlaybackTranscoding": true,
+      "EnableVideoPlaybackTranscoding": true,
+      "EnablePlaybackRemuxing": true,
+      "ForceRemoteSourceTranscoding": false,
+      "EnableContentDeletion": false,
+      "EnableContentDeletionFromFolders": [],
+      "EnableContentDownloading": true,
+      "EnableSyncTranscoding": true,
+      "EnableMediaConversion": true,
+      "EnabledDevices": [],
+      "EnableAllDevices": true,
+      "EnabledChannels": [],
+      "EnableAllChannels": true,
+      "EnabledFolders": [],
+      "EnableAllFolders": true,
+      "InvalidLoginAttemptCount": 0,
+      "LoginAttemptsBeforeLockout": -1,
+      "MaxActiveSessions": 0,
+      "EnablePublicSharing": true,
+      "BlockedMediaFolders": [],
+      "BlockedChannels": [],
+      "RemoteClientBitrateLimit": 0,
+      "AuthenticationProviderId": "Jellyfin.Server.Implementations.Users.DefaultAuthenticationProvider",
+      "PasswordResetProviderId": "Jellyfin.Server.Implementations.Users.DefaultPasswordResetProvider",
+      "SyncPlayAccess": "CreateAndJoinGroups"
+    }
+  },
+  "states": {
+    "baseline": {
+      "server": "primary",
+      "users": [
+        {"Id": "d4000000000000000000000000000001", "Name": "Avery", "Policy": {"IsAdministrator": true, "EnableContentDeletion": true}},
+        {"Id": "d4000000000000000000000000000002", "Name": "Blake", "PrimaryImageTag": "aaaa0000000000000000000000000001"},
+        {"Id": "d4000000000000000000000000000003", "Name": "Casey", "Policy": {"EnableAllFolders": false, "EnabledFolders": ["b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"], "MaxParentalRating": 10, "BlockedTags": ["late-night"], "BlockUnratedItems": ["Movie"]}},
+        {"Id": "d4000000000000000000000000000004", "Name": "Drew"},
+        {"Id": "d4000000000000000000000000000005", "Name": "Emery"}
+      ],
+      "visibleItems": {
+        "d4000000000000000000000000000001": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"],
+        "d4000000000000000000000000000002": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"],
+        "d4000000000000000000000000000003": ["c3000000000000000000000000000002"],
+        "d4000000000000000000000000000004": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"],
+        "d4000000000000000000000000000005": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"]
+      },
+      "idsQueryItems": {
+        "d4000000000000000000000000000003": ["c3000000000000000000000000000001", "c3000000000000000000000000000002"]
+      }
+    },
+    "changed": {
+      "server": "primary",
+      "users": [
+        {"Id": "d4000000000000000000000000000001", "Name": "Avery"},
+        {"Id": "d4000000000000000000000000000002", "Name": "Casey", "PrimaryImageTag": "aaaa0000000000000000000000000002", "Policy": {"IsAdministrator": true}},
+        {"Id": "d4000000000000000000000000000003", "Name": "Casey Archive", "Policy": {"EnableAllFolders": false, "EnabledFolders": ["b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"], "MaxParentalRating": 10, "BlockedTags": ["late-night"], "BlockUnratedItems": ["Movie"]}},
+        {"Id": "d4000000000000000000000000000004", "Name": "Drew", "Policy": {"IsDisabled": true}}
+      ],
+      "visibleItems": {
+        "d4000000000000000000000000000001": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"],
+        "d4000000000000000000000000000002": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"],
+        "d4000000000000000000000000000003": ["c3000000000000000000000000000002"],
+        "d4000000000000000000000000000004": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"]
+      },
+      "idsQueryItems": {
+        "d4000000000000000000000000000003": ["c3000000000000000000000000000001", "c3000000000000000000000000000002"]
+      }
+    },
+    "replaced": {
+      "server": "replacement",
+      "users": [
+        {"Id": "d4000000000000000000000000000002", "Name": "Blake", "Policy": {"IsAdministrator": true}},
+        {"Id": "e5000000000000000000000000000002", "Name": "Casey"}
+      ],
+      "visibleItems": {
+        "d4000000000000000000000000000002": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"],
+        "e5000000000000000000000000000002": ["c3000000000000000000000000000001", "c3000000000000000000000000000002", "c3000000000000000000000000000003", "c3000000000000000000000000000004"]
+      }
+    }
+  },
+  "faults": {
+    "timeout": {"kind": "delay", "note": "Accepts the connection and answers after the client timeout."},
+    "refused": {"kind": "refused", "note": "Nothing listens on the port."},
+    "starting": {"kind": "status", "status": 503, "contentType": "text/html", "body": "<html><body>Jellyfin Server is starting</body></html>"},
+    "server-error": {"kind": "status", "status": 500, "contentType": "application/problem+json", "body": "{\"title\": \"An error occurred while processing your request.\", \"status\": 500}"},
+    "gateway-page": {"kind": "status", "status": 200, "contentType": "text/html", "body": "<html><body>Sign in to the gateway</body></html>"},
+    "truncated-json": {"kind": "status", "status": 200, "contentType": "application/json", "body": "{\"Items\": ["},
+    "proxy-not-found": {"kind": "status", "status": 404, "contentType": "text/html", "body": "<html><body>404 Not Found</body></html>", "pathPrefixes": ["/Users"], "note": "A reverse proxy without the user routes; /System/Info/Public and /Items still reach Jellyfin."},
+    "stale-user-route": {"kind": "status", "status": 404, "contentType": "text/plain", "body": "User not found", "pathPrefixes": ["/Users/"], "methods": ["GET"], "note": "/Users/{id} answers 404 while /Users still lists the user."}
+  }
+}

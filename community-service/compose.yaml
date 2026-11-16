@@ -1,0 +1,54 @@
+name: editarr-community
+services:
+  community:
+    image: editarr-community:${COMMUNITY_IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: community-service/Dockerfile
+    init: true
+    restart: unless-stopped
+    read_only: true
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 128
+    stop_grace_period: 30s
+    ports: ["127.0.0.1:${COMMUNITY_PORT:-8787}:8787"]
+    environment:
+      COMMUNITY_CONFIG_FILE: /etc/community/service.json
+      COMMUNITY_SECRETS_FILE: /run/secrets/community_service
+    volumes:
+      - community-data:/data
+      - type: bind
+        source: ${COMMUNITY_CONFIG_FILE:-./container/service.example.json}
+        target: /etc/community/service.json
+        read_only: true
+    secrets: [community_service]
+    tmpfs: ["/tmp:size=32m,mode=1777,noexec,nosuid,nodev"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  maintenance:
+    image: editarr-community:${COMMUNITY_IMAGE_TAG:-local}
+    profiles: [maintenance]
+    init: true
+    read_only: true
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    pids_limit: 128
+    entrypoint: [node, dist/runtime/manage.mjs]
+    command: [--help]
+    volumes:
+      - community-data:/data
+      - community-backups:/backups
+    tmpfs: ["/tmp:size=32m,mode=1777,noexec,nosuid,nodev"]
+secrets:
+  community_service:
+    file: ${COMMUNITY_SECRETS_FILE:-./container/secrets.example.json}
+volumes:
+  community-data:
+  community-backups:

@@ -1,0 +1,18 @@
+{
+  "report": { "version": 1, "reason": "privacy", "note": "Reviewed private information in event notes." },
+  "action": {
+    "version": 1,
+    "actionId": "b8c116e7-856e-45aa-9810-f9f2d4d52ce1",
+    "command": "quarantine",
+    "targetId": "submission-ai",
+    "expectedRevision": 0,
+    "reason": "Confirmed privacy report."
+  },
+  "applied": {
+    "version": 1,
+    "actionId": "b8c116e7-856e-45aa-9810-f9f2d4d52ce1",
+    "resource": "revision:submission-ai",
+    "revision": 1,
+    "outcome": "applied"
+  }
+}

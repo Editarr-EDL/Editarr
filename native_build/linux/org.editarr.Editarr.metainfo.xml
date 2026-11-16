@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.editarr.Editarr</id>
+  <name>Editarr</name>
+  <summary>Scan media and review objectionable-content findings</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <description>
+    <p>
+      Editarr is a self-contained, browser-based media scanning application.
+      Model weights are downloaded on demand into the user's cache.
+    </p>
+  </description>
+  <launchable type="desktop-id">org.editarr.Editarr.desktop</launchable>
+  <provides>
+    <binary>Editarr</binary>
+  </provides>
+  <releases>
+    <release version="@VERSION@" date="@RELEASE_DATE@"/>
+  </releases>
+</component>

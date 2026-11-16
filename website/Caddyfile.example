@@ -1,0 +1,8 @@
+# Host-level Caddy, with DNS for both names pointing at this host.
+editarr.org {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8088
+}
+www.editarr.org {
+    redir https://editarr.org{uri} permanent
+}

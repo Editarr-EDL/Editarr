@@ -1,0 +1,77 @@
+.saved-review-repair-message,
+.review-repair-alert {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: #ffb4ae;
+  overflow-wrap: anywhere;
+}
+
+.saved-review-repair-message > span:not(.review-repair-icon),
+.review-repair-alert > span {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.review-repair-icon {
+  color: #ffb4ae;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.review-repair-alert {
+  margin-block: 1rem;
+}
+
+.review-repair-readonly {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  filter: grayscale(1);
+  opacity: 0.65;
+}
+
+.review-repair-dialog {
+  width: min(36rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.review-repair-options {
+  border: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.review-repair-dialog .review-repair-option > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.review-repair-dialog input[type="radio"] {
+  flex: 0 0 1rem;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.2rem 0 0;
+}
+
+.review-repair-option p {
+  margin: 0.375rem 0 0 1.5rem;
+}
+
+@media (max-width: 400px) {
+  .review-repair-dialog .button-row {
+    flex-wrap: wrap;
+  }
+
+  .review-repair-dialog .button-row > button {
+    flex: 1 1 auto;
+    white-space: normal;
+  }
+}

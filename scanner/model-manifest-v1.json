@@ -1,0 +1,315 @@
+{
+  "schema_version": 1,
+  "manifest_version": "2026.09.18",
+  "artifacts": [
+    {
+      "id": "faster-whisper-base",
+      "backend_ids": ["whisper"],
+      "backend_version": "base",
+      "distribution": "huggingface",
+      "repository": "Systran/faster-whisper-base",
+      "revision": "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66",
+      "required_patterns": ["config.json", "model.bin", "tokenizer.json", "vocabulary.txt"],
+      "source_url": "https://huggingface.co/Systran/faster-whisper-base",
+      "license": {"spdx": "MIT", "status": "declared", "url": "https://huggingface.co/Systran/faster-whisper-base/blob/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/README.md"},
+      "files": [
+        {"path": "config.json", "size": 2309, "git_blob_sha1": "867cf1a0fece1394e01d55e287ba2f09a577c046"},
+        {"path": "model.bin", "size": 145217532, "sha256": "d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9"},
+        {"path": "tokenizer.json", "size": 2203239, "git_blob_sha1": "7818adb6de9fa3064d3ff81226fdd675be1f6344"},
+        {"path": "vocabulary.txt", "size": 459861, "git_blob_sha1": "c9074644d9d1205686f16d411564729461324b75"}
+      ]
+    },
+    {
+      "id": "mlx-whisper-base",
+      "backend_ids": ["mlx_whisper"],
+      "backend_version": "base-mlx",
+      "distribution": "huggingface",
+      "repository": "mlx-community/whisper-base-mlx",
+      "revision": "1e3e249fb8d01c655324bd6841b1deadffd6d04c",
+      "required_patterns": ["config.json", "weights.npz"],
+      "source_url": "https://huggingface.co/mlx-community/whisper-base-mlx",
+      "license": {"spdx": null, "status": "license-review-required", "url": "https://huggingface.co/mlx-community/whisper-base-mlx"},
+      "files": [
+        {"path": "config.json", "size": 262, "git_blob_sha1": "3860125a7f82a556e43e28eda7147a51c802ba5a"},
+        {"path": "weights.npz", "size": 143724204, "sha256": "2f57d5f3ef473054c638961f90716f4ee415e8108de81313eccb2c5fd62eff0b"}
+      ]
+    },
+    {
+      "id": "wd-vit-tagger-v3",
+      "backend_ids": ["image_safety_gate"],
+      "backend_version": "wd-vit-v3",
+      "distribution": "huggingface",
+      "repository": "SmilingWolf/wd-vit-tagger-v3",
+      "revision": "7f6b584d0bd3f55c4531f14ba3d4761b2bccdc0f",
+      "required_patterns": ["model.onnx", "selected_tags.csv"],
+      "source_url": "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3"},
+      "files": [
+        {"path": "model.onnx", "size": 378536310, "sha256": "35f23693620b668f4d53fd3c62bf65e40af739bc52c7eb0fbc49258b58d065b6"},
+        {"path": "selected_tags.csv", "size": 308468, "git_blob_sha1": "a2a653a5c89c8e387765eb1de9cfd2aedc92ee8d"}
+      ]
+    },
+    {
+      "id": "wd-convnext-tagger-v3",
+      "backend_ids": ["image_safety_gate"],
+      "backend_version": "wd-convnext-v3",
+      "distribution": "huggingface",
+      "repository": "SmilingWolf/wd-convnext-tagger-v3",
+      "revision": "d39e46de298d27340111b64965e20b8185c407e6",
+      "required_patterns": ["model.onnx", "selected_tags.csv"],
+      "source_url": "https://huggingface.co/SmilingWolf/wd-convnext-tagger-v3",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/SmilingWolf/wd-convnext-tagger-v3"},
+      "files": [
+        {"path": "model.onnx", "size": 394990732, "sha256": "1b8a7abf13d9b8368267df47501d523789c4aeae66b2296ad98483239dfa32eb"},
+        {"path": "selected_tags.csv", "size": 308468, "git_blob_sha1": "a2a653a5c89c8e387765eb1de9cfd2aedc92ee8d"}
+      ]
+    },
+    {
+      "id": "wd-swinv2-tagger-v3",
+      "backend_ids": ["image_safety_gate"],
+      "backend_version": "wd-swinv2-v3",
+      "distribution": "huggingface",
+      "repository": "SmilingWolf/wd-swinv2-tagger-v3",
+      "revision": "627aef95638667ddcaa3ac8ae625e88ea5b02f51",
+      "required_patterns": ["model.onnx", "selected_tags.csv"],
+      "source_url": "https://huggingface.co/SmilingWolf/wd-swinv2-tagger-v3",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/SmilingWolf/wd-swinv2-tagger-v3"},
+      "files": [
+        {"path": "model.onnx", "size": 467460978, "sha256": "e6774bff34d43bd49f75a47db4ef217dce701c9847b546523eb85ff6dbba1db1"},
+        {"path": "selected_tags.csv", "size": 308468, "git_blob_sha1": "a2a653a5c89c8e387765eb1de9cfd2aedc92ee8d"}
+      ]
+    },
+    {
+      "id": "wd-vit-large-tagger-v3",
+      "backend_ids": ["image_safety_gate"],
+      "backend_version": "wd-vit-large-v3",
+      "distribution": "huggingface",
+      "repository": "SmilingWolf/wd-vit-large-tagger-v3",
+      "revision": "ae469aa2e4706a3af08d3673cf73a11d1add314c",
+      "required_patterns": ["model.onnx", "selected_tags.csv"],
+      "source_url": "https://huggingface.co/SmilingWolf/wd-vit-large-tagger-v3",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/SmilingWolf/wd-vit-large-tagger-v3"},
+      "files": [
+        {"path": "model.onnx", "size": 1260645673, "sha256": "e4c8001b000a6c98f2db10794f7c406daa79873d071d6ca924330fa053fa1845"},
+        {"path": "selected_tags.csv", "size": 308468, "git_blob_sha1": "a2a653a5c89c8e387765eb1de9cfd2aedc92ee8d"}
+      ]
+    },
+    {
+      "id": "wd-eva02-large-tagger-v3",
+      "backend_ids": ["image_safety_gate"],
+      "backend_version": "wd-eva02-large-v3",
+      "distribution": "huggingface",
+      "repository": "SmilingWolf/wd-eva02-large-tagger-v3",
+      "revision": "b25b82a03f7282e41aa2f257a52c7583b710bd1c",
+      "required_patterns": ["model.onnx", "selected_tags.csv"],
+      "source_url": "https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3"},
+      "files": [
+        {"path": "model.onnx", "size": 1260435999, "sha256": "9e768793060c7939b277ccb382783e8670e8a042d29d77aa736be0c8cc898bfc"},
+        {"path": "selected_tags.csv", "size": 308468, "git_blob_sha1": "a2a653a5c89c8e387765eb1de9cfd2aedc92ee8d"}
+      ]
+    },
+    {
+      "id": "stable-diffusion-safety-checker",
+      "backend_ids": ["image_safety_gate"],
+      "backend_version": "clip-safety-checker",
+      "distribution": "huggingface",
+      "repository": "CompVis/stable-diffusion-safety-checker",
+      "revision": "cb41f3a270d63d454d385fc2e4f571c487c253c5",
+      "required_patterns": ["config.json", "preprocessor_config.json", "pytorch_model.bin"],
+      "source_url": "https://huggingface.co/CompVis/stable-diffusion-safety-checker",
+      "license": {"spdx": null, "status": "license-review-required", "url": "https://huggingface.co/CompVis/stable-diffusion-safety-checker"},
+      "files": [
+        {"path": "config.json", "size": 4549, "git_blob_sha1": "aa454d222558d7e095fc9343266efd9512ad2f19"},
+        {"path": "preprocessor_config.json", "size": 342, "git_blob_sha1": "5294955ff7801083f720b34b55d0f1f51313c5c5"},
+        {"path": "pytorch_model.bin", "size": 1216067303, "sha256": "64b8393f1afd5a0c1ed2aa5f341fa7c08286839a48f3743162a76a2835c808bd"}
+      ]
+    },
+    {
+      "id": "image-safety-classifier-s",
+      "backend_ids": ["image_safety_gate"],
+      "backend_version": "small",
+      "distribution": "huggingface",
+      "repository": "OwenElliott/image-safety-classifier-s",
+      "revision": "015042b0eab17f1b17f2986527386346fb0d94be",
+      "required_patterns": ["config.json", "model.safetensors"],
+      "source_url": "https://huggingface.co/OwenElliott/image-safety-classifier-s",
+      "license": {"spdx": "MIT", "status": "declared", "url": "https://huggingface.co/OwenElliott/image-safety-classifier-s"},
+      "files": [
+        {"path": "config.json", "size": 917, "git_blob_sha1": "0a23605ebd34448d41aa3fe9716a38e63ee497e1"},
+        {"path": "model.safetensors", "size": 22647760, "sha256": "5a7a68c1036cd8b117662a910718f6a2d6a56d18996e70b19d5f79b1b7c892a2"}
+      ]
+    },
+    {
+      "id": "siglip2-base-patch16-256",
+      "backend_ids": ["siglip2_moderation_nsfw", "siglip2_moderation_violence"],
+      "backend_version": "base-patch16-256",
+      "distribution": "huggingface",
+      "repository": "google/siglip2-base-patch16-256",
+      "revision": "3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab",
+      "required_patterns": ["config.json", "model.safetensors", "preprocessor_config.json", "special_tokens_map.json", "tokenizer.json", "tokenizer.model", "tokenizer_config.json"],
+      "source_url": "https://huggingface.co/google/siglip2-base-patch16-256",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/google/siglip2-base-patch16-256"},
+      "files": [
+        {"path": "config.json", "size": 276, "git_blob_sha1": "b0a6b7804332a660ed5d6c2707b39bed80192010"},
+        {"path": "model.safetensors", "size": 1500985224, "sha256": "6125cacc01fa93bdc98a0c5101cefcd69b2ed1f8ab4f38d86f4ad5984f5dc863"},
+        {"path": "preprocessor_config.json", "size": 394, "git_blob_sha1": "130986149eee6a6fd9a2eb53da12fbc1a415c0e6"},
+        {"path": "special_tokens_map.json", "size": 636, "git_blob_sha1": "8d6368f7e735fbe4781bf6e956b7c6ad0586df80"},
+        {"path": "tokenizer.json", "size": 34363039, "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322"},
+        {"path": "tokenizer.model", "size": 4241003, "sha256": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2"},
+        {"path": "tokenizer_config.json", "size": 47164, "git_blob_sha1": "d97c5412159422c3b56fbc99076b1dcc25dd7856"}
+      ]
+    },
+    {
+      "id": "siglip2-moderation-head-nsfw",
+      "backend_ids": ["siglip2_moderation_nsfw"],
+      "backend_version": "nsfw",
+      "distribution": "huggingface",
+      "repository": "khasinski/siglip2-moderation-heads",
+      "revision": "b88fe03369e3dc6aa9887cd3b4cd3e9b7cf76ee5",
+      "required_patterns": ["nsfw_head.onnx", "nsfw_head.onnx.data"],
+      "source_url": "https://huggingface.co/khasinski/siglip2-moderation-heads",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/khasinski/siglip2-moderation-heads"},
+      "files": [
+        {"path": "nsfw_head.onnx", "size": 857, "sha256": "2e637e24367252c86d0adf5e17354a6f2df02a6cb20297e474f804dc9abd5a4a"},
+        {"path": "nsfw_head.onnx.data", "size": 788480, "sha256": "45d7988fb889f767dd8f8fe069862f84e71b3960a48df09bbb0eb91b9e61835f"}
+      ]
+    },
+    {
+      "id": "siglip2-moderation-head-violence",
+      "backend_ids": ["siglip2_moderation_violence"],
+      "backend_version": "violence",
+      "distribution": "huggingface",
+      "repository": "khasinski/siglip2-moderation-heads",
+      "revision": "b88fe03369e3dc6aa9887cd3b4cd3e9b7cf76ee5",
+      "required_patterns": ["violence_head.onnx", "violence_head.onnx.data"],
+      "source_url": "https://huggingface.co/khasinski/siglip2-moderation-heads",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/khasinski/siglip2-moderation-heads"},
+      "files": [
+        {"path": "violence_head.onnx", "size": 869, "sha256": "268b8702e8e373ab0fea4de55250f506650ff87be532d1809ba70513bd5fa5b4"},
+        {"path": "violence_head.onnx.data", "size": 788480, "sha256": "433df42d2b884d598a65f41d1cb16e2c44b60000f0f46da6b7c380f3851ce2ef"}
+      ]
+    },
+    {
+      "id": "qwen3-vl-4b-instruct-4bit",
+      "backend_ids": ["qwen3_vl"],
+      "backend_version": "4b-instruct-4bit",
+      "distribution": "huggingface",
+      "repository": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+      "revision": "2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b",
+      "required_patterns": ["*.json", "*.jinja", "*.txt", "*.safetensors"],
+      "source_url": "https://huggingface.co/mlx-community/Qwen3-VL-4B-Instruct-4bit",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/mlx-community/Qwen3-VL-4B-Instruct-4bit"},
+      "files": [
+        {"path": "added_tokens.json", "size": 707, "git_blob_sha1": "b54f9135e44c1e81047e8d05cb027af8bc039eed"},
+        {"path": "chat_template.jinja", "size": 5292, "git_blob_sha1": "124386803f142761528f710e77ae483f5f8c4fc4"},
+        {"path": "chat_template.json", "size": 5502, "git_blob_sha1": "e49e75bdda104c8de941eb20e0b3765184fb27bc"},
+        {"path": "config.json", "size": 7137, "git_blob_sha1": "f16fd1e371d6d513f2864c8f357aa51758541f83"},
+        {"path": "generation_config.json", "size": 269, "git_blob_sha1": "e116347d7ef42621c7a5957f82c015c38d939c1f"},
+        {"path": "merges.txt", "size": 1671853, "git_blob_sha1": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"},
+        {"path": "model.safetensors", "size": 3093767283, "sha256": "90eeb02604181dbcccd0a30a1f550a4a8928ca7dcbee4aee1449239306cfdfca"},
+        {"path": "model.safetensors.index.json", "size": 64742, "git_blob_sha1": "3b52de97496e2f4501dfa92a87642f60db3e22a1"},
+        {"path": "preprocessor_config.json", "size": 782, "git_blob_sha1": "2fa6553554f69b4e3a6b742a75264ff9dff90ad0"},
+        {"path": "special_tokens_map.json", "size": 613, "git_blob_sha1": "ac23c0aaa2434523c494330aeb79c58395378103"},
+        {"path": "tokenizer.json", "size": 11422654, "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"},
+        {"path": "tokenizer_config.json", "size": 5445, "git_blob_sha1": "fec7f182135c384a08ea2fc9635566ca79c45afc"},
+        {"path": "video_preprocessor_config.json", "size": 817, "git_blob_sha1": "e32b1d90356f74457edbfca27aa1e121dab7cdc7"},
+        {"path": "vocab.json", "size": 2776833, "git_blob_sha1": "4783fe10ac3adce15ac8f358ef5462739852c569"}
+      ]
+    },
+    {
+      "id": "qwen3-vl-8b-instruct-4bit",
+      "backend_ids": ["qwen3_vl"],
+      "backend_version": "8b-instruct-4bit",
+      "distribution": "huggingface",
+      "repository": "mlx-community/Qwen3-VL-8B-Instruct-4bit",
+      "revision": "defcdea7cc7a4b0858fea563cbbce171d328e457",
+      "required_patterns": ["*.json", "*.jinja", "*.txt", "*.safetensors"],
+      "source_url": "https://huggingface.co/mlx-community/Qwen3-VL-8B-Instruct-4bit",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/mlx-community/Qwen3-VL-8B-Instruct-4bit"},
+      "files": [
+        {"path": "added_tokens.json", "size": 707, "git_blob_sha1": "b54f9135e44c1e81047e8d05cb027af8bc039eed"},
+        {"path": "chat_template.jinja", "size": 5292, "git_blob_sha1": "124386803f142761528f710e77ae483f5f8c4fc4"},
+        {"path": "chat_template.json", "size": 5499, "git_blob_sha1": "1081bacf1af7c7c6de4a585ce02cd0fd34e382da"},
+        {"path": "config.json", "size": 7140, "git_blob_sha1": "58c3644a49cfca24347064001e5de92b7129a579"},
+        {"path": "generation_config.json", "size": 269, "git_blob_sha1": "e116347d7ef42621c7a5957f82c015c38d939c1f"},
+        {"path": "merges.txt", "size": 1671853, "git_blob_sha1": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"},
+        {"path": "model-00001-of-00002.safetensors", "size": 5353972197, "sha256": "7c637158b2203e321d83596d3661f33b7b98a72beddfaaaa0eddc512acbdd1fb"},
+        {"path": "model-00002-of-00002.safetensors", "size": 406693049, "sha256": "77190cd1dcf244522869bf923558340112b26d7db2ef3692f88407dd9b33c25d"},
+        {"path": "model.safetensors.index.json", "size": 67759, "git_blob_sha1": "5857ec62530eb589b1876034dd5386f1d98131a6"},
+        {"path": "preprocessor_config.json", "size": 782, "git_blob_sha1": "2fa6553554f69b4e3a6b742a75264ff9dff90ad0"},
+        {"path": "special_tokens_map.json", "size": 613, "git_blob_sha1": "ac23c0aaa2434523c494330aeb79c58395378103"},
+        {"path": "tokenizer.json", "size": 11422654, "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"},
+        {"path": "tokenizer_config.json", "size": 5445, "git_blob_sha1": "fec7f182135c384a08ea2fc9635566ca79c45afc"},
+        {"path": "video_preprocessor_config.json", "size": 817, "git_blob_sha1": "e32b1d90356f74457edbfca27aa1e121dab7cdc7"},
+        {"path": "vocab.json", "size": 2776833, "git_blob_sha1": "4783fe10ac3adce15ac8f358ef5462739852c569"}
+      ]
+    },
+    {
+      "id": "nudenet-package-model",
+      "backend_ids": ["nudenet"],
+      "backend_version": "nudenet>=3.4.2/320n.onnx",
+      "distribution": "bundled-package",
+      "package": "nudenet",
+      "required_patterns": ["320n.onnx"],
+      "source_url": "https://github.com/notAI-tech/NudeNet",
+      "license": {"spdx": "MIT", "status": "declared", "url": "https://github.com/notAI-tech/NudeNet/blob/v3.4.2/LICENSE"},
+      "files": []
+    },
+    {
+      "id": "better-profanity-package-data",
+      "backend_ids": ["better_profanity"],
+      "backend_version": "0.7.0",
+      "distribution": "bundled-package",
+      "package": "better-profanity",
+      "required_patterns": ["profanity_wordlist.txt"],
+      "source_url": "https://pypi.org/project/better-profanity/",
+      "license": {"spdx": "MIT", "status": "declared", "url": "https://github.com/snguyenthanh/better_profanity/blob/0.7.0/LICENSE"},
+      "files": []
+    },
+    {
+      "id": "glin-profanity-package-data",
+      "backend_ids": ["glin_profanity"],
+      "backend_version": "3.4.0",
+      "distribution": "bundled-package",
+      "package": "glin-profanity",
+      "required_patterns": ["data/dictionaries/*.json"],
+      "source_url": "https://pypi.org/project/glin-profanity/",
+      "license": {"spdx": "MIT", "status": "declared", "url": "https://pypi.org/project/glin-profanity/"},
+      "files": []
+    },
+    {
+      "id": "alt-profanity-check-package-data",
+      "backend_ids": ["alt_profanity_check"],
+      "backend_version": "1.9.0",
+      "distribution": "bundled-package",
+      "package": "alt-profanity-check",
+      "required_patterns": ["data/*.joblib"],
+      "source_url": "https://pypi.org/project/alt-profanity-check/",
+      "license": {"spdx": "MIT", "status": "declared", "url": "https://github.com/dimitrismistriotis/alt-profanity-check/blob/1.9.0/LICENSE"},
+      "files": []
+    },
+    {
+      "id": "imageio-ffmpeg-python",
+      "backend_ids": [],
+      "backend_version": "imageio-ffmpeg>=0.5.0",
+      "distribution": "bundled-package",
+      "package": "imageio-ffmpeg",
+      "required_patterns": ["*.py"],
+      "source_url": "https://github.com/imageio/imageio-ffmpeg",
+      "license": {"spdx": "BSD-2-Clause", "status": "declared", "url": "https://github.com/imageio/imageio-ffmpeg#license"},
+      "files": []
+    },
+    {
+      "id": "ffmpeg-package-binary",
+      "backend_ids": [],
+      "backend_version": "imageio-ffmpeg>=0.5.0",
+      "distribution": "bundled-package",
+      "package": "imageio-ffmpeg",
+      "required_patterns": ["binaries/ffmpeg-*"],
+      "source_url": "https://github.com/imageio/imageio-ffmpeg",
+      "license": {"spdx": null, "status": "license-review-required", "url": "https://github.com/imageio/imageio-ffmpeg#license"},
+      "files": []
+    }
+  ]
+}

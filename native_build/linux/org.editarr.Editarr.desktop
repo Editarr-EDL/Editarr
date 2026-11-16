@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Editarr
+Comment=Scan media and review objectionable-content findings
+Exec=Editarr
+TryExec=Editarr
+Icon=editarr
+Terminal=false
+Categories=AudioVideo;
+StartupNotify=false
+X-AppImage-Version=@VERSION@

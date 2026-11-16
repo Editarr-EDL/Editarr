@@ -1,0 +1,128 @@
+{
+  "version": "mts-credits-evaluation-v1",
+  "license": "CC0-1.0",
+  "source": "Deterministic synthetic observations authored for Editarr tests",
+  "cases": [
+    {
+      "id": "scrolling-credible-chapter",
+      "source": "generated",
+      "duration_seconds": 120.0,
+      "expected_boundary_seconds": 90.0,
+      "tolerance_seconds": 2.0,
+      "tags": ["scrolling", "credible_chapter"],
+      "chapters": [{"start_seconds": 90.0, "title": "End Credits"}],
+      "observations": [
+        {"timestamp_seconds": 90.0, "text_density": 0.82, "credit_motion": 0.86, "black_frame": 0.03},
+        {"timestamp_seconds": 94.0, "text_density": 0.88, "credit_motion": 0.91, "black_frame": 0.02},
+        {"timestamp_seconds": 102.0, "text_density": 0.84, "credit_motion": 0.89, "black_frame": 0.04}
+      ],
+      "scene_boundaries": [36.0, 63.0, 90.0]
+    },
+    {
+      "id": "static-title-cards",
+      "source": "generated",
+      "duration_seconds": 80.0,
+      "expected_boundary_seconds": 61.0,
+      "tolerance_seconds": 2.0,
+      "tags": ["static_cards", "missing_chapters"],
+      "chapters": [],
+      "observations": [
+        {"timestamp_seconds": 61.0, "text_density": 0.91, "credit_motion": 0.57, "black_frame": 0.02},
+        {"timestamp_seconds": 65.0, "text_density": 0.94, "credit_motion": 0.61, "black_frame": 0.03},
+        {"timestamp_seconds": 73.0, "text_density": 0.89, "credit_motion": 0.54, "black_frame": 0.04}
+      ],
+      "scene_boundaries": [18.0, 42.0, 61.0, 68.0]
+    },
+    {
+      "id": "credits-over-moving-imagery",
+      "source": "generated",
+      "duration_seconds": 100.0,
+      "expected_boundary_seconds": 76.0,
+      "tolerance_seconds": 3.0,
+      "tags": ["moving_imagery", "missing_chapters"],
+      "chapters": [],
+      "observations": [
+        {"timestamp_seconds": 76.0, "text_density": 0.76, "credit_motion": 0.79, "black_frame": 0.01},
+        {"timestamp_seconds": 80.0, "text_density": 0.81, "credit_motion": 0.83, "black_frame": 0.02},
+        {"timestamp_seconds": 88.0, "text_density": 0.73, "credit_motion": 0.75, "black_frame": 0.01}
+      ],
+      "scene_boundaries": [24.0, 55.0, 76.0]
+    },
+    {
+      "id": "post-credits-scene",
+      "source": "generated",
+      "duration_seconds": 140.0,
+      "expected_boundary_seconds": 96.0,
+      "tolerance_seconds": 2.0,
+      "tags": ["post_credits", "credible_chapter"],
+      "chapters": [{"start_seconds": 96.0, "title": "Closing Credits"}, {"start_seconds": 126.0, "title": "Epilogue"}],
+      "observations": [
+        {"timestamp_seconds": 96.0, "text_density": 0.87, "credit_motion": 0.84, "black_frame": 0.02},
+        {"timestamp_seconds": 104.0, "text_density": 0.9, "credit_motion": 0.88, "black_frame": 0.03},
+        {"timestamp_seconds": 124.0, "text_density": 0.04, "credit_motion": 0.08, "black_frame": 0.92},
+        {"timestamp_seconds": 126.0, "text_density": 0.08, "credit_motion": 0.12, "black_frame": 0.01}
+      ],
+      "scene_boundaries": [41.0, 74.0, 96.0, 124.0, 126.0]
+    },
+    {
+      "id": "misleading-chapter",
+      "source": "generated",
+      "duration_seconds": 110.0,
+      "expected_boundary_seconds": 84.0,
+      "tolerance_seconds": 3.0,
+      "tags": ["misleading_chapter", "non_english"],
+      "chapters": [{"start_seconds": 52.0, "title": "Credits"}],
+      "observations": [
+        {"timestamp_seconds": 52.0, "text_density": 0.08, "credit_motion": 0.09, "black_frame": 0.01},
+        {"timestamp_seconds": 84.0, "text_density": 0.8, "credit_motion": 0.77, "black_frame": 0.02},
+        {"timestamp_seconds": 92.0, "text_density": 0.86, "credit_motion": 0.82, "black_frame": 0.03}
+      ],
+      "scene_boundaries": [28.0, 52.0, 84.0]
+    },
+    {
+      "id": "intermittent-black-frames",
+      "source": "generated",
+      "duration_seconds": 95.0,
+      "expected_boundary_seconds": 70.0,
+      "tolerance_seconds": 3.0,
+      "tags": ["black_frames", "scrolling", "missing_chapters"],
+      "chapters": [],
+      "observations": [
+        {"timestamp_seconds": 68.0, "text_density": 0.02, "credit_motion": 0.03, "black_frame": 0.96},
+        {"timestamp_seconds": 70.0, "text_density": 0.79, "credit_motion": 0.81, "black_frame": 0.04},
+        {"timestamp_seconds": 76.0, "text_density": 0.03, "credit_motion": 0.04, "black_frame": 0.94},
+        {"timestamp_seconds": 78.0, "text_density": 0.85, "credit_motion": 0.86, "black_frame": 0.03}
+      ],
+      "scene_boundaries": [31.0, 68.0, 70.0, 76.0, 78.0]
+    },
+    {
+      "id": "no-credits",
+      "source": "generated",
+      "duration_seconds": 75.0,
+      "expected_boundary_seconds": null,
+      "tolerance_seconds": 0.0,
+      "tags": ["no_credits", "missing_chapters"],
+      "chapters": [],
+      "observations": [
+        {"timestamp_seconds": 54.0, "text_density": 0.11, "credit_motion": 0.14, "black_frame": 0.02},
+        {"timestamp_seconds": 62.0, "text_density": 0.09, "credit_motion": 0.12, "black_frame": 0.03},
+        {"timestamp_seconds": 70.0, "text_density": 0.07, "credit_motion": 0.1, "black_frame": 0.02}
+      ],
+      "scene_boundaries": [22.0, 48.0, 63.0]
+    },
+    {
+      "id": "ambiguous-low-confidence",
+      "source": "generated",
+      "duration_seconds": 90.0,
+      "expected_boundary_seconds": 69.0,
+      "tolerance_seconds": 3.0,
+      "tags": ["ambiguous", "low_confidence", "missing_chapters"],
+      "chapters": [],
+      "observations": [
+        {"timestamp_seconds": 69.0, "text_density": 0.58, "credit_motion": 0.56, "black_frame": 0.04},
+        {"timestamp_seconds": 75.0, "text_density": 0.6, "credit_motion": 0.54, "black_frame": 0.05}
+      ],
+      "scene_boundaries": [30.0, 69.0]
+    }
+  ]
+}

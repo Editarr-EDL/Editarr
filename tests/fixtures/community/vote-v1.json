@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "revisionId": "submission-ai",
+  "operationId": "vote-vector-1",
+  "mutation": {
+    "version": 1,
+    "vote": "like"
+  },
+  "completed": {
+    "version": 1,
+    "state": "completed",
+    "result": {
+      "version": 1,
+      "operationId": "vote-vector-1",
+      "revisionId": "submission-ai",
+      "vote": "like"
+    }
+  },
+  "own": {
+    "version": 1,
+    "revisionId": "submission-ai",
+    "vote": "like",
+    "eligible": true
+  },
+  "aggregates": {
+    "version": 1,
+    "revisionId": "submission-ai",
+    "likes": 1,
+    "dislikes": 0
+  },
+  "values": ["like", "dislike", "neutral"]
+}

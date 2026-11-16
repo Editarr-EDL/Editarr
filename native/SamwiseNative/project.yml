@@ -1,0 +1,80 @@
+name: Samwise
+options:
+  deploymentTarget:
+    macOS: "15.0"
+    iOS: "18.0"
+packages:
+  SamwiseShared:
+    path: ../SamwiseShared
+targets:
+  SamwiseMacOS:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Samwise
+      - path: Sources/SamwiseMacOS
+    dependencies:
+      - package: SamwiseShared
+        product: SamwiseShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.samwise.macos
+        PRODUCT_NAME: Samwise
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+  SamwiseIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/Samwise
+      - path: Sources/SamwiseIOS
+    dependencies:
+      - package: SamwiseShared
+        product: SamwiseShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.samwise.ios
+        PRODUCT_NAME: Samwise
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+  SamwiseMacOSUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: XCUITests/macOS
+    dependencies:
+      - target: SamwiseMacOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.samwise.macos.uitests
+        TEST_TARGET_NAME: SamwiseMacOS
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+  SamwiseIOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: XCUITests/iOS
+    dependencies:
+      - target: SamwiseIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.samwise.ios.uitests
+        TEST_TARGET_NAME: SamwiseIOS
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+schemes:
+  SamwiseMacOS:
+    build:
+      targets:
+        SamwiseMacOS: all
+        SamwiseMacOSUITests: [test]
+    test:
+      targets: [SamwiseMacOSUITests]
+  SamwiseIOS:
+    build:
+      targets:
+        SamwiseIOS: all
+        SamwiseIOSUITests: [test]
+    test:
+      targets: [SamwiseIOSUITests]

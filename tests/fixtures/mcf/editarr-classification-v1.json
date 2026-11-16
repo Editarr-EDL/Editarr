@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "primary_fields": {
+    "category": "McfCategoryFamily",
+    "subcategory": "McfCategory",
+    "severity": "Severity",
+    "mcf_channel": "McfChannel",
+    "mcf_comment": "string"
+  },
+  "new_findings_require_category_pair": true,
+  "legacy_edl_may_be_unclassified": true,
+  "producer_mappings": [
+    {
+      "producer": "ordinary_profanity",
+      "category": "language",
+      "subcategory": "swearing"
+    },
+    {
+      "producer": "explicit_blasphemy",
+      "category": "language",
+      "subcategory": "blasphemy"
+    },
+    {
+      "producer": "nudity",
+      "category": "nudity",
+      "subcategory": "nudity"
+    },
+    {
+      "producer": "violence",
+      "category": "violence",
+      "subcategory": "violence"
+    }
+  ],
+  "legacy_edl_aliases": {
+    "profanity": ["language", "swearing"],
+    "nudity": ["nudity", "nudity"],
+    "violence": ["violence", "violence"]
+  },
+  "post_core_subcategorization": {
+    "task": "MCF-12",
+    "minimum_evidence_source": "qwen_summaries",
+    "fallbacks": {
+      "language": "swearing",
+      "nudity": "nudity",
+      "violence": "violence"
+    }
+  }
+}

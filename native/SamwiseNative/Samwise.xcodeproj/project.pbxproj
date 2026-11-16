@@ -1,0 +1,680 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		16CE7D95E95E42E645F1B592 /* SamwiseMacOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23F75571CB47275D56A75DC /* SamwiseMacOSApp.swift */; };
+		33F30490C7CA219AE2221B31 /* SamwiseShared in Frameworks */ = {isa = PBXBuildFile; productRef = 1CF1FF0597608DCF8CC9804B /* SamwiseShared */; };
+		40D41CC544E7227056542C9C /* SamwiseIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F3B5DA9E008F585229436B /* SamwiseIOSApp.swift */; };
+		53892D6915B7475528027628 /* SamwiseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1BA72803580D85EBE65F1AC /* SamwiseApp.swift */; };
+		8A2A2F1330544A578EA6074A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0232FA85B7DDF08589CD1B8A /* Assets.xcassets */; };
+		916FE0D8A229CD9922CF7C3B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0232FA85B7DDF08589CD1B8A /* Assets.xcassets */; };
+		D25541A02842414AD0AC02FA /* SamwiseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1BA72803580D85EBE65F1AC /* SamwiseApp.swift */; };
+		E07CFA0AA21EC340F89F9604 /* SamwiseIOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76B8FF9CEF8F730298F9FF3E /* SamwiseIOSUITests.swift */; };
+		E0844EC576338D197F2CE0A2 /* SamwiseShared in Frameworks */ = {isa = PBXBuildFile; productRef = 56FC941BAC990AC4284F813D /* SamwiseShared */; };
+		F07DAC5FE49E72F9D5EAEE9F /* SamwiseMacOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5DE302C5B2914DFC1E18978 /* SamwiseMacOSUITests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		28A0F0484E851C6FA9DE4651 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5F167F2006C3A3DDE74913FB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B59B0FB0B02309CADEC5826A;
+			remoteInfo = SamwiseIOS;
+		};
+		AA6D0555F2325AC2D1F9C1CB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5F167F2006C3A3DDE74913FB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D70D5C22C5CFF285346F894D;
+			remoteInfo = SamwiseMacOS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0232FA85B7DDF08589CD1B8A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1279815E6A15B713FFFACBE9 /* SamwiseIOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SamwiseIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		42561C7D8262956E34E0ECF2 /* SamwiseMacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SamwiseMacOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		76B8FF9CEF8F730298F9FF3E /* SamwiseIOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamwiseIOSUITests.swift; sourceTree = "<group>"; };
+		80F3B5DA9E008F585229436B /* SamwiseIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamwiseIOSApp.swift; sourceTree = "<group>"; };
+		A44B8BE5C5229090778E1C36 /* SamwiseShared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SamwiseShared; path = ../SamwiseShared; sourceTree = SOURCE_ROOT; };
+		B5DE302C5B2914DFC1E18978 /* SamwiseMacOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamwiseMacOSUITests.swift; sourceTree = "<group>"; };
+		B96D1422700C51FCE0C082F6 /* SamwiseMacOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SamwiseMacOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C23F75571CB47275D56A75DC /* SamwiseMacOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamwiseMacOSApp.swift; sourceTree = "<group>"; };
+		D1BA72803580D85EBE65F1AC /* SamwiseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamwiseApp.swift; sourceTree = "<group>"; };
+		EC1B6924D4335B2B3EE47D10 /* SamwiseIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SamwiseIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		74F705BB00822E10B582B7A4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				33F30490C7CA219AE2221B31 /* SamwiseShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B4E304C40C895F34565FC983 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0844EC576338D197F2CE0A2 /* SamwiseShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4E4C3A9E1385920A9D3D731E /* Samwise */ = {
+			isa = PBXGroup;
+			children = (
+				D1BA72803580D85EBE65F1AC /* SamwiseApp.swift */,
+				85A20332BB6B70DD3E4C65BB /* Resources */,
+			);
+			name = Samwise;
+			path = Sources/Samwise;
+			sourceTree = "<group>";
+		};
+		5412F53FBFC07FDCE4E01542 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				76B8FF9CEF8F730298F9FF3E /* SamwiseIOSUITests.swift */,
+			);
+			name = iOS;
+			path = XCUITests/iOS;
+			sourceTree = "<group>";
+		};
+		5B6DE700756BBCD136A7CF8F /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				A44B8BE5C5229090778E1C36 /* SamwiseShared */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		85A20332BB6B70DD3E4C65BB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0232FA85B7DDF08589CD1B8A /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		8ABD7D187CF2592FAFD22869 /* macOS */ = {
+			isa = PBXGroup;
+			children = (
+				B5DE302C5B2914DFC1E18978 /* SamwiseMacOSUITests.swift */,
+			);
+			name = macOS;
+			path = XCUITests/macOS;
+			sourceTree = "<group>";
+		};
+		9268FFA1194E1C761D96A248 = {
+			isa = PBXGroup;
+			children = (
+				5412F53FBFC07FDCE4E01542 /* iOS */,
+				8ABD7D187CF2592FAFD22869 /* macOS */,
+				5B6DE700756BBCD136A7CF8F /* Packages */,
+				4E4C3A9E1385920A9D3D731E /* Samwise */,
+				E0BA8203AB05AE8B3EC011FA /* SamwiseIOS */,
+				B3C846A41F59A57201DCFD8D /* SamwiseMacOS */,
+				95C430B261BBB22F979EDF08 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		95C430B261BBB22F979EDF08 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EC1B6924D4335B2B3EE47D10 /* SamwiseIOS.app */,
+				1279815E6A15B713FFFACBE9 /* SamwiseIOSUITests.xctest */,
+				42561C7D8262956E34E0ECF2 /* SamwiseMacOS.app */,
+				B96D1422700C51FCE0C082F6 /* SamwiseMacOSUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B3C846A41F59A57201DCFD8D /* SamwiseMacOS */ = {
+			isa = PBXGroup;
+			children = (
+				C23F75571CB47275D56A75DC /* SamwiseMacOSApp.swift */,
+			);
+			name = SamwiseMacOS;
+			path = Sources/SamwiseMacOS;
+			sourceTree = "<group>";
+		};
+		E0BA8203AB05AE8B3EC011FA /* SamwiseIOS */ = {
+			isa = PBXGroup;
+			children = (
+				80F3B5DA9E008F585229436B /* SamwiseIOSApp.swift */,
+			);
+			name = SamwiseIOS;
+			path = Sources/SamwiseIOS;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0AB3355169EBA06A93172297 /* SamwiseMacOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6FF338EA3A9F74996E62C2BA /* Build configuration list for PBXNativeTarget "SamwiseMacOSUITests" */;
+			buildPhases = (
+				9A407B62AB071117AE502E2B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0AC0390BFF9FCE03ACDD27BF /* PBXTargetDependency */,
+			);
+			name = SamwiseMacOSUITests;
+			packageProductDependencies = (
+			);
+			productName = SamwiseMacOSUITests;
+			productReference = B96D1422700C51FCE0C082F6 /* SamwiseMacOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		90803C98741CA93846261C56 /* SamwiseIOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EE44A73529563D95517D13DA /* Build configuration list for PBXNativeTarget "SamwiseIOSUITests" */;
+			buildPhases = (
+				84013F2B8FC76897C145147A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C7E138BB20DD14AFDD50C44F /* PBXTargetDependency */,
+			);
+			name = SamwiseIOSUITests;
+			packageProductDependencies = (
+			);
+			productName = SamwiseIOSUITests;
+			productReference = 1279815E6A15B713FFFACBE9 /* SamwiseIOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		B59B0FB0B02309CADEC5826A /* SamwiseIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4732DF97CA4DC2B0C9D5AFD0 /* Build configuration list for PBXNativeTarget "SamwiseIOS" */;
+			buildPhases = (
+				5A77414FC275761F90B02AE7 /* Sources */,
+				EB5526CEA2F40F1E5B2D7D5F /* Resources */,
+				74F705BB00822E10B582B7A4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SamwiseIOS;
+			packageProductDependencies = (
+				1CF1FF0597608DCF8CC9804B /* SamwiseShared */,
+			);
+			productName = SamwiseIOS;
+			productReference = EC1B6924D4335B2B3EE47D10 /* SamwiseIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D70D5C22C5CFF285346F894D /* SamwiseMacOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8C016CBAD86BF029C8717AD3 /* Build configuration list for PBXNativeTarget "SamwiseMacOS" */;
+			buildPhases = (
+				CF724EE7BC9D06F96A20C206 /* Sources */,
+				8F0F2A2166A90364E1FF89AF /* Resources */,
+				B4E304C40C895F34565FC983 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SamwiseMacOS;
+			packageProductDependencies = (
+				56FC941BAC990AC4284F813D /* SamwiseShared */,
+			);
+			productName = SamwiseMacOS;
+			productReference = 42561C7D8262956E34E0ECF2 /* SamwiseMacOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5F167F2006C3A3DDE74913FB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					0AB3355169EBA06A93172297 = {
+						TestTargetID = D70D5C22C5CFF285346F894D;
+					};
+					90803C98741CA93846261C56 = {
+						TestTargetID = B59B0FB0B02309CADEC5826A;
+					};
+				};
+			};
+			buildConfigurationList = B44D9F88A31833DFFCB4A084 /* Build configuration list for PBXProject "Samwise" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9268FFA1194E1C761D96A248;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5EB0A3FC5A3C5CA2E6236BFC /* XCLocalSwiftPackageReference "../SamwiseShared" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 95C430B261BBB22F979EDF08 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D70D5C22C5CFF285346F894D /* SamwiseMacOS */,
+				B59B0FB0B02309CADEC5826A /* SamwiseIOS */,
+				0AB3355169EBA06A93172297 /* SamwiseMacOSUITests */,
+				90803C98741CA93846261C56 /* SamwiseIOSUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8F0F2A2166A90364E1FF89AF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				916FE0D8A229CD9922CF7C3B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EB5526CEA2F40F1E5B2D7D5F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A2A2F1330544A578EA6074A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5A77414FC275761F90B02AE7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				53892D6915B7475528027628 /* SamwiseApp.swift in Sources */,
+				40D41CC544E7227056542C9C /* SamwiseIOSApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		84013F2B8FC76897C145147A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E07CFA0AA21EC340F89F9604 /* SamwiseIOSUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A407B62AB071117AE502E2B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F07DAC5FE49E72F9D5EAEE9F /* SamwiseMacOSUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF724EE7BC9D06F96A20C206 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D25541A02842414AD0AC02FA /* SamwiseApp.swift in Sources */,
+				16CE7D95E95E42E645F1B592 /* SamwiseMacOSApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0AC0390BFF9FCE03ACDD27BF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D70D5C22C5CFF285346F894D /* SamwiseMacOS */;
+			targetProxy = AA6D0555F2325AC2D1F9C1CB /* PBXContainerItemProxy */;
+		};
+		C7E138BB20DD14AFDD50C44F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B59B0FB0B02309CADEC5826A /* SamwiseIOS */;
+			targetProxy = 28A0F0484E851C6FA9DE4651 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5F49587ED4DE310C856159EF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		6DE38C629C7BEF630B07B0DB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.macos.uitests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = SamwiseMacOS;
+			};
+			name = Release;
+		};
+		7C05A03FDE89F294F508ECB2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		7C301A95D4DFA1415B4F0495 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.macos;
+				PRODUCT_NAME = Samwise;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A50A1FCAB8A95F6E5B7C84B1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.macos.uitests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = SamwiseMacOS;
+			};
+			name = Debug;
+		};
+		C58ADBAB8FC6DC35DD362BA9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SamwiseIOS;
+			};
+			name = Debug;
+		};
+		DEBA9701B95C815374E89DE0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.ios;
+				PRODUCT_NAME = Samwise;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		EE80B4C86F89B632E799E67A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SamwiseIOS;
+			};
+			name = Release;
+		};
+		EF83C9AAE5FBD119689DA2C3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.ios;
+				PRODUCT_NAME = Samwise;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F88301AA1CC9AFFE418A3551 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.samwise.macos;
+				PRODUCT_NAME = Samwise;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4732DF97CA4DC2B0C9D5AFD0 /* Build configuration list for PBXNativeTarget "SamwiseIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DEBA9701B95C815374E89DE0 /* Debug */,
+				EF83C9AAE5FBD119689DA2C3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6FF338EA3A9F74996E62C2BA /* Build configuration list for PBXNativeTarget "SamwiseMacOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A50A1FCAB8A95F6E5B7C84B1 /* Debug */,
+				6DE38C629C7BEF630B07B0DB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8C016CBAD86BF029C8717AD3 /* Build configuration list for PBXNativeTarget "SamwiseMacOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7C301A95D4DFA1415B4F0495 /* Debug */,
+				F88301AA1CC9AFFE418A3551 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B44D9F88A31833DFFCB4A084 /* Build configuration list for PBXProject "Samwise" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7C05A03FDE89F294F508ECB2 /* Debug */,
+				5F49587ED4DE310C856159EF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EE44A73529563D95517D13DA /* Build configuration list for PBXNativeTarget "SamwiseIOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C58ADBAB8FC6DC35DD362BA9 /* Debug */,
+				EE80B4C86F89B632E799E67A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		5EB0A3FC5A3C5CA2E6236BFC /* XCLocalSwiftPackageReference "../SamwiseShared" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../SamwiseShared;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1CF1FF0597608DCF8CC9804B /* SamwiseShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SamwiseShared;
+		};
+		56FC941BAC990AC4284F813D /* SamwiseShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SamwiseShared;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 5F167F2006C3A3DDE74913FB /* Project object */;
+}

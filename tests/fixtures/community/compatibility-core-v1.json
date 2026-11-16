@@ -1,0 +1,57 @@
+{
+  "policy_version": "community-compatibility-core-1",
+  "dto_sha256": {
+    "sampled-file-not-analyzed-audio": "a59d79ea5868a56b5ce219a6741e1944f8c9ff4b91f61ca7896a13420b55e40a",
+    "renamed-file": "d4bc4b5ef0bb002538bfb139fe674074faf42a9b7a32844e2a2bced5fea9acb4",
+    "duration-inclusive-boundary": "a59d79ea5868a56b5ce219a6741e1944f8c9ff4b91f61ca7896a13420b55e40a",
+    "duration-conflict": "2aae60a396eecb662d4cf34343026f036c31599c583dfcec681f324a4c5f9c24",
+    "rounded-runtime": "8efd37aab9bfe40b6aae80bbc4475a55a1565ef130c2593ded9c4d90e8a876b4",
+    "coarse-probe": "8efd37aab9bfe40b6aae80bbc4475a55a1565ef130c2593ded9c4d90e8a876b4",
+    "wrong-cut-overrides-hash": "564d04e8e95b010cda5eda2d70ed3650e145e6f646146d5929590251ff6c38a0",
+    "dub-video-independent": "f0dea77d6f8f581273e59fd398a358a52dede8423cc8aba1e12e6abf3fd9f0cf",
+    "commentary-video-independent": "5531c67051fe773a5772d0a7a01b39ddddcc4d68f06c94e5daef118e0ac92861",
+    "unknown-track": "7f7d56f50edc2aa58922a1b82e775160b741f4eff4a44d8cb1b824b052b95d15",
+    "missing-work": "7bc37491487c16128d3decc42eacb8097ab53b0b44c873abc58a5a136416c23f",
+    "wrong-work": "c4837a67e87b23400b4d5c97402800a1c371d96f020b08998e5013b8e3e5e5bb",
+    "unlinked-provider": "8dcbb484c3978b7db3f6dbb46f5f2c727752847810a264e885d7d48a28f8e3a7",
+    "remux-no-stream-evidence": "d03c0040a9693bd3656977a1becfd22668e73a44893a993a73f4c1fa7285a864",
+    "reencode-no-release-name": "cc363620b6b0b46305b8a73b7f00fa93319fc782d5845c0bbd216dd1e26c3c17",
+    "legacy-md5-ignored": "c001a06504e576c3b3065ca99b6c72e7b3e7d849ff77abe0583843109165eed1",
+    "size-conflict-same-digest": "3f483bb294dfecd3b63bddcf3c9fb038d0f3ad9c566916604ea3a43794f9fd2b",
+    "full-file": "a8ac76275e84b8170e3d22a40baeb4256f14af0444a013c414e79dfc2f5ac5c8",
+    "double-special": "a59d79ea5868a56b5ce219a6741e1944f8c9ff4b91f61ca7896a13420b55e40a",
+    "double-vs-single": "8e538655a271a8f7f770ac58906e9a2d237695dcc89b4b19f6437e9942979704"
+  },
+  "target": {
+    "media": {
+      "entity_type": "movie",
+      "identifiers": [{"provider": "tmdb", "entity_type": "movie", "value": "1", "provenance": "user_confirmed"}],
+      "series_identifiers": [], "episode_numbers": [], "episode_span": [],
+      "release": {"scene_name": "Movie-GROUP", "group": "GROUP", "edition": "Theatrical", "quality": null, "size_bytes": 100, "duration": {"seconds": 6000, "source": "file_probe", "precision_seconds": null}, "audio": {"language": "en", "role": "main", "codec": null, "channels": null}},
+      "input_requirement": null
+    },
+    "fingerprints": [{"algorithm": "editarr-community-file-sha256-sampled-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size_bytes": 100}]
+  },
+  "cases": [
+    {"name": "sampled-file-not-analyzed-audio", "candidate": {}, "video": "strong_fingerprint", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "renamed-file", "candidate": {"media": {"release": {"scene_name": "Renamed", "group": "OTHER"}}}, "video": "strong_fingerprint", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "duration-inclusive-boundary", "candidate": {"media": {"release": {"duration": {"seconds": 6002}}}}, "video": "strong_fingerprint", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "duration-conflict", "candidate": {"media": {"release": {"duration": {"seconds": 6002.001}}}}, "video": "incompatible", "audio": "incompatible", "video_conflicts": ["measured_duration"], "audio_conflicts": ["measured_duration"]},
+    {"name": "rounded-runtime", "candidate": {"media": {"release": {"duration": {"source": "jellyfin_ticks", "precision_seconds": 60}}}}, "video": "possible_cut", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "coarse-probe", "candidate": {"media": {"release": {"duration": {"precision_seconds": 3}}}}, "video": "possible_cut", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "wrong-cut-overrides-hash", "candidate": {"media": {"release": {"edition": "Extended"}}}, "video": "incompatible", "audio": "incompatible", "video_conflicts": ["edition"], "audio_conflicts": ["edition"]},
+    {"name": "dub-video-independent", "candidate": {"media": {"release": {"audio": {"language": "fr"}}}}, "video": "strong_fingerprint", "audio": "incompatible", "video_conflicts": [], "audio_conflicts": ["audio_language"]},
+    {"name": "commentary-video-independent", "candidate": {"media": {"release": {"audio": {"role": "commentary"}}}}, "video": "strong_fingerprint", "audio": "incompatible", "video_conflicts": [], "audio_conflicts": ["audio_role"]},
+    {"name": "unknown-track", "candidate": {"media": {"release": {"audio": null}}}, "video": "strong_fingerprint", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "missing-work", "candidate": {"media": {"identifiers": []}}, "video": "title_only", "audio": "title_only", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "wrong-work", "candidate": {"media": {"identifiers": [{"provider": "tmdb", "entity_type": "movie", "value": "2", "provenance": "user_confirmed"}]}}, "video": "incompatible", "audio": "incompatible", "video_conflicts": ["work_identity"], "audio_conflicts": ["work_identity"]},
+    {"name": "unlinked-provider", "candidate": {"media": {"identifiers": [{"provider": "tvdb", "entity_type": "movie", "value": "1", "provenance": "user_confirmed"}]}}, "video": "title_only", "audio": "title_only", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "remux-no-stream-evidence", "candidate": {"fingerprints": [], "media": {"release": {"size_bytes": 110}}}, "video": "release_match", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "reencode-no-release-name", "candidate": {"fingerprints": [], "media": {"release": {"scene_name": null, "group": null, "size_bytes": 120}}}, "video": "possible_cut", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "legacy-md5-ignored", "candidate": {"fingerprints": [{"algorithm": "md5", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size_bytes": 100}]}, "video": "release_match", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "size-conflict-same-digest", "candidate": {"fingerprints": [{"algorithm": "editarr-community-file-sha256-sampled-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size_bytes": 101}], "media": {"release": {"size_bytes": 101}}}, "video": "incompatible", "audio": "incompatible", "video_conflicts": ["fingerprint_size"], "audio_conflicts": ["fingerprint_size"]},
+    {"name": "full-file", "target": {"fingerprints": [{"algorithm": "sha256-full-1", "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size_bytes": 100}]}, "candidate": {"fingerprints": [{"algorithm": "sha256-full-1", "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size_bytes": 100}]}, "video": "exact_file", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "double-special", "target": {"media": {"entity_type": "episode", "identifiers": [], "series_identifiers": [{"provider": "tvdb", "entity_type": "series", "value": "7", "provenance": "source_metadata"}], "episode_numbers": [{"scheme": "aired", "season": 0, "number": 1}], "episode_span": [{"scheme": "aired", "season": 0, "number": 1}, {"scheme": "aired", "season": 0, "number": 2}]}}, "candidate": {}, "video": "strong_fingerprint", "audio": "possible_cut", "video_conflicts": [], "audio_conflicts": []},
+    {"name": "double-vs-single", "target": {"media": {"entity_type": "episode", "identifiers": [], "series_identifiers": [{"provider": "tvdb", "entity_type": "series", "value": "7", "provenance": "source_metadata"}], "episode_numbers": [{"scheme": "aired", "season": 0, "number": 1}], "episode_span": [{"scheme": "aired", "season": 0, "number": 1}, {"scheme": "aired", "season": 0, "number": 2}]}}, "candidate": {"media": {"episode_span": []}}, "video": "incompatible", "audio": "incompatible", "video_conflicts": ["episode_span"], "audio_conflicts": ["episode_span"]}
+  ]
+}
