@@ -49,6 +49,8 @@ def _run_helper(path: str, label: str) -> None:
 
 def _smoke_release_media(ffmpeg: str) -> None:
     """Prove the release helpers can encode previews and PyAV can read their output."""
+    from nudenet import NudeDetector
+
     from scanner.pipeline.scenes import detect_scenes
 
     from .mute_preview import render_mute_preview, render_video_preview
@@ -70,6 +72,14 @@ def _smoke_release_media(ffmpeg: str) -> None:
             raise RuntimeError("Packaged FFmpeg did not produce an MP3 preview")
         if not render_video_preview(video, 0.25, 0.75):
             raise RuntimeError("Packaged FFmpeg did not produce an MP4 preview")
+        image = Path(temp) / "frame.png"
+        subprocess.run(
+            [ffmpeg, "-v", "error", "-i", str(video), "-frames:v", "1", str(image)],
+            check=True,
+            timeout=30,
+        )
+        if not isinstance(NudeDetector().detect(str(image)), list):
+            raise RuntimeError("Packaged NudeNet did not return a detection list")
 
 
 def run_runtime_smoke() -> int:

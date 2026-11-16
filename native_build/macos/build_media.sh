@@ -48,7 +48,7 @@ opencv="$output/src/opencv_python_headless-5.0.0.93"
 patch -d "$opencv" -p1 < "$sources/opencv-optional-typing.patch"
 export ENABLE_HEADLESS=1 CMAKE_BUILD_PARALLEL_LEVEL="$jobs"
 export CMAKE_ARGS="-DPYTHON3_NUMPY_INCLUDE_DIRS=$numpy_headers
--DBUILD_LIST=core,imgproc,imgcodecs,videoio,python3 -DWITH_FFMPEG=OFF
+-DBUILD_LIST=core,imgproc,imgcodecs,videoio,dnn,python3 -DWITH_FFMPEG=OFF
 -DWITH_AVFOUNDATION=OFF -DWITH_IPP=OFF -DWITH_OPENCL=OFF -DWITH_OPENEXR=OFF
 -DWITH_UNIFONT=OFF -DWITH_KLEIDICV=OFF -DWITH_ITT=OFF -DBUILD_TESTS=OFF
 -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF"

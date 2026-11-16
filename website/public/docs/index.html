@@ -49,8 +49,9 @@
 <p>From your first connection to a custom automation, here’s how to make Editarr part of your media setup.</p>
 <section id="get-started">
 <h2>Getting started</h2>
-<p>Editarr is a self-hosted Python service that serves its web interface and API together. Use Python 3.11 or newer; the release wheel includes the built interface.</p>
-<h3 id="install">Build and install from source</h3>
+<h3 id="install">Install on macOS</h3>
+<p>Download the Apple Silicon disk image for macOS 26.2 or later. Drag Editarr to Applications and follow the signing steps in the release notes before opening it. <a href="https://github.com/Editarr-EDL/Editarr/releases">GitHub releases</a></p>
+<h3>Build and install from source</h3>
 <p>Install Python, uv, Node.js, and pnpm as described in the <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/release-build.md">release build guide</a>, then build the wheel from a checkout.</p>
 <pre tabindex="0">
 <code>git clone https://github.com/Editarr-EDL/Editarr.git
@@ -59,7 +60,7 @@ uv sync --extra dev
 uv run python scripts/build_release.py --wheel
 uv venv /absolute/path/editarr-venv
 uv pip install --python /absolute/path/editarr-venv/bin/python \
-  dist/editarr-0.1.0-py3-none-any.whl
+  dist/editarr-0.1.1-py3-none-any.whl
 /absolute/path/editarr-venv/bin/editarr --host 127.0.0.1</code>
 </pre>
 <p>Open <code>http://localhost:3348/</code> and sign in as a Jellyfin administrator to create the owner account, or restore a backup before setup. Afterwards every person signs in with their own account; see <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/multi-user-guide.md">Run Editarr for several users</a> for roles, Jellyfin sign-in, and upgrades from a single-user release. Use the wheel filename produced by your build if its version differs.</p>

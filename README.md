@@ -36,16 +36,19 @@ plugin—to use during playback. Editarr never modifies your media files.
 ## Requirements
 
 - A Jellyfin server and a Jellyfin administrator account
-- Python 3.11 or newer, with SQLite 3.35 or newer
 - Read access to your media from the Editarr host, plus write access to publish
   sidecar files
 
-Python was chosen due to compatibility with most AI models in an attempt to have a unified tech stack for the backend.
-
 ## Install and run
 
-Build a release wheel from a checkout (needs [uv](https://docs.astral.sh/uv/),
-Node.js 20+, and pnpm), then install and run it:
+The native macOS app is available for Apple Silicon on macOS 26.2 or later.
+Download the disk image, drag Editarr to Applications, and follow the local
+signing steps in the release notes before opening it. [GitHub releases](https://github.com/Editarr-EDL/Editarr/releases)
+
+### Build from source for development
+
+You can build a Python wheel from a checkout with Python 3.11 or newer,
+SQLite 3.35 or newer, [uv](https://docs.astral.sh/uv/), Node.js, and pnpm:
 
 ```bash
 git clone https://github.com/Editarr-EDL/Editarr.git
@@ -60,6 +63,9 @@ Open `http://localhost:3348`. See the [release build guide](docs/release-build.m
 for details.
 
 ### Network access
+
+The commands below apply to source and wheel installations. The macOS app
+starts from its menu bar and uses the same deployment settings in Editarr.
 
 - **This computer only:** run `editarr` (it listens on `127.0.0.1:3348`).
 - **Your home network:** run `editarr --host 0.0.0.0` and open
