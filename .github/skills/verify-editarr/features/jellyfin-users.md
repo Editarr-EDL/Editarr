@@ -1,6 +1,6 @@
 # Jellyfin Users
 
-Feature `jellyfin-users` (MU-08, MU-16). `scanner/integrations/jellyfin_users.py`
+`scanner/integrations/jellyfin_users.py`
 reads verified Jellyfin identity and media access. Jellyfin sign-in
 (`POST /api/auth/jellyfin/login`), account import and sync, and media decisions
 call it. This page covers the adapter's deterministic checks and the live
@@ -74,7 +74,7 @@ rm -rf "$T"
   `SSL_CERT_FILE`. A `.netrc` file in `HOME` never changes the adapter's
   `Authorization` header.
 
-## Fixture states for later tasks
+## Fixture states
 
 `tests/jellyfin_user_boundary.JellyfinBoundary(api_key, passwords)` serves one
 state, optionally under a named fault. Set `state` and `fault` between calls.
@@ -96,15 +96,12 @@ state, optionally under a named fault. Set `state` and `fault` between calls.
 ## Live-server check
 
 A live check needs a disposable Jellyfin container with synthetic users and
-media; it never uses a real server or credentials. The MU-08 run used the
-plugin verifier's digest-pinned Jellyfin 12 image. Its probe script and
-reports are retained evidence under `web/test-results/mu-08/`, not committed,
-and its result is in the MU-08 handoff. Repeat a live check when a Jellyfin
+media; it never uses a real server or credentials. Use the plugin verifier’s digest-pinned Jellyfin 12 image. Repeat a live check when a Jellyfin
 upgrade changes these routes. That check found that Jellyfin 12's batch
 `/Items?Ids=...&userId=...` ignores library access, which the fixture now
 reproduces through `idsQueryItems`.
 
-## Account admission and sync (MU-16, JF-05)
+## Account admission and sync
 
 `scanner/security/jellyfin_accounts/` turns those reads into linked accounts:
 first sign-in creation (`POST /api/auth/jellyfin/login` or Quick Connect),
@@ -113,7 +110,7 @@ import (`/api/jellyfin/users`), the five-minute and manual sync
 evidence cache. The contract is "Jellyfin accounts and admission" in
 docs/multi-user-contracts.md.
 
-Since JF-05 every Jellyfin user's first sign-in creates an account; there is no
+Every Jellyfin user's first sign-in creates an account; there is no
 admission mode, and `/api/settings/jellyfin-admission` and
 `POST /api/users/{id}/role-sync` answer 404. Migration `0028_jellyfin_admission`
 drops the stored mode and records one system `settings.jellyfin_admission.change`
@@ -131,16 +128,14 @@ Jellyfin username and "Avatar from Jellyfin" without edit controls; email,
 timezone, and language stay editable. Sync still disables accounts that Jellyfin
 disabled or deleted and ends their sessions.
 
-Browser journeys: `verify.mjs auth --users` (MU-25) imports Jellyfin users and
+Browser journeys: `verify.mjs auth --users` imports Jellyfin users and
 signs one in through the Jellyfin form. `verify.mjs auth --jellyfin-accounts`
-(JF-05, `scripts/lib/jellyfin-accounts-journey.mjs`) starts from a database at
+(`scripts/lib/jellyfin-accounts-journey.mjs`) starts from a database at
 `0027_jellyfin_owner` with import-only admission stored (`seedImportOnlyDatabase`),
-so the run's startup upgrade is plan lane 2. It creates users through the run's
-Jellyfin 12 admin API and proves, with UI input and API readbacks, the plan's
-lanes in order: (1) an ordinary user's first sign-in creates a `user`; (2) the
+then creates users through the run’s Jellyfin 12 admin API and checks: (1) an ordinary user's first sign-in creates a `user`; (2) the
 upgrade journal names `0027_jellyfin_owner`, that sign-in worked after it, and
 the audit history holds one system `settings.jellyfin_admission.change` event
-(`previous: import_only`), shown in `jf05-mode-migrated.png`; (3) an
+(`previous: import_only`); (3) an
 administrator's first sign-in creates an `admin` shown in Users; (4) the owner's
 change of that admin to `user` survives the user's next sign-in and a manual
 sync; (5) a Jellyfin rename reaches the display name, the username, Users, and
@@ -151,7 +146,7 @@ renames an account, and no profile control offers them; (8) import of a
 never-signed-in administrator creates an `admin`; (9) Users and the linked
 profile fit 320px with no admission control; (10) a Jellyfin-disabled user is
 disabled and signed out at sync. Step 11 is an extra check that the admission
-and role-sync routes answer 404. Steps 12 to 15 cover the JF-05 fix round: (12) a
+and role-sync routes answer 404. Additional checks cover (12) a
 Jellyfin user whose name another linked account still holds (Jellyfin renamed
 the holder, but no sync has run) signs in with no username, one
 `account.jellyfin.state` event says `username: unavailable`, the syncs that
@@ -162,7 +157,7 @@ sign-in with the blocked message, Quick Connect with 403 `jellyfin_user_blocked`
 and import with `blocked`, audits both sign-in refusals, and lists the user under
 "Blocked Jellyfin users"; (15) the owner's Unblock with a fresh password lets the
 next sign-in create a fresh account. It writes `jellyfin-accounts-steps.json`,
-`jellyfin-accounts-result.json`, and masked `jf05-*.png` captures.
+`jellyfin-accounts-result.json`, and masked screenshots.
 
 ```bash
 node .github/skills/verify-editarr/scripts/verify.mjs auth --jellyfin-accounts --ports=9950-9999

@@ -1,6 +1,6 @@
 # Account linking
 
-Feature `account-linking` (MU-35 API, MU-39 UI). An admin or the owner links an
+An admin or the owner links an
 unlinked account to a Jellyfin identity, or relinks a linked account after a server
 replacement. Only migration `0030_remove_passwords` makes unlinked accounts: it
 disables every active account without a Jellyfin link with disable cause
@@ -29,7 +29,7 @@ files), so a pending removal survives a reload until the read says it finished.
 Passwords are cleared when each proof request ends; the result survives the
 session remount as an operation receipt. Nested password prompts keep Tab,
 Shift+Tab, and Escape in the topmost dialog (`web/src/ui/ModalDialog.tsx`). There is no unlink or merge action; a duplicate identity explains
-that explicit deletion or transfer is required (MU-41 adds the action).
+that explicit deletion or transfer is required.
 
 ## Routes
 
@@ -57,7 +57,7 @@ interactive authentication. API keys get `interactive_session_required`.
 ## Automated journey
 
 ```bash
-VERIFY_EVIDENCE_ROOT=web/test-results/mu-39/verify node .github/skills/verify-editarr/scripts/verify.mjs auth --reviews --account-link
+node .github/skills/verify-editarr/scripts/verify.mjs auth --reviews --account-link
 ```
 
 Before launch, `scripts/lib/legacy-members.mjs` seeds a 0029 database (see the
@@ -195,8 +195,7 @@ A live Jellyfin server. The `outage_expired` state is covered by Vitest
 (`web/src/settings/users/account-link-*.test.tsx`), not the journey. The journey
 finishes a pending removal through the pre-link recovery, not by waiting for the
 hourly sweep or restarting. The legacy member's personal exports are written by
-the current publication code against the 0029 database, standing in for a JF-05
-local account's own publication; no JF-05 build runs.
+the current publication code against the 0029 database, representing an existing local account publication.
 
 A real remount is not driven; the tests renumber the file's device or inode in
 `os.lstat`. Where a share's inode numbers change across mounts, an interrupted

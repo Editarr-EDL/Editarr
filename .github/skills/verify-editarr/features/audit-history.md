@@ -1,6 +1,6 @@
 # Audit History
 
-Feature ID `mu-audit-history`, owned by MU-28. Use the existing source verifier.
+Use the source verifier to check audit history.
 This recipe needs no provider, media, model, or pre-existing database.
 
 ## Sub-features
@@ -88,7 +88,7 @@ check, retaining failure evidence and running the same cleanup.
 
 Run `tests/test_audit_query.py` and `tests/test_audit_history_http.py` for retention
 boundaries, corrupt-payload redaction, account protection, fresh-authority races,
-action-capability scope, unrelated-write tolerance, busy retries, and MU-11 media
+action-capability scope, unrelated-write tolerance, busy retries, and media
 scope before filters/counts/details. The registry completeness check fails if a
 new audit action lacks an explicit visibility rule. The HTTP fixture uses real
 authentication and SQLite, with synthetic local media. It is not a live

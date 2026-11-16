@@ -1,11 +1,8 @@
 # Verify settings access
 
-Feature `mu-27`, fixture `settings-access-v2`. The permission journey checks
+The permission journey checks
 owner, admin, user, and override-account settings at 1440 and 320 pixels,
 independent API refusals, keyboard focus, axe, and a real controller restart.
-Round-3 evidence is under `web/test-results/mu-27/fix-round-3/`.
-Round-4 race and section-feedback evidence is under
-`web/test-results/mu-27/fix-round-4/`.
 
 ## Run the isolated journey
 
@@ -20,11 +17,10 @@ community identity. It retains the existing Connections-page admission grant.
 The reserved `https://community.test` configuration gives the disconnected status
 panel a meaningful state. The journey never initiates a remote community action.
 
-Run from the assigned checkout. Choose ports reserved for that task.
+Run from the repository checkout and choose an available port range.
 
 ```sh
-mkdir -p /private/tmp/mu27-runtime
-TMPDIR=/private/tmp/mu27-runtime node .github/skills/verify-editarr/scripts/verify.mjs auth --settings --controller --ports=9000-9019
+node .github/skills/verify-editarr/scripts/verify.mjs auth --settings --controller --ports=9000-9019
 ```
 
 The helper prints its evidence directory under `web/test-results/verify-editarr/`.
@@ -108,7 +104,7 @@ list access because their controls need the listed ID, content, and order.
 Although the delete API accepts a known ID without path visibility, this UI
 does not invent an ID-entry workflow.
 
-The coordinator's R3 ruling permits model cancel/delete controls to require
+Model cancel and delete controls require
 `models.inventory.view` as well as the corresponding action grant. The controls
 act on listed artifact IDs. The scan catalog's backend IDs are not artifact IDs,
 and no existing no-inventory discovery API exposes them. The regression cases
@@ -120,21 +116,4 @@ Community status GETs require `community.identity.view.own`. Enrollment
 start/complete/cancel require `community.identity.enroll.own`; profile
 rename/discard require `community.identity.profile.own`; rotation and every
 recovery POST require `community.identity.keys.own`. Keep readable status when
-mutation grants are absent. There is no community-disconnect control in this
-MU-27 UI. MU-32 owns its entry-point redesign rather than this fix inventing one.
-
-## Safety finding and limits
-
-Earlier controller runs isolated data and logs but inherited the native HOME.
-Their model cancel/delete operations were not proven scratch-only. An inherited
-`removed: true` may reflect a host-cache artifact directory. Host contents and
-impact are unknown; this work does not inspect or repair that cache. Earlier
-scratch-only model-operation claims are invalid. The controller regression now
-requires the real cancellation marker inside scratch before deletion is allowed.
-
-Runs `3bDgi4` and `haZLBD` exposed a separate pre-existing backend limitation.
-An archive exported after changing filter defaults fails staged preflight with
-ValueError. The schema validator compares mutable revision/severity seed values
-with a fresh migration database. This is not a passing restore case and is not
-fixed here. Retained failure evidence and `continuation/premise.md` document it.
-Restore activation and post-edit archive round trips remain outside this proof.
+mutation grants are absent.

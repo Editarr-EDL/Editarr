@@ -1,15 +1,13 @@
 # Editarr API contract
 
-This file summarizes the currently implemented contract. The authoritative
-product direction and confirmed contract corrections are in the
-[retrospective feature and design specification](feature-design-spec.md),
-including strict MCF import/export, structured defaults, format-keyed sidecar state,
-and complete multi-scan export provenance.
+This file describes Editarr’s API behavior and where to find its schemas.
+For permission evaluation and export layout, see the
+[multi-user contracts](multi-user-contracts.md).
 
 Editarr publishes its live OpenAPI document at `/openapi.json`. All paths below are
 application-relative: with Base URL `https://example.com/editarr`, `/api/scans` means
 `/editarr/api/scans` publicly. All payloads are JSON unless noted otherwise. The Jellyfin
-API key is write-only and are never present in a response.
+server API key is write-only and never appears in a response.
 
 ## Integration API key
 
@@ -77,8 +75,7 @@ overrides, role defaults, and local media access have their own routes, and
 `POST /api/users/bulk` applies one of them to many accounts with the same
 per-account checks. Every permission or media-access change needs the caller's
 Jellyfin password in the request (`reauthentication`), so API keys cannot make
-them. The route table, bodies, and refusal codes are in
-[the multi-user contracts](multi-user-contracts.md#users-and-profiles).
+them. The live OpenAPI document lists request and response schemas.
 
 Jellyfin setup, a first Jellyfin sign-in, or an import creates every account.
 Editarr has no route that creates a local account, sets or resets a password,
@@ -148,7 +145,7 @@ link, and import. While another account holds that name, or it is not a valid
 username, the account keeps its current one (none for an account created then),
 and the first read that finds this stores `account.jellyfin.state` with
 `username: unavailable`; see
-[linked accounts](multi-user-contracts.md#users-profiles-and-registration).
+[provider snapshots](multi-user-contracts.md#accounts-sessions-and-provider-snapshots).
 
 Deleting a linked account with `jellyfin_user: block` blocks its Jellyfin user.
 Jellyfin password sign-in and Quick Connect then answer 403
@@ -157,8 +154,7 @@ the preview blocker `jellyfin_user_blocked` or, when the block arrives after the
 preview, answers 409 `jellyfin_user_blocked`. `GET /api/jellyfin/blocks` lists the
 blocks and `POST /api/jellyfin/blocks/unblock` (owner by default, with
 `reauthentication`) removes one, so the user's next sign-in creates a fresh
-account. The route table and refusal codes are in
-[the multi-user contracts](multi-user-contracts.md#jellyfin-accounts-and-admission).
+account.
 
 ## Local community API
 
@@ -192,17 +188,14 @@ Discord ID or provider token appears. Names are untrusted text, not credentials.
 Errors contain `code`/`retryable` (409 for nonretryable conflicts, 503 for
 retryable/unconfigured errors; existing auth policy retains 401/403).
 Network/membership failures never become an empty lookup result.
-See [CSS-29 handoff](community-scan-service-tasks/29-local-service-client.md)
-for endpoint validation, exact retry behavior and private backup inventory.
-The [CSS-30 settings panel](community-scan-service-tasks/30-connection-settings.md)
-reads local state first, then verifies a connected profile with the signed refresh.
+The connection settings panel reads local state first, then verifies a
+connected profile with the signed refresh.
 Outages leave cached labels explicitly unverified and name editing disabled.
 Hosted verification displays only the public enrollment reference; returning or
 refreshing never confirms enrollment without the administrator's local dialog.
 
-The [CSS-32 rotation workflow](community-scan-service-tasks/32-manual-key-rotation-ui.md)
-adds nullable public `pendingRotation` (`operationId`, `newKeyId`, `state: "pending"`)
-and `rotationCompleted` (`operationId`, `keyId`, Unix-millisecond `committedAt`).
+The rotation response includes nullable public `pendingRotation`
+(`operationId`, `newKeyId`, `state: "pending"`) and `rotationCompleted` (`operationId`, `keyId`, Unix-millisecond `committedAt`).
 A noncommitted probe adds `rotationStatus: "not_committed"`; this is not cancellation.
 Private candidate bytes and detached proofs never appear in local DTOs. Pending
 rotation blocks other identity mutations/ordinary old-key profile refresh. Reload
@@ -215,7 +208,7 @@ No CLI, scheduler, startup, restore or ordinary Discord login rotates keys.
 
 `POST /api/community/lookup` accepts one selected local target
 `{source:"jellyfin",item_id,media_source_id?}` with no other fields, optional
-complete CSS-35A `audio_selection`, `page_size` (default 16, 1..96), `cursor`,
+complete `audio_selection`, `page_size` (default 16, 1..96), `cursor`,
 `target_key` and `refresh`. Provider identity/path/version are resolved server-side without media/review upserts.
 The browser cannot supply evidence, fingerprints or alternate-track inventory.
 This read POST still requires administrator, same-origin/CSRF and returns no-store.
@@ -225,7 +218,7 @@ availability,availabilityError,page,pageError}`. Nullable errors are safe
 `{code,retryable}` values; failed payloads remain null, not zero-match success.
 Missing identity preserves null counts and skips matches. The page contains
 bounded public summaries, attribution/statistics, portable evidence and separate
-video/audio compatibility, with `selected:false`. CSS-53 supplies versioned
+video/audio compatibility, with `selected:false`. Results include versioned
 revision-only quality ranking; older responses may retain `ranking:null`.
 Target/file/track/policy changes invalidate pagination; `targetKey` is a local
 opaque guard, distinct from the hosted cursor. Explicit refresh bypasses hosted
@@ -236,13 +229,11 @@ There is no whole-library polling, automatic enrollment, upload or artifact
 download. Private paths/selectors/inventory never leave local Editarr. Duration
 is bounded file metadata or unknown, never catalog evidence or frame-count fallback.
 Existing transport retries/backoff and fingerprint budgets remain in force.
-See the [CSS-48 DTO/cancellation handoff](community-scan-service-tasks/48-local-lookup-adapter.md).
-The [CSS-49 catalog UI](community-scan-service-tasks/49-find-filters-results.md)
-supplies exact selected-version/track input after explicit action and renders
+The catalog UI supplies exact selected-version/track input after explicit action and renders
 separate channel compatibility/provenance. Channel-specific selections are bound
 to local target key and immutable revision/digest, with explicit review-required
 channels; local association never accepts them. Artifact downloads/reuse remain
-separate explicit actions under CSS-50; lookup alone never downloads/applies them.
+separate explicit actions. Lookup alone never downloads or applies artifacts.
 
 ### Community Downloads
 
@@ -259,9 +250,9 @@ Uncertain channels require `confirmed:true`; incompatible channels remain refuse
 
 Success: `{version:1,revisionId,status:"imported"|"reused",scan,receiptState,
 reviewRequired,reviewed}`. Receipt failure does not undo local commit. This action
-never updates a review, applies filters, retimes or exports a sidecar. CSS-51
-attempts acknowledgment independently after local commit; receipt failures preserve
-import success and durable retry state.
+never updates a review, applies filters, retimes or exports a sidecar. Editarr
+attempts acknowledgment after local commit. A receipt failure preserves import
+success and durable retry state.
 Both `EDITARR_COMMUNITY_DOWNLOAD_BOUNDS` (explicit JSON ResourceBounds)
 and `EDITARR_COMMUNITY_DOWNLOAD_RESPONSE_BYTES` (positive, at most 3,000,000) are
 required to send; unset means `downloads_not_configured`, not a production default.
@@ -279,7 +270,7 @@ for review controls, separately from immutable `community_provenance`. Existing
 target evidence JSON retains private `selected_channels`/`lookup_target_key`; no
 schema migration or signature change is introduced. Cancellation drains workers;
 an in-flight commit can still succeed, so lost/aborted replies remain unknown until
-local status reconciliation. See the [CSS-50 flow/state machine and verification](community-scan-service-tasks/50-find-filters-downloads.md).
+local status reconciliation.
 
 ### Import Acknowledgments
 
@@ -299,11 +290,10 @@ Signed hosted `POST /v1/import-receipts` accepts `{version:1,receipt}` with
 not a new increment per request. Deduplicate contributor/revision across
 installations, restores and channel approvals; infer no vote/trust or transfer
 count. Explicit `IMPORT_LIMITS` and trusted `DOWNLOAD_RECEIPT_KEYS` are required;
-production is disabled. See the [CSS-51 contract/migration handoff](community-scan-service-tasks/51-import-receipts.md).
+the default hosted configuration is disabled.
 
 ### Hosted Votes
 
-CSS-52 implements signed hosted routes; CSS-54 supplies the local adapter/UI below.
 `POST /v1/contributions/{revisionId}/vote` accepts `{version:1,vote}` where vote is
 `like`, `dislike` or `neutral`, with a new `Idempotency-Key` for each intent. It
 returns `{version:1,state:"completed",result:{version:1,operationId,revisionId,vote}}`.
@@ -322,13 +312,12 @@ Upload restrictions do not block voting. Suspension/nonmembership blocks access
 without removing votes/totals. No reason field, report or ranking is accepted.
 `VOTE_LIMITS` explicitly bounds request bytes (<=8192) and queries (<=64), with no
 default. Numbered SQLite 0013 requires explicit backed-up upgrades for existing service stores;
-production activation remains separate.
-See the [CSS-52 handoff](community-scan-service-tasks/52-votes-service.md) and
-[shared DTO fixture](../tests/fixtures/community/vote-v1.json).
+the default hosted configuration is disabled.
+See the [shared DTO fixture](../tests/fixtures/community/vote-v1.json).
 
 ### Revision Quality Ranking
 
-CSS-53 adds candidate `ranking:{policyVersion,qualityScore,voteCount,uploaderBoost,score}`
+Candidate results include `ranking:{policyVersion,qualityScore,voteCount,uploaderBoost,score}`
 to signed hosted `/v1/matches` and the local lookup projection. Policy is
 `community-ranking-wilson-1`: Wilson lower bound with z=1.96 and one positive/negative
 prior vote. Neutral is excluded from `voteCount`; actual likes/dislikes remain in
@@ -345,14 +334,11 @@ still reread current counters; policy version is part of cache/cursor identity.
 New inserts remain outside the original revision ceiling; changed votes/moderation
 invalidate the cursor with 400 `invalid_cursor`. Restart lookup without that cursor,
 rather than silently combining changed page orders. Old cursor versions also fail
-closed. CSS-54 implements visible compatibility-first quality sorting/displays
-and the local vote client/UI, without changing hosted policy or signed evidence.
-See the [formula and verification handoff](community-scan-service-tasks/53-ranking-policy.md)
-and [shared precise ranking vectors](../tests/fixtures/community/ranking-v1.json).
+closed. The local UI sorts by compatibility first. See the [shared precise ranking vectors](../tests/fixtures/community/ranking-v1.json).
 
 ### Local Revision Feedback
 
-CSS-54 `GET /api/community/votes/{revision_id}` freshly reads signed private own
+`GET /api/community/votes/{revision_id}` freshly reads signed private own
 vote and public totals, separate from cached catalog results. Response:
 `{version:1,revisionId,scope:{serviceUrl,contributorId},current,totals,pending,error}`.
 `current` is `{vote,eligible,reason:null|"self_vote"|"import_required"}`; `totals`
@@ -365,7 +351,7 @@ Strict `POST` on the same route accepts
 It requires a committed exact-revision non-self import with an acknowledged
 original receipt before persisting intent. `POST /{revision_id}/retry` accepts
 `{operation_id,confirmed:true}` and uses saved bytes only. Both return the hosted
-CSS-52 completed-result envelope; historical success is not current own state.
+hosted completed-result envelope; historical success is not current own state.
 Extra/reason fields fail validation. Real administrator, same-origin/CSRF and
 no-store are enforced. Ordinary error envelopes retain
 `code/retryable`; no local/remote failure silently cancels a submitted operation.
@@ -381,21 +367,19 @@ UI feedback loads explicitly and never enters public result caches. Late/stale
 candidate replies are discarded. Failures show pending intent, not manufactured
 counts or confirmed own vote; success rereads current state. Catalog counts and
 quality remain snapshots. Both match bands dominate every sort; quality uses
-CSS-53 scores and stable ASCII revision ties, legacy null remains unknown. Author
-reputation/tiers remain unavailable. Report abuse is a separate disabled command:
-CSS-56 must approve fields and implement report transport before enabling it.
-See the [CSS-54 handoff](community-scan-service-tasks/54-feedback-ui.md).
+the ranking score with stable ASCII revision ties. A null score stays unknown.
+See [hosted moderation](../community-service/README.md#reports-and-reversible-moderation)
+for the separate service report contract.
 
 ### Publication jobs
 
-The [CSS-45 outbox](community-scan-service-tasks/45-local-publication-outbox.md)
-persists exact backend-approved signed publication bytes before network work.
+The publication outbox persists exact backend-approved signed publication bytes before network work.
 `EDITARR_COMMUNITY_PUBLICATION_REQUEST_BYTES` has no default; an explicit positive
 bound, at most 3,000,000 bytes, is required for queue/send. This is a client safety
 ceiling, not approval of a production payload limit. Status/cancel and owned
 result reconciliation do not require that bound. No startup/background sender or
-automatic enrollment is added. CSS-46 adds the protected exact-preview/approval
-boundary below; production activation and hosted limits remain gated.
+automatic enrollment occurs. The [manual sharing flow](#manual-sharing) defines
+the preview and approval boundary.
 
 | Method and route | Request / behavior |
 | --- | --- |
@@ -404,14 +388,14 @@ boundary below; production activation and hosted limits remain gated.
 | `POST /api/community/publications/{operation_id}/retry` | `{ "confirmed": true }`; check first, explicitly retry exact saved bytes under current identity/consent. |
 | `DELETE /api/community/publications/{operation_id}` | Persist cancellation only; cannot delete a remote publication. |
 
-CSS-63 hosted permission/attribution refusals (`sharing_permission_required`,
+Hosted permission and attribution refusals (`sharing_permission_required`,
 `source_permission_unknown`, `source_permission_incompatible`,
 `source_attribution_mismatch`) are preserved as terminal `rejected` local outcomes.
 Exact signed evidence remains stored; retry reconciles owned status without another
 upload for that rejected intent. No author withdrawal or remote deletion API exists.
 
 Each action requires its own/other publication capability, authorized source media,
-and access to the original contributor under MU-29. A publication of a removed
+and access to the original contributor. A publication of a removed
 Radarr, Sonarr, or Other Files source has no source media. Only its status and check routes
 answer. They require `archive.view` in place of source media access. A caller
 without `archive.view` receives 404, even one who sent the publication. A caller
@@ -440,8 +424,7 @@ New local schema 0007 and full backups retain payloads. Existing installations n
 
 ### Manual Sharing
 
-The [CSS-46 workflow](community-scan-service-tasks/46-manual-sharing-ui.md) accepts
-settled scan evidence and persisted saved reviews. MU-29 scopes each route to
+Manual sharing accepts settled scan evidence and persisted saved reviews. Each route is scoped to
 the current account's capabilities and media access; mutations require
 same-origin/CSRF and all responses are no-store.
 
@@ -468,7 +451,7 @@ identically; conflicting URL/explicit episode context is rejected. No provider
 lookup, IMDb-only association, media-path request or file-identity proof is used.
 Existing confirmed associations and numbering/spans remain typed. Only actually
 analyzed eligible source tracks are selectable; imported/historical unknown tracks
-remain unknown. Preparation uses the CSS-37 mixed-track exclusions without editing
+remain unknown. Preparation uses the mixed-track exclusions without editing
 the review. Private captures and consent tokens never cross the browser boundary.
 
 Preparation requires explicitly configured `EDITARR_COMMUNITY_PREVIEW_BOUNDS`
@@ -487,8 +470,7 @@ there is no license picker, film/media ownership claim or author withdrawal.
 Operators may moderate availability. Imported community sources currently require
 the same known permission; missing/corrupt/incompatible original permission fails
 closed and original signed claims are never rewritten. A saved local publication
-consent is not automatic-sharing opt-in. Automatic donation remains absent/off and
-requires a separate CSS-62 decision/control.
+consent is not automatic-sharing opt-in. Editarr sends contributions after explicit approval.
 
 The Share command approves, then explicitly invokes the saved outbox retry only
 when the acting account has its retry capability. Reopen
@@ -510,7 +492,7 @@ Supported identity providers are only TMDB and TVDB, never IMDb. The existing
 local discovery fields remain unchanged. Upstream episode aliases are conservative,
 and a linked series record must match the explicit source series ID.
 
-See the [CSS-34 DTO, alias, capture and storage contract](community-scan-service-tasks/decision-evidence/34-media-identity-contract.md).
+See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts).
 
 ## Named review API
 
@@ -661,7 +643,7 @@ flow ended after its request was verified, and activation is never cancelled.
 `X-Setup-Restore-Token` and the flow cookie. Every request checks that no
 administrator exists; job IDs are inaccessible from a different flow. The
 activation lease checks setup state again before any switch. These endpoints
-reuse the bounded CSS-20 upload, redacted preview, consent, and journaled
+reuse the bounded upload, redacted preview, consent, and journaled
 activation; export and download are never available during setup. The setup
 preflight checks that the backup's owner has a Jellyfin link. After activation,
 that owner signs in with Jellyfin. If the backup has no accounts, Jellyfin setup
@@ -796,7 +778,7 @@ seed, the selected port, and any explicit `--port` override. Thus a CLI port ove
 can mask a saved port in `next_start` and leave `restart_required` false. Save never
 changes routes, origin checks, cookie scope, or the bound listener. A Base URL edit that
 changes canonical origin or prefix stages only the active prefix for later cookie cleanup;
-RP-08 activates reauthentication only after a successful replacement service starts.
+Reauthentication applies after the replacement service starts successfully.
 
 Invalid deployment values return `422 {"code":"deployment_configuration_invalid",
 "detail":"…"}` without modifying the file. Corrupt, unreadable, or unwritable deployment
@@ -942,8 +924,8 @@ nullable `requested_audio_selection` and `analyzed_audio_selection`. Actual inpu
 is immutable and recorded only after successful analysis; requested input alone
 does not prove analysis. Historical/imported unknown input stays null. Stale or
 missing queued inputs and unverifiable audio checkpoints stop without substitution.
-See the [selected-track contract](community-scan-service-tasks/decision-evidence/35-track-contract.md)
-for budgets, cache/provenance and migration/backup behavior.
+See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts)
+for how selected tracks affect community matching.
 
 ### Scan naming
 
@@ -1191,7 +1173,7 @@ is retained for review. Schedule state/credentials are not portable-backup membe
 Encrypted scheduling currently requires POSIX permission validation; unsupported
 Windows ACL validation fails closed. No community-service schedule is implied.
 
-## Canonical Review Exports (MU-31)
+## Canonical Review Exports
 
 `POST /api/reviews/{review_id}/exports/{format}` accepts `edl` or `mcf`, the
 existing `revision`, `policy_owner_id`, and `policy_revision` tokens, and
@@ -1201,7 +1183,7 @@ arbitrary user IDs, and unknown fields are refused. Existing review `/edl` and
 shape. They no longer write legacy adjacent files.
 
 Personal paths are `<format>/<export-id>/<stem>.user-<export-id>.<format>`;
-defaults are `<format>/<stem>.<format>`. Export IDs use MU-01 provider GUIDs or
+defaults are `<format>/<stem>.<format>`. Export IDs use provider GUIDs or
 immutable `local-` IDs. Source review owner, original author, actor, and target
 are separate. Choosing another target never changes the policy owner. Source
 and personal-target actions, account state, and media access are checked with
@@ -1217,7 +1199,7 @@ visibility. No response includes a destination path or the private snapshot.
 `DELETE /api/exports/{id}?revision=N&publication_id=UUID`, requires the current
 publication generation and revision, and returns 204. The UUID prevents stale
 requests from acting on a reused SQLite row ID. Retained publications remain deletable after source attribution
-is detached and the source review is removed. MU-36 owns review deletion itself.
+is detached and the source review is removed.
 
 Replacing another source review returns 409 `export_confirmation_required` with
 a 64-hex `confirmation` token. Resubmit it with the same request. The token binds
@@ -1238,10 +1220,10 @@ Existing rows retain null snapshots and revision zero. The private
 `editarr-export-snapshot-1` JSON retains the full saved-review model, base and
 effective filters, synchronization, MCF metadata, accepted credits, policy
 evidence, immutable source findings, actor/owner/target IDs, source revision,
-and the physical media path. Exact output bytes are stored separately. MU-34 can
+and the physical media path. Exact output bytes are stored separately. Editarr can
 consume these without depending on a surviving source review.
 Migration `0022_export_regenerations` adds `media_item_export_regenerations`,
-one MU-34 regeneration job per personal publication keyed by export ID. The
+one regeneration job per personal publication keyed by export ID. The
 snapshot JSON no longer carries job state.
 
 Callers acquire `publication_lock(db)` before the authorized writer transaction

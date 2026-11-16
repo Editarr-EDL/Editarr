@@ -2,7 +2,7 @@
 
 Owners and admins export full archives from Settings. A backup is restored only
 into an empty installation, through first-run setup or `editarr backup restore`
-into an empty data directory (ruling wave14-fresh-install-restore).
+into an empty data directory.
 
 ## Sub-features
 
@@ -77,7 +77,7 @@ the source run stays up for the whole journey and stops at its cleanup.
    onboarding at 320px and answers 409 `restore_target_has_work`; its database is
    unchanged.
 
-## Upgrade and recovery acceptance (MU-45)
+## Upgrade and recovery acceptance
 
 - `tests/test_upgrade_matrix.py` builds one populated database per revision below
   head (unversioned through 0023) and upgrades it through snapshot-backed adoption.
@@ -90,7 +90,7 @@ the source run stays up for the whole journey and stops at its cleanup.
   retained generation exports the exact source database. Released sources
   (unversioned through 0009) must also revoke every session and refuse the old
   cookie. 0010-0023 are unreleased development revisions and need not revoke
-  sessions (ruling `wave16-upgrade-session-revocation`).
+  sessions.
 - `tests/test_upgrade_restore_acceptance.py` proves legacy activity without an
   account refuses library and CLI restore, before and after its upgrade, with every
   data-directory byte unchanged.

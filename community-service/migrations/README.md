@@ -35,7 +35,7 @@ mapping. New requests that carry either Arr value fail ordinary validation.
 No existing database was changed. To adopt schema 17, explicitly stop the service
 and use the [verified-backup-first upgrade procedure](../../docs/community-service-docker.md#persistence-and-recovery).
 Never reset a store, overwrite a backup or stamp an unknown schema. Current
-snapshots contain all tables, including historical data; legacy CSS-60/61 archive
+snapshots contain all tables, including historical data; legacy encrypted archive
 validation remains pinned to its original schema and is not automatic adoption.
 
 ## Historical Migrations
@@ -54,8 +54,7 @@ conversion, not automatic adoption or schema stamping.
 `0002_budget_ledger.sql` adds policy/caps, global and contributor counters,
 reservations and permanent settled-ID tombstones. It seeds no policy or limits
 and is not wired into routes. Its provider-verified reservation prototype is
-historical and dormant under the September 29 revision; CSS-24 no longer
-requires provider polling, accounting reservations or restore reconciliation.
+retained for schema compatibility.
 Do not treat these unused tables as current admission or provider-usage totals.
 
 `0003_quotas.sql` records the former accounting schema. Its tables/rows remain
@@ -113,7 +112,7 @@ name-change events. Secret values are not stored in SQLite. Registration/key/non
 and rename/nonce/operation/event/name are atomic in application batches.
 Hash/grant/profile/name-event times are milliseconds (membership/nonces remain
 seconds). Include new columns/events and schema revision in SQLite backups; local
-pending secrets are CSS-29 private identity state, not a hosted provider credential.
+pending secrets are local private identity state, not a hosted provider credential.
 Hourly cleanup deletes at most 1000 expired name-change events; restores preserve
 historical events and never verify membership by themselves. Hourly admission is retired.
 
@@ -125,7 +124,7 @@ moderation or key is silently rewritten/deleted. Use the reviewed transactional
 migration runner and a verified recoverable backup; a failed raw SQL probe may
 have added columns before its guard fails and is not authorization to stamp or
 rerun an unknown partial schema. Restore/recover through the migration/backup
-workflow, never a reset. No existing database was touched by CSS-28.
+workflow, never a reset.
 
 `0009_catalog.sql` adds `works`, `work_identifiers`, `releases`,
 `release_work_associations`, `release_episodes`, `release_fingerprints`,
@@ -165,8 +164,6 @@ Only then apply numbered migrations through the reviewed migration runner. Never
 wipe data, silently stamp an unknown schema, or use reset as a migration strategy.
 No existing database was modified during this storage change.
 
-See the [current storage decision and future R2 note](../../docs/community-scan-service-tasks/d1-storage-scope.md).
-
 Publication now creates its nonce, operation and catalog records in the same SQLite
 batch as payloads, counters and the published result. The existing lifecycle states
 are transitions within this transaction. This runtime simplification requires no
@@ -198,8 +195,7 @@ change and operator deletion. Access loss does not delete votes. Indexed bounded
 reconciliation can rebuild totals without altering imports. Separate daily
 `vote_usage_observations` retains known/null handler costs, not voting histories.
 Full SQLite backups must include both tables, vote operations, statistics, referenced
-import facts and historical keys. Retain vote/retry identity pending CSS-64;
-no retention cleanup or public/operator maintenance route is introduced here.
+import facts and historical keys. Retain vote and retry identity.
 
 Isolated fresh/populated supported 0001-0012 upgrade checks preserve every prior
 application row, including signed artifact BLOBs and import facts/observations.

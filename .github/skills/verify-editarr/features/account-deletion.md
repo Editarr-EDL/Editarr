@@ -1,6 +1,6 @@
 # Account deletion
 
-Feature `account-deletion` (MU-38 API, MU-41 UI). An admin or the owner deletes
+An admin or the owner deletes
 another account after previewing what retention, transfer, or permanent deletion
 does to it. The journey first drives the real API, then the browser UI.
 
@@ -37,7 +37,7 @@ admin, other admins answer 403 `protected_account`; the caller's own account
 answers 409 `own_account`. A deleted account answers 404 everywhere else and is
 missing from `GET /api/users`.
 
-## UI (MU-41)
+## UI
 
 Users shows a Delete action on each row the caller may delete and a "Delete
 selected" bulk action; Account details has "Delete account"; and
@@ -64,7 +64,7 @@ gateway error) is reported as an unknown outcome, never as "not changed", and
 Users is reread. Bulk previews each target, offers confirmation only after every
 preview settles, sends exactly the unblocked targets shown when confirmation
 opened, and lists each target's outcome; stale targets are previewed again for a
-second confirmation. In the link dialog, MU-39's `jellyfin_identity_in_use`
+second confirmation. In the link dialog, `jellyfin_identity_in_use`
 blocker finds the holding account from `GET /api/jellyfin/sync` and, when the caller
 may delete it, offers "Review deleting or transferring NAME" with the link target
 as the suggested destination when the link preview says the target is active. A
@@ -80,7 +80,7 @@ COREPACK_ENABLE_NETWORK=0 EDITARR_VERIFY_PNPM_CJS=$HOME/.cache/node/corepack/v1/
 node .github/skills/verify-editarr/scripts/verify.mjs auth --community --reviews --account-deletion --ports=9220-9239
 ```
 
-`--community` runs the MU-32 community journey first; its `mu32-member` (a
+`--community` runs the community journey first. Its synthetic contributor account (a
 community identity, a queued publication, and its evidence) is the community
 history the UI bulk step deletes. `EDITARR_VERIFY_PNPM_CJS` is that journey's
 prerequisite (see [community activities](./community-activities.md)). Without
@@ -132,11 +132,11 @@ no remote call. Hard exits before and after the commit are proven by
 retain or delete, and a rollback that keeps failing, are proven by
 `tests/test_account_transfer_leftovers.py`. Backups captured mid-transfer and
 restored (full, settings, and over pending cleanup) are proven by
-`tests/test_account_transfer_restore.py` and, for MU-35 links,
+`tests/test_account_transfer_restore.py` and, for account links,
 `tests/test_account_link_restore.py`: every usable copy stays, the restored records
 close, and the owner's `editarr admin write-export <export_id>` puts the committed
 bytes back at the recorded path. Detecting and blocking a restore whose records
-disagree with the disk is MU-40's (ruling wave13-mu38-defer-restore). That command
+disagree with the disk belongs to restore preflight. That command
 never replaces an entry. Its cases (an empty path created, the committed bytes
 already present left alone, a refused user edit including one saved during the
 command, symbolic links including a directory swapped for one after the checks,

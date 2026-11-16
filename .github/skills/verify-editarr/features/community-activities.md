@@ -19,10 +19,10 @@ whether a control is displayed.
 
 ## Driving it with verify.mjs
 
-MU-32's maintained real-UI journey uses the existing `MockService` and
+The browser journey uses the existing `MockService` and
 `ActivityService` at `community_identity_api.service_transport`. The production
 API, authentication, capabilities, CSRF, preview cache, and database stay real.
-The disposable fixture (`MU32-community-ui-1`) learns public authorization URLs
+The disposable fixture learns public authorization URLs
 only after the UI starts enrollment, then verifies the real confirmation secret
 and HTTP signatures. No hosted service or Discord account is contacted.
 
@@ -81,13 +81,13 @@ body gets 409 `operation_conflict`. `tests/test_verify_community_double.py` pins
 these rules. Votes stay unproven, because they need imported revisions from a live
 service.
 
-Evidence is retained in `web/test-results/mu-32/editarr-verify-*`: `doctor.json`,
+The printed evidence directory contains `doctor.json`,
 `community-result.json`, `community-steps.json`, `community-http-statuses.json`,
 `community-axe.json`, `community-double.json`, masked captures, `cleanup.json`,
 and `redaction.json`. After cleanup, run `verify.mjs doctor EVIDENCE`; it must
 fail because the recorded process group stopped. Retain failure evidence too.
 
-The earlier MU-29 local-status recipe remains available:
+To exercise the local status routes:
 
 Run from the assigned source checkout with disposable HOME and XDG_CACHE_HOME.
 Use a provisioned pnpm executable on PATH without exposing host model caches.
@@ -128,7 +128,7 @@ after artifact verification with no import writes.
 ## Gotchas
 
 The earlier real-app status check is local and makes no service request. The
-MU-32 journey adds enrollment, connection and publication UI against the signed
+The browser journey covers enrollment, connection and publication UI against the signed
 double, not the live community service. Receipt retry, vote transport and queue
 lifetime cases also have component/HTTP tests. Neither recipe certifies live
 providers, inference, installed runtime, account deletion or the separate

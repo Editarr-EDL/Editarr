@@ -4,8 +4,7 @@ This guide is for the operator of an Editarr installation that more than one
 person uses. It covers the upgrade from a single-user release, accounts and
 roles, personal API keys, filter policy, reviews and exports, the Jellyfin
 plugin, backups, and what to do when the owner cannot sign in. The
-[permission matrix](multi-user-permissions.md) lists every default, and the
-[decision log](multi-user-decisions.md) records why each rule exists.
+[permission matrix](multi-user-permissions.md) lists the role defaults.
 
 ## Know the roles
 
@@ -45,15 +44,12 @@ these steps in order, so that players keep receiving EDL files throughout.
    `http://localhost:3348/`, refuses connections. Leave it stopped until step 5.
 
    Then install the new release's `editarr` command, but do not start it. Step 2
-   needs the new command, which reads every released schema. Releases before commit
-   `031b4f77`, including the earliest, have no `backup` command. Installing the new
-   release starts no server and does not open the database.
+   needs a current build with the `backup` command. Install it without starting
+   the server or opening the database.
 
    If you installed Editarr from a wheel, install the new wheel into a new virtual
-   environment and leave the old environment unchanged. Every release so far has
-   version `0.1.0`, so pip treats the new wheel as already installed in the old
-   environment and keeps the old code. Create the new environment with the Python of
-   the old one, for example with pip:
+   environment so you can still run the old version if recovery is needed.
+   Create the new environment with the Python of the old one, for example with pip:
 
 	```bash
 	/opt/editarr/venv/bin/python -m venv /opt/editarr/venv-new
@@ -71,9 +67,8 @@ these steps in order, so that players keep receiving EDL files throughout.
    Editarr from a source checkout, check out the new release's commit and run
    `uv sync` with the same `--extra` options you used before, because a plain
    `uv sync` removes the packages of every extra it is not given. Step 2 then runs
-   `uv run editarr` from the checkout. Editarr has no released container or native
-   build of this server, so these are the only installations to upgrade. Before
-   step 5, never run `editarr` without a command, because that starts the server.
+   `uv run editarr` from the checkout. Keep the application stopped through
+   the backup and sidecar copy steps.
 
    Check that the new command is active before step 2. Run the `editarr` that
    step 2 runs, for example:
@@ -156,8 +151,8 @@ these steps in order, so that players keep receiving EDL files throughout.
    now the owner, with its API key and saved reviews. That account has no
    Jellyfin link, so migration `0030_remove_passwords` disables it, and nobody
    can sign in as that owner. To keep that owner, recover the pre-upgrade
-   snapshot and link it with the previous release, as
-   [Jellyfin accounts only](../README.md#jellyfin-accounts-only) describes. If the database
+   snapshot into a separate data directory and use a compatible previous
+   version to link the owner to Jellyfin before upgrading. If the database
    had work but no administrator, Editarr asks you to connect Jellyfin and
    create the owner before anything else runs. The existing API key stops
    working until then. Setup assigns the existing work and that key to the owner.
@@ -183,10 +178,9 @@ editarr --data-dir /absolute/data/dir migration recover-export /absolute/recover
 editarr --data-dir /absolute/recovery/dir migration upgrade
 ```
 
-The recovery never replaces the active database. Inspect the recovered copy
-before you point the installation at it. The README section
-[Headless provisioning and recovery](../README.md#headless-provisioning-and-recovery)
-describes the identity copy and the refusal cases.
+Inspect the recovered copy before pointing the installation at it. Run
+`editarr --data-dir /absolute/recovery/dir migration inspect` to check its
+schema and recovery state.
 
 ## Copy legacy sidecars into the new layout
 
@@ -471,18 +465,14 @@ serves each signed-in Jellyfin user that user's personal file, or the item
 default when the user has none. A server API key gets only the default. An
 invalid or unreadable personal file is an error, not a fallback.
 
-Use the plugin and Editarr revisions from the same release. To upgrade both,
-follow the order in
-[Upgrade a single-user installation](#upgrade-a-single-user-installation). Editarr
-`a617b836` and plugin `9127daf` are the verified pair on Jellyfin 12.0.0. The
-wave 17 combined run tested Editarr at `f8122834` with plugin `9127daf`.
-`a617b836` changes only line wrapping and formatting in six test, script, and
-verifier files. Ruff, the affected pytest files, and the verifier tests passed on it.
-The commits after them on both `multi-user/implementation` branches change only
-documentation and task records. Both follow the export layout contract
-`editarr-export-layout-1`, whose shared cases live in Editarr's
-`tests/fixtures/multi-user/export-layout-v1/` directory. An older plugin build
-reads only the legacy adjacent EDL file and does not understand the new folders.
+Install [jellyfin-edl v1.0.0](https://github.com/Editarr-EDL/jellyfin-edl/releases/tag/v1.0.0)
+for Jellyfin 12.0.0. For an existing installation, follow the order in
+[Upgrade a single-user installation](#upgrade-a-single-user-installation).
+Both applications use the `editarr-export-layout-1` export layout. Shared
+compatibility cases are in
+[`tests/fixtures/multi-user/export-layout-v1/`](../tests/fixtures/multi-user/export-layout-v1/).
+Older plugin builds that only read the legacy adjacent EDL cannot read personal
+exports or item defaults in the new layout.
 
 ## Back up and restore
 
@@ -497,8 +487,7 @@ an empty data directory. A configured installation has no restore controls.
 To recover a broken installation, stop Editarr, start it with a new empty data
 directory, and restore there. A restore signs out every browser session, keeps
 every API key, and keeps the new installation's base URL and listen port. The
-[README](../README.md#portable-backups-from-the-cli) lists the commands and
-refusal reasons.
+[CLI backup guide](../README.md#portable-backups-from-the-cli) lists the commands.
 
 ## When the owner cannot sign in
 
@@ -507,8 +496,7 @@ Editarr has no lockout recovery. The owner signs in only with Jellyfin, and the
 owner to Jellyfin before upgrading. If the upgrade disabled an owner without a
 Jellyfin link, no backup helps, because this release restores only backups made
 at its own schema. Reinstall, or recover the pre-upgrade snapshot with the
-previous release as
-[Jellyfin accounts only](../README.md#jellyfin-accounts-only) describes:
+previous compatible release. Export the pre-upgrade copy to a separate location:
 
 ```bash
 editarr --data-dir /absolute/data/dir migration recover-export /absolute/recovery/dir/scanner.db

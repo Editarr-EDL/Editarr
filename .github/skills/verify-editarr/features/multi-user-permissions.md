@@ -1,6 +1,6 @@
 # Multi-User Permissions
 
-Feature `mu-permissions` (MU-04). One evaluator decides every action for HTTP
+One evaluator decides every action for HTTP
 handlers, services, workers, and serializers. It is proved by deterministic
 checks and a TEST FIXTURE HTTP boundary here. Product routes call it through
 `load_access` and `may_attempt` (for example `scanner/http/permissions_api.py`),
@@ -34,7 +34,7 @@ resolves a principal, so a new gated route cannot ship unchecked.
 
 ## Deterministic checks
 
-Run from the task checkout with scratch data and logs. Importing the app
+Run from the repository checkout with scratch data and logs. Importing the app
 writes into `EDITARR_DATA_DIR`, and logging writes into `EDITARR_LOG_DIR`.
 
 ```bash
@@ -59,9 +59,9 @@ rm -rf "$T"
   and checks that every outcome matches one committed state. It also checks
   that a proof verified in one request is refused in the next.
 
-## Builders for later tasks
+## Access test fixtures
 
-`tests/multi_user_access_support.py` is fixture version `mu04-access-builders-2`.
+`tests/multi_user_access_support.py` builds access fixtures.
 
 - `build_access(role, credential=..., status=..., local_credential=...,
   role_defaults=..., overrides=..., unreadable=...)` returns a principal whose

@@ -1,13 +1,7 @@
 # Community service on a Mac mini
 
-## Deployment decision
-
-On October 5, 2026, the user requested: "Then refactor to be a docker image to
-run on a Mac mini." The community service now has a Node 24 LTS + SQLite Docker
-runtime. This supersedes Workers/D1 as the intended deployment target, not the
-signed API, permission, identity, moderation or retention contracts. The existing
-regression suite also runs on Node against the production SQLite adapter; there is
-no alternate Worker deployment or provider test runtime.
+The community service runs in Docker with Node 24 LTS and SQLite. The service
+tests use the same SQLite adapter as the Docker image.
 
 This image contains the community API and its operator UI, not the Python scanner,
 local Editarr UI, AI models, media files or personal configuration. All original
@@ -37,12 +31,9 @@ publicly activated service. `COMMUNITY_PORT` selects a different loopback port.
 an accessible current-schema database. Activation is controlled only by the
 protected runtime configuration, not historical accounting policy rows.
 
-The image uses a multiarchitecture official Debian/Node base. The ARM64 image is
-tested locally for Apple Silicon; the base's AMD64 availability is not certification
-of an Intel deployment. AMD64 target-host verification remains an open release gate.
-Nothing requires Node or pnpm on the host. See the
-[packaging matrix](community-scan-service-tasks/decision-evidence/67-packaging-matrix.md)
-for the exact tested image identity and platform limitations.
+The image uses a multiarchitecture official Debian/Node base. The ARM64 image
+has been tested on Apple Silicon. Intel hosts require their own validation.
+Node and pnpm are contained in the image.
 
 ## Configure before activation
 
@@ -90,7 +81,7 @@ restricted to the tunnel/operator machine. It is not cryptographic proof of the
 sender. Never expose this listener to a LAN or internet port, and never mount the
 Docker socket. Using a different ingress requires a separately reviewed trust
 adapter. Provisioning a tunnel, public hostname, Access policy or actual Discord
-credentials is not performed by the image or this refactor.
+credentials is separate from installing the image.
 
 After reviewing launch configuration and validation bounds, set both `enabled`
 and `trustedTunnel` to true in the protected configuration
@@ -98,7 +89,7 @@ and recreate the container with `docker compose -f community-service/compose.yam
 up -d --force-recreate`. Set `enabled` to false and recreate to disable service
 without erasing data. There is no maintenance `policy` command.
 
-The October 7 local-service decision removes user usage allowances: no daily
+The service does not enforce daily
 request/write ceilings, cumulative global/contributor payload caps, usage-pressure
 pauses, IP/shared request buckets, hourly name-change caps, daily report counts or
 maximum-open-report allowances. Usage and payload-byte observations are passive,
@@ -140,9 +131,8 @@ streamed per-table row/BLOB fingerprints. The command does not mark an unverifie
 copy complete. Snapshots are private but plaintext: encrypt them before off-device
 transfer, protect configuration and signing secrets separately, and keep the
 decryption key independent. The backup volume on the same Mac is not disaster
-recovery. October 8 CSS-64 selects retain-first: no automatic manual-snapshot
-pruning or new service backup schedule. Off-device destination/protection and
-recovery objectives remain separate open decisions; none are invented here.
+recovery. Keep independent encrypted copies according to the deployment’s
+recovery requirements. Manual snapshots have no automatic pruning or schedule.
 
 ### Retention And Offline Preview
 
@@ -166,8 +156,7 @@ plus an overflow flag, not identifiers or secret values. Counts are currently
 eligible observations, not reservations or known scanned-row totals; membership
 coordination may become eligible only after stale evidence is removed. Payload
 bytes reclaimed are zero. It refuses running/unknown/future/outdated stores and
-has no --confirm/delete form. No backup pruning or live action was executed while
-implementing [CSS-64](community-scan-service-tasks/64-retention-cleanup.md).
+has no `--confirm` or delete form.
 
 To restore, stop the service and stage the verified snapshot in a new data volume
 as `community.sqlite`, with UID 1000 access and its original `user_version`.
@@ -205,11 +194,9 @@ verifies it, then runs an atomic migration. Unknown
 schemas are refused, and failed migrations roll back. Image rollback is safe only
 with a schema-compatible image; it is not a database downgrade.
 
-Existing D1 stores and CSS-60/61 archives are not automatically adopted or stamped.
-Those formats include separate D1 migration history and require a reviewed offline
-import/cutover procedure. October 7 CSS-67 scope is an explicitly selected **fresh
-deployment, with no legacy import**. Discovering legacy data later reopens that gate;
-it does not authorize initialization over it. No existing database is changed here.
+Legacy D1 stores and encrypted legacy archives require an offline conversion.
+Preserve and verify the original data before conversion. See
+[isolated service restore](../community-service/README.md#isolated-service-restore).
 
 ### Image replacement and rollback
 
@@ -277,9 +264,8 @@ private receipt signer and public key/revocation history separately. Review stal
 revocations, membership evidence, moderation, replay/nonces, operations and local usage
 before separately approved activation. Preserve both generations and restore the
 original volume mapping if staging fails. A same-Mac snapshot is not an off-device
-recovery drill. The user canceled CSS-68 October 7 for local Docker on Mac mini;
-CSS-69 records the remaining unverified recovery risk and launch disposition.
-No replacement drill or new backup policy is authorized by cancellation.
+recovery drill. An off-device drill requires access to the independent snapshot
+and matching secrets on another host.
 
 ## Security and operations
 
@@ -299,9 +285,7 @@ of blindly replacing running images with `latest` or an automatic updater.
 
 ### Host restart checklist
 
-Target-Mac cold boot is **unverified**, not proven by `restart: unless-stopped`.
-October 7 authorization permits only recording this open gate, not a host reboot or
-live tunnel change. Rehearse separately with an operator present: graceful stop,
+Rehearse host restart with an operator present: graceful stop,
 hard restart, power restoration/UPS behavior, FileVault unlock, macOS login, Docker
 engine start, container health, tunnel reconnection and independent HTTPS monitoring.
 Record timestamps, which steps required a human, and whether the host stayed locked.
@@ -309,8 +293,7 @@ Do not disable FileVault, enable automatic login or change tunnel startup policy
 make a test pass. An encrypted boot volume may require physical unlock; Docker Desktop
 may require a user session. Arrange operator access and UPS-assisted orderly shutdown
 accordingly. Verify UID 1000 readability after host/engine updates without printing
-configuration or secret contents. Until rehearsed, unattended reboot recovery is an
-open launch gate. OPS-01/02 own live provider/ingress checks, not these local tests.
+configuration or secret contents. Check local restart and live provider connectivity independently.
 
 ## Verification
 
@@ -329,17 +312,7 @@ Container tests create and remove only uniquely named disposable test volumes.
 Real Discord/Access/tunnel setup, public activation, off-device recovery, large
 catalog performance and Mac cold-boot behavior remain deployment checks.
 
-The [plan's release-check ownership](community-scan-service-plan.md#remaining-release-checks-and-owners)
-and [task coverage map](community-scan-service-tasks/coverage.md) identify the remaining
-owners. CSS-66 verified all API families over real Node HTTP/SQLite with synthetic
-providers; OPS-01/02 cover
-live Discord/Tunnel/Access; CSS-67 covers image/platform/Mac cold boot and any
-approved legacy import; CSS-68 is canceled; CSS-69 requires explicit launch/activation
-decisions and unverified-risk dispositions. Passing local review tests does
-not mark any of those operational checks complete.
-
-The [CSS-66 evidence matrix](community-scan-service-tasks/decision-evidence/66-integration-matrix.md)
-records source, image, local-app and live-check coverage separately. Source journeys
+Source journeys
 also require the repository Python `.venv` for actual downloaded-artifact import
 verification; build operator assets first with `pnpm --dir community-service assets`.
 Both build and test tooling use Node, locally owned runtime types, SQLite and esbuild.

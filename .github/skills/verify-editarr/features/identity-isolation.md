@@ -1,4 +1,4 @@
-# Identity and Media Isolation (MU-43)
+# Identity and Media Isolation
 
 Feature `identity-isolation`. One run drives six accounts through the real
 source application and a disposable Jellyfin server, then checks that no
@@ -30,13 +30,13 @@ it with `--users`, `--settings`, `--audit`, `--community`, `--plugin-interop`, o
 `--reviews` exits 64.
 
 ```bash
-VERIFY_EVIDENCE_ROOT=web/test-results/<task> VERIFY_DOCKER_RUN_PREFIX=<task>-identity- \
+VERIFY_EVIDENCE_ROOT=web/test-results/identity-verification VERIFY_DOCKER_RUN_PREFIX=verify-identity- \
   node .github/skills/verify-editarr/scripts/verify.mjs auth --identity --ports=9200-9219
 ```
 
 `--ports` bounds the three listeners: the API, Vite, and Jellyfin's host port.
 `VERIFY_DOCKER_RUN_PREFIX` (default `identity-jellyfin-`) begins the
-`editarr.verify.run` label on the container and volume, so a concurrent task
+`editarr.verify.run` label on the container and volume, so a concurrent run
 can identify its own resources. The same variable names the `auth --users`
 provider's label (default `users-ui-jellyfin-`).
 
@@ -186,7 +186,7 @@ and volumes that the run recorded and labelled.
 ## Clock boundaries
 
 The browser journey cannot wait 24 hours or five minutes. The HTTP boundary
-tests in `tests/test_identity_clock_boundaries.py` use the MU-16 fixture
+tests in `tests/test_identity_clock_boundaries.py` use the account sync fixture
 (synthetic `JellyfinBoundary`, `editarr-jellyfin-users-1`) and one fixed clock
 for sessions, link expiry, and the scheduler:
 

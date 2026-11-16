@@ -1,15 +1,14 @@
-# Catalog access (MU-20)
+# Catalog access
 
 Catalog, artwork, candidate, and audio-track routes decide media before they
 count, show, or serve it. The contract is in
-[Catalog authorization](../../../../docs/multi-user-contracts.md#catalog-authorization).
+[Catalog authorization](../../../../docs/multi-user-contracts.md#accounts-sessions-and-provider-snapshots).
 
 ## Deterministic HTTP
 
 `tests/test_catalog_authorization_http.py` and
 `tests/test_catalog_authorization_regressions.py` drive the real catalog routers
-through the access middleware (fixture `mu20-catalog-1` over
-`mu11-media-access-4`). The Jellyfin catalog client and MU-16's
+through the access middleware. The Jellyfin catalog client and account sync’s
 evidence adapter are replaced and record their calls; that substitution
 is not live evidence.
 

@@ -84,15 +84,15 @@ before the first action. Baseline contains none of these media inputs.
 - Baseline has no scan findings. Test manual-only reviews first; included-scan and
   imported-retiming cases require their actual separate fixtures and proof.
 
-## Canonical Publication (MU-31)
+## Canonical Publication
 
 `auth --reviews --ports=9140-9159` reads canonical
 personal EDL/MCF files from the run's scratch database. It independently compares
-download, retained content, and disk bytes, verifies the MU-01 filename, preserves
+download, retained content, and disk bytes, verifies the canonical filename, preserves
 legacy adjacent bytes, and deletes only its own exports through the
 revision-checked API before the policy journey. The existing UI export menu is
 exercised through the `Export` dialog; target selection and confirmation are
-covered by the MU-37 recipe below.
+covered by the export UI recipe below.
 
 Before deletion, the journey reloads the desktop page and reopens the review.
 Both current badges must remain visible. Fresh review and discovery GETs must
@@ -120,7 +120,7 @@ for failed parent-directory sync followed by a successful durable retry in both
 formats and target scopes. These use synthetic provider boundaries, not live
 provider or native Windows certification.
 
-## Review Deletion With File Choices (MU-36)
+## Review Deletion With File Choices
 
 `auth --reviews` ends with
 `scripts/lib/review-deletion-journey.mjs` on the same isolated instance. A new
@@ -148,10 +148,10 @@ replacement of the policy journey's files. Then:
 proof. Fault injection, hard exits, permission overrides, and hidden-change
 non-invalidation are in `tests/test_review_deletion_http.py`.
 
-## Export Choices And Deletion UI (MU-37)
+## Export Choices And Deletion UI
 
 `auth --reviews` ends with
-`scripts/lib/export-ui-journey.mjs` on the same instance, after the MU-36 recipe.
+`scripts/lib/export-ui-journey.mjs` on the same instance, after the review deletion recipe.
 A new member (`export-member`, a Jellyfin user with default permissions)
 imports MCF reviews
 `Export A` (cue 1-2 s) and `Export B` (cue 2.5-3.5 s) on the synthetic movie. Every check reads SQL rows and parses the EDL rows or MCF cue timings
@@ -172,7 +172,7 @@ on disk; badges are never the proof.
   shows three radios. `Review owner's personal files (export-member)` names the
   member as destination and policy source and shows the member's files. The
   owner publishes the item-default MCF and a personal EDL, confirming replacement
-  of the MU-36 retained files. SQL shows default scope with no target user, owner
+  of the retained files from review deletion. SQL shows default scope with no target user, owner
   target and actor, and the member as policy owner; both files hold cue 2.5-3.5.
 - **Cross-user delete.** The owner sees `Delete` on every row and deletes
   `MCF · Personal · export-member`: the file and row are gone and the member EDL
@@ -200,12 +200,12 @@ on disk; badges are never the proof.
   delete buttons; its discovery is empty and its review reads 404 for the
   member. Opening the first movie again restores both retained rows.
 
-`export-ui-result.json`, `export-ui-http-statuses.json`, and the `mu37-*`
+`export-ui-result.json`, `export-ui-http-statuses.json`, and the matching
 screenshots hold the proof. Component tests in `web/src/review/*.test.tsx`
 cover every condition label, admin targets without default rights, and
 deletion retries.
 
-## Automatic Personal Regeneration (MU-34)
+## Automatic Personal Regeneration
 
 Run the existing executable entry point on an isolated source instance:
 
@@ -227,7 +227,7 @@ Retain `export-regeneration-result.json`, `review-policy-result.json`, screensho
 ARIA snapshots, HTTP status records, `doctor.json`, `cleanup.json`, and
 `redaction.json` under the printed evidence directory. Cleanup must stop the
 recorded group, remove scratch, and preserve evidence; a stopped doctor must
-fail because that group is absent. Archive the run under the task evidence root.
+fail because that group is absent. Keep the run’s evidence directory.
 Do not edit Python during measurement; source reload invalidates the sample.
 
 Run `tests/test_export_regeneration.py` and
@@ -269,7 +269,7 @@ before rerunning the real-app command.
 
 ## Write Authority And Imported Fields
 
-MU-22 write-boundary regressions use the established synthetic Jellyfin adapter
+Write-boundary regression tests use the established synthetic Jellyfin adapter
 with real HTTP handlers and isolated databases. Run
 `tests/test_review_write_boundaries.py` for rename, create, and duplicate races:
 commit a restrictive account snapshot immediately before the writer lock, then
@@ -308,7 +308,7 @@ A second review with removed evidence must remain readable and renameable,
 refuse both formats, reject membership removal and an unrelated-time repair,
 still refuse both formats, and accept a genuine repair save. Actual sidecar bytes and hashes,
 a 1440px reopen, and a 320px reopen prove the result and restoration without
-changing media bytes. MU-33 also drives real member upload, timing, saved-policy
+changing media bytes. The saved-review journey also drives real member upload, timing, saved-policy
 locks, non-enforced personal severity edits, and locked mode visibility at 1440
 and 320. After enforcement removal it saves Copy and Live mode through the
 member UI and checks fresh protected reads. Owner copy changes policy owner,
@@ -322,7 +322,7 @@ scratch databases, FFmpeg clips, and completed chapter-based credits detection.
 It proves upload, retime/save, credits accept/save, copy, rename, delete, and
 guessed private-review refusal for Jellyfin at both widths.
 It does not certify live providers, model inference, or installed runtimes.
-Both runners accept `VERIFY_EVIDENCE_ROOT` for a task-owned evidence directory.
+Both runners accept `VERIFY_EVIDENCE_ROOT` for an evidence directory for the isolated run.
 Do not edit Python during measurement; retain failures and require zero reloads.
 
 A review detached before enforcement must remain valid after enforcement changes.
@@ -398,7 +398,7 @@ plugin installation. Run `tests/test_review_policy_*.py` for manual and import o
 metadata and evidence bypasses, copy and owner transitions, policy races, preview,
 Apply, retiming, credits, and community artifact preparation.
 
-## Plugin Interoperability (MU-44)
+## Plugin Interoperability
 
 Run from this checkout with the public plugin checkout beside it, or name it:
 
@@ -411,7 +411,7 @@ Prerequisites are the `auth` ones plus Docker, `python3`, the cached
 `mcr.microsoft.com/dotnet/sdk:10.0` image, and the digest-pinned Jellyfin 12.0.0
 image, as the plugin's verify-jellyfin-edl skill lists. A missing plugin helper,
 Docker daemon, or image exits 2 BLOCKED. A BLOCKED run is not live evidence.
-`VERIFY_PLUGIN_LABELS=KEY=VALUE[,...]` adds Docker labels for a task run.
+`VERIFY_PLUGIN_LABELS=KEY=VALUE[,...]` adds Docker labels to identify the isolated run.
 
 `scripts/lib/plugin-interop-journey.mjs` builds a media tree in the run's scratch
 (`Movies/{Interop Movie, Versions 1080p and 2160p, Policy, Transfer}` and

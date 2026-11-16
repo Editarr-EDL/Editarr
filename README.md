@@ -135,6 +135,26 @@ Backup and restore**, including scheduled backups. A new installation can
 restore a backup from its setup screen. The `editarr backup` command does the
 same from the command line. See the [multi-user guide](docs/multi-user-guide.md#back-up-and-restore).
 
+### Portable backups from the CLI
+
+With Editarr stopped, export a full backup to a private destination. Add
+`--encrypt` to protect the archive with a passphrase.
+
+```sh
+editarr --data-dir /path/to/editarr-data backup export /path/to/private/editarr.backup --encrypt
+```
+
+Inspect and restore the archive using an empty data directory. Editarr verifies
+the archive and asks for confirmation before activation.
+
+```sh
+editarr --data-dir /path/to/empty-data backup inspect /path/to/private/editarr.backup
+editarr --data-dir /path/to/empty-data backup restore /path/to/private/editarr.backup
+```
+
+For an interrupted restore, stop the application and run
+`editarr --data-dir /path/to/restore-target backup recover`.
+
 ## Learn more
 
 - [Run Editarr for several users](docs/multi-user-guide.md)

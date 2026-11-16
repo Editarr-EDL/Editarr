@@ -1,8 +1,4 @@
-"""Capability defaults checked against the human-approved permission documents.
-
-Expected values are parsed from docs/multi-user-permissions.md and the decision
-log's settings table, not restated here.
-"""
+"""Check capability defaults against the published permission tables."""
 
 from __future__ import annotations
 
@@ -37,7 +33,6 @@ from scanner.security.access.vocabulary import (
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 PERMISSIONS = (DOCS / "multi-user-permissions.md").read_text(encoding="utf-8")
-DECISIONS = (DOCS / "multi-user-decisions.md").read_text(encoding="utf-8")
 
 GRANTING_CELLS = {
     "Yes",
@@ -100,11 +95,10 @@ def _table_rows(text: str, header: str) -> dict[str, list[str]]:
     return rows
 
 
-MATRIX = _table_rows(PERMISSIONS, "| Action |")
-SETTINGS_TABLE = _table_rows(
-    DECISIONS.split("### Confirmed settings permission defaults", 1)[1], "| Action |"
-)
-# Restore runs during onboarding, before any role exists (amendment 2026-10-30).
+ROLE_MATRIX, SETTINGS_MATRIX = PERMISSIONS.split("## Settings permission defaults", 1)
+MATRIX = _table_rows(ROLE_MATRIX, "| Action |")
+SETTINGS_TABLE = _table_rows(SETTINGS_MATRIX, "| Action |")
+# Restore runs during onboarding, before any role exists.
 SETTINGS_WITHOUT_ROLE = {"Restore a backup"}
 ROLE_COLUMNS = (Role.USER, Role.ADMIN, Role.OWNER)
 
@@ -155,14 +149,14 @@ def test_role_defaults_match_every_cited_matrix_row(capability):
 
 
 @pytest.mark.parametrize("action", sorted(SETTINGS_DECISION_ROWS))
-def test_settings_defaults_match_decision_log_minimum_roles(action):
+def test_settings_defaults_match_documented_minimum_roles(action):
     minimum = Role(SETTINGS_TABLE[action][0])
     expected = {Role.USER: {Role.USER, Role.ADMIN}, Role.ADMIN: {Role.ADMIN}, Role.OWNER: set()}
     for capability in SETTINGS_DECISION_ROWS[action]:
         assert set(CAPABILITIES[capability].granted) == expected[minimum], capability
 
 
-def test_settings_decision_table_is_fully_mapped():
+def test_settings_table_is_fully_mapped():
     assert set(SETTINGS_DECISION_ROWS) | SETTINGS_WITHOUT_ROLE == set(SETTINGS_TABLE)
 
 
@@ -247,9 +241,10 @@ def test_fresh_interactive_requirements_follow_the_matrix_paragraph():
     assert fresh == set().union(*FRESH_PHRASES.values())
 
 
-def test_enforcing_filter_policy_needs_the_fresh_guard_named_by_mu14():
-    brief = (DOCS / "multi-user-tasks" / "14-filter-preferences-engine.md").read_text("utf-8")
-    assert "fresh interactive guard for enforced-policy" in _flat(brief)
+def test_enforcing_filter_policy_requires_fresh_owner_authentication():
+    restrictions = PERMISSIONS.split("## Nondelegable and authentication restrictions", 1)[1]
+    assert "manage enforced filter policy" in _flat(restrictions)
+    assert "fresh authentication" in _flat(restrictions)
     row = CAPABILITIES[C.FILTERS_POLICY_ENFORCE]
     assert row.authentication is Authentication.FRESH_INTERACTIVE
     assert row.owner_power is OwnerPower.MANAGE_ENFORCED_FILTER_POLICY

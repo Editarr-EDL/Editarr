@@ -2,7 +2,7 @@
 
 Evaluation date: **September 20, 2026**
 
-Decision: **Keep the MTS-04 extractor.** No surveyed candidate demonstrated a
+No surveyed candidate demonstrated a
 licensed, reproducible improvement on the legal corpus. PySceneDetect remains useful in
 its existing supporting scene-boundary role, but replacing the generated-tail scene
 evidence with it reduced candidate recall. No package or model was added.
@@ -45,7 +45,7 @@ than complete process RSS.
   Editarr already locks this release and uses it for general scene detection, so the
   comparison required no installation or acquisition.
 - Disposition: executed as supporting sequence evidence. Keep only its existing role; do
-  not replace the MTS-04 visual fallback with it.
+  not replace Editarr’s visual fallback with it.
 
 ### RapidOCR and PaddleOCR
 
@@ -68,9 +68,7 @@ than complete process RSS.
   provenance record. The current README refers to `MODEL_LICENSES.md`, but that path was
   absent when surveyed. The general PaddleOCR Apache-2.0 repository license and papers do
   not identify the complete training-data rights for the proposed weight.
-- Disposition: rejected before execution. The missing model-specific provenance fails the
-  MTS-04A gate, independently of the new dependency and artifact approval that execution
-  would also require.
+- Disposition: rejected before execution. The model lacks documented provenance for the pinned weight.
 
 ### Recurring Content Detector
 
@@ -119,8 +117,8 @@ than complete process RSS.
 ### Existing Qwen choices
 
 Editarr's pinned Qwen3-VL 4B and 8B choices remain optional ambiguity evidence under the
-MTS-04 contract. The MTS-04 handoff records that no Qwen artifact was acquired or available
-for deterministic evaluation. MTS-04A did not access a model cache or acquire either model;
+credits detection contract. No Qwen artifact was available
+for deterministic evaluation. The comparison used neither a model cache nor a download;
 the existing strict mocked-response tests remain the only Qwen evidence for this corpus.
 
 ## Executed comparison
@@ -134,7 +132,7 @@ Recorded platform: `macOS-27.0-arm64-arm-64bit`.
 
 | Track | Recall | Null false positives | Mean/max emitted error | Analysis runtime | Peak Python memory |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| MTS-04 rendered baseline | 7/7 | 0/1 | 0.0s / 0.0s | 0.023s | 582,208 bytes |
+| Editarr rendered baseline | 7/7 | 0/1 | 0.0s / 0.0s | 0.023s | 582,208 bytes |
 | PySceneDetect scene evidence | 6/7 | 0/1 | 0.0s / 0.0s | 0.264s | 4,626,142 bytes |
 
 PySceneDetect emitted four medium- and two high-confidence candidates. It missed
@@ -165,5 +163,5 @@ Reproduce the machine-readable result with:
 ```bash
 uv run editarr-evaluate-credits \
   tests/fixtures/mts/credits-evaluation-v1.json \
-  --output /tmp/mts-04a-report.json
+  --output /tmp/editarr-credits-comparison.json
 ```

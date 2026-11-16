@@ -1,16 +1,15 @@
 # macOS package inputs
 
 `EditarrLauncher.swift` is the small AppKit lifecycle shell used as the executable of
-`Editarr.app`. It owns no HTTP or scan behavior. Start invokes the embedded NATIVE-10
-runtime; Open Editarr, Open Logs, status, Stop, and Quit use the authenticated NATIVE-06
+`Editarr.app`. It owns no HTTP or scan behavior. Start invokes the embedded
+runtime; Open Editarr, Open Logs, status, Stop, and Quit use the authenticated
 lifecycle adapter exposed by the runtime CLI. `SMAppService.mainApp` owns Launch at
 Login.
 
 The application is an `LSUIElement` menu-bar agent and intentionally has no App Sandbox
 entitlement. Current macOS distribution policy deliberately ships an unsigned app and
 DMG: it does not claim a Developer ID identity, hardened-runtime coverage, notarization,
-stapling, or Gatekeeper acceptance. `runtime.entitlements` is retained only for a future
-explicitly approved Developer ID experiment; it is not applied to the distributable.
+stapling, or Gatekeeper acceptance. The distributable does not use `runtime.entitlements`.
 
 After moving `Editarr.app` to `/Applications`, the end user performs this local ad-hoc
 signing sequence in Terminal before opening it:

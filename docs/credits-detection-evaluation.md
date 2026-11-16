@@ -2,11 +2,11 @@
 
 Evaluation date: **September 20, 2026**
 
-This report records the MTS-04 deterministic detector baseline. It evaluates policy and
+This report records the deterministic credits detector baseline. It evaluates policy and
 cross-platform visual feature extraction on authored CC0 fixtures. It does not claim
 real-film accuracy or treat confidence as a probability.
 
-The MTS-04A third-party survey, common-corpus comparison, and keep decision are recorded in
+The third-party survey and common-corpus comparison are recorded in
 [Third-party closing-credits detector evaluation](credits-third-party-detector-evaluation.md).
 
 ## Corpus and method
@@ -52,7 +52,7 @@ first credible closing-credits boundary.
 - Treat text-pattern and credit-motion scores of 0.50 as positive, black-frame scores of
   0.85 as conflicting evidence, and scene transitions within two seconds as supporting
   evidence.
-- Keep the MTS-00 confidence labels: low below 0.60, medium from 0.60 through below 0.80,
+- Keep the confidence labels: low below 0.60, medium from 0.60 through below 0.80,
   and high from 0.80. They are presentation labels, not calibrated probabilities.
 - Give a credible credits chapter priority over a later visual-only post-credits candidate.
   Black-frame evidence lowers confidence. Optional Qwen evidence may annotate or raise a
@@ -67,7 +67,7 @@ The corpus is deliberately small and synthetic. It justifies deterministic v1 be
 guards regressions; it cannot establish precision, recall, or confidence calibration for a
 population of commercial films. Real-media acceptance requires a separately licensed,
 human-reviewed corpus. Qwen behavior is covered by strict mocked-response tests only; no
-model was acquired or run for MTS-04.
+model was acquired or run for this evaluation.
 
 Reproduce the report with:
 

@@ -78,7 +78,7 @@ Build/install the artifact using `docs/release-build.md`, then run from the chec
 
 ```sh
 .venv/bin/python scripts/proxy_fixture.py \
-  --editarr '/tmp/Editarr RP12 installed env/bin/editarr' \
+  --editarr '/tmp/Editarr installed env/bin/editarr' \
   --dependency-site-packages "$PWD/.venv/lib/python3.11/site-packages"
 ```
 
@@ -97,7 +97,7 @@ and may install ordinary package dependencies; no `brew services` command is use
 
 The Python HTTPS client validates the generated CA and localhost/IP SANs with
 `ssl.create_default_context(cafile=fixture.ca)`; verification is never disabled.
-For RP-13 Chromium, launch a **disposable browser process** with
+For Chromium smoke tests, launch a **disposable browser process** with
 `args=[fixture.chromium_certificate_arg()]` and leave `ignore_https_errors=False`.
 The returned Chromium switch makes a process-local exception for only this fixture
 leaf public-key pin; it is not OS trust or proof of browser CA-chain validation.
@@ -136,9 +136,9 @@ through a trusted upstream peer `127.0.0.1/32` from both a real IPv4 and a real
 401 without a session cookie. This proves edge sanitation; it does not test a
 remote public-IP client.
 
-RP-12 passed all six matrix cells with Nginx 1.31.5, Caddy 2.11.4 and OpenSSL 3.6.4
+The six proxy configurations were tested with Nginx 1.31.5, Caddy 2.11.4 and OpenSSL 3.6.4
 on macOS arm64. Each cell validates syntax before launch and after reconfiguration,
 then checks actual HTTPS HTML/assets/cache/query behavior, mounted API boundaries,
 Secure scoped cookies, Origin/CSRF acceptance and rejection, origin-relative slash
-redirects, and the two forwarding classifications. RP-13 owns actual browser flows,
+redirects, and the two forwarding classifications. Verify browser flows,
 media playback and application settings/restart transitions.

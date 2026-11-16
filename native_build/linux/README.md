@@ -1,7 +1,7 @@
 # Linux AppImage package
 
 Build the raw runtime on native Linux x86_64 against glibc 2.28, then package it with
-the pinned AppImage tooling used by the NATIVE-14 workflow. The baseline build runs in
+the pinned AppImage tooling listed below. The baseline build runs in
 Rocky Linux 8.10 image
 `rockylinux/rockylinux@sha256:e8a49c5403b687db05d4d67333fa45808fbe74f36e683cec7abb1f7d0f2338c6`:
 
@@ -44,7 +44,7 @@ It creates `Editarr-<version>-x86_64.AppImage`, a matching SHA-256 file, a packa
 inventory, and a disposable review AppDir. The AppImage installs no systemd unit and
 never writes `/etc` or `/var`; durable and cache data stay in the documented XDG roots.
 
-`.github/workflows/native14-linux-package.yml` builds and runs raw/AppDir NATIVE-11 on
+The Linux package workflow builds and runs the raw runtime and AppDir on
 the baseline, then checks the same package payload on Ubuntu 24.04. It separately covers
 normal FUSE execution, `--appimage-extract-and-run`, explicit extraction plus `AppRun`,
 headless URL logging, graphical browser launch under Xvfb, second launch, Quit, arbitrary
@@ -63,10 +63,5 @@ Use `--mode fuse` on a host with FUSE. The harness uses isolated state and gener
 colour/tone media to exercise Whisper, all three audio filter loaders, and each advertised
 detector with its default configuration. It restarts with the managed downloader's HTTP
 proxies blocked and HF offline mode enabled, then uses different media content to force
-fresh inference with the cached weights. These checks prove execution and offline reuse;
-speech/detector accuracy, additional detector configurations, CUDA-host inference, and the
-long acceptance matrix remain NATIVE-15. The workflow retains a successful development
+fresh inference with the cached weights. These checks cover execution and offline reuse with default settings on CPU. The workflow retains a successful development
 AppImage privately in CI for seven days; it is a marked test build, not a release.
-
-The AppImage is not a substitute for release signing/provenance. NATIVE-16 owns the
-release signing and publication policy.

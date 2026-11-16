@@ -1,7 +1,7 @@
 # Multi-user default permission matrix
 
-Companion to the [plan](multi-user-plan.md) and [decision log](multi-user-decisions.md).
-Updated 2026-10-18. All defaults below are confirmed interview decisions.
+See the [account guide](multi-user-guide.md) and
+[multi-user contracts](multi-user-contracts.md) for the user flows and data contracts.
 
 `Yes` includes the caller's authorized media only. `Own` restricts objects to the
 caller. `Ordinary users` excludes other admins and the owner. Owner has full
@@ -135,8 +135,7 @@ retract remote publications.
 
 Restore happens only on an empty installation, with no accounts and no work,
 from the onboarding screen or the offline CLI into an empty data directory. No
-role restores a backup into a configured installation (amendment 2026-10-30 in
-the [decision log](multi-user-decisions.md)).
+role restores a backup into a configured installation.
 
 ## Nondelegable and authentication restrictions
 
@@ -146,9 +145,8 @@ others' API keys, change connections/deployment, download backups, or
 manage enforced filter policy. No role template or override can grant these
 powers to another role. The owner retains full access even if Jellyfin changes.
 
-JF-05 removed the Jellyfin first-login admission mode, so every first Jellyfin
-sign-in creates an account. JF-06 removed local passwords, password resets, and
-the registration mode. Every account comes from Jellyfin.
+Every account comes from Jellyfin. The first successful sign-in creates an
+Editarr account.
 
 Viewing the archive of removed sources belongs to the admin role and the owner.
 It is not delegable either: no role default or individual override grants it to
@@ -160,3 +158,38 @@ authentication with the account's Jellyfin password: API-key reveal/rotation, pe
 account linking, account deletion (retain, transfer, or permanent), Jellyfin
 unblocking, and ownership transfer. An otherwise
 authorized API key cannot substitute for this authentication requirement.
+
+## Settings permission defaults
+
+The minimum role includes that role and higher roles. Media and filesystem
+access restrictions still apply. Reserved owner powers stay with the owner.
+
+| Action | Minimum role |
+| --- | --- |
+| View connection addresses/status | admin |
+| Test/edit/disconnect Jellyfin | owner |
+| View installed models and download status | admin |
+| Download models, including scan/credits-triggered acquisition | user |
+| Cancel model downloads | admin |
+| Delete models | admin |
+| View/test path mappings | admin |
+| Create/edit/delete/reorder path mappings | owner |
+| View deployment/network configuration | owner |
+| Change deployment/network configuration | owner |
+| View diagnostic logs | admin |
+| Change logging settings | admin |
+| Restart Editarr | admin |
+| View About/version information | user |
+| Edit instance filter selection rules and severity defaults | owner |
+| Change default filter mode (live inheritance or independent copy) | admin |
+| Choose an individual user's filter mode | admin |
+| Enforce non-overridable filter defaults | owner |
+| Create a full backup | admin |
+| Download a full backup | owner |
+| Configure scheduled backups | admin |
+| View backup job/status details | admin |
+| Restore a backup | onboarding of an empty installation only |
+| Delete backup jobs or retained archives | owner |
+
+Users can download models while starting a scan or credits job and see progress
+in that job. The general model inventory and download status require admin access.

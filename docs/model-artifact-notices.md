@@ -23,10 +23,7 @@ upstream sources, and license metadata.
 
 The MLX Whisper repository does not currently declare a repository license even though
 the original Whisper project is MIT-licensed. The CompVis safety-checker repository also
-does not publish model-license metadata. Both remain available for development and
-on-demand acquisition, but they are `license-review-required`. NATIVE-15 and NATIVE-17
-must not approve a release until both have written clearance or are removed from the
-release contract.
+does not publish model-license metadata. Both remain available for development and are marked `license-review-required` in the manifest.
 
 The first native macOS release excludes these two downloads and disables their
 backends, MLX Whisper and Image Safety Gate. Faster-Whisper, NudeNet and SigLIP2
@@ -45,15 +42,12 @@ options. See [macOS release inputs and notices](macos-release.md).
 - `imageio-ffmpeg` Python code declares BSD-2-Clause and has a separate manifest entry,
   while its bundled FFmpeg executable
   is governed separately by the FFmpeg build configuration and applicable LGPL/GPL
-  obligations. It is `license-review-required`; NATIVE-15 and NATIVE-17 must not approve
-  a release until the executable's exact license, corresponding-source/source-offer, and
-  notice obligations are verified.
+  obligations. The upstream bundled executable is marked `license-review-required`
+  in the manifest.
 
 The native macOS release replaces the `imageio-ffmpeg` binary with FFmpeg and
 ffprobe built from pinned sources. It rebuilds PyAV against the same libraries
 and builds OpenCV without its own FFmpeg copy.
 
-NATIVE-10 owns collection of package data and helper binaries into frozen artifacts.
-NATIVE-16 owns the final SBOM and complete third-party notices. A declared license in
-this inventory is evidence about the pinned upstream component, not legal advice or a
-substitute for those release checks.
+The macOS release includes third-party notices and the corresponding source for
+the bundled FFmpeg build. See [Editarr v0.1.1](https://github.com/Editarr-EDL/Editarr/releases/tag/v0.1.1).

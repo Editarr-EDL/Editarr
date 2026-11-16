@@ -1,6 +1,6 @@
 ---
 name: verify-editarr
-description: 'Verify Editarr through its real authenticated web UI and local API. Use after changes to setup, accounts, multi-user access, audit history, settings, imports, saved reviews, exports, scans, or backups; launch isolated source instances and retain browser evidence.'
+description: 'Verify Editarr through its real authenticated web UI and local API. Use for setup, accounts, multi-user access, audit history, settings, imports, saved reviews, exports, scans, and backups. Launch isolated instances and retain browser evidence.'
 ---
 
 # Verify Editarr
@@ -55,9 +55,9 @@ published-review deletion refusal, and a fresh 320px reopen. `reviews-result.jso
 `reviews-http-statuses.json`, masked screenshots, ARIA snapshots, and copied
 synthetic sidecars survive the normal cleanup. No models or live providers are
 used; live Jellyfin needs the separate checks below. The run ends with the
-[review deletion recipe](./features/reviews-exports.md#review-deletion-with-file-choices-mu-36)
+[review deletion recipe](./features/reviews-exports.md#review-deletion-with-file-choices)
 and then the
-[export choices and deletion UI recipe](./features/reviews-exports.md#export-choices-and-deletion-ui-mu-37).
+[export choices and deletion UI recipe](./features/reviews-exports.md#export-choices-and-deletion-ui).
 
 Append `--quick-connect` instead to drive Jellyfin Quick Connect sign-in on
 the run's Jellyfin: the ordinary member approves the code through Jellyfin's
@@ -66,15 +66,15 @@ nobody in, a disabled Editarr account is refused with the Jellyfin password
 sign-in message, Quick Connect off in Jellyfin hides the button, and a pending code
 expires when Jellyfin expires it. The expiry wait makes the run about eleven
 minutes; see
-[Quick Connect](features/authentication.md#quick-connect-jf-04).
+[Quick Connect](features/authentication.md#quick-connect).
 
-Append `--jellyfin-accounts` instead to prove JF-05 Jellyfin-owned accounts on
+Append `--jellyfin-accounts` instead to test Jellyfin-owned accounts on
 the run's Jellyfin: first sign-in creates `user` or, for a Jellyfin
 administrator, `admin` accounts; the owner's role change outlasts sign-in and
 sync; Jellyfin renames, avatars, and disablement reach Editarr; linked profile
 edits are refused; import works; and the removed admission and role-sync routes
 answer 404. See
-[Account admission and sync](features/jellyfin-users.md#account-admission-and-sync-mu-16-jf-05).
+[Account admission and sync](features/jellyfin-users.md#account-admission-and-sync).
 
 With `--reviews`, append `--account-link` to prove after the review-policy journey
 that a linked Jellyfin member, who holds personal EDL and MCF publications, gets
@@ -114,7 +114,7 @@ synthetic media, runs Editarr's setup against it, signs every account in with Je
 through Editarr's API, and compares each user's served EDL and MCF bytes with the
 published files through the plugin's `verify.py matrix`. Missing Docker, images,
 or the plugin helper exits 2 BLOCKED. See
-[plugin interoperability](./features/reviews-exports.md#plugin-interoperability-mu-44).
+[plugin interoperability](./features/reviews-exports.md#plugin-interoperability).
 
 For permission-scoped audit history, run:
 
@@ -137,7 +137,7 @@ and browser paths. The double bundles the community service's own validators wit
 the esbuild and zod in `community-service/node_modules`; without them the run
 exits 2 BLOCKED (`communityContract`) before launch. The real authenticated UI and API use the existing
 signature-verifying hosted-service double at the outbound transport boundary.
-Evidence stays under `web/test-results/mu-32/`; no real contributor is used.
+The helper prints the evidence directory. no real contributor is used.
 
 For ordinary-user catalog scans and owner controls, run the executable helper:
 
@@ -189,12 +189,11 @@ node .github/skills/verify-editarr/scripts/verify.mjs auth --users --ports=8960-
 ```
 
 This tracked journey needs Docker and the digest-pinned Jellyfin 12 image already
-available. It drives the original 22 users/profile checks and the MU-30 account
-access extension at 1440 and 320 pixels with axe,
+available. It checks profiles and account access controls at 1440 and 320 pixels with axe,
 fresh API readbacks, and masked captures. The provider adapter reuses the existing
 Jellyfin launch/doctor/cleanup helpers. It removes only its recorded labelled
 container and cache volume. App and provider evidence survive cleanup. See
-[the exact recipe](features/multi-user.md#users-and-personal-profile-ui-mu-25)
+[the exact recipe](features/multi-user.md#users-and-personal-profile-ui)
 for evidence names, failure proof, and the post-cleanup doctor command.
 `--users` selects this scenario instead of the earlier API/session fixtures.
 `auth` runs at most one of `--users`, `--audit` (or `--audit-inject-failure`),
@@ -207,7 +206,7 @@ ordinary free-loopback-port selection. `probe` and `serve` also accept the range
 For cross-account media isolation, run:
 
 ```bash
-VERIFY_DOCKER_RUN_PREFIX=<task>-identity- \
+VERIFY_DOCKER_RUN_PREFIX=verify-identity- \
   node .github/skills/verify-editarr/scripts/verify.mjs auth --identity --ports=9200-9219
 ```
 
@@ -229,13 +228,12 @@ For other feature recipes, start a manually driven instance:
 node .github/skills/verify-editarr/scripts/verify.mjs serve
 ```
 
-MU-27 adds the [settings-access recipe](./features/settings-access.md).
+See the [settings-access recipe](./features/settings-access.md).
 `auth --settings --controller --ports=9000-9019`
 runs its role journeys with a real API-only restart controller and Vite.
 `serve` also accepts `--controller` and `--ports=FIRST-LAST`. The port range is
 inclusive and applies to both owned loopback listeners. These options do not
-change the existing default launcher. Settings evidence is retained under
-`web/test-results/mu-27/`. The controller child also gets a scratch `HOME` and
+change the default launcher. The helper prints the evidence directory. The controller child also gets a scratch `HOME` and
 `XDG_CACHE_HOME`; inherited model-library cache variables are removed. Setting
 `EDITARR_DATA_DIR` alone does not isolate the native model cache. The journey
 requires a cancellation marker inside scratch before sending model deletion.
@@ -268,10 +266,9 @@ node .github/skills/verify-editarr/scripts/verify.mjs upgrade --ports=9240-9259
 ```
 
 It writes the synthetic 0009 database from `build_activity_database` in
-`tests/activity_migration_support.py` (fixture `mu03-activity-fixture-2`) into
-scratch before launch, then adds MU-06 community state with `add_community_state`
-from `tests/community_identity_migration_support.py` (fixture
-`mu06-community-fixture-1`). That database has the MU-02 owner, live session, and
+`tests/activity_migration_support.py` into scratch before launch, then adds
+community state with `add_community_state` from
+`tests/community_identity_migration_support.py`. The database has an owner, live session, and
 readable key, plus two saved reviews, a consent-waiting queued job that the queue
 never starts, an imported scan, and legacy EDL and MCF export records whose
 `Movie.edl` and `Movie.mcf` sidecars sit beside a synthetic `Movie.mkv` in the
@@ -281,7 +278,7 @@ and a publish operation, an identity with a pending key recovery in the legacy
 gets the reserved `https://community.test` service; nothing contacts a community
 service. Startup upgrades to `0030_remove_passwords`. The fixture owner has no
 Jellyfin link and no Jellyfin is configured, so it comes out disabled with cause
-`unlinked` and nobody can sign in (plan Appendix C).
+`unlinked` and nobody can sign in.
 
 The helper waits for the `unauthenticated` gate and checks the complete upgrade
 journal and retained snapshot. The old session cookie must get 401, the owner's
@@ -356,7 +353,7 @@ administrator, and stores the server URL and key, so real startup applies only
 `0030_remove_passwords` from its snapshot and the owner stays active. Two
 fresh runs prove the repair list, dialog, no-identity refusal, manual-cue recovery,
 editing, review deletion, and community-scan deletion at 1440 and 320 pixels with
-axe. Evidence stays under `web/test-results/mu-b2r-proof/`. No community identity,
+axe. The helper prints the evidence directory. No community identity,
 external network service, or model download is created; the Jellyfin container
 stops with each run.
 
@@ -586,6 +583,3 @@ server-launching file takes its own slice of `VERIFY_PORTS` from
 cd .github/skills/verify-editarr/scripts
 VERIFY_PORTS=9250-9259 node --test verify.test.mjs verify-dispatch.test.mjs lib/*.test.mjs
 ```
-
-Keep the map current with `/maintain-verification-skill`. Use this `.github/skills/`
-location when that upstream workflow refers to `.cursor/skills/`.

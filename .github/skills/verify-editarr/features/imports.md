@@ -1,7 +1,7 @@
 # Import Filters
 
 Users import EDL or MCF as a browser upload to create reviewable snapshots for
-the selected physical media version. Path import was removed in JF-02.
+the selected physical media version. The workflow imports uploaded files.
 
 ## Sub-features
 
@@ -69,5 +69,5 @@ FFmpeg-generated media, never existing user files.
 - A dirty saved-review draft disables import; save or cancel it explicitly first.
 - MCF schema errors are not interchangeable with explicitly ignored recoverable
   errors. Keep invalid-input proof separate from a successful import.
-- Existing selector examples in `web/e2e/mcf10.spec.ts` and
+- Existing selector examples in the [browser tests](../../../../web/e2e/), including
   `web/e2e/app-review.spec.ts` use mocked APIs; borrow selectors, not mock results.

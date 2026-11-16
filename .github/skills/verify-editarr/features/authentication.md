@@ -110,7 +110,7 @@ Two concurrent submissions create one owner and one key. Setup mints only while
 it holds SQLite's write lock after checking again that no owner exists, so the
 loser refuses with 409 before it mints. A failure after minting revokes the key.
 
-## Quick Connect (JF-04)
+## Quick Connect
 
 ```bash
 node .github/skills/verify-editarr/scripts/verify.mjs auth --quick-connect --ports=9900-9919

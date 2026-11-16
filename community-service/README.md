@@ -1,24 +1,15 @@
 # Editarr community service
 
-The intended deployment is now a hardened Node 24 LTS + SQLite Docker image for
-a Mac mini. See the [Docker setup and recovery guide](../docs/community-service-docker.md).
-The image includes only the community API and isolated operator UI, not the local
-scanner. Default configuration is disabled; no public service, existing database
-import, retention policy is activated by building it.
+The community service runs the community API and operator UI on Node 24 LTS
+and SQLite. Development tests and the Docker image use the same database
+adapter. The default runtime configuration is disabled. `GET /health` checks
+liveness, while contributor and operator routes require explicit configuration.
 
-Development and tests use the same Node runtime and SQLite adapter as Docker.
-`GET /health` is available locally; signed identity requires configured
-bot membership and explicitly enabled protected runtime configuration. The OAuth
-broker checks trusted ingress and records passive observations. Enrollment completion
-requires the prebound backend confirmation secret, trusted edge admission, current
-membership and configured policy; CSS-29/30 implement the local admin/client UI
-separately from this hosted package.
-`GET /v1/capabilities` returns 503
-with `{"error":{"code":"service_unavailable"}}`. Unsupported runtime modes return
-the same redacted 503 response. Runtime configuration  must both be
-explicitly enabled before contributor or operator routes can be served.
-The self-hosted entry point separately validates configuration before explicit
-activation; identities, signed bytes and transactional publication are shared.
+Use the [Docker setup and recovery guide](../docs/community-service-docker.md)
+to configure SQLite, Discord, Cloudflare Tunnel and operator Access. See the
+[community service contracts](../docs/community-scan-service-contracts.md) for
+the contributor protocol and the [community user guide](../docs/community-user-guide.md)
+for connection, discovery and sharing in Editarr.
 
 ## Local commands
 
@@ -104,7 +95,7 @@ October 8 approved community-retain-first-1 keeps durable signed artifacts,
 lineage, public-key/identity history, operations, receipts/deduplication, votes,
 reports and audits indefinitely. Existing hourly transient expiry and log rotation
 remain; no payload deletion or automatic manual-service-backup pruning is added.
-CSS-65's local-app scheduled-backup policy is separate and unchanged.
+The local app’s scheduled-backup policy is separate and unchanged.
 
 After separate operator authorization, stop the service and inspect offline:
 
@@ -120,24 +111,23 @@ or observations writes. It needs no service secrets/network/listener and works
 while runtime configuration is disabled. There is no --confirm/delete/activation
 variant. Counts are not reservations, scanned-row totals or disk-reclamation
 estimates; payloadBytesReclaimed is zero. Existing exclusive-writer locking refuses
-inspection of a running database. See the [retention matrix and evidence](../docs/community-scan-service-tasks/64-retention-cleanup.md).
+inspection of a running database. See the [offline retention guide](../docs/community-service-docker.md#retention-and-offline-preview).
 
 ## Operator Access
 
-CSS-55 implements the operator boundary locally, separate from contributor signing
-and the local Editarr administrator session. Configure `ACCESS_ISSUER` (exact HTTPS
+Operator access is separate from contributor signing and the local Editarr
+administrator session. Configure `ACCESS_ISSUER` (exact HTTPS
 team origin), `ACCESS_AUDIENCE` (Access application's AUD), `OPERATOR_ORIGIN`
 (canonical HTTPS origin, no trailing slash) and `OPERATOR_SUBJECTS` (JSON array
 of exact verified Access `sub` strings). No values or permissive defaults are
-committed; real identities and policy remain OPS-02. Do not send credentials or
+committed. Do not send credentials or
 JWTs through chat or tracked configuration.
 
 All `/admin` paths require a verified RS256 application JWT and current allowlist.
 `GET /admin/v1/session` returns only `{version:1,subject}`. Unsafe methods require
 exact Origin, `X-Community-Operator: 1` and same-origin fetch context when present.
 Unknown API paths return JSON errors, not login HTML or an SPA. No CORS/CLI
-exception exists. CSS-56 adds protected moderation operations described below.
-Assertions/cookies are stripped
+exception exists. Assertions/cookies are stripped
 before internal asset fetches; protected responses use no-store and strict CSP.
 
 The isolated `web/operator` / `web/src/settings/community-operator` entry builds
@@ -150,17 +140,13 @@ credentials. `pnpm --dir ../web build` still builds the independent local app.
 
 `pnpm --dir ../web exec playwright test --config playwright.operator.config.ts`
 checks only the operator frontend with synthetic session responses. Live Access
-configuration, session lifecycle, key rotation, provider account configuration and administrative
-CLI auth remain unverified. CSS-55 adds no private key or persistent state;
-CSS-56's SQLite state belongs in full service backups. Protect deployment configuration
-separately in the future hosted backup inventory.
-Runtime activation is explicit and disabled by default.
-See the [CSS-55 handoff](../docs/community-scan-service-tasks/55-operator-access.md).
+configuration and CLI sign-in require their own checks. Keep the complete SQLite
+state in backups and protect deployment configuration separately. See
+[Docker configuration](../docs/community-service-docker.md#configure-before-activation).
 
 ## Operator CLI
 
-CSS-59 adds a human Access CLI without a server-side authentication exception.
-Use `pnpm operator -- --help` from this package. After approved OPS-02 setup,
+Use `pnpm operator -- --help` from this package. With operator Access configured,
 log in with `cloudflared access login https://operator-host/admin/`, then run:
 
 ```sh
@@ -188,10 +174,8 @@ the checkpoint's `lock` file; retain all action/page evidence.
 
 `pnpm test:operator-cli` runs Node subprocess/fake-transport tests. The shared service
 comparison is `test/operator-cli-service.test.ts`. Live cloudflared/Access/session
-and binding-cookie compatibility remain OPS-02; do not weaken Access settings.
-No remote backup/restore jobs, reset, key rotation or deferred feature
-pauses are exposed. Current backups use offline Docker maintenance.
-See the [CSS-59 commands, recovery and CSS-60/61 adapter handoff](../docs/community-scan-service-tasks/59-operator-cli.md).
+and binding-cookie compatibility require a live configuration check.
+Use offline Docker maintenance for backups and restores.
 
 ### Independent Service Backup
 
@@ -210,12 +194,12 @@ attest to operator-owned files and continues to report backup status unavailable
 
 For current SQLite snapshots, use the Docker guide's disabled new-volume restore
 procedure. `pnpm operator -- restore` is retained **only for already-created legacy
-CSS-60 archive pairs**, not current Docker snapshots or automatic runtime adoption.
+encrypted archive pairs**, not current Docker snapshots or automatic runtime adoption.
 It is network-free dry-run. Explicit `--confirm` requires
 the completed backup directory (both encrypted archives and original private
 `state.json`), an owned 0600 age identity file, a new private destination outside
 the checkout, explicit archive/SQL ceilings and artifact bounds. No `--origin`,
-provider token, live target, deployment or activation option exists. current Node 24 LTS and
+provider token, live target, deployment or activation option exists. Current Node 24 LTS and
 age with POSIX `/dev/fd/3` are required; other platforms remain unverified.
 
 The command validates ciphertext/manifest pairing, exact SQL, known 0014 schema,
@@ -234,14 +218,11 @@ Identical `--resume` retries incomplete imports from the same immutable snapshot
 completed/validated outputs are digest checked before cleanup/completion. No reset,
 automatic migration, source deletion or production cutover occurs.
 
-See the [CSS-61 command, safety bounds, failure recovery and drill report](../docs/community-scan-service-tasks/61-hosted-restore.md).
-Local/mock completion does not certify hosted recovery, off-device protection,
-large-database capacity, downtime or live provider costs. Dashboard backup status
-remains unavailable. Production cutover needs separate review and authorization.
+The dashboard cannot see operator-owned backup or restore files.
 
 ## Read-Only Operator Dashboard
 
-CSS-57 adds overview/usage, contributions/reports, contributors/keys, operation
+The dashboard includes overview/usage, contributions/reports, contributors/keys, operation
 history, audits and backup-status hash routes in the isolated hosted frontend.
 Every API stays behind Access; no local Editarr bootstrap, login or contributor
 credentials are used. Session failure clears protected data; Sign in reloads the
@@ -263,14 +244,11 @@ Operation results, artifact bytes, private Discord IDs and key bytes are exclude
 Dashboard reads share explicit `MODERATION_LIMITS` body/query bounds and
 passive request/write observations with moderation. Missing configuration or
 unavailable authority verification fails closed; high observations never refuse
-access. No mutation controls, provider credential or
-backup format is added. CSS-58 owns reviewed controls; CSS-60/61 own approved
-backup/recovery sources. Live Access/production remain disabled/unverified.
-See the [CSS-57 read contract and verification](../docs/community-scan-service-tasks/57-operator-dashboard-read.md).
+access.
 
 ## Reports and Reversible Moderation
 
-CSS-56 adds local-only signed `POST /v1/contributions/{revisionId}/reports` with
+The hosted service accepts signed `POST /v1/contributions/{revisionId}/reports` with
 `{version:1,reason,note?}`. Reasons are spam/inaccurate/privacy/rights/other;
 note is private plain text <=1,000 characters. Current member/active key, counted
 exact-revision import and non-self authorship are required. One open report per
@@ -301,13 +279,10 @@ reports, moderation_actions, vote_exclusions, moderation_versions, moderation_ep
 operator_request_counts, report_usage_observations and original operations/source
 facts. Preserve exclusions during reconciliation and restore into a disabled
 environment. Existing upgrades require approval and a verified recoverable backup.
-Report UI/local transport, CLI authentication, live Access, hosted backup/recovery
-and production activation remain downstream. See the
-[CSS-56 handoff](../docs/community-scan-service-tasks/56-moderation-service.md).
 
 ## Authorized downloads
 
-CSS-42 adds local-only signed `GET /v1/contributions/{revisionId}/artifact`.
+The hosted service accepts signed `GET /v1/contributions/{revisionId}/artifact`.
 It returns exact original gzip/manifest/signature buffers in a bounded JSON/base64
 bundle, registered historical author keys and a fresh contributor-bound service
 Ed25519 receipt. Downloads do not update popularity. Every immutable-byte cache
@@ -319,12 +294,12 @@ container secret; public verification/revocation history is trusted configuratio
 Do not use synthetic fixture keys or provision real credentials through chat or
 tracked files. Known schema through additive 0011 and a separately protected
 secret/history backup inventory are required before operational activation.
-See the [download/receipt contract](../docs/community-scan-service-tasks/decision-evidence/42-artifact-download-contract.md)
-for wire framing, errors, limits and upgrade/backup rules. Production remains disabled.
+See the [download API](../docs/api-contract.md#community-downloads) and the
+[SQLite upgrade procedure](migrations/README.md).
 
 ## Import Acknowledgments
 
-CSS-51 adds local-only signed `POST /v1/import-receipts`. Original service receipts
+The hosted service accepts signed `POST /v1/import-receipts`. Original service receipts
 verify against configured `DOWNLOAD_RECEIPT_KEYS`; no private signer is needed.
 Atomic SQLite 0012 facts count one acknowledged import per contributor/revision,
 excluding the author, across installations and retries. Equivalent valid issuances
@@ -338,11 +313,11 @@ production remains disabled. Before applying additive 0012 to an existing store,
 authorize the upgrade and verify a recoverable full SQLite/key-history backup.
 The `community-retain-first-1` policy retains immutable import facts indefinitely;
 daily observations are not account totals. See the
-[retention policy](../docs/community-scan-service-tasks/64-retention-cleanup.md).
+[offline retention guide](../docs/community-service-docker.md#retention-and-offline-preview).
 
 ## Revision Votes
 
-CSS-52 adds local-only signed `POST /v1/contributions/{revisionId}/vote` and signed
+The hosted service accepts signed `POST /v1/contributions/{revisionId}/vote` and signed
 `GET` for the caller's current vote/eligibility; `GET` on the plural `/votes` path
 returns only public likes/dislikes. All responses are private/no-store. Writes
 require an acknowledged successful import of that exact revision, current member
@@ -357,184 +332,58 @@ vote and aggregate changes commit atomically. Old retries never overwrite a newe
 vote; current state requires a separate read. Preserve vote rows and referenced
 operations/keys in full backups. The retain-first policy keeps these indefinitely. Applying 0013
 to an existing store requires authorization and a verified recoverable backup.
-See the [CSS-52 policy/DTO handoff](../docs/community-scan-service-tasks/52-votes-service.md).
+See the [vote API](../docs/api-contract.md#hosted-votes).
 
 ## Revision Quality
 
-CSS-53 adds `community-ranking-wilson-1`: the Wilson lower bound with z=1.96 and
+The service ranks candidates with `community-ranking-wilson-1`, the Wilson lower bound with z=1.96 and
 one positive/negative prior vote, using only that revision's likes/dislikes.
 Neutral adds no rating evidence; scores are rounded to nine decimals. Catalog
 order remains video compatibility, audio compatibility, descending quality, then
-ASCII revision ID. Author boost is zero, no age decay, no usage-based admission; author
-boosts/tiers are explicitly deferred. Upload/import volume never affects quality.
+ASCII revision ID. The score has no author boost, age decay or trust tier.
+Upload and import volume do not affect quality.
 
 Current counters are reread on cache hits, with no extra ranking query or stored
 score. Ranking version invalidates cache/cursor identities. `community-search-2`
 cursors preserve the revision ceiling but reject changed votes/visibility with
 `invalid_cursor`; restart lookup without a cursor. Signed artifacts and schema
 remain unchanged. No new configuration or production activation is added.
-See the [CSS-53 formula/DTO handoff](../docs/community-scan-service-tasks/53-ranking-policy.md).
+See the [ranking API](../docs/api-contract.md#revision-quality-ranking).
 
-## Boundaries
+## Service structure
 
-- `src/index.ts` handles HTTP dispatch and the redacted error envelope.
-- `src/config.ts` declares SQLite and policy/identity runtime dependencies. Missing
-  configuration is reported by name only; values and secrets are never logged.
-- `src/runtime/contracts.ts` owns the database and asset interfaces;
-  `src/runtime/` implements Node HTTP, SQLite, configuration, schema checks and maintenance.
-  Dockerfile/Compose bundle only the service/operator UI and publish a loopback origin.
-- `test/service.test.ts` checks fail-closed production responses and local
-  SQLite bindings. `migrations/0001_identity_operations.sql` provides the
-  dormant identity/operation tables; `test/identity-operations.test.ts` checks
-  their SQLite constraints and repository transactions. CSS-28 adds local confirmed enrollment.
-- `src/budgets/usage.ts` records allowed/denied/retried request and logical-write
-  observations. `serviceUsage` aggregates anonymous and contributor observations
-  without policy/caps/pauses. Telemetry is best effort, not permission to mutate.
-  Historical accounting migrations remain unchanged for preserving upgrades and
-  legacy archive recovery. Migrations 0015/0016 retire usage enforcement; removed
-  application APIs must not be reintroduced. CSS-24 is retired. Migration 0017
-  rewrites stored Radarr and Sonarr provenance to generic values.
-- `src/security/contributor-auth.ts` resolves the current key and contributor,
-  verifies exact signed bytes, and requires a membership eligibility hook.
-  `GET /v1/identity` uses it to return only the signed contributor's status,
-  using the CSS-27 bot membership hook. Missing bot configuration fails closed.
-  `src/operations/repository.ts` and
-  `migrations/0004_request_admission.sql` provide atomic nonce/operation
-  admission for future mutations. Do not treat a valid signature alone as
-  permission to bypass membership or restart an existing operation.
-- `src/integrations/discord/oauth.ts` implements a locally testable browser
-  start, explicit confirmation and the fixed `/v1/discord/callback` route.
-  Browser state is bound to an HttpOnly cookie and an installation public key;
-  a successful callback verifies Discord identity and membership and records
-  a short-lived enrollment handoff, not an enrolled account. Configure
-  `PUBLIC_ORIGIN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` and a secret
-  `DISCORD_CLIENT_SECRET` for local integration tests. No live callback is
-  enabled: non-local traffic still returns 503, and CSS-28 must finish
-  local confirmation client/UI integration before contributors can sign in normally.
-  `src/integrations/discord/service.ts` supplies trusted pre-handler admission and
-  passive observations. An explicit trusted actor resolver is mandatory. The
-  tunnel resolver reads canonical `CF-Connecting-IP`, ignores
-  forwarding aliases and rejects `CF-Worker` subrequests. The protected origin
-  listener is the trust boundary, not arbitrary headers or runtime metadata.
-  Missing configuration returns 503. High or unknown observations never refuse
-  requests; replay and revocation remain durable across restarts. No hosted
-  namespace or resource was provisioned.
-  Token and membership requests reject redirects to avoid forwarding credentials.
-  Bounded parsing, cancellation consumption and full-schema OAuth-to-signed-key
-  proof tests do not constitute live enrollment or deployment acceptance.
-- `migrations/0006_oauth_usage.sql` and `src/integrations/discord/usage.ts` add
-  bounded daily anonymous counters and passive aggregate reads across contributor
-  observations. No IPs, browser state or Discord IDs are stored in counters.
-  Mutation metadata measures known broker/cleanup rows written; accounting
-  includes its own row. Native-denied traffic and reads are not recorded;
-  outages can leave observations partial. Committed OAuth responses survive
-  accounting failure with only `Community-Usage-Status: unavailable` added.
-  Monthly byte observations are conservative estimates, not current inventory
-  or total database storage. Hourly local-only cleanup bounds deletions to 1000 rows
-  per table. Fresh/populated 0001-0005 upgrades are tested; existing-store
-  application needs verified recoverable backup and explicit authorization.
+- [HTTP dispatch](src/index.ts) routes requests and returns redacted errors.
+- [Runtime adapters](src/runtime/) implement the Node HTTP server, SQLite,
+  configuration, static assets and offline maintenance.
+- [Contributor authorization](src/security/contributor-auth.ts) verifies signed
+  requests, active key state, and contributor eligibility.
+- [Discord integration](src/integrations/discord/) handles OAuth and bot
+  membership checks. It binds OAuth state to an HttpOnly cookie and the
+  installation key. The fixed callback is `/v1/discord/callback`.
+- [Operation storage](src/operations/repository.ts) coordinates nonce
+  admission and idempotency. [Publication](src/contributions/) preserves original
+  gzip, manifest and signature BLOBs and commits the revision and result
+  atomically. `GET /v1/publication-operations/{id}` lets a contributor
+  reconcile an owned publication.
+- The [catalog](src/catalog/) indexes typed identity and immutable release
+  evidence for signed batch availability and matches. Run
+  `node scripts/measure-catalog.mjs 1000` from this package to measure synthetic
+  catalog table and index growth in a disposable database.
+- [Usage observations](src/budgets/usage.ts) count requests and SQLite logical
+  writes on a best-effort basis. Usage does not grant or revoke access.
 
-`src/integrations/discord/member-provider.ts` and `membership.ts` implement
-single-member bot REST using secret `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID`.
-Positive and negative evidence expires after 900 seconds; expired checks refresh
-on use, never grant outage grace, and preserve operator suspension. Shared SQLite
-leases/cooldowns bound provider concurrency. No Gateway or retained user tokens
-are added. `0007_membership.sql` stores evidence/coordination in Unix seconds;
-guild or bot credential rotation invalidates previous authority. Cleanup preserves
-active leases/cooldowns. Fresh/populated versions 0001-0006 are tested through
-0007; no existing database was migrated. Membership request mutations are not
-fully represented in usage counters; recorded observations remain partial.
-See the task pack's operator setup for minimal-permission live verification.
+## Signing key lifecycle routes
 
-CSS-28 adds `POST /v1/enrollments/complete`, signed `GET /v1/identity` and
-`PATCH /v1/identity`. Public OAuth start requires `confirmationHash` bound before
-OAuth; completion requires the backend-only secret after local administrator
-confirmation. Signatures, fresh membership and trusted ingress are mandatory;
-registration/key/nonce and rename/operation/name-event commits are atomic. Same active-key/grant
-retries reconcile within ten minutes and return current profiles. Reconnecting
-the same active installation/key preserves identity; another key for it returns
-`recovery_required`, never silently replaces credentials. Names are curated
-three-word labels or validated 3-40-code-point custom text, unique among current
-NFC/lowercase/NFC keys, with unrestricted valid name changes. Clients must
-escape labels, refresh signed profiles and replace cached names/revisions on
-responses. `0008_enrollment_profiles.sql` needs a verified backup and authorized
-upgrade for existing stores; legacy normalization/collision cases stop for review.
-The shared fixture is `tests/fixtures/community/enrollment-profile-v1.json` at
-repository root. Local administrator/CSRF transport/UI is not implemented here.
+Signed key rotation uses `POST /v1/keys/rotate` and
+`POST /v1/keys/rotation-status`; revocation uses `POST /v1/keys/revoke`.
+`GET /v1/key-operations/{key_rotation|key_revocation}/{operationId}` reconciles
+an owned operation. Rotation binds old and new proofs to one intent and retires
+the old key in the same commit that activates the replacement. Retain exact
+proofs and operation bytes for retries.
 
-Production configuration is intentionally absent. Later tasks must create
-separate deployment configuration with approved policy and secret management,
-replace placeholder bindings, and validate Discord and Access identity before
-enabling contributor or operator routes. A configured local `APP_ENV` is never
-proof that production prerequisites have been met.
-
-CSS-33 adds a distinct `/v1/discord/recovery-start` flow and candidate-signed
-`POST /v1/keys/recover` / `POST /v1/keys/recovery-status`, with active-owned
-`GET /v1/key-operations/key_recovery/{operationId}` reconciliation. Fresh Discord
-ownership, installation/candidate/operation binding and the backend-held confirmation
-secret are required; ordinary enrollment cannot replace a key or consume a recovery
-grant. The existing SQLite operations/key tables suffice: no new migration was added.
-Atomic replacement preserves the contributor and sibling installations, and bounded
-cleanup retains committed evidence. The local backend/UI implement explicit approval
-and same-candidate recovery; no standalone CLI or operator trigger was introduced.
-See the [exact recovery contract and runbook](../docs/community-scan-service-tasks/decision-evidence/33-key-recovery-contract.md).
-
-CSS-31 adds signed key lifecycle routes behind the same trusted ingress and
-membership checks: `POST /v1/keys/rotate`,
-`POST /v1/keys/revoke`, `POST /v1/keys/rotation-status` and signed contributor-scoped
-`GET /v1/key-operations/{key_rotation|key_revocation}/{operationId}`. Rotation binds
-old/new proofs to one durable intent and atomically commits nonce, old retirement,
-new activation and operation. Historical public bytes and unrelated
-installations are preserved. The replacement signs reconciliation without the
-retired old private key, using retained public proofs and exact original bytes.
-No new schema or live migration is needed. Read the
-[versioned proof/recovery contract](../docs/community-scan-service-tasks/decision-evidence/31-key-lifecycle-contract.md)
-and [task handoff](../docs/community-scan-service-tasks/31-key-rotation-service.md)
-before adding a client. UI triggers/private pending journal remain CSS-32;
-lost-key recovery remains CSS-33. Neither a lookup nor normal Discord enrollment
-can reactivate retired/revoked credentials.
-
-CSS-38 adds the dormant `0009_catalog.sql` schema and internal repository APIs:
-`src/catalog/{records,works,releases,lookup}.ts` for typed identity, immutable
-release evidence and bounded indexed published-only queries, and
-`src/contributions/repository.ts` for v1/v2 verified-artifact revision planning,
-owned durable-operation recovery, bounded immutable lineage and publication
-transitions. Signed catalog HTTP routes provide batch availability and matches.
-See the [user guide](../docs/community-user-guide.md) for discovery and reuse.
-Caps are explicit inputs, not production policy.
-
-Run `node scripts/measure-catalog.mjs 1000` from this package for synthetic local
-table/index amplification. It creates its own temporary database and verifies
-its pre-upgrade backup; it never migrates an existing store. Local measurements
-are not hosted capacity or billing. Read the
-[schema/API/backup handoff](../docs/community-scan-service-tasks/decision-evidence/38-catalog-schema-contract.md)
-before using these helpers. Existing-store migration needs explicit authorization
-and a verified recoverable backup; referenced operations/keys are durable data.
-
-CSS-39 adds signed local `POST /v1/contributions` and owned signed
-`GET /v1/publication-operations/{id}` with native admission, active key/member
-checks and strictly explicit `PUBLICATION_LIMITS`
-JSON. No limits are supplied by default; unconfigured or disabled runtime
-requests remain 503. High recorded usage does not pause uploads. No contributor role was added.
-
-`src/contributions/{publication-input,publication,storage}.ts` and
-`src/http/publication.ts` preserve original v1/v2 gzip, manifest and detached
-signature. One SQLite transaction inserts the nonce, operation, catalog and all three
-exact BLOBs, checks byte integrity and key authority, and commits publication plus the
-completed result. A failed new publication leaves no partial records to recover.
-Identical retries return the saved result even after a lost response; conflicts
-never overwrite bytes. Older pending records can still complete on explicit retry.
-Failed envelopes are observed and cached success never creates another payload.
-Telemetry is best effort and partial, never an admission control.
-CSS-40 is retired; no background publication recovery worker is needed.
-
-Migration `0010_d1_artifacts.sql` adds immutable `artifact_payloads`, storage policy
-and byte counters. Historical object key/etag columns and retired accounting rows
-remain preserved for schema compatibility; there is no R2 binding or runtime use.
-Combined parts remain bounded to 1.9 MB as an inherited application policy. The default
-aggregate payload admission policy is retired by 0015; monitor overall SQLite size
-separately because these counters exclude indexes and operational tables.
-Read the [current SQLite storage scope](../docs/community-scan-service-tasks/d1-storage-scope.md)
-and [migration procedure](migrations/README.md) before upgrading an existing store.
-Production payload/CPU, license, live setup and deployment remain separate gates.
-`validationWallMs` is cooperative wall time, not a hard CPU cutoff.
+Lost-key recovery starts at `/v1/discord/recovery-start`. Candidate-signed
+`POST /v1/keys/recover` and `POST /v1/keys/recovery-status` bind fresh Discord
+authorization, the installation, the replacement, the operation and the private
+confirmation secret. An active owned key can reconcile with
+`GET /v1/key-operations/key_recovery/{operationId}`. See the
+[enrollment guide](../docs/community-scan-service-discord-enrollment.md).

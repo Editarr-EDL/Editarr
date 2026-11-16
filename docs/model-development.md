@@ -27,7 +27,7 @@ development artifacts and can be deleted when no longer needed.
 ### MCF subcategory evaluation
 
 Qwen prose is currently enrichment evidence only. It does not replace a detector's MCF
-classification. MCF-12 requires a constrained, versioned response containing only category
+classification. The classifier uses a constrained, versioned response containing only category
 tokens from the detector's known family before any Qwen result can select a more specific
 subcategory. Invalid, out-of-family, low-confidence, or unevaluated output retains the
 producer's deterministic fallback.
@@ -108,10 +108,10 @@ uv run editarr-evaluate-credits \
 
 The report includes boundary recall within per-case tolerances, null-case false positives,
 absolute boundary error, confidence-band counts, runtime, platform, backend, and per-case
-results. It also includes the MTS-04A comparison against the already-installed
+results. It also includes a comparison against the already-installed
 PySceneDetect scene extractor with package identity, runtime, and Python-managed peak
 memory. This synthetic corpus is a regression and policy baseline, not evidence of
-real-film population accuracy. The recorded MTS-04 evidence and limitations are in
+real-film population accuracy. The evaluation results and limitations are in
 [credits-detection-evaluation.md](credits-detection-evaluation.md), and the third-party
 survey and decision are in
 [credits-third-party-detector-evaluation.md](credits-third-party-detector-evaluation.md).

@@ -1,9 +1,9 @@
 # Media Access
 
-Feature `media-access` (MU-11). `scanner/security/media_access` decides which
-Jellyfin items an account may reach and changes local scopes. MU-15's management endpoints
-and MU-20's catalog routes call it. The real-app journeys are
-[account access controls](multi-user.md#account-access-controls-mu-30) for
+`scanner/security/media_access` decides which
+Jellyfin items an account may reach and changes local scopes. Account management endpoints
+and catalog routes call it. The real-app journeys are
+[account access controls](multi-user.md#account-access-controls) for
 scope editing, [catalog access](catalog-access.md) for the
 catalog routes, and [identity isolation](identity-isolation.md) for six
 accounts with different local scopes and Jellyfin policies.
@@ -110,7 +110,7 @@ files under `TMPDIR` and removes them at exit.
   Film B and the series with collections; the stacked movie's second part
   appears only in its `AdditionalParts`; both listings build whole and in
   pages of three, and a changed or failed first-page reread of either is refused.
-- The matrix runs the real `JellyfinUserAdapter` against the MU-08 local
+- The matrix runs the real `JellyfinUserAdapter` against the local
   boundary (`editarr-jellyfin-users-1`) for Casey and Blake. That boundary is
   synthetic; passing it is not live Jellyfin evidence.
 - Storage tests use real accounts, sessions, API keys, role defaults, and

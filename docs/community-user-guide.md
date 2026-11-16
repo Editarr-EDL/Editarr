@@ -42,7 +42,7 @@ before retrying; explicit retry sends the saved intent, not a newly created dona
 Cancellation after submission can be uncertain, and a committed publication remains
 published. Standing permission permits retained public notes, attribution and change
 history. There is no author withdrawal command; operators can moderate visibility.
-Automatic donation and separate enrollment/publication pause controls are deferred.
+Community sharing requires explicit approval for each contribution.
 
 ## Find, import and review
 
@@ -103,14 +103,13 @@ and seek operator review rather than resetting the database.
 
 ## Compatibility and failures
 
-The Python package declares Python 3.11 or newer; CSS-67 tested 3.11.16 on macOS.
-This is not certification of every interpreter/platform. Wheel encryption on POSIX
-requires age and Expect; native packaging bundles its helper when verified. Windows
+The developer Python package requires Python 3.11 or newer. Wheel encryption
+on POSIX uses age and Expect. The native app bundles its encryption helper. Windows
 encrypted scheduling fails closed because protected-file ACL validation is unavailable.
 Local scheduling is disabled until configured and never backs up the Docker service.
 
-Current local schema is `0009_readable_api_key`. Community SQLite schemas
-1-15 upgrade offline to 16 with a verified pre-upgrade snapshot; startup never upgrades.
+Use the [Docker upgrade procedure](community-service-docker.md#persistence-and-recovery)
+with a verified pre-upgrade snapshot. Startup does not upgrade the database.
 Artifact v1/v2 verification retains exact gzip, manifest and signature bytes. Strict
 clients and service DTOs need coordinated releases; unknown versions/fields fail closed.
 The About endpoint may report community/artifact identities as unknown; it is not a
@@ -126,6 +125,4 @@ support logs from tokens, private paths, passwords and Discord identities.
 Operator moderation, maintenance snapshots and restore are documented in the
 [service guide](../community-service/README.md) and
 [Docker runbook](community-service-docker.md). Local administrator credentials do not
-grant operator Access authority. Native/Intel packaging, live ingress, host cold boot,
-capacity and independent recovery remain open release checks in the
-[CSS-67 evidence](community-scan-service-tasks/decision-evidence/67-packaging-matrix.md).
+grant operator Access authority.

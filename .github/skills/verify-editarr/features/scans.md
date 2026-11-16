@@ -24,7 +24,7 @@ own jobs without server paths or global queue controls.
 Run the complete isolated access journey from the repository root.
 
 ```bash
-VERIFY_EVIDENCE_ROOT=web/test-results/mu-26 node .github/skills/verify-editarr/scripts/scan-ui.mjs
+node .github/skills/verify-editarr/scripts/scan-ui.mjs
 ```
 
 The executable helper reuses launch, readiness, doctor, authentication, synthetic

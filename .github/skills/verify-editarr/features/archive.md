@@ -1,4 +1,4 @@
-# Archive (JF-01, JF-02)
+# Archive
 
 Editarr no longer connects to Radarr or Sonarr, and every media item now comes
 from Jellyfin. Migration `0025_archive_arr_sources` moves every former Radarr and

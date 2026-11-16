@@ -61,7 +61,7 @@ until their recipes run with the listed prerequisites.
   drafts, personal filter modes, and automatic personal regeneration with
   matching disk, download, snapshot, and system-audit evidence, then review
   deletion with per-file retain/remove choices and hidden-file nondisclosure,
-  then the MU-37 export dialog, replacement confirmation with stale recovery,
+  then the export dialog, replacement confirmation with stale recovery,
   owner targets, cross-user deletes, account switches, and the review deletion
   dialog against parsed disk files.
   `scan-ui.mjs --reviews` covers personal imports, timing, completed
@@ -80,22 +80,22 @@ until their recipes run with the listed prerequisites.
 - [Backups](./backups.md): full archive export from Settings and the
   four-instance restore journey (`verify.mjs restore`): onboarding restore into an
   empty instance, CLI restore after an interrupted activation, and named refusals.
-  It also lists the MU-45 upgrade matrix and the installed restore, owner recovery,
+  It also lists the upgrade matrix and the installed restore, owner recovery,
   and TLS proxy checks.
 - [Settings access](./settings-access.md): owner, admin, and user settings,
   denied operations, standalone restart, scratch model operations, an archive
   download with no restore control, and enforced-filter authentication at 1440
   and 320 pixels.
   The recipe records the separate post-edit archive validation limitation.
-- [Multi-user journeys](./multi-user.md): account and profile recipes, MU-30 role,
+- [Multi-user journeys](./multi-user.md): account and profile recipes, role,
   media, filter policy, bulk, and ownership controls, with each sub-feature's
-  owning MU tasks and proof.
+  account workflows and verification commands.
 - [Multi-user permissions](./multi-user-permissions.md): evaluator tables,
-  test-fixture HTTP checks, and the MU-42 route coverage check that every gated
+  test-fixture HTTP checks, and the route coverage check that every gated
   handler resolves its principal. Every launch admits every active account;
   plain `auth` drives the real two-user smoke.
 - [Jellyfin users](./jellyfin-users.md): verified Jellyfin identity, deletion,
-  outage, and item-access checks against a synthetic local boundary, and MU-16
+  outage, and item-access checks against a synthetic local boundary, and checks for
   account admission and sync (first sign-in, import, five-minute and manual
   sync, 24-hour outage grace), with live Jellyfin 12 checks for both.
 - [Account linking](./account-linking.md): proof-bound linking and relinking
@@ -110,7 +110,7 @@ until their recipes run with the listed prerequisites.
   --account-deletion` deletes synthetic members, including one with community
   history, and resolves a duplicate identity for a seeded 0030-disabled account.
 - [Media access](./media-access.md): Jellyfin media decisions and local
-  scopes, checked against the synthetic boundary and real accounts. MU-20's catalog routes use them.
+  scopes, checked against the synthetic boundary and real accounts. Catalog routes use the same checks.
 - [Catalog access](./catalog-access.md): catalog, artwork, candidate, and track
   routes decided per user before counts and paging, over HTTP with recorded
   boundaries and against live Jellyfin 12 with `catalog_live.py run`.
@@ -131,7 +131,7 @@ until their recipes run with the listed prerequisites.
   orphan import refusal, and the owner view at 1440 and 320 in its second run,
   whose owner is linked to Jellyfin before startup.
 - [Community activities](./community-activities.md): actor and contributor isolation,
-  exact previews, receipts, votes and lock-time refusal. MU-32's
+  exact previews, receipts, votes and lock-time refusal. The
   `auth --community --ports=9100-9119` drives personal
   and named-account UI against the existing signature-verifying transport double,
   including acting/original attribution, stale refresh, axe and overflow. The existing
