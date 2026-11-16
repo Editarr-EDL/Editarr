@@ -4,7 +4,7 @@
 you skip or mute objectionable content in your movies and shows. It scans a
 video's audio and picture with AI models that run on your own hardware, suggests
 time ranges to filter, and lets you review and refine them. It then publishes
-[Simple EDL](https://kodi.wiki/view/Edit_decision_list) or [Movie Content Filter (MCF)](https://www.moviecontentfilter.com/specification) sidecar files that Jellyfin can serve
+[Simple EDL](https://kodi.wiki/view/Edit_decision_list) or [Movie Content Filter (MCF)](https://github.com/delight-im/MovieContentFilter) sidecar files that Jellyfin can serve
 to clients—such as via the [jellyfin-edl](https://github.com/Editarr-EDL/jellyfin-edl)
 plugin—to use during playback. Editarr never modifies your media files.
 
