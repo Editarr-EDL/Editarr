@@ -422,6 +422,11 @@ def build_native(args: argparse.Namespace) -> int:
                 environment=environment,
             )
             _prune_excluded_runtime_content(runtime)
+            if args.macos_release:
+                # The upstream sounddevice wheel contains several Windows-only drivers.
+                portaudio = runtime / "_internal" / "_sounddevice_data" / "portaudio-binaries"
+                for driver in portaudio.glob("*.dll"):
+                    driver.unlink()
             _assert_clean_runtime(runtime)
             _assert_collected_frontend(runtime, frontend_hashes)
             _smoke_backup_helper(
