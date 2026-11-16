@@ -17,6 +17,7 @@ from importlib.util import find_spec
 from typing import Literal
 
 from scanner.models import ModelCapability, ModelDownloadState
+from scanner.runtime.distribution import is_macos_release
 
 AvailabilityReason = Literal[
     "unsupported_platform",
@@ -222,6 +223,21 @@ def _target_failure(
     return "unsupported_platform"
 
 
+def _deferred_for_macos_release(backend_id: str) -> bool:
+    if not is_macos_release():
+        return False
+    from scanner.modeling.model_acquisition_manifest import (
+        artifact_ids_for_backend,
+        artifact_offered_in_macos_release,
+        manifest,
+    )
+
+    return any(
+        not artifact_offered_in_macos_release(manifest().artifact(artifact_id))
+        for artifact_id in artifact_ids_for_backend(backend_id)
+    )
+
+
 def model_capabilities(
     environment: CapabilityEnvironment | None = None,
 ) -> tuple[ModelCapability, ...]:
@@ -247,6 +263,10 @@ def model_capabilities(
                 available=False,
                 reason=target_failure,
                 weight_requirement=weight_requirement,
+            )
+        if _deferred_for_macos_release(backend_id):
+            return _capability(
+                backend_id, stage, available=False, reason="deferred_gap", weight_requirement="none"
             )
         if _missing_package(environment, *packages):
             return _capability(

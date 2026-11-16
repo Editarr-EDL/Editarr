@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from scanner.models import ModelDownloadState
+from scanner.runtime.distribution import is_macos_release
 from scanner.runtime.runtime_paths import ensure_user_private_directory
 
 from .model_acquisition_authority import (
@@ -33,6 +34,7 @@ from .model_acquisition_manifest import (
     ProgressCallback,
     RepositoryClient,
     artifact_ids_for_backend,
+    artifact_offered_in_macos_release,
 )
 from .model_acquisition_storage import (
     _LOCAL_LOCKS,
@@ -295,7 +297,19 @@ class ModelAcquisitionService:
             return True
 
     def list_artifacts(self) -> tuple[ArtifactStatus, ...]:
-        return tuple(self.status(artifact.id) for artifact in self.manifest.artifacts)
+        return tuple(
+            self.status(artifact.id)
+            for artifact in self.manifest.artifacts
+            if not is_macos_release() or artifact_offered_in_macos_release(artifact)
+        )
+
+    def _require_offered(self, artifact_id: str) -> None:
+        if is_macos_release() and not artifact_offered_in_macos_release(
+            self.manifest.artifact(artifact_id)
+        ):
+            raise AcquisitionError(
+                "not_downloadable", f"{artifact_id} is unavailable in this release."
+            )
 
     def backend_status(
         self, backend_id: str, *, wd_variant: str = "eva02-large"
@@ -337,6 +351,7 @@ class ModelAcquisitionService:
         """Acquire one pinned artifact, honoring progress, cancellation, and offline mode."""
         from .model_acquisition_transfer import acquire
 
+        self._require_offered(artifact_id)
         return acquire(self, artifact_id, progress=progress, cancelled=cancelled, offline=offline)
 
     def prefetch_backend(
@@ -349,8 +364,11 @@ class ModelAcquisitionService:
         offline: bool = False,
     ) -> dict[str, Path]:
         """Acquire every artifact for a backend and return their local paths."""
+        artifact_ids = artifact_ids_for_backend(backend_id, wd_variant=wd_variant)
+        for artifact_id in artifact_ids:
+            self._require_offered(artifact_id)
         paths: dict[str, Path] = {}
-        for artifact_id in artifact_ids_for_backend(backend_id, wd_variant=wd_variant):
+        for artifact_id in artifact_ids:
             paths[artifact_id] = self.acquire(
                 artifact_id,
                 progress=(

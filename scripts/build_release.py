@@ -138,19 +138,21 @@ def _imageio_ffmpeg() -> Path:
     return helper
 
 
-def _ffprobe_helper(value: str | None) -> Path:
+def _target_helper(value: str | None, name: str) -> Path:
     if not value:
         raise RuntimeError(
-            "A relocatable ffprobe helper is required. Pass --ffprobe-helper from the "
+            f"A relocatable {name} helper is required. Pass --{name}-helper from the "
             "target release toolchain; do not use an untracked system PATH dependency."
         )
     supplied = Path(value).expanduser()
-    if supplied.is_symlink():
-        raise RuntimeError("--ffprobe-helper must name a regular target helper executable")
     helper = supplied.resolve()
-    if not helper.is_file():
-        raise RuntimeError("--ffprobe-helper must name a regular target helper executable")
+    if supplied.is_symlink() or not helper.is_file():
+        raise RuntimeError(f"--{name}-helper must name a regular target helper executable")
     return helper
+
+
+def _ffprobe_helper(value: str | None) -> Path:
+    return _target_helper(value, "ffprobe")
 
 
 def _stage_helpers(
@@ -364,7 +366,11 @@ def build_native(args: argparse.Namespace) -> int:
     target, packages = _target_inputs()
     if args.target and args.target != target:
         raise RuntimeError(f"target {args.target} must be built natively as {target}")
-    ffmpeg = _imageio_ffmpeg()
+    if args.macos_release and (target != "macos-arm64" or args.test_fake_models):
+        raise RuntimeError("--macos-release requires a real macOS arm64 runtime")
+    ffmpeg = (
+        _target_helper(args.ffmpeg_helper, "ffmpeg") if args.macos_release else _imageio_ffmpeg()
+    )
     ffprobe = _ffprobe_helper(args.ffprobe_helper)
     output = args.out_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -395,6 +401,8 @@ def build_native(args: argparse.Namespace) -> int:
         # artifact. Runtime code still requires both this marker and the matching
         # environment value before it can take the fake-adapter branch.
         environment["EDITARR_PYINSTALLER_TEST_FAKE_MODELS"] = "1"
+    if args.macos_release:
+        environment["EDITARR_PYINSTALLER_MACOS_RELEASE"] = "1"
     try:
         with _staged_frontend() as frontend_hashes:
             _run(
@@ -470,6 +478,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()))
     parser.add_argument("--target", choices=("macos-arm64", "windows-x64", "linux-x86_64"))
     parser.add_argument("--ffprobe-helper", help="Regular target-native ffprobe helper to bundle")
+    parser.add_argument("--ffmpeg-helper", help="Source-built FFmpeg for the macOS release")
+    parser.add_argument("--macos-release", action="store_true", help="Use macOS release inputs")
     parser.add_argument(
         "--test-fake-models",
         action="store_true",

@@ -355,6 +355,12 @@ def package(args: argparse.Namespace) -> int:
     resources.mkdir(parents=True)
     try:
         shutil.copytree(source_runtime, embedded_runtime, symlinks=True)
+        notices = getattr(args, "notices", None)
+        if (source_runtime / "_internal" / "macos-release.marker").is_file():
+            if notices is None or not (notices / "THIRD-PARTY-NOTICES.md").is_file():
+                raise PackageError("a macOS release runtime requires the reviewed license notices")
+        if notices is not None:
+            shutil.copytree(notices, resources / "Licenses")
         records = _runtime_macho_records(embedded_runtime)
         minimum_macos, forcing_dependencies = _minimum_macos(records)
         _build_launcher(macos / "Editarr", minimum_macos)
@@ -421,6 +427,7 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", type=Path, required=True, help="NATIVE-10 macOS onedir root")
     parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--notices", type=Path, help="License files to include in the app")
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()))
     parser.add_argument(
         "--test-fake-models",

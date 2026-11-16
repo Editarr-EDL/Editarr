@@ -256,6 +256,7 @@ def test_native_build_preserves_preexisting_frontend_staging(tmp_path, monkeypat
     monkeypatch.setattr(release, "_stage_helpers", lambda helpers, *args, **kwargs: helpers)
     args = SimpleNamespace(
         target=None,
+        macos_release=False,
         ffprobe_helper=None,
         out_dir=tmp_path / "output",
         work_dir=tmp_path / "work",

@@ -59,6 +59,9 @@ datas = [
 if os.environ.get("EDITARR_PYINSTALLER_TEST_FAKE_MODELS") == "1":
     marker = ROOT / "native_build" / "native-test-fake-models.marker"
     datas.append((str(marker), "."))
+if os.environ.get("EDITARR_PYINSTALLER_MACOS_RELEASE") == "1":
+    marker = ROOT / "native_build" / "macos" / "macos-release.marker"
+    datas.append((str(marker), "."))
 # certifi's CA store is accessed by package code rather than a stable import path.
 datas.extend(collect_data_files("certifi", includes=["cacert.pem"]))
 datas.extend(package_datas)

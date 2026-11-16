@@ -28,6 +28,11 @@ on-demand acquisition, but they are `license-review-required`. NATIVE-15 and NAT
 must not approve a release until both have written clearance or are removed from the
 release contract.
 
+The first native macOS release excludes these two downloads and disables their
+backends, MLX Whisper and Image Safety Gate. Faster-Whisper, NudeNet and SigLIP2
+remain available. Source and development builds retain their original model
+options. See [macOS release inputs and notices](macos-release.md).
+
 ## Package-supplied resources and helper binaries
 
 - NudeNet supplies `320n.onnx` as package data and declares MIT.
@@ -43,6 +48,10 @@ release contract.
   obligations. It is `license-review-required`; NATIVE-15 and NATIVE-17 must not approve
   a release until the executable's exact license, corresponding-source/source-offer, and
   notice obligations are verified.
+
+The native macOS release replaces the `imageio-ffmpeg` binary with FFmpeg and
+ffprobe built from pinned sources. It rebuilds PyAV against the same libraries
+and builds OpenCV without its own FFmpeg copy.
 
 NATIVE-10 owns collection of package data and helper binaries into frozen artifacts.
 NATIVE-16 owns the final SBOM and complete third-party notices. A declared license in

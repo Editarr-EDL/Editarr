@@ -371,6 +371,11 @@ def load_manifest() -> ModelManifest:
 _MANIFEST = load_manifest()
 
 
+def artifact_offered_in_macos_release(artifact: ModelArtifact) -> bool:
+    """Exclude uncleared downloads and the binary replaced by the source-built helpers."""
+    return artifact.license.status != "license-review-required"
+
+
 def manifest() -> ModelManifest:
     return _MANIFEST
 

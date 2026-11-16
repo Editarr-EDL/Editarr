@@ -5,7 +5,10 @@ from __future__ import annotations
 import importlib
 import platform
 import subprocess
+import tempfile
+from pathlib import Path
 
+from .distribution import is_macos_release
 from .runtime_support import resolve_ffmpeg, resolve_ffprobe
 
 _BASE_IMPORTS = (
@@ -44,6 +47,31 @@ def _run_helper(path: str, label: str) -> None:
         raise RuntimeError(f"Bundled {label} failed its version probe")
 
 
+def _smoke_release_media(ffmpeg: str) -> None:
+    """Prove the release helpers can encode previews and PyAV can read their output."""
+    from scanner.pipeline.scenes import detect_scenes
+
+    from .mute_preview import render_mute_preview, render_video_preview
+
+    with tempfile.TemporaryDirectory(prefix="editarr-media-smoke-") as temp:
+        video = Path(temp) / "example.mp4"
+        subprocess.run(
+            [
+                ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=size=160x90:rate=24",
+                "-f", "lavfi", "-i", "sine=frequency=440", "-t", "2",
+                "-c:v", "libx264", "-c:a", "aac", str(video),
+            ],
+            check=True,
+            timeout=30,
+        )
+        if not detect_scenes(str(video)):
+            raise RuntimeError("Packaged PyAV failed to open and decode a video")
+        if not render_mute_preview(video, 0.25, 0.75):
+            raise RuntimeError("Packaged FFmpeg did not produce an MP3 preview")
+        if not render_video_preview(video, 0.25, 0.75):
+            raise RuntimeError("Packaged FFmpeg did not produce an MP4 preview")
+
+
 def run_runtime_smoke() -> int:
     """Import lazy runtime families and execute bundled media helpers without weights."""
 
@@ -61,5 +89,7 @@ def run_runtime_smoke() -> int:
     if ffprobe is None:
         raise RuntimeError("Bundled ffprobe is unavailable")
     _run_helper(ffprobe, "ffprobe")
+    if is_macos_release():
+        _smoke_release_media(ffmpeg)
     print("Editarr frozen runtime smoke passed")
     return 0
