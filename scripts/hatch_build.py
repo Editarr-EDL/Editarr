@@ -34,10 +34,9 @@ class CustomBuildHook(BuildHookInterface):
         )
         frontend = Path(self.root) / "scanner" / "frontend"
         validate_frontend(frontend)
-        # The wheel already includes this package directory. The sdist needs an explicit
-        # include because the release-only staging path is ignored by Git.
+        # Hatch reads .gitignore even when rebuilding from an sdist without .git.
+        build_data.setdefault("force_include", {})[str(frontend)] = "scanner/frontend"
         if self.target_name == "sdist":
-            build_data.setdefault("force_include", {})[str(frontend)] = "scanner/frontend"
             build_data.setdefault("force_include", {})[
                 str(Path(self.root) / "web" / "package.json")
             ] = "web/package.json"

@@ -162,7 +162,7 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
     root = Path(__file__).parents[1]
     project = tmp_path / "project"
     project.mkdir()
-    for name in ("pyproject.toml", "README.md"):
+    for name in (".gitignore", "pyproject.toml", "README.md"):
         shutil.copyfile(root / name, project / name)
     web = project / "web"
     web.mkdir()
@@ -196,7 +196,17 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
         capture_output=True,
         text=True,
     )
-    assert next(rebuilt.glob("*.whl")).is_file()
+    frontend = root / "web/dist"
+    frontend_files = {
+        f"scanner/frontend/{asset.relative_to(frontend).as_posix()}": asset.read_bytes()
+        for asset in frontend.rglob("*")
+        if asset.is_file()
+    }
+    for wheel in (next(output.glob("*.whl")), next(rebuilt.glob("*.whl"))):
+        with zipfile.ZipFile(wheel) as package:
+            names = [name for name in package.namelist() if name.startswith("scanner/frontend/")]
+            assert sorted(names) == sorted(frontend_files)
+            assert {name: package.read(name) for name in names} == frontend_files
     installed = tmp_path / "installed"
     with zipfile.ZipFile(next(output.glob("*.whl"))) as package:
         required = {

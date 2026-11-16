@@ -452,7 +452,12 @@ def build_wheel(args: argparse.Namespace) -> int:
         environment = os.environ.copy()
         environment.setdefault("SOURCE_DATE_EPOCH", DEFAULT_SOURCE_DATE_EPOCH)
         output.mkdir(parents=True, exist_ok=True)
-        _run(["uv", "build", "--out-dir", str(output)], cwd=ROOT, environment=environment)
+        # Build both from the checkout so the wheel records the source commit.
+        _run(
+            ["uv", "build", "--sdist", "--wheel", "--out-dir", str(output)],
+            cwd=ROOT,
+            environment=environment,
+        )
         _assert_wheel_backup_helper(output / f"editarr-{_project_version()}-py3-none-any.whl")
     print(json.dumps({"frontend_sha256": hashes}, indent=2, sort_keys=True))
     return 0
