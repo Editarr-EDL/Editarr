@@ -72,7 +72,7 @@ def _smoke_release_media(ffmpeg: str) -> None:
             raise RuntimeError("Packaged FFmpeg did not produce an MP3 preview")
         if not render_video_preview(video, 0.25, 0.75):
             raise RuntimeError("Packaged FFmpeg did not produce an MP4 preview")
-        image = Path(temp) / "frame.png"
+        image = Path(temp) / "frame.jpg"
         subprocess.run(
             [ffmpeg, "-v", "error", "-i", str(video), "-frames:v", "1", str(image)],
             check=True,
