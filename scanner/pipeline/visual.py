@@ -103,7 +103,6 @@ def _get_detector() -> NudeDetector:
             detector.onnx_session = create_coreml_session(
                 onnxruntime,
                 model_path,
-                compute_units="ALL",
                 dimensions={"height": detector.input_height, "width": detector.input_width},
                 cache_dir=settings.model_cache / "nudenet" / "coreml-cache",
             )

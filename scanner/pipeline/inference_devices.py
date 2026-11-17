@@ -46,9 +46,6 @@ class _CoreMLSession:
     def __init__(self, session: Any):
         self._session = session
 
-    def get_inputs(self):
-        return self._session.get_inputs()
-
     def get_providers(self):
         return self._session.get_providers()
 
@@ -67,10 +64,8 @@ def create_coreml_session(
     ort: Any,
     path: Path,
     *,
-    compute_units: str,
     dimensions: dict[str, int],
     cache_dir: Path,
-    static_shapes: bool = False,
 ):
     """Compile an ONNX ML Program for the detector and fall back if Core ML fails."""
     try:
@@ -86,8 +81,8 @@ def create_coreml_session(
                     COREML_PROVIDER,
                     {
                         "ModelFormat": "MLProgram",
-                        "MLComputeUnits": compute_units,
-                        "RequireStaticInputShapes": str(int(static_shapes)),
+                        "MLComputeUnits": "ALL",
+                        "RequireStaticInputShapes": "0",
                         "EnableOnSubgraphs": "0",
                         "SpecializationStrategy": "FastPrediction",
                         "ModelCacheDirectory": str(cache_dir.resolve()),

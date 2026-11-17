@@ -39,10 +39,8 @@ def _model_storage_status() -> dict[str, object]:
     service = root.get_acquisition_service()
     environment = current_environment()
 
-    def device_for(artifact_id: str) -> Literal["cpu", "coreml"] | None:
-        if artifact_id.startswith("wd-"):
-            return environment.onnx_device
-        if artifact_id.startswith("siglip2-moderation-head-"):
+    def device_for(artifact_id: str) -> Literal["cpu"] | None:
+        if artifact_id.startswith(("wd-", "siglip2-moderation-head-")):
             return "cpu"
         return None
 

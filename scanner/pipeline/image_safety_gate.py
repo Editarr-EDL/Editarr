@@ -9,10 +9,10 @@ from pathlib import Path
 from threading import Lock
 
 from scanner.model_acquisition import get_acquisition_service, manifest
-from scanner.settings.capabilities import capability_for, current_environment
+from scanner.settings.capabilities import capability_for
 from scanner.settings.config import settings
 
-from .inference_devices import CPU_PROVIDER, TorchInference, create_coreml_session
+from .inference_devices import CPU_PROVIDER, TorchInference
 
 _WD_VARIANT_REPOS = {
     "vit": "SmilingWolf/wd-vit-tagger-v3",
@@ -40,10 +40,6 @@ def _model_root() -> Path:
     """Return the regenerable Image Safety Gate root after cache env setup."""
 
     return settings.model_cache / "image_safety_gate"
-
-
-def _coreml_cache_dir() -> Path:
-    return _model_root() / "coreml-cache"
 
 
 @dataclass
@@ -82,21 +78,6 @@ def _ensure_files(repo_id: str, model_dir: Path, names: tuple[str, ...]) -> Path
     return get_acquisition_service().acquire(artifact.id)
 
 
-def _create_wd_onnx_session(onnxruntime, model_path: Path):
-    """Use static Core ML for the frame-at-a-time WD tagger when available."""
-    if current_environment().onnx_device == "coreml":
-        return create_coreml_session(
-            onnxruntime,
-            model_path,
-            # Keep the tagger off the GPU while CLIP and NSFL use Metal.
-            compute_units="CPUAndNeuralEngine",
-            dimensions={"batch_size": 1},
-            cache_dir=_coreml_cache_dir(),
-            static_shapes=True,
-        )
-    return onnxruntime.InferenceSession(str(model_path), providers=[CPU_PROVIDER])
-
-
 def _load_wd_tagger(variant: str):
     """Load and cache the local WD tagger and its labels for safety classification."""
     if variant not in _WD_VARIANT_REPOS:
@@ -127,7 +108,10 @@ def _load_wd_tagger(variant: str):
                     f"WD tagger ratings CSV is missing '{name}' index"
                 )
         unsafe_indices = tuple(rating_indices[name] for name in _WD_UNSAFE_RATING_NAMES)
-        session = _create_wd_onnx_session(onnxruntime, model_dir / "model.onnx")
+        # The WD EVA02 model gains no Neural Engine work and can stall on Core ML's GPU path.
+        session = onnxruntime.InferenceSession(
+            str(model_dir / "model.onnx"), providers=[CPU_PROVIDER]
+        )
         input_meta = session.get_inputs()[0]
         _, height, _, _ = input_meta.shape
         target_size = int(height) if isinstance(height, int) else 448

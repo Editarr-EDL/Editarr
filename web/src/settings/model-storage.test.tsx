@@ -148,14 +148,14 @@ it("sums cached and in-progress downloads once across all stages", async () => {
 it("shows the artifact's preferred device for a mixed-device backend", async () => {
   renderInventory({
     artifacts: [
-      { ...artifact("wd-tagger", detector.id, "ready"), device: "coreml" },
+      { ...artifact("wd-tagger", detector.id, "ready"), device: "cpu" },
       artifact("safety-checker", detector.id, "ready"),
     ],
     model_capabilities: [{ ...detector, device: "metal" }],
   });
   fireEvent.click(await screen.findByText("Video Detection"));
   const wd = within(screen.getByRole("article", { name: "wd-tagger model" }));
-  expect(wd.getByText("Core ML")).toBeVisible();
+  expect(wd.getByText("CPU")).toBeVisible();
   const checker = within(screen.getByRole("article", { name: "safety-checker model" }));
   expect(checker.getByText("GPU (Metal)")).toBeVisible();
 });

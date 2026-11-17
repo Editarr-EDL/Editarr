@@ -27,8 +27,9 @@ def test_metal_prediction_retries_once_and_keeps_model_on_cpu():
 def test_coreml_failure_retries_once_and_keeps_session_on_cpu(tmp_path):
     class Session:
         def __init__(self, _path, *, providers, **_kwargs):
-            self.providers = [provider[0] if isinstance(provider, tuple) else provider
-                              for provider in providers]
+            self.providers = [
+                provider[0] if isinstance(provider, tuple) else provider for provider in providers
+            ]
             self.calls = []
 
         def get_providers(self):
@@ -47,7 +48,6 @@ def test_coreml_failure_retries_once_and_keeps_session_on_cpu(tmp_path):
     session = create_coreml_session(
         ort,
         tmp_path / "model.onnx",
-        compute_units="ALL",
         dimensions={},
         cache_dir=tmp_path / "coreml",
     )
