@@ -13,16 +13,19 @@ const account: api.AccountDetail = {
 afterEach(cleanup);
 beforeEach(() => vi.clearAllMocks());
 
-it("saves independent local preferences and uploads the selected image", async () => {
+it("saves the local display name and uploads the selected image", async () => {
   const onSaved = vi.fn();
-  vi.mocked(api.editAccount).mockResolvedValue({ ...account, display_name: "Pat Smith", email: "pat@example.test" });
+  const existing = { ...account, email: "pat@example.test", timezone: "Europe/London" };
+  vi.mocked(api.editAccount).mockResolvedValue({ ...existing, display_name: "Pat Smith" });
   vi.mocked(api.uploadAccountAvatar).mockResolvedValue({ ...account, avatar: "digest" });
-  render(<ProfileEditor account={account} editable onSaved={onSaved} />);
+  render(<ProfileEditor account={existing} editable onSaved={onSaved} />);
+  expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Timezone")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Display language")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Pat Smith" } });
-  fireEvent.change(screen.getByLabelText("Email"), { target: { value: "pat@example.test" } });
   fireEvent.click(screen.getByText("Save profile"));
   await screen.findByText("Profile saved.");
-  expect(api.editAccount).toHaveBeenCalledWith(4, { display_name: "Pat Smith", email: "pat@example.test", timezone: null, language: "en" });
+  expect(api.editAccount).toHaveBeenCalledWith(4, { display_name: "Pat Smith" });
   const image = new File(["png"], "portrait.png", { type: "image/png" });
   fireEvent.change(screen.getByLabelText("Avatar image"), { target: { files: [image] } });
   fireEvent.click(screen.getByText("Upload avatar"));
@@ -31,21 +34,19 @@ it("saves independent local preferences and uploads the selected image", async (
   expect(onSaved).toHaveBeenLastCalledWith(expect.objectContaining({ avatar: "digest" }));
 });
 
-it("shows the Jellyfin username and avatar read-only while saving email, timezone, and supported language", async () => {
+it("shows the Jellyfin identity without a profile form", () => {
   const linked: api.AccountDetail = { ...account, username: null, source: "jellyfin", avatar: "digest", read_only_fields: ["username", "display_name", "avatar"] };
-  vi.mocked(api.editAccount).mockResolvedValue(linked);
   render(<ProfileEditor account={linked} editable onSaved={vi.fn()} />);
+  expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Timezone")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Display language")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Avatar image")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /avatar/i })).not.toBeInTheDocument();
   expect(screen.getByText("Jellyfin username").nextElementSibling).toHaveTextContent(/^None \(Jellyfin name: Pat\)$/);
   expect(screen.getByText("Avatar from Jellyfin")).toBeVisible();
-  expect(screen.getByRole("combobox")).toHaveTextContent("English");
-  expect(screen.getAllByRole("option")).toHaveLength(1);
-  fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "Europe/London" } });
-  fireEvent.click(screen.getByText("Save profile"));
-  await waitFor(() => expect(api.editAccount).toHaveBeenCalledWith(4, { email: null, timezone: "Europe/London", language: "en" }));
+  expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
 });
 
 it("never offers an admin a rename for a Jellyfin account and shows the username Jellyfin gave it", () => {
@@ -61,14 +62,14 @@ it("offers no username for a local account and saves its display name", async ()
   expect(screen.queryByText(/username/i)).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Patricia" } });
   fireEvent.click(screen.getByText("Save profile"));
-  await waitFor(() => expect(api.editAccount).toHaveBeenCalledWith(4, { display_name: "Patricia", email: null, timezone: null, language: "en" }));
+  await waitFor(() => expect(api.editAccount).toHaveBeenCalledWith(4, { display_name: "Patricia" }));
 });
 
 it("shows a rejected save without discarding the draft", async () => {
-  vi.mocked(api.editAccount).mockRejectedValue(new Error("Timezone must be an IANA name"));
+  vi.mocked(api.editAccount).mockRejectedValue(new Error("Display name is invalid"));
   render(<ProfileEditor account={account} editable onSaved={vi.fn()} />);
-  fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "bad timezone" } });
+  fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Pending name" } });
   fireEvent.click(screen.getByText("Save profile"));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Timezone must be an IANA name");
-  expect(screen.getByLabelText("Timezone")).toHaveValue("bad timezone");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Display name is invalid");
+  expect(screen.getByLabelText("Display name")).toHaveValue("Pending name");
 });

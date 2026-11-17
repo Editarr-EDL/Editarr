@@ -15,7 +15,7 @@ import { useCommunityLifetime } from "../settings/community/community-access";
 import "../styles/community-sharing.css";
 
 const messages: Record<string, string> = {
-  preview_not_configured: "Sharing limits are not configured. Local scans and reviews remain available.",
+  preview_not_configured: "Ask your Editarr instance operator to configure sharing limits.",
   not_connected: "Connect this installation in Settings before sharing.",
   preview_stale: "The source changed. Refresh the source and generate a new preview.",
   preview_expired: "The preview expired. Generate a new preview.",
@@ -32,9 +32,12 @@ const messages: Record<string, string> = {
   publication_limit: "The contribution exceeds configured upload bounds. Generate a smaller new revision.",
   operation_conflict: "The saved publication conflicts with service state. Check its outcome before proceeding.",
 };
-function errorText(reason: unknown) {
-  const code = reason instanceof CommunityApiError ? reason.code : "network_unavailable";
+function errorText(code: string) {
   return messages[code] || failureMessage(code);
+}
+
+function apiErrorCode(reason: unknown) {
+  return reason instanceof CommunityApiError ? reason.code : "network_unavailable";
 }
 
 function SharingDialog({ source, initialName, onClose }: {
@@ -65,7 +68,7 @@ function SharingDialog({ source, initialName, onClose }: {
   const [busy, setBusy] = useState(true);
   const [activity, setActivity] = useState("Checking community access...");
   const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const livePreview = useRef<string | null>(null);
   const running = useRef(false);
   const cancelRunning = useRef(false);
@@ -85,13 +88,13 @@ function SharingDialog({ source, initialName, onClose }: {
     setContext(value);
     setUseSaved(Boolean(value.mediaIdentity));
     if (value.audioSources.length === 1) setAudioSource(value.audioSources[0].scanId);
-    if (value.accessError) setError(messages[value.accessError] || failureMessage(value.accessError));
+    if (value.accessError) setErrorCode(value.accessError);
   }
   useEffect(() => {
     active.current = true;
     const controller = new AbortController();
     void reload(controller.signal).catch((reason) => {
-      if (current() && !controller.signal.aborted) setError(errorText(reason));
+      if (current() && !controller.signal.aborted) setErrorCode(apiErrorCode(reason));
     }).finally(() => { if (current() && !controller.signal.aborted) setBusy(false); });
     return () => {
       active.current = false;
@@ -106,11 +109,11 @@ function SharingDialog({ source, initialName, onClose }: {
   }
   async function run(action: () => Promise<void>, label = "Updating contribution...") {
     if (!current() || running.current) return;
-    running.current = true; setBusy(true); setActivity(label); setError(null);
+    running.current = true; setBusy(true); setActivity(label); setErrorCode(null);
     try { await action(); }
     catch (reason) {
       if (!current()) return;
-      setError(errorText(reason));
+      setErrorCode(apiErrorCode(reason));
       if (reason instanceof CommunityApiError && [403, 404].includes(reason.status)) {
         invalidate(false); setContext(null); setJob(null); setName(""); setReference(""); setIdentityConfirmed(false);
         gate?.refreshAuthenticationStatus?.();
@@ -150,11 +153,11 @@ function SharingDialog({ source, initialName, onClose }: {
   }
   async function cancelJob() {
     if (!mayRetract || !current() || !job || cancelRunning.current) return;
-    cancelRunning.current = true; setCancelling(true); setError(null);
+    cancelRunning.current = true; setCancelling(true); setErrorCode(null);
     try { acceptJob(await cancelPublication(job.operationId, lifetime.signal())); }
     catch (reason) {
       if (!current()) return;
-      setError(errorText(reason));
+      setErrorCode(apiErrorCode(reason));
       if (reason instanceof CommunityApiError && [403, 404].includes(reason.status)) {
         invalidate(false); setContext(null); setJob(null); setName(""); setIdentityConfirmed(false);
         gate?.refreshAuthenticationStatus?.();
@@ -170,8 +173,8 @@ function SharingDialog({ source, initialName, onClose }: {
       <button type="button" className="btn-secondary compact-button" onClick={onClose} disabled={busy}>Close</button></div>
     {busy && <p role="status">{activity}</p>}
     {cancelling && <p role="status">Requesting local cancellation...</p>}
-    {error && <p role="alert" className="form-error">{error}</p>}
-    <a href="#/settings/profile">Community connection settings</a>
+    {errorCode && <p role="alert" className="form-error">{errorText(errorCode)}</p>}
+    {errorCode !== "preview_not_configured" && <a href="#/settings/profile">Community connection settings</a>}
     {!context && !busy && <button type="button" onClick={() => void run(() => reload())}>Refresh source</button>}
     {mayPublish && context && !job && <>
       <label className="field"><span>Contribution name</span><input value={name} maxLength={128} disabled={busy}
@@ -183,7 +186,7 @@ function SharingDialog({ source, initialName, onClose }: {
         <label className="field"><span>Entity</span><select value={entity} disabled={busy} onChange={(event) => { setEntity(event.target.value as EntityType); setSeries(""); setSeason(""); setEpisode(""); invalidate(); setIdentityConfirmed(false); }}><option value="movie">Movie</option><option value="series">Series</option><option value="episode">Episode</option></select></label>
         <label className="field sharing-wide"><span>TMDB/TVDB ID or URL</span><input value={reference} disabled={busy} maxLength={2048} onChange={(event) => { setReference(event.target.value); invalidate(); setIdentityConfirmed(false); }} /></label>
         {entity === "episode" && <>
-          <label className="field sharing-wide"><span>Series ID or URL</span><input value={series} disabled={busy} onChange={(event) => { setSeries(event.target.value); invalidate(); setIdentityConfirmed(false); }} /></label>
+          <label className="field sharing-wide"><span>{provider === "tvdb" ? "TVDB series ID" : "Series ID or URL"}</span><input value={series} disabled={busy} onChange={(event) => { setSeries(event.target.value); invalidate(); setIdentityConfirmed(false); }} /></label>
           <label className="field"><span>Aired season</span><input type="number" min={0} value={season} disabled={busy} onChange={(event) => { setSeason(event.target.value); invalidate(); setIdentityConfirmed(false); }} /></label>
           <label className="field"><span>Aired episode</span><input type="number" min={0} value={episode} disabled={busy} onChange={(event) => { setEpisode(event.target.value); invalidate(); setIdentityConfirmed(false); }} /></label>
         </>}
@@ -218,7 +221,7 @@ function SharingDialog({ source, initialName, onClose }: {
       <dl className="sharing-facts"><dt>Original contributor</dt><dd>{job.contributorId}</dd><dt>Revision</dt><dd>{job.revisionId}</dd><dt>Phase</dt><dd>{job.phase}</dd></dl>
       {job.errorCode && (job.errorCode !== "not_connected" || jobHeld) && <p role="alert">{jobHeld
         ? "This contributor is disconnected. Saved publications are held until reconnect."
-        : messages[job.errorCode] || failureMessage(job.errorCode)}</p>}
+        : errorText(job.errorCode)}</p>}
       {job.state === "cancel_pending" && <p>The remote outcome is uncertain. Cancellation does not delete a published contribution.</p>}
       {job.result && <p>Published {new Date(job.result.committedAt * 1000).toLocaleString()}</p>}
       <div className="button-row">{mayCheck && <button type="button" className="btn-secondary" disabled={busy || job.state === "published" || jobHeld}

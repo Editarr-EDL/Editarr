@@ -38,6 +38,27 @@ it("shows Never for a profile with no previous login", async () => {
   expect(screen.getByText("Never")).toBeVisible();
 });
 
+it("shows the name, avatar and account type for a linked profile", async () => {
+  vi.mocked(api.readAccount).mockResolvedValue({ ...ordinaryAccount, username: "Pat Jellyfin", avatar: "test-avatar" });
+  render(<ProfileView />);
+  const details = await screen.findByRole("region", { name: "Profile details" });
+  expect(screen.getByRole("heading", { name: "Pat" })).toBeVisible();
+  expect(screen.getByText("Jellyfin account")).toBeVisible();
+  expect(details.querySelector("img.account-avatar")).toHaveAttribute("src", expect.stringContaining("test-avatar"));
+  expect(screen.queryByText("Jellyfin username")).not.toBeInTheDocument();
+  expect(screen.queryByText("Avatar from Jellyfin")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Jellyfin link" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
+});
+
+it("keeps the recovery action available when the Jellyfin server has changed", async () => {
+  const capabilities = new Set<Capability>(["profile.view.own", "accounts.link.own"]);
+  vi.mocked(usePrincipal).mockReturnValue({ ...ownerPrincipal, linkState: "server_replaced", capabilities });
+  vi.mocked(api.readAccount).mockResolvedValue(ordinaryAccount);
+  render(<ProfileView />);
+  expect(await screen.findByRole("button", { name: "Relink to current server" })).toBeVisible();
+});
+
 it("exposes personal community settings without provider connection or directory permissions", async () => {
   vi.mocked(usePrincipal).mockReturnValue({ ...ownerPrincipal, role: "user", capabilities: new Set(["profile.view.own", "community.identity.view.own"]) });
   vi.mocked(api.readAccount).mockResolvedValue(ordinaryAccount);

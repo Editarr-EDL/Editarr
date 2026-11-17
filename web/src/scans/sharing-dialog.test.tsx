@@ -31,6 +31,27 @@ async function prepare() {
   fireEvent.click(screen.getByRole("button", { name: "Generate preview" }));
   await screen.findByRole("region", { name: "Outgoing contribution" });
 }
+it("points to the instance operator when sharing limits are missing", async () => {
+  vi.mocked(api.fetchSharingContext).mockRejectedValue(new CommunityApiError("preview_not_configured", false, 503));
+  render(<ShareAction source={{ kind: "scan", id: "source-local" }} name="Public source" />);
+  fireEvent.click(screen.getByRole("button", { name: "Share Public source" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Ask your Editarr instance operator to configure sharing limits.");
+  expect(screen.queryByRole("link", { name: "Community connection settings" })).not.toBeInTheDocument();
+});
+it("explains what audio filters share and what a missing fingerprint means", async () => {
+  const value = sharingPreviewFixture();
+  vi.mocked(api.prepareSharingPreview).mockResolvedValue({
+    ...value, preview: { ...value.preview, warnings: ["audio_fingerprint_unsupported"] },
+  });
+  await open(); await prepare();
+  const preview = within(screen.getByRole("region", { name: "Outgoing contribution" }));
+  expect(preview.getByText(/View detected words in the local scan/)).toBeVisible();
+  expect(preview.getByRole("list", { name: "Preview warnings" })).toHaveTextContent(
+    "Audio fingerprint unavailable for this track. Recipients must verify the audio track and timing.",
+  );
+  fireEvent.click(screen.getByLabelText("I may share this data and its notes, and I approve this exact preview."));
+  expect(screen.getByRole("button", { name: "Share contribution" })).toBeEnabled();
+});
 it("opens and previews without approving or sending, then invalidates exact consent on changes", async () => {
   await open(); await prepare();
   expect(api.approveSharingPreview).not.toHaveBeenCalled(); expect(api.retryPublication).not.toHaveBeenCalled();

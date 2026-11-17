@@ -14,6 +14,8 @@
 .account-avatar { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
 .account-avatar-placeholder { display: grid; place-items: center; background: #303641; color: #e2e8f3; font-size: 20px; }
 .profile-avatar-controls { display: grid; gap: 12px; }
+.profile-name-form { display: grid; gap: 12px; justify-items: start; }
+.profile-name-form .field { width: min(100%, 440px); }
 .account-page .field, .account-dialog .field { min-width: 0; }
 .account-page input, .account-page select, .account-dialog input, .account-dialog select { min-width: 0; max-width: 100%; }
 .account-dialog { width: min(760px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; }

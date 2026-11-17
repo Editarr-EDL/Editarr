@@ -1,4 +1,4 @@
-"""No-weight import and helper smoke used only to verify a frozen Editarr runtime."""
+"""Offline import, detector, and helper checks for a frozen Editarr runtime."""
 
 from __future__ import annotations
 
@@ -83,13 +83,18 @@ def _smoke_release_media(ffmpeg: str) -> None:
 
 
 def run_runtime_smoke() -> int:
-    """Import lazy runtime families and execute bundled media helpers without weights."""
+    """Exercise lazy imports, the bundled profanity detector, and media helpers."""
 
     for name in _BASE_IMPORTS:
         importlib.import_module(name)
     if platform.system() == "Darwin":
         for name in _MACOS_IMPORTS:
             importlib.import_module(name)
+    from scanner.pipeline.audio_filters import _load_alt_profanity_check_detector
+
+    detector = _load_alt_profanity_check_detector()
+    if detector("Good morning"):
+        raise RuntimeError("Bundled alt-profanity-check failed its prediction probe")
     ffmpeg = resolve_ffmpeg()
     imageio_ffmpeg = importlib.import_module("imageio_ffmpeg")
     if imageio_ffmpeg.get_ffmpeg_exe() != ffmpeg:

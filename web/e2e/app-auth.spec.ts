@@ -286,7 +286,8 @@ test("navigates between Settings subsections", async ({ page }) => {
 
 test("manages a mocked model download accessibly on a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Model Storage" }).click();
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("dialog", { name: "Navigation menu" }).getByRole("button", { name: "Model Storage" }).click();
   await expect(page.getByRole("heading", { name: "Model Storage", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Download" }).focus();
   await page.keyboard.press("Enter");

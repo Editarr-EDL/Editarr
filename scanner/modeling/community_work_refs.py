@@ -39,9 +39,12 @@ def identity_from_reference(provider: str, entity_type: str, reference: str) -> 
                 value = match[2]
         elif provider == "tvdb" and host == "thetvdb.com":
             match = re.fullmatch(r"/dereferrer/(movie|series|episode)/([0-9]+)/?", parsed.path)
+            episode = re.fullmatch(r"/series/[^/]+/episodes/([0-9]+)/?", parsed.path)
             query = parse_qs(parsed.query, strict_parsing=True) if parsed.query else {}
             if match and not query and match[1] == entity_type:
                 value = match[2]
+            elif episode and not query and entity_type == "episode":
+                value = episode[1]
             elif (
                 parsed.path in {"", "/"}
                 and set(query) == {"tab", "id"}

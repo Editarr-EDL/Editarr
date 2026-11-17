@@ -33,6 +33,7 @@ describe('Discord OAuth broker', () => {
       .status).toBe(400);
     const page = await discordOAuth(request(flow.confirmationUrl, flow.cookie), config, now);
     expect(page.status).toBe(200);
+    expect(page.headers.get('referrer-policy')).toBe('same-origin');
     const markup = await page.text();
     const text = markup.replaceAll('<wbr>', '');
     expect(text).toContain('Continue with Discord');
@@ -42,6 +43,7 @@ describe('Discord OAuth broker', () => {
       { Origin: 'https://attacker.example' }), config, now)).status).toBe(403);
     const redirect = await confirm(flow);
     expect(redirect.status).toBe(303);
+    expect(redirect.headers.get('referrer-policy')).toBe('no-referrer');
     const discord = new URL(redirect.headers.get('location')!);
     expect(discord.origin).toBe('https://discord.com');
     expect(discord.searchParams.get('redirect_uri')).toBe(`${origin}/v1/discord/callback`);
@@ -55,11 +57,15 @@ describe('Discord OAuth broker', () => {
     await confirm(flow);
     const callback = `${origin}/v1/discord/callback?state=${flow.stateId}&code=synthetic-code`;
     const client = provider('member');
+    for (const issuer of ['iss=https%3A%2F%2Fother.example', 'iss=https%3A%2F%2Fdiscord.com&iss=https%3A%2F%2Fdiscord.com']) {
+      expect((await discordOAuth(request(`${callback}&${issuer}`, flow.cookie), config, now, client)).status)
+        .toBe(400);
+    }
     expect((await discordOAuth(request(callback, 'wrong=token'), config, now, client)).status)
       .toBe(400);
     expect(client).not.toHaveBeenCalled();
     const [first, second] = await Promise.all([
-      discordOAuth(request(callback, flow.cookie), config, now, client),
+      discordOAuth(request(`${callback}&iss=https%3A%2F%2Fdiscord.com`, flow.cookie), config, now, client),
       discordOAuth(request(callback, flow.cookie), config, now, client),
     ]);
     expect([first.status, second.status].sort()).toEqual([200, 400]);

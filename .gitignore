@@ -44,6 +44,7 @@ web/dist/
 web/dist-operator/
 scanner/frontend/
 .pnpm-store/
+.wrangler/
 web/test-results/
 web/playwright-report/
 web/coverage/

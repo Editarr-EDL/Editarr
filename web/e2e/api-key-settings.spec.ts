@@ -26,6 +26,12 @@ for (const width of [375, 1280]) {
       read_only_fields: ["username", "display_name", "avatar"], available_languages: ["en"], link_cleanup: null, successor_refusal: null,
     } }));
     await page.goto("/#/settings/profile");
+    const profile = page.getByRole("region", { name: "Profile details" });
+    await expect(profile.getByText("Jellyfin account", { exact: true })).toBeVisible();
+    await expect(profile.getByText("Jellyfin username", { exact: true })).toHaveCount(0);
+    await expect(profile.getByText("Avatar from Jellyfin", { exact: true })).toHaveCount(0);
+    await expect(profile.getByRole("button", { name: "Save profile" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Jellyfin link" })).toHaveCount(0);
     const panel = page.getByRole("region", { name: "API Key", exact: true });
     await panel.getByRole("button", { name: "Generate API key", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Generate API key?" });

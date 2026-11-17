@@ -13,13 +13,40 @@
   .combined-scan-filter-table th:nth-child(2), .combined-scan-filter-table td:nth-child(2), .combined-scan-filter-table.has-video-preview th:nth-child(2), .combined-scan-filter-table.has-video-preview td:nth-child(2) { width: 76px; }
   .auth-page { align-items: start; padding: 16px; }
   .auth-panel { margin-top: 16px; padding: 24px 18px; }
-  .editarr-shell { grid-template-columns: 1fr; }
+  .editarr-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .app-sidebar { position: static; height: auto; padding: 15px; border-right: 0; border-bottom: 1px solid #2d313c; }
-  .brand { padding-bottom: 13px; padding-right: 64px; }
+  .brand { padding: 0 64px 0 0; }
+  .brand-mark { flex: none; }
+  .sidebar-toggle, .sidebar-close {
+    display: grid; flex: none; place-items: center; width: 44px; height: 44px;
+    padding: 0; border: 1px solid #3c4350; border-radius: 8px; color: #e6e9ef; background: #222731;
+  }
+  .sidebar-toggle:hover, .sidebar-close:hover { background: #2b3240; }
+  .sidebar-hamburger { width: 19px; height: 2px; border-radius: 1px; background: currentColor; box-shadow: 0 -6px currentColor, 0 6px currentColor; }
+  .sidebar-close { align-self: flex-end; font-size: 26px; line-height: 1; }
+  .sidebar-drawer {
+    position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none;
+    margin: 0; padding: 0; border: 0; overflow: hidden; color: inherit; background: transparent;
+    transition: display .22s allow-discrete, overlay .22s allow-discrete;
+  }
+  .sidebar-drawer::backdrop { background: transparent; transition: background-color .22s ease; }
+  .sidebar-drawer[open]::backdrop { background: rgb(0 0 0 / 60%); }
+  .sidebar-drawer-panel {
+    display: flex; flex-direction: column; gap: 12px; width: min(280px, calc(100% - 48px)); height: 100%;
+    padding: 15px; border-right: 1px solid #2d313c; background: #191c23;
+    transform: translateX(-100%); transition: transform .22s ease;
+  }
+  .sidebar-drawer[open] .sidebar-drawer-panel { transform: translateX(0); }
+  @starting-style {
+    .sidebar-drawer[open]::backdrop { background: transparent; }
+    .sidebar-drawer[open] .sidebar-drawer-panel { transform: translateX(-100%); }
+  }
+  body:has(.sidebar-drawer[open]) { overflow: hidden; }
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-drawer, .sidebar-drawer::backdrop, .sidebar-drawer-panel { transition: none; }
+  }
   .app-sidebar nav { grid-template-columns: 1fr; gap: 5px; }
-  .sidebar-scroll { flex: none; overflow: visible; }
   .settings-link { margin-top: 0; }
-  .sidebar-error { margin-top: 12px; }
   .app-main { padding: 26px 18px; }
   .editarr-shell, .saved-review-panel { overflow-x: clip; }
   .content-page, .media-detail, .settings-card, .saved-review-panel, .mcf-review-metadata, .mcf-document-editor { min-width: 0; max-width: 100%; }

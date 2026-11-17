@@ -15,6 +15,8 @@ function escapeHtml(value: string): string {
     .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
+export const discordAuthorizeUrl = 'https://discord.com/oauth2/authorize';
+
 /** Render standalone broker pages with only a hash-authorized style block and embedded brand asset. */
 export async function discordPage(input: { stateId: string; installationId: string; keyId: string; recovery?: boolean } | null,
   responseHeaders: Record<string, string>, enrollmentReference?: string): Promise<Response> {
@@ -23,8 +25,9 @@ export async function discordPage(input: { stateId: string; installationId: stri
     `<div class="auth-heading"><h1>Discord verified</h1></div><p class="auth-success">Discord membership verified. Return to Editarr to finish connecting.</p>${enrollmentReference && /^[0-9a-f]{64}$/.test(enrollmentReference) ? `<dl><div><dt>Enrollment reference</dt><dd><code>${escapeHtml(enrollmentReference)}</code></dd></div></dl>` : ''}`;
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(styles)));
   const hash = btoa(String.fromCharCode(...digest));
+  const formAction = input ? `'self' ${discordAuthorizeUrl}` : "'none'";
   return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${styles}</style></head><body><main><section class="auth-panel" aria-label="${title}"><div class="auth-brand"><img src="data:image/png;base64,${icon}" alt="" width="32" height="32"><span>Editarr</span></div>${content}</section></main></body></html>`, {
     headers: { ...responseHeaders, 'Content-Type': 'text/html; charset=utf-8',
-      'Content-Security-Policy': `default-src 'none'; style-src 'sha256-${hash}'; img-src data:; frame-ancestors 'none'; form-action 'self'; base-uri 'none'` },
+      'Content-Security-Policy': `default-src 'none'; style-src 'sha256-${hash}'; img-src data:; frame-ancestors 'none'; form-action ${formAction}; base-uri 'none'` },
   });
 }

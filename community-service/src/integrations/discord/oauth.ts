@@ -3,7 +3,7 @@ import { transientStatement } from '../../retention/transient';
 import type { Env } from '../../config';
 import { z } from 'zod';
 import { BodyLimitError, readBoundedBytes, readBoundedJson } from '../../http/bounded-body';
-import { discordPage } from './pages';
+import { discordAuthorizeUrl, discordPage } from './pages';
 import { recoveryAuthorization, type RecoveryAuthorization } from '../../identity/recovery';
 
 const startSchema = z.object({
@@ -21,6 +21,7 @@ const tokenSchema = z.object({ access_token: z.string().regex(/^[\x21-\x7e]{1,20
   scope: z.string().max(256).refine((value) =>
     ['identify', 'guilds.members.read'].every((scope) => value.split(' ').includes(scope))) });
 
+const discordOrigin = new URL(discordAuthorizeUrl).origin;
 const callbackPath = '/v1/discord/callback';
 const cookieName = '__Host-community_oauth';
 const ttl = 10 * 60 * 1000;
@@ -166,8 +167,9 @@ async function confirm(request: Request, env: Env & { CATALOG_DB: SqlDatabase;
   }
   if (request.method === 'GET') {
     const recovery = await recoveryAuthorization(env.CATALOG_DB, stateId);
+    // The same-origin form POST needs its Origin header for the confirmation check.
     return discordPage({ stateId, installationId: state.installation_id, keyId: state.key_id,
-      recovery: Boolean(recovery) }, headers);
+      recovery: Boolean(recovery) }, { ...headers, 'Referrer-Policy': 'same-origin' });
   }
   const browser = browserCookie(request)!;
   const claimed = await env.CATALOG_DB.prepare(`UPDATE discord_oauth_states SET confirmed = 1
@@ -176,7 +178,7 @@ async function confirm(request: Request, env: Env & { CATALOG_DB: SqlDatabase;
     stateId, await sha256(`${env.PUBLIC_ORIGIN}:${browser}`), now,
   ).run();
   if (claimed.meta.changes !== 1) return error(400, 'invalid_state');
-  const target = new URL('https://discord.com/oauth2/authorize');
+  const target = new URL(discordAuthorizeUrl);
   target.search = new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID,
     redirect_uri: `${env.PUBLIC_ORIGIN}${callbackPath}`, response_type: 'code',
     scope: 'identify guilds.members.read', state: stateId }).toString();
@@ -190,8 +192,9 @@ async function callback(request: Request, env: Env & { CATALOG_DB: SqlDatabase;
   const stateId = url.searchParams.get('state') ?? '';
   const denied = url.searchParams.has('error');
   const code = url.searchParams.get('code') ?? '';
-  const permitted = denied ? ['state', 'error', 'error_description', 'error_uri'] : ['state', 'code'];
+  const permitted = denied ? ['state', 'iss', 'error', 'error_description', 'error_uri'] : ['state', 'iss', 'code'];
   if (url.search.length > 2048 || url.searchParams.getAll('state').length !== 1 ||
+      (url.searchParams.has('iss') && url.searchParams.get('iss') !== discordOrigin) ||
       [...url.searchParams.keys()].some((name) => !permitted.includes(name) ||
         url.searchParams.getAll(name).length !== 1) ||
       (denied ? !/^[A-Za-z0-9_]{1,64}$/.test(url.searchParams.get('error') ?? '') :

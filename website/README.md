@@ -6,7 +6,31 @@ The product preview shows the actual app with synthetic example media from the b
 test fixtures. Refresh it with `EDITARR_CAPTURE_WEBSITE=1 pnpm --dir web exec
 playwright test website-preview.spec.ts`. Website colors match the app shell palette.
 
-## Run
+## Cloudflare Workers Static Assets
+
+The `editarr-website` Worker serves `public/` as static assets. The Wrangler
+config declares `editarr.org` as the custom domain, and `public/_headers` applies
+the site's security headers.
+
+For updates, upload a version from the repository root and run the browser tests
+against the version URL printed by Wrangler:
+
+```sh
+npx wrangler versions upload --config website/wrangler.toml
+EDITARR_WEBSITE_URL=https://your-version.workers.dev \
+  pnpm --dir web exec playwright test --config playwright.website.config.ts
+```
+
+Check that `/docs/openapi.json` serves JSON, `/healthz` returns `ok`, and a missing
+path returns 404. Once the preview passes, promote the tested version with
+`npx wrangler versions deploy --config website/wrangler.toml`.
+
+The zone's Cloudflare Single Redirect sends requests for `www.editarr.org` and
+HTTP requests for `editarr.org` to `https://editarr.org` with a 301, preserving
+the path and query string. It uses a proxied `www` A record pointing to the
+placeholder `192.0.2.1`.
+
+## Run locally or on your own host
 
 From the repository root:
 

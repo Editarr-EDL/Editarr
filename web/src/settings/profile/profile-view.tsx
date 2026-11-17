@@ -4,7 +4,7 @@ import { usePrincipal } from "../../auth/auth-gate";
 import { can } from "../../auth/session";
 import { ApiKeySettings } from "../api-key-settings";
 import { accountDate } from "../users/account-actions";
-import { ProfileEditor } from "./profile-editor";
+import { ProfileEditor, ProfileIdentity } from "./profile-editor";
 import { CommunitySettings } from "../community/community-settings";
 import { AccountLinkSection } from "../users/account-link-section";
 
@@ -29,8 +29,10 @@ export function ProfileView() {
     {error && <div role="alert"><p>{error}</p><button className="btn-secondary" onClick={() => setReload(reload + 1)}>Retry profile</button></div>}
     {!account && !error && <p role="status">Loading profile...</p>}
     {account && <><dl className="account-facts"><div><dt>Created</dt><dd>{accountDate(account.created_at)}</dd></div><div><dt>Last login</dt><dd>{accountDate(account.last_login_at)}</dd></div></dl>
-      <ProfileEditor account={account} editable={can(principal, "profile.edit.own")} onSaved={setAccount} />
-      <AccountLinkSection account={account} principal={principal} own onChanged={() => void readAccount(account.id).then(setAccount).catch(() => undefined)} /></>}
+      {account.source === "jellyfin"
+        ? <section className="profile-editor" aria-label="Profile details"><ProfileIdentity account={account} /></section>
+        : <ProfileEditor account={account} editable={can(principal, "profile.edit.own")} onSaved={setAccount} />}
+      <AccountLinkSection account={account} principal={principal} own hideVerifiedStatus onChanged={() => void readAccount(account.id).then(setAccount).catch(() => undefined)} /></>}
     {account && <ApiKeySettings />}
     {account && <CommunitySettings />}
   </div>;

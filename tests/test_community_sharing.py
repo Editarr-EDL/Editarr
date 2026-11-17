@@ -103,6 +103,7 @@ def test_changed_source_invalidates_exact_preview_before_any_network(source_data
     [
         ("tmdb", "movie", "https://www.themoviedb.org/movie/123-title", "123"),
         ("tvdb", "movie", "https://www.thetvdb.com/dereferrer/movie/123", "123"),
+        ("tvdb", "episode", "https://thetvdb.com/series/psych/episodes/307497", "307497"),
     ],
 )
 def test_public_reference_urls_and_ids_agree(provider, entity, url, identifier):

@@ -39,7 +39,9 @@ function useLinkStatus(account: AccountDetail, principal: Principal, own: boolea
 }
 
 /** Link status, disconnection messaging, and the link or relink action for one account. */
-export function AccountLinkSection({ account, principal, own, onChanged }: { account: AccountDetail; principal: Principal; own: boolean; onChanged: () => void }) {
+export function AccountLinkSection({ account, principal, own, onChanged, hideVerifiedStatus = false }: {
+  account: AccountDetail; principal: Principal; own: boolean; onChanged: () => void; hideVerifiedStatus?: boolean;
+}) {
   const gate = useOptionalAuthenticationGate();
   const [reload, setReload] = useState(0);
   const [target, setTarget] = useState<LinkTarget | null>(null);
@@ -50,10 +52,12 @@ export function AccountLinkSection({ account, principal, own, onChanged }: { acc
   const name = accountName(account);
   const cleanup = account.link_cleanup;
   const cleanupText = cleanup && (receipt || cleanup.state === "removing" || cleanup.kept > 0) ? cleanupMessage(cleanup) : "";
+  const showStatus = !hideVerifiedStatus || (status.state !== null && status.state !== "verified");
+  if (!showStatus && !receipt && !cleanupText) return null;
   const message = status.state ? STATUS[status.state](status) : "Linked to Jellyfin.";
   return <section className="account-section account-link-section" aria-labelledby={`account-link-${account.id}`}>
     <h3 id={`account-link-${account.id}`}>Jellyfin link</h3>
-    <p className={`link-status link-status-${status.state ?? "linked"}`} role={status.state && status.state !== "unlinked" && status.state !== "verified" ? "status" : undefined}>{message}</p>
+    {showStatus && <p className={`link-status link-status-${status.state ?? "linked"}`} role={status.state && status.state !== "unlinked" && status.state !== "verified" ? "status" : undefined}>{message}</p>}
     {receipt && <p className="link-receipt" role="status">{linkedMessage(receipt)}</p>}
     {cleanup && cleanupText && <p className={`link-cleanup link-cleanup-${cleanup.state}`} role="status">{cleanupText}</p>}
     {allowed && kind && <div className="button-row"><button type="button" className="btn-secondary" onClick={() => setTarget({ id: account.id, name, own, kind })}>{kind === "link" ? "Link to Jellyfin" : "Relink to current server"}</button></div>}

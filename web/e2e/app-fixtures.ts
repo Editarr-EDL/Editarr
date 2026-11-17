@@ -150,7 +150,9 @@ export async function mockApi(page: Page) {
   let defaultFilterMode = "live";
   let personalFilters = { user_id: 1, mode: "live", mode_locked: false, revision: 1, policy_revision: 1, instance_revision: 0,
     rules: [] as unknown[], severities: [] as unknown[], enforced_rules: [] as string[], enforced_severities: [] as string[] };
+  const scanScope = { library_id: "movies", media_source_id: "source-1", is_own: true };
   let queuedScans = [{
+    ...scanScope,
     id: "scan-1", scan_id: 1, media_item_id: "media-1", jellyfin_item_id: "movie-1",
     item_name: "Example Movie", item_type: "Movie", status: "queued", scan_audio: true,
     audio_model: "whisper", scan_video: true, video_model: "nudenet", frame_interval: 1,
@@ -281,8 +283,9 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/library-items/movie-1/exports/edl" && method === "DELETE") { await route.fulfill({ status: 204 }); return; }
     if (url.pathname === "/api/library-items/movie-1/scans") {
       await json(route, [{
+        ...scanScope,
         id: "scan-previous", scan_id: 2, media_item_id: "media-1", jellyfin_item_id: "movie-1",
-        item_name: "Example Movie", item_type: "Movie", media_source_id: "source-1", media_source_name: "4K HDR", status: "complete", scan_audio: true,
+        item_name: "Example Movie", item_type: "Movie", media_source_name: "4K HDR", status: "complete", scan_audio: true,
         audio_model: "whisper", scan_video: true, video_model: "nudenet", frame_interval: 1,
         speed_up: false, error_message: null, created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z",
       }]);
@@ -397,11 +400,12 @@ export async function mockApi(page: Page) {
       await json(route, { cancelled: true, cancelling: false }); return;
     }
     if (url.pathname === "/api/scans/history") {
-      await json(route, [{ id: "scan-history", scan_id: 2, media_item_id: "media-1", jellyfin_item_id: "movie-1", item_name: "Example Movie", item_type: "Movie", status: "complete", scan_audio: true, audio_model: "whisper", scan_video: true, video_model: "nudenet", frame_interval: 1, speed_up: false, error_message: null, created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z" }]);
+      await json(route, [{ ...scanScope, id: "scan-history", scan_id: 2, media_item_id: "media-1", jellyfin_item_id: "movie-1", item_name: "Example Movie", item_type: "Movie", status: "complete", scan_audio: true, audio_model: "whisper", scan_video: true, video_model: "nudenet", frame_interval: 1, speed_up: false, error_message: null, created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z" }]);
       return;
     }
     if (url.pathname === "/api/scans" && method === "POST") {
       await json(route, {
+        ...scanScope,
         id: "scan-1", scan_id: 1, media_item_id: "media-1", jellyfin_item_id: "movie-1",
         item_name: "Example Movie", item_type: "Movie", status: "queued", scan_audio: true,
         audio_model: "whisper", scan_video: true, video_model: "nudenet", frame_interval: 1,

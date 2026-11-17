@@ -12,7 +12,7 @@ describe('Editarr hosted Discord pages', () => {
     const csp = response.headers.get('content-security-policy')!;
     expect(csp).toContain(`style-src 'sha256-${btoa(String.fromCharCode(...digest))}'`);
     expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain("form-action 'self'");
+    expect(csp).toContain("form-action 'self' https://discord.com/oauth2/authorize;");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).not.toContain('unsafe-inline');
     expect(markup).not.toContain('<script');
@@ -32,7 +32,9 @@ describe('Editarr hosted Discord pages', () => {
   });
 
   it('uses the same branded layout for verified handoffs without claiming enrollment', async () => {
-    const markup = await (await discordPage(null, {})).text();
+    const response = await discordPage(null, {});
+    const markup = await response.text();
+    expect(response.headers.get('content-security-policy')).toContain("form-action 'none';");
     expect(markup).toContain('class="auth-panel"');
     expect(markup).toContain('Return to Editarr to finish connecting.');
     expect(markup).not.toContain('<form');

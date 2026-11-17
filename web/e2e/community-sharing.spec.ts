@@ -3,10 +3,19 @@ import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, 
 import { pendingPublication, sharingContextFixture, sharingPreviewFixture } from "../src/scans/sharing-test-fixtures";
 import type { PublicationJob } from "../src/api/api-sharing";
 
+const completedScan = {
+  id: "scan-previous", scan_id: 7, media_item_id: "media-1", library_id: "movies", jellyfin_item_id: "movie-1",
+  item_name: "Example Movie", item_type: "Movie", media_source_id: "source-1", media_source_name: "4K HDR",
+  name: "Audio test scan", origin: "generated", status: "complete", scan_audio: true, audio_model: "whisper",
+  scan_video: false, video_model: null, frame_interval: 1, speed_up: false, error_message: null,
+  created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z",
+};
+
 for (const width of [320, 1440]) {
   test(`${width}px exact preview, focus, stale revision, saved retry and cancellation`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockApi(page);
+    await page.route("**/api/scans/history", (route) => json(route, [completedScan]));
     let job: PublicationJob | null = null;
     let approvalCalls = 0;
     const posts: { path: string; body: unknown }[] = [];
@@ -17,7 +26,10 @@ for (const width of [320, 1440]) {
         expect(request.headers()["x-csrf-token"]).toBe("test-csrf-token");
         posts.push({ path, body: request.postDataJSON() });
       }
-      if (path.endsWith("/preview")) return json(route, sharingPreviewFixture());
+      if (path.endsWith("/preview")) {
+        const fixture = sharingPreviewFixture();
+        return json(route, { ...fixture, preview: { ...fixture.preview, warnings: ["audio_fingerprint_unsupported"] } });
+      }
       if (path.endsWith("/approve")) {
         expect(request.postDataJSON()).toEqual({ confirmed: true });
         if (++approvalCalls === 1) return json(route, { code: "preview_stale", retryable: false }, 409);
@@ -33,10 +45,8 @@ for (const width of [320, 1440]) {
       if (request.method() === "DELETE") return json(route, { discarded: true });
       return json(route, { ...sharingContextFixture(), jobs: job ? [job] : [] });
     });
-    await page.goto("/#/settings");
-    await page.getByRole("button", { name: "Movies", exact: true }).click();
-    await page.getByRole("button", { name: "Open Example Movie" }).click();
-    const share = page.getByRole("list", { name: "Scan history" }).getByRole("button", { name: /^Share / }).first();
+    await page.goto("/#/library/movies/item/movie-1");
+    const share = page.getByRole("button", { name: /^Share Audio test scan/ });
     await share.click();
     let dialog = page.getByRole("dialog", { name: "Share scan" });
     await expect(dialog.getByLabel("I confirm this TMDB/TVDB association.")).toBeVisible();
@@ -44,6 +54,8 @@ for (const width of [320, 1440]) {
     await dialog.getByLabel("I confirm this TMDB/TVDB association.").check();
     await dialog.getByRole("button", { name: "Generate preview" }).click();
     await expect(dialog.getByRole("region", { name: "Outgoing contribution" })).toBeVisible();
+    await expect(dialog.getByRole("list", { name: "Preview warnings" })).toContainText("Audio fingerprint unavailable for this track.");
+    await expect(dialog.getByText(/View detected words in the local scan/)).toBeVisible();
     expect(posts.every((request) => request.path.endsWith("/preview"))).toBe(true);
     await dialog.getByLabel("I may share this data and its notes, and I approve this exact preview.").check();
     await dialog.getByRole("button", { name: "Close", exact: true }).focus();
@@ -64,6 +76,7 @@ for (const width of [320, 1440]) {
     await expect(dialog.getByRole("alert")).toContainText("The source changed");
     await expect(dialog.getByRole("region", { name: "Outgoing contribution" })).toHaveCount(0);
     expect(posts.some((request) => request.path.includes("/publications/"))).toBe(false);
+    await dialog.getByLabel("I confirm this TMDB/TVDB association.").check();
     await dialog.getByRole("button", { name: "Generate preview" }).click();
     await dialog.getByLabel("I may share this data and its notes, and I approve this exact preview.").check();
     await dialog.getByRole("button", { name: "Share contribution" }).click();
@@ -108,9 +121,7 @@ for (const width of [320, 1440]) {
     page.on("request", (request) => {
       if (request.method() === "PUT" || request.url().includes("/approve") || request.url().includes("/publications/")) writes.push(request.url());
     });
-    await page.goto("/#/settings");
-    await page.getByRole("button", { name: "Movies", exact: true }).click();
-    await page.getByRole("button", { name: "Open Example Movie" }).click();
+    await page.goto("/#/library/movies/item/movie-1");
     await page.getByRole("button", { name: "Open review Mixed community review" }).click();
     await page.getByRole("button", { name: "Share Mixed community review" }).click();
     const dialog = page.getByRole("dialog", { name: "Share review" });
@@ -136,13 +147,7 @@ for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await mockApi(page);
     const privatePath = "/media/movies/example.mkv";
-    await page.route("**/api/scans/history", (route) => json(route, [{
-      id: "scan-previous", scan_id: 7, media_item_id: "media-1", library_id: "movies", jellyfin_item_id: "movie-1",
-      item_name: "Example Movie", item_type: "Movie", media_source_id: "source-1", media_source_name: "4K HDR",
-      name: "Manual evidence", origin: "manual", status: "complete", scan_audio: true, audio_model: "whisper",
-      scan_video: false, video_model: null, frame_interval: 1, speed_up: false, error_message: null,
-      created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z",
-    }]));
+    await page.route("**/api/scans/history", (route) => json(route, [{ ...completedScan, name: "Manual evidence", origin: "manual" }]));
     const requests: unknown[] = [];
     await page.route(/\/api\/community\/.*/, async (route) => {
       if (route.request().method() === "DELETE") return json(route, { discarded: true });
@@ -154,9 +159,7 @@ for (const width of [320, 1440]) {
       }
       return json(route, { ...sharingContextFixture("manual"), mediaIdentity: null, audioSources: [{ scanId: "scan-previous", track: null }] });
     });
-    await page.goto("/#/settings");
-    await page.getByRole("button", { name: "Movies", exact: true }).click();
-    await page.getByRole("button", { name: "Open Example Movie" }).click();
+    await page.goto("/#/library/movies/item/movie-1");
     await page.getByRole("button", { name: /^Share Manual evidence/ }).click();
     const dialog = page.getByRole("dialog", { name: "Share scan" });
     await dialog.getByLabel("TMDB/TVDB ID or URL").fill("https://www.imdb.com/title/tt123");

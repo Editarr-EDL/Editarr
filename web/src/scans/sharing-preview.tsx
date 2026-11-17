@@ -18,7 +18,14 @@ export function SharingPreviewDetails({ value }: { value: SharingPreview }) {
     {exclusions.length > 0 && <div><h4>Excluded filters</h4><ul>{exclusions.map((item) => <li key={item.event_id}>
       {item.event_id} · {item.channel || "filter"} · {item.reason.replace(/_/g, " ")}
     </li>)}</ul></div>}
-    {warnings.length > 0 && <ul aria-label="Preview warnings">{warnings.map((warning) => <li key={warning}>{warning.replace(/_/g, " ")}</li>)}</ul>}
+    {warnings.length > 0 && <ul aria-label="Preview warnings">{warnings.map((warning) => <li key={warning}>
+      {warning === "audio_fingerprint_unsupported"
+        ? "Audio fingerprint unavailable for this track. Recipients must verify the audio track and timing."
+        : warning.replace(/_/g, " ")}
+    </li>)}</ul>}
+    {artifact.findings.some((finding) => finding.channel === "audio" || finding.channel === "both") && <p className="muted-copy">
+      Shared audio filters include time ranges, classifications, and any public notes. View detected words in the local scan.
+    </p>}
     <div className="sharing-table-scroll" role="region" aria-label="Outgoing filters" tabIndex={0}>
       <table className="library-table"><thead><tr><th>Time</th><th>Channel</th><th>Classification</th><th>Public note</th></tr></thead>
         <tbody>{artifact.findings.map((finding) => <tr key={finding.event_id}>

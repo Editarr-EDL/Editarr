@@ -29,9 +29,9 @@ test("documentation search exposes request and response schemas", async ({ page 
   await page.goto("/docs/");
   await expect(page.locator("#api-count")).toContainText("endpoints");
   await page.getByLabel("Find an endpoint").fill("api/auth/api-key");
-  const operations = page.locator(".api-operation:visible");
-  await expect(operations.filter({ hasText: /POST\s*\/api\/auth\/api-key\/reveal$/ })).toBeVisible();
-  await operations.filter({ hasText: /POST\s*\/api\/auth\/api-key$/ }).locator("summary").click();
+  const visibleOperations = page.locator(".api-operation:visible > summary");
+  await expect(visibleOperations.filter({ hasText: /^POST\s*\/api\/auth\/api-key\/reveal$/ })).toBeVisible();
+  await visibleOperations.filter({ hasText: /^POST\s*\/api\/auth\/api-key$/ }).click();
   const schemas = page.locator(".api-operation[open] pre");
   await expect(schemas).toContainText('"FreshKeyRequest"');
   await expect(schemas).toContainText('"ApiKeySecret"');

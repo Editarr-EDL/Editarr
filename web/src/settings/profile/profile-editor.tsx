@@ -17,15 +17,18 @@ export function AccountAvatar({ account }: { account: AccountDetail | Pick<Accou
     : <span className="account-avatar account-avatar-placeholder" aria-hidden="true">{accountName(account).slice(0, 1).toUpperCase()}</span>;
 }
 
-/** Edit an account's preferences; a Jellyfin-linked account's username, name, and avatar are shown read-only. */
+export function ProfileIdentity({ account }: { account: AccountDetail }) {
+  return <div className="account-identity"><AccountAvatar account={account} />
+    <div><h2>{accountName(account)}</h2><p>{account.source === "jellyfin" ? "Jellyfin" : "Local"} account</p></div>
+  </div>;
+}
+
+/** Edit an account's local name and avatar and show the identity supplied by Jellyfin. */
 export function ProfileEditor({ account, editable, onSaved }: {
   account: AccountDetail; editable: boolean; onSaved: (account: AccountDetail) => void;
 }) {
   const id = useId();
   const [displayName, setDisplayName] = useState(account.display_name ?? "");
-  const [email, setEmail] = useState(account.email ?? "");
-  const [timezone, setTimezone] = useState(account.timezone ?? "");
-  const [language, setLanguage] = useState(account.language ?? "en");
   const [image, setImage] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -34,16 +37,14 @@ export function ProfileEditor({ account, editable, onSaved }: {
   const fromJellyfin = account.read_only_fields.includes("username");
   const syncedName = account.read_only_fields.includes("display_name");
   const syncedAvatar = account.read_only_fields.includes("avatar");
+  const mayEditName = editable && !syncedName;
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy || !editable) return;
+    if (busy || !mayEditName) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const next = await editAccount(account.id, {
-        ...(!syncedName ? { display_name: displayName.trim() || null } : {}),
-        email: email.trim() || null, timezone: timezone.trim() || null, language,
-      });
+      const next = await editAccount(account.id, { display_name: displayName.trim() || null });
       onSaved(next); setMessage("Profile saved.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save profile."); }
     finally { setBusy(false); }
@@ -63,25 +64,18 @@ export function ProfileEditor({ account, editable, onSaved }: {
   }
 
   return <section className="profile-editor" aria-label="Profile details">
-    <div className="account-identity"><AccountAvatar account={account} /><div><h2>{accountName(account)}</h2><p>{account.source === "jellyfin" ? "Jellyfin" : "Local"} account</p></div></div>
+    <ProfileIdentity account={account} />
     {syncedAvatar ? <p>Avatar from Jellyfin</p> : editable && <div className="profile-avatar-controls">
       <label className="field" htmlFor={`${id}-avatar`}><span>Avatar image</span><input ref={imageInput} id={`${id}-avatar`} type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={(event) => { setImage(event.target.files?.[0] ?? null); setError(""); }} /></label>
       <div className="button-row"><button type="button" className="btn-secondary" disabled={busy || !image} onClick={() => void changeAvatar(false)}>Upload avatar</button>
         {account.avatar && <button type="button" className="btn-secondary" disabled={busy} onClick={() => void changeAvatar(true)}>Remove avatar</button>}</div>
     </div>}
-    <form onSubmit={(event) => void save(event)}>
-      <div className="account-fields">
-        {fromJellyfin && <div><span className="account-field-label">Jellyfin username</span><p>{jellyfinUsername(account)}</p></div>}
-        {syncedName ? null : !editable ? <div><span className="account-field-label">Display name</span><p>{account.display_name ?? "Not set"}</p></div>
-          : <label className="field"><span>Display name</span><input value={displayName} maxLength={100} disabled={busy} autoComplete="nickname" onChange={(event) => setDisplayName(event.target.value)} /></label>}
-        <label className="field"><span>Email</span><input type="email" value={email} maxLength={254} readOnly={!editable} disabled={busy} autoComplete="email" onChange={(event) => setEmail(event.target.value)} /></label>
-        <label className="field"><span>Timezone</span><input value={timezone} maxLength={100} readOnly={!editable} disabled={busy} placeholder="America/New_York" onChange={(event) => setTimezone(event.target.value)} /></label>
-        <label className="field"><span>Display language</span><select value={language} disabled={!editable || busy} onChange={(event) => setLanguage(event.target.value)}>
-          {account.available_languages.map((code) => <option key={code} value={code}>{code === "en" ? "English" : code}</option>)}
-        </select></label>
-      </div>
-      {editable && <button type="submit" className="btn-primary" disabled={busy}>Save profile</button>}
-    </form>
+    {fromJellyfin && <div><span className="account-field-label">Jellyfin username</span><p>{jellyfinUsername(account)}</p></div>}
+    {!syncedName && !editable && <div><span className="account-field-label">Display name</span><p>{account.display_name ?? "Not set"}</p></div>}
+    {mayEditName && <form className="profile-name-form" onSubmit={(event) => void save(event)}>
+      <label className="field"><span>Display name</span><input value={displayName} maxLength={100} disabled={busy} autoComplete="nickname" onChange={(event) => setDisplayName(event.target.value)} /></label>
+      <button type="submit" className="btn-primary" disabled={busy}>Save profile</button>
+    </form>}
     {message && <p role="status">{message}</p>}{error && <p role="alert" className="form-status">{error}</p>}
   </section>;
 }
