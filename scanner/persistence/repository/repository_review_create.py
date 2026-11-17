@@ -210,12 +210,17 @@ def _create_saved_review(
     else:
         inputs = list(data.filters) + manual_filters
     inputs = root.fill_filter_defaults(inputs, base_filter_settings(db, row.owner_id)).filters
-    row.filters = root._filter_rows_from_inputs(
+    stored_filters = root._filter_rows_from_inputs(
         db,
         review_id=row.id,
         memberships=membership_rows,
         filters=inputs,
     )
+    if data.filters is not None:
+        from .review_filter_tracking import track_manual_edits
+
+        track_manual_edits(db, row, stored_filters, synchronization, membership_rows)
+    row.filters = stored_filters
     try:
         bind_review_evidence(db, row)
         prepare_review_policy(db, row)
@@ -251,6 +256,8 @@ def _append_manual_review_filters(
             raise ValueError("Review filter range exceeds media duration")
         finding = ScanFindingRow(
             scan_id=manual_scan.id,
+            manually_added=True,
+            manually_edited=False,
             **value.model_dump(exclude={"id"}),
         )
         db.add(finding)

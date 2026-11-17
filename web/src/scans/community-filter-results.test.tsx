@@ -3,82 +3,135 @@ import { afterEach, expect, it, vi } from "vitest";
 import { CommunityFilterResults, type CommunityResultsProps } from "./community-filter-results";
 import { communityResponse, mixedCandidate } from "../test/community-lookup-fixtures";
 import { remoteFilterDisplay } from "./use-community-lookup";
-import { defaultResultFilters, filterResults } from "./community-result-state";
 
 vi.mock("../auth/auth-gate", async (original) => ({ ...await original<typeof import("../auth/auth-gate")>(), useCan: () => true }));
 afterEach(cleanup);
-it("keeps quality inside both bands, sorts ties by revision and leaves legacy quality unknown", () => {
-  const ranked = { ...mixedCandidate, revisionId: "b", ranking: { policyVersion: "community-ranking-wilson-1" as const,
-    qualityScore: 0.207654955, voteCount: 1, uploaderBoost: 0 as const, score: 0.207654955 } };
-  const tied = { ...ranked, revisionId: "a" };
-  const wrongCut = { ...ranked, revisionId: "c", ranking: { ...ranked.ranking, score: 0.946540780 },
-    compatibility: { ...ranked.compatibility, video: { ...ranked.compatibility.video, band: "possible_cut" as const } } };
-  expect(filterResults([wrongCut, ranked, { ...tied, revisionId: "legacy", ranking: null }, tied],
-    { ...defaultResultFilters, sort: "quality" }).map((candidate) => candidate.revisionId)).toEqual(["a", "b", "legacy", "c"]);
-});
-function lookup(): CommunityResultsProps["lookup"] {
-  return { key: "target", status: "ready", response: communityResponse(), candidates: [mixedCandidate],
-    displayCandidates: [remoteFilterDisplay(mixedCandidate)], error: null, stale: false,
+const downloadController = () => ({ allowed: true, entries: [], running: false, statusError: false, checking: false,
+  start: vi.fn(), cancel: vi.fn(), reconcile: vi.fn(), retry: vi.fn() });
+
+function lookup(candidates = [mixedCandidate]): CommunityResultsProps["lookup"] {
+  return { key: "target", status: "ready", response: communityResponse(candidates), candidates,
+    displayCandidates: candidates.map(remoteFilterDisplay), error: null, stale: false,
     start: vi.fn(), refresh: vi.fn(), more: vi.fn(), cancel: vi.fn() };
 }
 
-it("starts all remote channels unchecked, separates mixed uncertainty and exposes provenance honestly", () => {
-  const onSelectionChange = vi.fn();
-  render(<CommunityFilterResults lookup={lookup()} onSelectionChange={onSelectionChange} />);
-  const review = screen.getByRole("region", { name: "Review required results" });
-  expect(within(review).getByText("Video: Strong fingerprint")).toBeVisible();
-  expect(within(review).getByText("Audio: Possible cut")).toBeVisible();
-  expect(screen.getByRole("checkbox", { name: "Select audio from Mixed review" })).not.toBeChecked();
-  fireEvent.click(screen.getByRole("button", { name: "Select strong channels" }));
-  expect(screen.getByRole("checkbox", { name: "Select video from Mixed review" })).toBeChecked();
-  expect(screen.getByRole("checkbox", { name: "Select audio from Mixed review" })).not.toBeChecked();
-  expect(onSelectionChange).toHaveBeenLastCalledWith([expect.objectContaining({ targetKey: "a".repeat(64), channels: ["video"], reviewRequired: [] })]);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Select audio from Mixed review" }));
-  expect(onSelectionChange).toHaveBeenLastCalledWith([expect.objectContaining({ reviewRequired: ["audio"] })]);
-  fireEvent.click(screen.getByText("Evidence and provenance"));
-  expect(screen.getByText("Models / settings")).toBeVisible();
-  expect(screen.getByText("Unavailable")).toBeVisible();
-  expect(screen.getByText("Analyzed audio: Unknown analyzed track")).toBeVisible();
+it("finds sortable scoped matches with a checkbox menu and expandable category counts", () => {
+  const second = { ...mixedCandidate, revisionId: "a", summary: { ...mixedCandidate.summary, name: "Another scan", channels: { video: 1 } } };
+  render(<CommunityFilterResults lookup={lookup([mixedCandidate, second])} />);
+  const table = () => within(screen.getByRole("table", { name: "Community filter matches" }));
+  expect(table().getAllByRole("row")[1]).toHaveTextContent("Another scan");
+  fireEvent.click(table().getByRole("button", { name: "Scan" }));
+  fireEvent.click(table().getByRole("button", { name: "Scan" }));
+  expect(table().getAllByRole("row")[1]).toHaveTextContent("Mixed review");
+  fireEvent.click(screen.getByRole("button", { name: "Match All" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "All grades" }));
+  expect(screen.getByRole("checkbox", { name: "Strong fingerprint" })).toHaveAccessibleDescription("Loaded results: 1");
+  expect(screen.getByRole("checkbox", { name: "Possible cut" })).toHaveAccessibleDescription("Loaded results: 1");
+  fireEvent.click(screen.getByRole("checkbox", { name: "Possible cut" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Strong fingerprint" }));
+  expect(table().getAllByRole("row")).toHaveLength(3);
+  fireEvent.change(screen.getByLabelText("Channel"), { target: { value: "audio" } });
+  expect(table().getAllByRole("row")).toHaveLength(2);
+  expect(screen.getByRole("checkbox", { name: "Strong fingerprint" })).toHaveAccessibleDescription("Loaded results: 0");
+  expect(screen.getByRole("checkbox", { name: "Possible cut" })).toHaveAccessibleDescription("Loaded results: 1");
+  fireEvent.click(table().getByRole("button", { name: /Mixed review/ }));
+  expect(table().getByText("All filters by category")).toBeVisible();
+  expect(table().getByText("Language (1)")).toBeVisible();
+  expect(table().getByText("Swearing 1")).toBeVisible();
 });
 
-it("distinguishes failed, stale, cancelled, empty and filtered results and disables stale selection", () => {
+it("opens details with compared timing, genuine model and manual metadata, and restores focus", () => {
+  const stream = { algorithm: "pcm", digest: "b".repeat(64), playback_start: "1/4", duration: "120",
+    provenance: "analyzed" as const, description: null };
+  const candidate = { ...mixedCandidate, summary: { ...mixedCandidate.summary,
+    models: [{ capability: "audio_analysis", model_id: "Whisper" }], manual_filter_counts: { added: 1, edited: 2 } },
+    evidence: { ...mixedCandidate.evidence, audio_stream: stream } };
+  const state = lookup([candidate]);
+  state.response!.targetEvidence = { ...state.response!.targetEvidence, audio_stream: { ...stream, playback_start: "0" } };
+  render(<CommunityFilterResults lookup={state} />);
+  fireEvent.click(screen.getByRole("button", { name: /Mixed review/ }));
+  const trigger = screen.getByRole("button", { name: "Details for Mixed review" });
+  fireEvent.click(trigger);
+  const dialog = screen.getByRole("dialog", { name: "Mixed review" });
+  expect(within(dialog).getByText("Whisper")).toBeVisible();
+  expect(within(dialog).getByText("Manually edited filters").parentElement).toHaveTextContent("2");
+  expect(within(dialog).getByText("Manually added filters").parentElement).toHaveTextContent("1");
+  expect(within(dialog).getByRole("table", { name: "Audio timing" })).toHaveTextContent("Playback start0.25 s0.000 s");
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+});
+
+it("distinguishes legacy metadata from zero edits and treats remote labels as text", () => {
+  const candidate = { ...mixedCandidate, catalogCreatedAt: Number.MAX_SAFE_INTEGER,
+    attribution: { ...mixedCandidate.attribution, displayName: "<img src=x onerror=alert(1)>" } };
+  const { rerender } = render(<CommunityFilterResults lookup={lookup([candidate])} />);
+  fireEvent.click(screen.getByRole("button", { name: /Mixed review/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Details for Mixed review" }));
+  expect(screen.getAllByText("Not recorded")).toHaveLength(2);
+  expect(screen.getByText("No models recorded.")).toBeVisible();
+  expect(screen.getByText(/Unknown date/)).toBeVisible();
+  expect(document.querySelector("img")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  rerender(<CommunityFilterResults lookup={lookup([{ ...candidate, summary: { ...candidate.summary, manual_filter_counts: { added: 0, edited: 0 } } }])} />);
+  fireEvent.click(screen.getByRole("button", { name: "Details for Mixed review" }));
+  expect(screen.queryByText("Manually edited filters")).toBeNull();
+  expect(screen.queryByText("Manually added filters")).toBeNull();
+});
+
+it("downloads only selected channels and invalidates uncertain consent when the target changes", () => {
+  const downloads = downloadController();
   const state = lookup();
-  const { rerender } = render(<CommunityFilterResults lookup={{ ...state, status: "error", stale: true, error: { code: "service_unavailable", retryable: true } }} />);
+  const { rerender } = render(<CommunityFilterResults lookup={state} downloads={downloads} />);
+  fireEvent.click(screen.getByRole("button", { name: "Download Mixed review" }));
+  const dialog = screen.getByRole("dialog", { name: "Download filters" });
+  expect(within(dialog).getByRole("checkbox", { name: /Video/ })).toBeChecked();
+  const audio = within(dialog).getByRole("checkbox", { name: /Audio/ });
+  expect(audio).not.toBeChecked();
+  fireEvent.click(audio);
+  const approve = within(dialog).getByRole("checkbox", { name: /I reviewed the timing/ });
+  expect(within(dialog).getByRole("button", { name: "Download filters" })).toBeDisabled();
+  fireEvent.click(approve);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Download filters" }));
+  expect(downloads.start).toHaveBeenCalledWith([mixedCandidate], [expect.objectContaining({
+    channels: ["video", "audio"], targetKey: "a".repeat(64), reviewRequired: ["audio"],
+  })], true);
+  fireEvent.click(screen.getByRole("button", { name: "Download Mixed review" }));
+  rerender(<CommunityFilterResults lookup={{ ...state, key: "another", response: { ...communityResponse(), targetKey: "b".repeat(64) } }} downloads={downloads} />);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(downloads.start).toHaveBeenCalledOnce();
+});
+
+it("marks compatible scoped channels downloaded without treating an incompatible-only scope as complete", () => {
+  const candidate = { ...mixedCandidate, compatibility: { ...mixedCandidate.compatibility,
+    audio: { ...mixedCandidate.compatibility.audio, band: "incompatible" as const } } };
+  const downloads: NonNullable<CommunityResultsProps["downloads"]> = { ...downloadController(), entries: [{
+    id: "imported", input: { target: { source: "jellyfin", item_id: "video" } }, targetKey: "a".repeat(64),
+    choice: { revisionId: candidate.revisionId, contributionId: candidate.contributionId, artifactDigest: candidate.artifactDigest, channels: ["video"] },
+    label: "Mixed review", status: "imported", confirmed: false,
+  }] };
+  render(<CommunityFilterResults lookup={lookup([candidate])} downloads={downloads} />);
+  expect(screen.getByRole("button", { name: "Downloaded Mixed review" })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("Channel"), { target: { value: "audio" } });
+  expect(screen.getByRole("button", { name: "Download Mixed review" })).toBeDisabled();
+  expect(downloads.start).not.toHaveBeenCalled();
+});
+
+it("keeps stale actions inactive and offers refresh, retry, paging, and honest empty states", () => {
+  const state = lookup();
+  const downloads = downloadController();
+  const { rerender } = render(<CommunityFilterResults lookup={{ ...state, status: "error", stale: true, error: { code: "service_unavailable", retryable: true } }} downloads={downloads} />);
   expect(screen.getByRole("alert")).toHaveTextContent("Community lookup is unavailable.");
-  expect(screen.getByText(/Previous results are stale/)).toBeVisible();
-  expect(screen.getByRole("checkbox", { name: "Select video from Mixed review" })).toBeDisabled();
+  expect(screen.getByText("Previous results are stale.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Download Mixed review" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /^Thumbs up/ })).toBeDisabled();
   expect(screen.queryByText("No community filters were found.")).not.toBeInTheDocument();
   rerender(<CommunityFilterResults lookup={{ ...state, status: "cancelled" }} />);
   expect(screen.getByText("Community lookup cancelled.")).toBeVisible();
-  rerender(<CommunityFilterResults lookup={{ ...state, candidates: [], response: communityResponse([]) }} />);
+  const page = { ...communityResponse().page!, nextCursor: "more" };
+  rerender(<CommunityFilterResults lookup={{ ...state, response: { ...communityResponse(), page } }} />);
+  fireEvent.click(screen.getByRole("button", { name: "More community results" }));
+  expect(state.more).toHaveBeenCalledOnce();
+  rerender(<CommunityFilterResults lookup={lookup([])} />);
   expect(screen.getByText("No community filters were found.")).toBeVisible();
-  rerender(<CommunityFilterResults lookup={state} />);
-  fireEvent.change(screen.getByLabelText("Type"), { target: { value: "manual" } });
-  expect(screen.getByText("No results match these filters.")).toBeVisible();
-});
-
-it("renders legacy/partial/zero findings and long untrusted labels without inventing metadata", () => {
-  const state = lookup();
-  const candidate = { ...mixedCandidate, catalogCreatedAt: Number.MAX_SAFE_INTEGER,
-    attribution: { ...mixedCandidate.attribution, displayName: "<img src=x onerror=alert(1)>" },
-    summary: { ...mixedCandidate.summary, schema_version: "community-summary-1" as const, name: "Long".repeat(120), kind: "scan" as const,
-      total: 0, coverage: [{ channel: "video" as const, capability: "visual", state: "partial", intervals: [] }] } };
-  render(<CommunityFilterResults lookup={{ ...state, candidates: [candidate] }} />);
-  expect(screen.getByText(/Unknown date/)).toBeVisible();
-  expect(screen.getByText(/visual \(partial\)/)).toBeVisible();
-  expect(document.querySelector("img")).toBeNull();
-  expect(screen.getByRole("heading", { name: candidate.summary.name })).toBeVisible();
-});
-
-it("filters type, language, channel, coverage, category and both independent bands", () => {
-  render(<CommunityFilterResults lookup={lookup()} />);
-  for (const [label, value] of [["Type", "derived"], ["Language", "unknown"], ["Channel", "audio"],
-    ["Coverage", "unknown"], ["Category", "language/swearing"], ["Video band", "strong_fingerprint"], ["Audio band", "possible_cut"]]) {
-    fireEvent.change(screen.getByLabelText(label), { target: { value } });
-    expect(screen.getByRole("article", { name: "Mixed review" })).toBeVisible();
-  }
-  fireEvent.change(screen.getByLabelText("Audio band"), { target: { value: "incompatible" } });
-  expect(screen.getByText("No results match these filters.")).toBeVisible();
-  expect(screen.getByRole("option", { name: "Revision quality" })).toBeEnabled();
-  expect(screen.getByRole("option", { name: "Most downloaded unavailable" })).toBeDisabled();
 });

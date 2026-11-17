@@ -1,6 +1,7 @@
 import { parseTree, type Node } from 'jsonc-parser';
 
 import taxonomy from './taxonomy.json';
+import { contributionMetadata } from './contribution-metadata';
 import { artifactSchema, manifestSchema, allowedSettings, allowedSettingsV2, validateV2, type Artifact } from './schema';
 import { withoutArrProvenance } from '../catalog/compatibility-inputs';
 
@@ -73,6 +74,7 @@ function summary(artifact: Artifact) {
       source_revision: artifact.source_revision, analyzed_audio: artifact.analyzed_audio,
       source_states: artifact.sources.map(({ source_id, origin, status }) => ({ source_id, origin, status })),
     } : {}),
+    ...contributionMetadata(artifact),
   };
 }
 

@@ -27,7 +27,10 @@ for (const width of [320, 1440]) {
     page.on("request", (request) => {
       if (request.url().includes("/api/community/")) communityRequests.push(request.url());
     });
-    await page.route(/\/api\/library-items\/movie-1\/scans(?:\?.*)?$/, (route) => json(route, associated ? [existing, scan] : [existing]));
+    await page.route("**/api/scans/history", (route) => json(route, associated ? [existing, scan] : [existing]));
+    await page.route("**/api/media/audio-tracks?*", (route) => json(route, {
+      file_version: "a".repeat(64), tracks: [], selection: null, selection_stale: false,
+    }));
     await page.route("**/api/filter-candidates", (route) => {
       searches.push(route.request().postDataJSON());
       return json(route, { media_item_id: "resolved-target", matches: [
@@ -55,8 +58,9 @@ for (const width of [320, 1440]) {
     await expect(selected).toBeChecked();
     await expect(dialog.getByRole("checkbox", { name: /Associate Already linked/ })).toBeDisabled();
     await expect(dialog.getByRole("checkbox", { name: /Associate Already linked/ })).toBeChecked();
-    expect(searches[0]).toMatchObject({ source: "jellyfin", source_path: items[0].versions[1].path,
+    expect(searches[0]).toMatchObject({ source: "jellyfin", item_id: "movie-1", media_source_id: "source-2",
       duration_seconds: 5700, scene_name: items[0].versions[1].scene_name, release_group: "OTHER" });
+    expect(searches[0]).not.toHaveProperty("source_path");
     await expect(dialog.getByRole("button", { name: "Find community filters" })).toBeEnabled();
     await page.keyboard.press("Shift+Tab");
     await expect(dialog.getByRole("button", { name: "Find community filters" })).toBeFocused();

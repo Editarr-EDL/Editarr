@@ -183,7 +183,7 @@ def test_restore_brings_back_everything_and_pauses_the_queue(tmp_path, encrypted
     assert json.loads((target / REPORT).read_text()) == report
     assert not (target / JOURNAL).exists()
     assert (target / RECOVERY / "before" / "database.sqlite3").is_file()
-    assert inspect_schema(target / "scanner.db", target) == "0031_explicit_filter_modes"
+    assert inspect_schema(target / "scanner.db", target) == "0032_manual_filter_tracking"
 
 
 def test_restore_into_a_directory_without_a_database(tmp_path):
@@ -532,7 +532,7 @@ def _empty_again(target, *, database):
     if database:
         with sqlite3.connect(target / "scanner.db") as connection:
             assert connection.execute("SELECT count(*) FROM users").fetchone() == (0,)
-        assert inspect_schema(target / "scanner.db", target) == "0031_explicit_filter_modes"
+        assert inspect_schema(target / "scanner.db", target) == "0032_manual_filter_tracking"
     else:
         assert not (target / "scanner.db").exists()
 

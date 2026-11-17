@@ -20,6 +20,12 @@ export type SharingContext = {
   jobs: PublicationJob[]; terms: { version: string; text: string };
   accessVerified: boolean; accessError: string | null;
 };
+export type SharingFinding = {
+  event_id: string; start_seconds: number; end_seconds: number;
+  source?: "audio" | "visual" | "manual" | "derived";
+  channel: string; category: string | null; subcategory: string | null; note: string | null;
+  manual?: { added: boolean | null; edited: boolean | null } | null;
+};
 export type SharingPreview = {
   previewId: string; expiresAt: number; terms: { version: string; text: string };
   preview: {
@@ -28,8 +34,8 @@ export type SharingPreview = {
       author: { contributor_id: string; key_id: string };
       audio_association: string;
       analyzed_audio: { language: string | null; description: string | null } | null;
-      findings: { event_id: string; start_seconds: number; end_seconds: number;
-        channel: string; category: string | null; subcategory: string | null; note: string | null }[];
+      matching?: { media: MediaIdentity };
+      findings: SharingFinding[];
       coverage: { channel: string; state: string }[];
     };
     manifest: { summary: { total: number } }; artifact_digest: string; manifest_digest: string;

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from scanner.formats.community.artifact_v2 import AnalyzedAudio
 from scanner.formats.community.codec import Coverage, WorkId
+from scanner.formats.community.contribution_metadata import MAX_SUMMARY_MODELS, MODEL_TOKEN
 
 from .community_matching import Band, MatchEvidence
 from .model_audio_tracks import AudioSelection
@@ -72,6 +73,17 @@ class SummarySourceState(LookupModel):
     status: Literal["complete", "failed", "cancelled"]
 
 
+class SummaryModel(LookupModel):
+    capability: str = Field(pattern=MODEL_TOKEN)
+    model_id: str = Field(pattern=MODEL_TOKEN)
+    model_revision: str | None = Field(default=None, pattern=MODEL_TOKEN)
+
+
+class SummaryManualFilterCounts(LookupModel):
+    added: Count | None
+    edited: Count | None
+
+
 class LookupSummary(LookupModel):
     schema_version: Literal["community-summary-1", "community-summary-2"]
     registry_version: Literal["mcf-1.1.0"]
@@ -93,6 +105,8 @@ class LookupSummary(LookupModel):
     source_revision: int | None = Field(default=None, ge=0)
     analyzed_audio: AnalyzedAudio | None = None
     source_states: list[SummarySourceState] | None = Field(default=None, max_length=128)
+    models: list[SummaryModel] | None = Field(default=None, max_length=MAX_SUMMARY_MODELS)
+    manual_filter_counts: SummaryManualFilterCounts | None = None
 
 
 class LookupCandidate(LookupModel):

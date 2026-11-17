@@ -456,7 +456,7 @@ def test_a_backup_below_schema_head_is_refused_without_changes(tmp_path, revisio
     assert refused.value.reason == "restore_backup_schema_unsupported"
     assert str(refused.value) == (
         f"This backup has database schema {revision or 'unversioned-v1'}. This Editarr "
-        "restores only backups made at schema 0031_explicit_filter_modes."
+        "restores only backups made at schema 0032_manual_filter_tracking."
     )
     assert legacy.read_bytes() == old_bytes
     assert _active_hashes(target) == before

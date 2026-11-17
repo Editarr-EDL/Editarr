@@ -58,11 +58,12 @@ export async function catalogCeiling(db: SqlDatabase) { return (await catalogSna
 const summaryFields = ['schema_version', 'registry_version', 'submission_id', 'kind', 'work_ids', 'release',
   'duration_seconds', 'release_version', 'scanner_behavior_version', 'total', 'sources', 'channels', 'taxonomy',
   'coverage', 'name', 'matching', 'audio_association', 'source_revision', 'analyzed_audio', 'source_states'];
-function publicSummary(value: string): Record<string, unknown> {
+function publicSummary(value: string, includeDetails: boolean): Record<string, unknown> {
   const summary = JSON.parse(value) as Record<string, unknown>;
   if (!['community-summary-1', 'community-summary-2'].includes(String(summary.schema_version)))
     throw new Error('catalog_unavailable');
-  return Object.fromEntries(summaryFields.filter(field => Object.hasOwn(summary, field)).map(field => [field, summary[field]]));
+  const fields = includeDetails ? [...summaryFields, 'models', 'manual_filter_counts'] : summaryFields;
+  return Object.fromEntries(fields.filter(field => Object.hasOwn(summary, field)).map(field => [field, summary[field]]));
 }
 type Position = [number, number, number, string];
 type RankedCandidate = Pick<Candidate, 'compatibility' | 'ranking' | 'revisionId'>;
@@ -77,7 +78,7 @@ export function compareCandidates(first: RankedCandidate, second: RankedCandidat
   return compare(position(first), position(second));
 }
 
-async function candidates(db: SqlDatabase, targets: SearchTarget[], rows: Rows) {
+async function candidates(db: SqlDatabase, targets: SearchTarget[], rows: Rows, includeDetails = false) {
   const state = await currentPublicState(db, rows.flatMap(item => item.rows.map(row => row.revision_id)));
   return targets.map(target => {
     const source = rows.find(item => item.id === target.id)!;
@@ -87,7 +88,7 @@ async function candidates(db: SqlDatabase, targets: SearchTarget[], rows: Rows) 
       return { contributionId: row.contribution_id, revisionId: row.revision_id, artifactSchema: row.artifact_schema, artifactDigest: row.artifact_digest,
         releaseId: row.release_id, catalogCreatedAt: row.created_at,
         attribution: { contributorId: row.contributor_id, displayName: current.display_name },
-        summary: publicSummary(row.summary_json), evidence, compatibility: classify(target.evidence, evidence),
+        summary: publicSummary(row.summary_json, includeDetails), evidence, compatibility: classify(target.evidence, evidence),
         statistics: { imports: current.imports, likes: current.likes, dislikes: current.dislikes },
         ranking: rankRevision(current.likes, current.dislikes) };
     });
@@ -120,7 +121,8 @@ export async function availability(db: SqlDatabase, targets: SearchTarget[], pol
 }
 
 export async function matches(db: SqlDatabase, target: SearchTarget, pageSize: number,
-  cursor: string | null, policy: string, now: number, refresh: boolean, limits: SearchLimits, cacheScope: object = db) {
+  cursor: string | null, policy: string, now: number, refresh: boolean, limits: SearchLimits, cacheScope: object = db,
+  includeDetails = false) {
   const catalog = await catalogSnapshot(db), latest = catalog.sequence, key = await queryKey([target], policy, limits, catalog.epoch);
   let ceiling = latest, after: Position | null = null, expectedSnapshot: string | null = null;
   if (cursor) {
@@ -138,7 +140,7 @@ export async function matches(db: SqlDatabase, target: SearchTarget, pageSize: n
   }
   const rows = await cachedRows(db, [target], ceiling, key, now, refresh, limits, cacheScope);
   if (rows[0].rows.length > limits.maxCandidates) throw new SearchError('lookup_limit');
-  const result = (await candidates(db, [target], rows))[0];
+  const result = (await candidates(db, [target], rows, includeDetails))[0];
   const snapshot = await sha256(encoder.encode(JSON.stringify(result.items.map(item =>
     [item.revisionId, item.statistics.likes, item.statistics.dislikes]))));
   if (expectedSnapshot !== null && expectedSnapshot !== snapshot) throw new SearchError('invalid_cursor');

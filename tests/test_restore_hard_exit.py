@@ -63,7 +63,7 @@ def test_hard_exit_rollback_leaves_an_empty_installation(tmp_path, monkeypatch, 
     assert recover_restore(target / "scanner.db", target)
     _empty_again(target, database=database)
     if database:
-        assert require_supported_schema() == "0031_explicit_filter_modes"
+        assert require_supported_schema() == "0032_manual_filter_tracking"
     _restore(archive, target)
     with pytest.raises(RuntimeError, match="reconciliation before worker admission"):
         require_supported_schema()

@@ -167,6 +167,7 @@ def test_binding_writers_are_enumerated():
     assert producers["_map_policy_floor"] == {
         ("import_mcf.py", "_import_mcf_as_saved_review"),
         ("repository_review_retime.py", "_map_retime_entries"),
+        ("review_filter_tracking.py", "track_manual_edits"),
         ("review_policy_evidence.py", "evidence_interval"),
         ("review_policy.py", "validate_policy_draft"),
     }

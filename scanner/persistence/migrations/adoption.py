@@ -62,7 +62,8 @@ JELLYFIN_ADMISSION_REVISION = "0028_jellyfin_admission"
 JELLYFIN_BLOCKS_REVISION = "0029_jellyfin_user_blocks"
 REMOVE_PASSWORDS_REVISION = "0030_remove_passwords"
 EXPLICIT_FILTER_MODES_REVISION = "0031_explicit_filter_modes"
-HEAD_REVISION = EXPLICIT_FILTER_MODES_REVISION
+MANUAL_FILTER_TRACKING_REVISION = "0032_manual_filter_tracking"
+HEAD_REVISION = MANUAL_FILTER_TRACKING_REVISION
 JOURNAL_NAME = "migration-upgrade.json"
 
 
@@ -144,6 +145,7 @@ def _inspect_database(path: Path) -> str | None:
                 [(JELLYFIN_ADMISSION_REVISION,)],
                 [(JELLYFIN_BLOCKS_REVISION,)],
                 [(REMOVE_PASSWORDS_REVISION,)],
+                [(EXPLICIT_FILTER_MODES_REVISION,)],
                 [(HEAD_REVISION,)],
             ):
                 raise ValueError(f"Unsupported database revision: {revisions!r}")

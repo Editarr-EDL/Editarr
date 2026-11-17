@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import type { MediaIdentity } from "../api/api-media-identity";
 import type { PublicationJob, SharingContext, SharingPreview } from "../api/api-community-sharing";
 
 export function sharingPreviewFixture(kind = "ai"): SharingPreview {
-  const vectors = JSON.parse(readFileSync("../tests/fixtures/community/donation-artifacts-v2.json", "utf8"));
+  const file = kind === "tracked" ? "donation-artifact-filter-details.json" : "donation-artifacts-v2.json";
+  const vectors = JSON.parse(readFileSync("../tests/fixtures/community/" + file, "utf8"));
   const encoded = vectors.cases[kind];
   const artifact = JSON.parse(gunzipSync(Buffer.from(encoded.artifact, "base64")).toString("utf8"));
   const manifest = JSON.parse(Buffer.from(encoded.manifest, "base64").toString("utf8"));
@@ -18,7 +18,7 @@ export function sharingPreviewFixture(kind = "ai"): SharingPreview {
 }
 export function sharingContextFixture(kind = "ai"): SharingContext {
   const preview = sharingPreviewFixture(kind);
-  const identity = (preview.preview.artifact as unknown as { matching: { media: MediaIdentity } }).matching.media;
+  const identity = preview.preview.artifact.matching?.media ?? null;
   return { sourceOwnerId: 1, name: preview.preview.artifact.name, mediaIdentity: identity, durationSeconds: 10,
     audioSources: [{ scanId: "scan-a", track: { stream_index: 1, language: "en", title: "English actually analyzed", codec: "aac", channels: 2,
       disposition: 1, time_base: "1/48000", start_seconds: 0, duration_seconds: 10 } }],

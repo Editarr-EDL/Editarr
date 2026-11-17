@@ -47,6 +47,8 @@ export type RemoteFilterCandidate = {
       intervals: { start_seconds: number; end_seconds: number }[] }[];
     matching?: MatchEvidence | null; audio_association?: "none" | "unknown" | "identified" | null;
     source_revision?: number | null;
+    models?: { capability: string; model_id: string; model_revision?: string | null }[] | null;
+    manual_filter_counts?: { added: number | null; edited: number | null } | null;
     analyzed_audio?: { provenance: "analyzed"; language: string | null; description: string | null;
       role: "main" | "commentary" | "descriptive" | "unknown"; codec: string | null; channels: number | null;
       stream_start_seconds: number | null; stream_duration_seconds: number | null; time_base: string | null } | null;

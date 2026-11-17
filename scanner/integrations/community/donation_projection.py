@@ -325,6 +325,11 @@ def project_source(captured: CapturedSource, options: DonationOptions, *, bounds
             channel = "video"
         if row["end_seconds"] is None:
             raise ArtifactError("Donation findings require an explicit end time")
+        manual = (
+            {"added": False, "edited": False}
+            if generated
+            else {"added": row["manually_added"], "edited": row["manually_edited"]}
+        )
         findings.append(
             {
                 "event_id": event_id,
@@ -346,6 +351,7 @@ def project_source(captured: CapturedSource, options: DonationOptions, *, bounds
                 "note": text(notes.get(str(row["id"]), row["mcf_comment"]), f"note:{event_id}"),
                 "parent_event_id": parent_event,
                 "source_snapshot_id": source_ids[identifier],
+                "manual": manual,
             }
         )
     retiming = []
@@ -406,6 +412,7 @@ def project_source(captured: CapturedSource, options: DonationOptions, *, bounds
     )
     payload = {
         "schema_version": "community-artifact-2",
+        "manual_filter_tracking": "manual-1",
         "name": text(options.name, "name", required=True),
         "source_revision": data["root"].get("revision", data["root"].get("selection_revision", 0)),
         "submission_id": token(options.submission_id, "submission"),

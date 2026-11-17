@@ -239,6 +239,8 @@ class CommunityTransport:
                 headers = {name: value for name, value in signed.items() if isinstance(value, str)}
                 headers["accept"] = "application/json"
                 headers["accept-encoding"] = "identity"
+                if method == "POST" and path == "/v1/matches":
+                    headers["editarr-filter-details"] = "1"
                 try:
                     async with client.stream(
                         method, target, content=body, headers=headers

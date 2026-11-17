@@ -101,6 +101,8 @@ def project_findings(downloaded: VerifiedDownload, scan_id: str) -> list[ScanFin
                 source=source,
                 selected=True,
                 edit_action=item.action or ("mute" if source == "audio" else "skip"),
+                manually_added=item.manual.added if item.manual else None,
+                manually_edited=item.manual.edited if item.manual else None,
             )
         )
     return result

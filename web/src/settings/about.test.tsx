@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { version as frontendRelease } from "../../package.json";
 import { fetchVersionInformation } from "../api/api-service";
 import { About } from "./about";
 
@@ -9,7 +10,7 @@ beforeEach(() => vi.resetAllMocks());
 
 it("shows independent versions and unknown build state", async () => {
   vi.mocked(fetchVersionInformation).mockResolvedValue({
-    release: "0.1.0", build_revision: null, build_dirty: null,
+    release: frontendRelease, build_revision: null, build_dirty: null,
     scanner_behavior: "scanner-1", database_schema: "0001_current_baseline",
     local_api: "1", community_api: null, artifact_schema: null,
   });
@@ -22,7 +23,7 @@ it("shows independent versions and unknown build state", async () => {
 
 it("shows a dirty build and a failed request without inventing a release", async () => {
   vi.mocked(fetchVersionInformation).mockResolvedValueOnce({
-    release: "0.1.0", build_revision: "a".repeat(40), build_dirty: true,
+    release: frontendRelease, build_revision: "a".repeat(40), build_dirty: true,
     scanner_behavior: "scanner-1", database_schema: "0001_current_baseline",
     local_api: "1", community_api: null, artifact_schema: null,
   });
@@ -35,13 +36,14 @@ it("shows a dirty build and a failed request without inventing a release", async
 });
 
 it("flags a frontend and backend release mismatch", async () => {
+  const serverRelease = frontendRelease + "-different";
   vi.mocked(fetchVersionInformation).mockResolvedValue({
-    release: "0.2.0", build_revision: null, build_dirty: null,
+    release: serverRelease, build_revision: null, build_dirty: null,
     scanner_behavior: "scanner-1", database_schema: "0001_current_baseline",
     local_api: "1", community_api: null, artifact_schema: null,
   });
   render(<About />);
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Frontend 0.1.0 does not match server 0.2.0",
+    "Frontend " + frontendRelease + " does not match server " + serverRelease,
   );
 });

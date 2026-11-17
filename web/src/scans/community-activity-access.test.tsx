@@ -64,9 +64,8 @@ it("does not read feedback after a vote finishes in an expired authentication li
     current: { vote: "neutral", eligible: true, reason: null }, totals: null, pending: null, error: null });
   vi.mocked(sendCommunityVote).mockImplementation(() => new Promise(resolve => { finish = () => resolve(undefined); }));
   render(<CommunityFeedback revisionId="mixed" disabled={false} refreshKey="target" />);
-  fireEvent.click(screen.getByRole("button", { name: "Check feedback" }));
-  await waitFor(() => expect(screen.getByRole("radio", { name: /^Like$/ })).toBeEnabled());
-  fireEvent.click(screen.getByRole("radio", { name: /^Like$/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Thumbs up/ }));
+  await waitFor(() => expect(sendCommunityVote).toHaveBeenCalledOnce());
   access.current = false;
   await act(async () => finish());
   expect(readCommunityFeedback).toHaveBeenCalledOnce();

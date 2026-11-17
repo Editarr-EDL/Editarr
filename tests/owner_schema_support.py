@@ -1,10 +1,17 @@
-"""Reverse migrations 0027 to 0031 so a head database can stand in for an older revision."""
+"""Reverse recent migrations so test fixtures can stand in for older revisions."""
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 from tests.community_schema_fixture import SYNTHETIC_PASSWORD_HASH
+
+
+def undo_manual_filter_tracking_migration(connection) -> None:
+    """Remove tracking columns from a fixture representing a pre-tracking database."""
+    for table in ("scan_findings", "review_filters"):
+        for column in ("manually_added", "manually_edited"):
+            connection.exec_driver_sql(f"ALTER TABLE {table} DROP COLUMN {column}")
 
 
 def undo_explicit_filter_modes_migration(connection) -> None:

@@ -61,7 +61,7 @@ def test_previous_revision_upgrades_with_every_row_kept_and_an_empty_table(tmp_p
     generation = adoption.upgrade_existing_database(path, path.parent)
     assert generation.is_dir()
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
-    assert adoption.HEAD_REVISION == "0031_explicit_filter_modes"
+    assert adoption.HEAD_REVISION == "0032_manual_filter_tracking"
     upgraded, _ = _snapshot(path)
     drop_0031_additions(upgraded, original)
     assert upgraded.pop("account_dispositions") == []

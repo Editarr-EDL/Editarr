@@ -5,6 +5,7 @@ import { verifyArtifactSignature } from '../src/artifact/signatures';
 import { sha256 } from '../src/catalog/records';
 import { validateParentPermission } from '../src/contributions/permission';
 import fixture from '../../tests/fixtures/community/donation-artifacts-v2.json';
+import filterDetails from '../../tests/fixtures/community/donation-artifact-filter-details.json';
 import { signManifest, signedArtifact } from './helpers/publication-signatures';
 
 const bounds = { compressedBytes: 65536, expandedBytes: 524288, events: 100, text: 4096, depth: 24 };
@@ -23,6 +24,7 @@ describe('Python donation artifact v2', () => {
     expect(verified.manifestBytes).toBe(manifestBytes);
     expect(verified.envelopeBytes).toBe(envelopeBytes);
     expect(verified.artifact.summary).toEqual(JSON.parse(new TextDecoder().decode(manifestBytes)).summary);
+    expect(verified.artifact.summary).not.toHaveProperty('manual_filter_counts');
     const artifact = verified.artifact.artifact;
     expect(artifact.schema_version).toBe('community-artifact-2');
     if (artifact.schema_version !== 'community-artifact-2') throw new Error('Expected v2');
@@ -43,6 +45,29 @@ describe('Python donation artifact v2', () => {
     const publicBytes = JSON.stringify(artifact);
     for (const canary of ['PRIVATE', '/private/', 'private-provider', 'stream_index', 'file_version'])
       expect(publicBytes).not.toContain(canary);
+  });
+
+  it('verifies tracked counts and deduplicated models from a signed Python review', async () => {
+    const item = filterDetails.cases.tracked;
+    const verified = await verifyArtifactSignature(decode(item.artifact), decode(item.manifest), decode(item.envelope),
+      { contributorId: 'contributor-1', keyId: 'key-1', publicKey: decode(filterDetails.public_key), status: 'active' },
+      'submission-tracked', bounds);
+    expect(verified.artifact.summary).toMatchObject({
+      manual_filter_counts: { added: 1, edited: 1 },
+      models: [
+        { capability: 'audio_filter', model_id: 'alt_profanity_check', model_revision: null },
+        { capability: 'audio_scan', model_id: 'whisper', model_revision: 'a'.repeat(40) },
+        { capability: 'visual_qwen', model_id: 'qwen3-vl-8b', model_revision: 'a'.repeat(40) },
+      ],
+    });
+    const artifact = verified.artifact.artifact;
+    if (artifact.schema_version !== 'community-artifact-2') throw new Error('Expected tracked v2');
+    const missingFlag = structuredClone(artifact);
+    delete missingFlag.findings[0].manual;
+    await expect(parseArtifact(encode(missingFlag), bounds)).rejects.toThrow(ArtifactError);
+    const missingVersion = structuredClone(artifact);
+    delete missingVersion.manual_filter_tracking;
+    await expect(parseArtifact(encode(missingVersion), bounds)).rejects.toThrow(ArtifactError);
   });
 
   it.each([

@@ -41,7 +41,9 @@ export async function contributorCatalog(request: Request, db: SqlDatabase, auth
     } else {
       const input = parsed(matchesSchema, body);
       if (input.pageSize > limits.maxPageSize) throw new SearchError('lookup_limit');
-      result = await matches(db, { id: 'target', evidence: input.evidence }, input.pageSize, input.cursor, policy, now, input.refresh, limits, cacheScope);
+      const includeDetails = request.headers.get('Editarr-Filter-Details') === '1';
+      result = await matches(db, { id: 'target', evidence: input.evidence }, input.pageSize, input.cursor, policy,
+        now, input.refresh, limits, cacheScope, includeDetails);
     }
     const active = await db.prepare(`SELECT 1 FROM installation_keys k JOIN installations i USING (installation_id)
       JOIN contributors c USING (contributor_id) WHERE k.key_id = ? AND k.state = 'active'

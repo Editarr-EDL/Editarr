@@ -45,6 +45,7 @@ from .repository_review_retime import (
 from .repository_review_retime import (
     retime_saved_review_draft as retime_saved_review_draft,
 )
+from .review_filter_tracking import track_manual_edits
 from .review_policy import (
     policy_write,
     prepare_review_policy,
@@ -194,6 +195,7 @@ def _save_saved_review(
     new_filters = root._filter_rows_from_inputs(
         db, review_id=row.id, memberships=memberships, filters=inputs
     )
+    track_manual_edits(db, row, new_filters, data.synchronization, memberships)
     new_signatures = _revision_signatures(
         requested_memberships,
         inputs,
@@ -346,6 +348,8 @@ def duplicate_saved_review(
             confidence=review_filter.confidence,
             edit_action=review_filter.edit_action,
             selected=review_filter.selected,
+            manually_added=review_filter.manually_added,
+            manually_edited=review_filter.manually_edited,
         )
         for review_filter in source.filters
     ]

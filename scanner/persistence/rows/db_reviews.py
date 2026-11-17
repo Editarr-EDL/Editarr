@@ -211,6 +211,8 @@ class ReviewFilterRow(Base):
     confidence = Column(Float, nullable=True)
     edit_action = Column(String, nullable=False)
     selected = Column(Boolean, nullable=False, default=True)
+    manually_added = Column(Boolean, nullable=True)
+    manually_edited = Column(Boolean, nullable=True)
 
     review = relationship("SavedReviewRow", back_populates="filters")
     source_scan = relationship("ScanRow", foreign_keys=[source_scan_id])

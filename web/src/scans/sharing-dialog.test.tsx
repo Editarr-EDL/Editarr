@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as api from "../api/api-community-sharing";
 import { CommunityApiError } from "../api/api-community";
@@ -24,12 +24,10 @@ afterEach(() => { cleanup(); vi.resetAllMocks(); });
 async function open(kind: "scan" | "review" = "scan") {
   render(<ShareAction source={{ kind, id: "source-local" }} name="Public source" />);
   fireEvent.click(screen.getByRole("button", { name: "Share Public source" }));
-  await screen.findByLabelText("I confirm this TMDB/TVDB association.");
+  await screen.findByRole("button", { name: "Share contribution" });
 }
 async function prepare() {
-  fireEvent.click(screen.getByLabelText("I confirm this TMDB/TVDB association."));
-  fireEvent.click(screen.getByRole("button", { name: "Generate preview" }));
-  await screen.findByRole("region", { name: "Outgoing contribution" });
+  return screen.findByRole("region", { name: "Filter summary" });
 }
 it("points to the instance operator when sharing limits are missing", async () => {
   vi.mocked(api.fetchSharingContext).mockRejectedValue(new CommunityApiError("preview_not_configured", false, 503));
@@ -43,31 +41,79 @@ it("explains what audio filters share and what a missing fingerprint means", asy
   vi.mocked(api.prepareSharingPreview).mockResolvedValue({
     ...value, preview: { ...value.preview, warnings: ["audio_fingerprint_unsupported"] },
   });
-  await open(); await prepare();
-  const preview = within(screen.getByRole("region", { name: "Outgoing contribution" }));
+  await open();
+  const preview = within(await prepare());
   expect(preview.getByText(/View detected words in the local scan/)).toBeVisible();
-  expect(preview.getByRole("list", { name: "Preview warnings" })).toHaveTextContent(
+  expect(preview.getByRole("list", { name: "Sharing warnings" })).toHaveTextContent(
     "Audio fingerprint unavailable for this track. Recipients must verify the audio track and timing.",
   );
-  fireEvent.click(screen.getByLabelText("I may share this data and its notes, and I approve this exact preview."));
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Generate preview" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Share contribution" })).toBeEnabled();
 });
-it("opens and previews without approving or sending, then invalidates exact consent on changes", async () => {
+it("shows total, scanned, added and edited counts for each category and its subcategories", async () => {
+  const preview = sharingPreviewFixture("tracked");
+  const artifact = preview.preview.artifact;
+  artifact.findings.push({ ...artifact.findings[0], event_id: "added-and-edited", subcategory: "vulgarity",
+    manual: { added: true, edited: true }, note: "Public wording" });
+  artifact.findings.push({ ...artifact.findings[0], event_id: "unknown", category: "violence", subcategory: "violence",
+    manual: { added: null, edited: false } });
+  preview.preview.manifest.summary.total = artifact.findings.length;
+  vi.mocked(api.prepareSharingPreview).mockResolvedValue(preview);
+  await open("review");
+  const summary = within(await prepare());
+  const language = summary.getByRole("button", { name: "Language" });
+  expect(language).toHaveAttribute("aria-expanded", "false");
+  const cells = (row: HTMLElement) => within(row).getAllByRole("cell").map((cell) => cell.textContent);
+  expect(cells(language.closest("tr")!)).toEqual(["2", "1", "1", "2"]);
+  expect(summary.queryByRole("rowheader", { name: /Vulgarity/i })).not.toBeInTheDocument();
+  fireEvent.click(language);
+  expect(language).toHaveAttribute("aria-expanded", "true");
+  expect(cells(summary.getByRole("rowheader", { name: /Vulgarity/i }).closest("tr")!)).toEqual(["1", "0", "1", "1"]);
+  expect(cells(summary.getByRole("rowheader", { name: /Swearing/i }).closest("tr")!)).toEqual(["1", "1", "0", "1"]);
+  expect(cells(summary.getByRole("button", { name: "Violence" }).closest("tr")!)).toEqual(["1", "—Unknown", "—Unknown", "0"]);
+  expect(summary.getByText(/A dash indicates an unknown count/)).toBeVisible();
+  expect(summary.queryByText("added-and-edited")).not.toBeInTheDocument();
+  expect(summary.getByText("Public notes (1)")).toBeVisible();
+});
+it("loads a summary without publishing and replaces the preview when its input changes", async () => {
   await open(); await prepare();
   expect(api.approveSharingPreview).not.toHaveBeenCalled(); expect(api.retryPublication).not.toHaveBeenCalled();
-  const confirm = screen.getByLabelText("I may share this data and its notes, and I approve this exact preview.");
-  fireEvent.click(confirm);
   expect(screen.getByRole("button", { name: "Share contribution" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+  expect(api.prepareSharingPreview).toHaveBeenCalledOnce();
+  const refreshed = sharingPreviewFixture();
+  refreshed.previewId = "preview-edited";
+  refreshed.preview.artifact.name = "New public name";
+  vi.mocked(api.prepareSharingPreview).mockResolvedValueOnce(refreshed);
   fireEvent.change(screen.getByLabelText("Contribution name"), { target: { value: "New public name" } });
-  expect(screen.queryByRole("region", { name: "Outgoing contribution" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Filter summary" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Share contribution" })).toBeDisabled();
+  await prepare();
   expect(api.discardSharingPreview).toHaveBeenCalledWith("preview-ai", expect.any(AbortSignal));
   expect(document.body.textContent).not.toContain("PRIVATE FULL TRANSCRIPT");
   expect(document.body.textContent).not.toContain("/private/media.mp4");
+  fireEvent.click(screen.getByRole("button", { name: "Share contribution" }));
+  await waitFor(() => expect(api.approveSharingPreview).toHaveBeenCalledExactlyOnceWith("preview-edited", expect.any(AbortSignal)));
+});
+it("discards a response for an older draft and enables sharing only for the latest summary", async () => {
+  let finish!: (value: api.SharingPreview) => void;
+  vi.mocked(api.prepareSharingPreview).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await open();
+  await waitFor(() => expect(api.prepareSharingPreview).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+  fireEvent.change(screen.getByLabelText("Contribution name"), { target: { value: "Updated draft" } });
+  const late = { ...sharingPreviewFixture(), previewId: "stale-id" };
+  await act(async () => finish(late));
+  expect(screen.queryByRole("region", { name: "Filter summary" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Share contribution" })).toBeDisabled();
+  await prepare();
+  expect(api.discardSharingPreview).toHaveBeenCalledExactlyOnceWith("stale-id", expect.any(AbortSignal));
+  expect(api.approveSharingPreview).not.toHaveBeenCalled();
 });
 it("queues only the exact approved ID, retries the saved job and cancels without deleting remotely", async () => {
   vi.mocked(api.cancelPublication).mockResolvedValue({ ...pendingPublication, state: "cancel_pending", cancelRequested: true });
   await open(); await prepare();
-  fireEvent.click(screen.getByLabelText("I may share this data and its notes, and I approve this exact preview."));
   fireEvent.click(screen.getByRole("button", { name: "Share contribution" }));
   await screen.findByRole("button", { name: "Retry saved contribution" });
   expect(api.approveSharingPreview).toHaveBeenCalledWith("preview-ai", expect.any(AbortSignal));
@@ -93,10 +139,9 @@ it("recovers saved publication status on reopen without auto-send", async () => 
 it("clears a revised source's preview and gives an actionable error", async () => {
   vi.mocked(api.approveSharingPreview).mockRejectedValue(new CommunityApiError("preview_stale", false, 409));
   await open(); await prepare();
-  fireEvent.click(screen.getByLabelText("I may share this data and its notes, and I approve this exact preview."));
   fireEvent.click(screen.getByRole("button", { name: "Share contribution" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("The source changed");
-  expect(screen.queryByRole("region", { name: "Outgoing contribution" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Filter summary" })).not.toBeInTheDocument();
   expect(api.retryPublication).not.toHaveBeenCalled();
 });
 it("shows actual mixed tracks, public notes and exclusions without saving the review", async () => {
@@ -105,15 +150,18 @@ it("shows actual mixed tracks, public notes and exclusions without saving the re
   vi.mocked(api.fetchSharingContext).mockResolvedValue(context);
   vi.mocked(api.prepareSharingPreview).mockResolvedValue(sharingPreviewFixture("derived"));
   await open("review");
-  fireEvent.click(screen.getByLabelText("I confirm this TMDB/TVDB association."));
-  expect(screen.getByRole("button", { name: "Generate preview" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Share contribution" })).toBeDisabled();
+  expect(api.prepareSharingPreview).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText("Contribution audio source"), { target: { value: "scan-a" } });
-  fireEvent.click(screen.getByRole("button", { name: "Generate preview" }));
-  await screen.findByRole("heading", { name: "Excluded filters" });
-  expect(screen.getByText(/event-2.*other audio track/)).toBeInTheDocument();
+  await prepare();
+  expect(screen.getByRole("list", { name: "Excluded filters" })).toHaveTextContent("Audio from another track excluded from 1 filter");
   expect(api.prepareSharingPreview).toHaveBeenCalledWith({ kind: "review", id: "source-local" }, expect.objectContaining({ audio_source_scan_id: "scan-a" }), expect.any(AbortSignal));
   fireEvent.change(screen.getByLabelText("Contribution audio source"), { target: { value: "scan-b" } });
-  expect(screen.queryByRole("region", { name: "Outgoing contribution" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Filter summary" })).not.toBeInTheDocument();
+  await prepare();
+  expect(api.prepareSharingPreview).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+    audio_source_scan_id: "scan-b",
+  }), expect.any(AbortSignal));
 });
 it.each(["manual", "legacy"])("keeps %s unknown tracks explicitly review-required", async (kind) => {
   vi.mocked(api.fetchSharingContext).mockResolvedValue({ ...sharingContextFixture(kind), audioSources: [{ scanId: "scan-a", track: null }] });
@@ -143,7 +191,6 @@ it.each([false, true])("allows in-flight cancellation without overriding a commi
   vi.mocked(api.retryPublication).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   vi.mocked(api.cancelPublication).mockImplementation(() => new Promise((resolve) => { finishCancel = resolve; }));
   await open(); await prepare();
-  fireEvent.click(screen.getByLabelText("I may share this data and its notes, and I approve this exact preview."));
   fireEvent.click(screen.getByRole("button", { name: "Share contribution" }));
   const cancel = await screen.findByRole("button", { name: "Cancel publication" });
   expect(cancel).toBeEnabled();

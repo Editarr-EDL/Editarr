@@ -49,6 +49,7 @@ const v2 = v1.extend({
   schema_version: z.literal('community-artifact-2'), name: text,
   source_revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), matching: matchEvidenceSchema,
   audio_association: z.enum(['none', 'unknown', 'identified']), audio_source_id: nullableText,
+  manual_filter_tracking: z.literal('manual-1').optional(),
   analyzed_audio: z.strictObject({
     provenance: z.literal('analyzed'), language: z.string().nullable(), description: z.string().nullable(),
     role: z.enum(['main', 'commentary', 'descriptive', 'unknown']), codec: z.string().nullable(),
@@ -66,7 +67,10 @@ const v2 = v1.extend({
     mapping: z.enum(['affine', 'unknown']), applied: z.literal(true),
   })),
   provenance: provenanceV2,
-  findings: z.array(finding.extend({ source_snapshot_id: nullableText.optional() })),
+  findings: z.array(finding.extend({
+    source_snapshot_id: nullableText.optional(),
+    manual: z.strictObject({ added: z.boolean().nullable(), edited: z.boolean().nullable() }).optional(),
+  })),
 });
 export const artifactSchema = z.discriminatedUnion('schema_version', [v1, v2]);
 export type Artifact = z.infer<typeof artifactSchema>;
@@ -87,6 +91,10 @@ export const allowedSettingsV2 = new Set([...allowedSettings,
 
 export function validateV2(artifact: ArtifactV2, sourceLimit: number): void {
   const fail = (message: string): never => { throw new Error(message); };
+  if (artifact.manual_filter_tracking === undefined && artifact.findings.some(finding => finding.manual !== undefined))
+    fail('Manual filter evidence requires a tracking version');
+  if (artifact.manual_filter_tracking !== undefined && artifact.findings.some(finding => finding.manual === undefined))
+    fail('Manual filter tracking requires evidence for every finding');
   const identity = artifact.matching.media;
   const workIds = [...identity.identifiers, ...identity.series_identifiers].map(({ provider, entity_type, value }) => ({ provider, entity_type, value }));
   if (JSON.stringify(workIds) !== JSON.stringify(artifact.media.work_ids)) fail('V2 work identity disagrees with media');

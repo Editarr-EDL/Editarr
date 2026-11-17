@@ -5,6 +5,7 @@ import gzip
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from scanner.db import (
     CommunityImportRow,
+    ReviewFilterRow,
     ReviewSynchronizationRow,
     ScanFindingRow,
     ScanMcfDocumentRow,
@@ -22,28 +24,56 @@ from scanner.db import (
 from scanner.formats.community.codec import ArtifactError, parse_artifact, parse_manifest
 from scanner.integrations.community.donation_sources import SourceRef, canonical, capture_source
 from scanner.integrations.community.donations import approve_donation, prepare_donation
+from scanner.persistence.repository.community_import_projection import project_findings
 from scanner.security.community_artifact_signatures import signature_base
 from tests.test_community_donations import BOUNDS, audio_selection, options, seed_mixed_review
 from tests.test_community_donations import source_database as source_database
 
 CASES = ("ai", "manual", "imported", "derived", "retimed", "partial", "legacy", "zero")
 TEST_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+TRACKED_FIXTURE = Path(__file__).parent / "fixtures/community/donation-artifact-filter-details.json"
 
 
 def prepare_case(engine, case):
     """Create each public case from persisted test rows through the actual builder."""
     reference = SourceRef("scan", "scan")
     changes = {"submission_id": f"submission-{case}", "name": f"Public {case}"}
-    if case in {"derived", "retimed"}:
+    if case in {"derived", "retimed", "tracked"}:
         seed_mixed_review(engine)
         reference = SourceRef("review", "review")
         changes.update(
             duration_seconds=20 if case == "retimed" else 10, audio_source_scan_id="scan"
         )
         with Session(engine) as db:
-            if case == "derived":
+            if case in {"derived", "tracked"}:
                 db.query(ScanMcfDocumentRow).delete()
                 db.get(ReviewSynchronizationRow, "review").end_seconds = 10
+            if case == "tracked":
+                first = db.get(ReviewFilterRow, ("review", "f1"))
+                first.manually_added = False
+                first.manually_edited = True
+                manual = db.get(ReviewFilterRow, ("review", "f3"))
+                manual.manually_added = True
+                manual.manually_edited = False
+                for execution_id, capability, model_id in (
+                    ("audio", "audio_scan", "whisper"),
+                    ("scene-1", "visual_qwen:scene_1", "qwen3-vl-8b"),
+                    ("scene-2", "visual_qwen:scene_2", "qwen3-vl-8b"),
+                    ("path", "audio_qwen", "C:/Users"),
+                ):
+                    db.add(
+                        ScanStageCoverageRow(
+                            scan_id="scan",
+                            stage=capability,
+                            execution_id=execution_id,
+                            status="complete",
+                            source="generated",
+                            model_id=model_id,
+                            model_revision="a" * 40,
+                            effective_settings_json='{"audio_filter":"alt_profanity_check"}',
+                            intervals_json="[]",
+                        )
+                    )
             db.commit()
     else:
         with Session(engine) as db:
@@ -211,13 +241,44 @@ def test_cancelled_preparation_cannot_yield_signable_bytes(source_database):
 
 
 @pytest.mark.parametrize("case", CASES)
-def test_frozen_builder_bytes_and_signatures(source_database, case):
+def test_unextended_frozen_bytes_and_signatures(case):
     frozen = json.loads(
         (Path(__file__).parent / "fixtures/community/donation-artifacts-v2.json").read_text()
     )["cases"][case]
-    prepared = prepare_case(source_database, case)
-    assert vector(prepared, source_database) == frozen
-    assert prepared.artifact_bytes[9] == 255
+    stored, metadata, signature = (
+        base64.b64decode(frozen[key]) for key in ("artifact", "manifest", "envelope")
+    )
+    decoded = parse_artifact(stored, bounds=BOUNDS, compressed=True)
+    manifest = parse_manifest(metadata, artifact=decoded, bounds=BOUNDS)
+    TEST_KEY.public_key().verify(
+        base64.b64decode(json.loads(signature)["signature"]),
+        signature_base(metadata, manifest.manifest),
+    )
+    assert stored[9] == 255
+    assert "models" not in decoded.summary and "manual_filter_counts" not in decoded.summary
+    downloaded = SimpleNamespace(verified=SimpleNamespace(artifact=decoded))
+    assert {
+        (finding.manually_added, finding.manually_edited)
+        for finding in project_findings(downloaded, "legacy-import")
+    } <= {(None, None)}
+
+
+def test_tracked_builder_matches_cross_language_vector(source_database):
+    expected = json.loads(TRACKED_FIXTURE.read_text())
+    prepared = prepare_case(source_database, "tracked")
+    parsed = parse_artifact(prepared.artifact_bytes, bounds=BOUNDS, compressed=True)
+    assert vector(prepared, source_database) == expected["cases"]["tracked"]
+    assert parsed.summary["manual_filter_counts"] == {"added": 1, "edited": 1}
+    assert [row["model_id"] for row in parsed.summary["models"]] == [
+        "alt_profanity_check",
+        "whisper",
+        "qwen3-vl-8b",
+    ]
+    downloaded = SimpleNamespace(verified=SimpleNamespace(artifact=parsed))
+    assert [
+        (finding.manually_added, finding.manually_edited)
+        for finding in project_findings(downloaded, "tracked-import")
+    ] == [(False, True), (True, False)]
 
 
 def test_source_changes_during_preparation_require_new_preview(source_database, monkeypatch):
@@ -280,10 +341,10 @@ def test_only_known_unsupported_formats_can_omit_audio_digest(
         assert "audio_fingerprint_unsupported" in preview["warnings"]
 
 
-def generate_vectors(destination: Path):
+def generate_vectors(destination: Path, cases_to_generate=CASES):
     """Regenerate synthetic golden bytes only when this module is explicitly invoked."""
     cases = {}
-    for case in CASES:
+    for case in cases_to_generate:
         with TemporaryDirectory() as directory:
             fixture = source_database.__wrapped__(Path(directory))
             engine = next(fixture)
@@ -311,4 +372,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Regenerate synthetic donation v2 golden fixtures")
     parser.add_argument("destination", type=Path)
-    generate_vectors(parser.parse_args().destination)
+    parser.add_argument("--tracked", action="store_true")
+    args = parser.parse_args()
+    generate_vectors(args.destination, ("tracked",) if args.tracked else CASES)

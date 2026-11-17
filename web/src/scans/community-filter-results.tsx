@@ -1,17 +1,20 @@
-import { useEffect, useRef, useState, type ComponentProps } from "react";
-import { AudioTrackField } from "./audio-track-field";
-import { CommunityFilterRow } from "./community-filter-row";
-import { CommunityDownloadPanel } from "./community-download-panel";
-import type { useCommunityDownloads } from "./use-community-downloads";
-import { bandLabels, candidateLanguage, defaultResultFilters, filterResults, requiresReview, useCommunitySelection,
-  type ResultFilters, type RemoteSelection } from "./community-result-state";
-import type { useCommunityLookup } from "./use-community-lookup";
+import { useEffect, useRef, useState, type ComponentProps, type MouseEvent } from "react";
+import type { MatchBand } from "../api/api-community-lookup";
 import { useCan } from "../auth/auth-gate";
+import { AudioTrackField } from "./audio-track-field";
+import { CommunityDownloadPanel } from "./community-download-panel";
+import { CommunityFilterDetails, CommunityFilterDownloadDialog } from "./community-filter-details";
+import { CommunityFilterRow } from "./community-filter-row";
+import { CommunityIcon } from "./community-icon";
+import { CommunityMatchFilter } from "./community-match-filter";
+import { communityRows, compatibleChannels, matchBandCounts, matchBands, selectDownload, strongChannel,
+  type ChannelFilter, type ResultChannel, type ResultSort } from "./community-result-state";
+import type { useCommunityDownloads } from "./use-community-downloads";
+import type { useCommunityLookup } from "./use-community-lookup";
 
 export type CommunityResultsProps = {
   lookup: ReturnType<typeof useCommunityLookup>;
   tracks?: ComponentProps<typeof AudioTrackField>;
-  onSelectionChange?: (selections: RemoteSelection[]) => void;
   downloads?: ReturnType<typeof useCommunityDownloads>;
 };
 const errors: Record<string, string> = {
@@ -23,79 +26,114 @@ const errors: Record<string, string> = {
   audio_selection_stale: "The audio selection changed. Choose a track again.", target_changed: "The selected target changed.",
   rotation_pending: "Community key rotation is pending.", invalid_response: "Community response could not be validated.",
 };
+const columns = [{ id: "name", label: "Scan" }, { id: "match", label: "Match" }, { id: "filters", label: "Filters" }] as const;
+type Popup = { kind: "details" | "download"; key: string; revisionId: string; digest: string };
 
-/** Public summaries only; artifact downloads and feedback are separate workflows. */
-export function CommunityFilterResults({ lookup, tracks, onSelectionChange, downloads }: CommunityResultsProps) {
+export function CommunityFilterResults({ lookup, tracks, downloads }: CommunityResultsProps) {
   const allowed = useCan("community.search");
-  const [filters, setFilters] = useState<ResultFilters>(defaultResultFilters);
-  const disabled = !allowed || lookup.status !== "ready" || lookup.stale || tracks?.disabled === true;
-  const selection = useCommunitySelection(lookup.candidates, lookup.response?.targetKey || null, disabled);
-  const selectionJson = JSON.stringify(disabled ? [] : selection.selections);
-  const notifySelection = useRef(onSelectionChange);
-  notifySelection.current = onSelectionChange;
-  useEffect(() => { notifySelection.current?.(JSON.parse(selectionJson)); }, [selectionJson]);
-  const visible = filterResults(lookup.candidates, filters);
-  const setFilter = (name: keyof ResultFilters, value: string) => setFilters((previous) => ({ ...previous, [name]: value }));
-  const renderGroup = (review: boolean) => {
-    const candidates = visible.filter((candidate) => requiresReview(candidate) === review);
-    return candidates.length ? <section aria-label={review ? "Review required results" : "Strong results"}>
-      <h3>{review ? "Review Required" : "Strong Matches"}</h3>
-      {candidates.map((candidate) => <CommunityFilterRow key={candidate.revisionId} candidate={candidate} disabled={disabled}
-        refreshKey={JSON.stringify([lookup.key, lookup.response?.targetKey, candidate.artifactDigest])}
-        selection={selection.selections.find((entry) => entry.revisionId === candidate.revisionId)}
-        onChange={(channels) => selection.change(candidate, channels)} />)}
-    </section> : null;
-  };
+  const [bands, setBands] = useState<ReadonlySet<MatchBand>>(() => new Set(matchBands));
+  const [channel, setChannel] = useState<ChannelFilter>("all");
+  const [sort, setSort] = useState<ResultSort>({ column: "match", direction: "ascending" });
+  const [popup, setPopup] = useState<Popup | null>(null);
+  const returnFocus = useRef<HTMLElement>(null);
+  const targetKey = lookup.response?.targetKey ?? null;
+  const target = lookup.response?.targetEvidence;
+  const ready = lookup.status === "ready" && !lookup.stale && !tracks?.disabled;
+  const canDownload = !!downloads?.allowed && ready && !!targetKey && !downloads.running && !downloads.checking;
+  const visible = communityRows(lookup.candidates, channel, bands, sort);
+  const popupKey = JSON.stringify([lookup.key, targetKey, channel, matchBands.filter((band) => bands.has(band))]);
+  const popupRow = popup?.key === popupKey
+    ? visible.find(({ candidate }) => candidate.revisionId === popup.revisionId && candidate.artifactDigest === popup.digest)
+    : undefined;
+  const close = () => setPopup(null);
+  useEffect(() => {
+    if (popup && (!popupRow || popup.kind === "download" && !canDownload)) setPopup(null);
+  }, [popup, popupRow, canDownload]);
+
   if (!allowed) return null;
+  const open = (event: MouseEvent<HTMLButtonElement>, row: typeof visible[number], kind: Popup["kind"]) => {
+    returnFocus.current = event.currentTarget;
+    setPopup({ kind, key: popupKey, revisionId: row.candidate.revisionId, digest: row.candidate.artifactDigest });
+  };
+  const downloadedChannels = (row: typeof visible[number]) => new Set(downloads?.entries.flatMap((entry) =>
+    entry.targetKey === targetKey && entry.choice.revisionId === row.candidate.revisionId
+      && entry.choice.contributionId === row.candidate.contributionId && entry.choice.artifactDigest === row.candidate.artifactDigest
+      && (entry.status === "imported" || entry.status === "reused") ? entry.choice.channels : []));
+  const downloadOptions = (row: typeof visible[number]) => {
+    const downloaded = downloadedChannels(row);
+    return compatibleChannels(row.candidate, row.channels).filter((value) => !downloaded.has(value));
+  };
+  const startDownload = (row: typeof visible[number], requested: ResultChannel[], confirmed: boolean) => {
+    if (!canDownload || !targetKey || !downloads || !requested.length || requested.some((value) => !downloadOptions(row).includes(value))) return;
+    const selection = selectDownload(row.candidate, targetKey, requested);
+    if (selection.reviewRequired.length && !confirmed) return;
+    close();
+    void downloads.start(lookup.candidates, [selection], confirmed);
+  };
+  const requestDownload = (event: MouseEvent<HTMLButtonElement>, row: typeof visible[number]) => {
+    const options = downloadOptions(row);
+    if (!canDownload || !target || !options.length) return;
+    if (options.length === 1 && strongChannel(row.candidate, options[0])) startDownload(row, options, false);
+    else open(event, row, "download");
+  };
+  const loading = lookup.status === "loading";
+
   return <section className="community-filter-results" aria-label="Community filters">
-    <h3>Community Filters</h3>
+    <header className="community-results-header"><h3>Community Filters</h3>
+      <div className="button-row">
+        <button className="btn-secondary" type="button" disabled={downloads?.running || loading || tracks?.loading || tracks?.disabled} onClick={() => void lookup.refresh()}>
+          {lookup.response ? "Refresh community filters" : "Find community filters"}</button>
+        {loading && <button className="btn-secondary" type="button" onClick={lookup.cancel}>Cancel lookup</button>}
+      </div></header>
     {tracks && <AudioTrackField {...tracks} disabled={tracks.disabled || downloads?.running} />}
-    {lookup.response && <p>Target video start: {lookup.response.targetEvidence.video_stream?.playback_start ?? "Unknown"};
-      {" "}duration: {lookup.response.targetEvidence.video_stream?.duration ?? "Unknown"}.
-      {" "}Target audio start: {lookup.response.targetEvidence.audio_stream?.playback_start ?? "Unknown"};
-      {" "}duration: {lookup.response.targetEvidence.audio_stream?.duration ?? "Unknown"}.</p>}
-    <div className="button-row">
-      <button className="btn-secondary" type="button" disabled={downloads?.running || lookup.status === "loading" || tracks?.loading || tracks?.disabled} onClick={() => void lookup.refresh()}>
-        {lookup.status === "idle" || lookup.status === "cancelled" ? "Find community filters" : "Refresh community filters"}</button>
-      {lookup.status === "loading" && <button className="btn-secondary" type="button" onClick={lookup.cancel}>Cancel lookup</button>}
-    </div>
-    <p role="status" aria-live="polite">{lookup.status === "loading" ? "Looking up community filters..."
-      : lookup.status === "cancelled" ? "Community lookup cancelled."
-        : lookup.status === "idle" ? "Community lookup not started."
-          : lookup.status === "ready" ? `${lookup.candidates.length} community results.` : "Community lookup failed."}
-      {lookup.stale && " Previous results are stale."}</p>
+    {loading && <p role="status">Looking up community filters…</p>}
+    {lookup.status === "cancelled" && <p role="status">Community lookup cancelled.</p>}
     {lookup.error && <p role="alert">{errors[lookup.error.code] || "Community lookup is unavailable."}</p>}
-    {lookup.response?.availability?.items[0].status === "ok" && <p>Available candidates: {lookup.response.availability.items[0].candidateCount}
-      {lookup.response.availability.items[0].truncated ? " (lower bound)" : ""}</p>}
-    {lookup.response?.warnings.length ? <p>Target evidence: {lookup.response.warnings.map((warning) => warning.replace(/_/g, " ")).join("; ")}</p> : null}
+    {lookup.stale && <p role="status">Previous results are stale.</p>}
+    {lookup.response?.warnings.length ? <details className="community-lookup-warnings">
+      <summary tabIndex={0}>Lookup notes</summary><ul>{lookup.response.warnings.map((warning, index) =>
+        <li key={`${warning}:${index}`}>{warning.replace(/_/g, " ")}</li>)}</ul>
+    </details> : null}
     {lookup.candidates.length > 0 && <>
       <div className="community-result-filters">
-        <label>Type<select aria-label="Type" value={filters.kind} onChange={(event) => setFilter("kind", event.target.value)}>
-          <option value="all">All types</option><option value="scan">AI scans</option><option value="manual">Manual filters</option><option value="derived">Derived reviews</option></select></label>
-        <label>Language<select aria-label="Language" value={filters.language} onChange={(event) => setFilter("language", event.target.value)}>
-          <option value="all">All languages</option>{[...new Set(lookup.candidates.map(candidateLanguage))].sort().map((language) => <option key={language} value={language}>{language === "unknown" ? "Unknown language" : language}</option>)}</select></label>
-        <label>Channel<select aria-label="Channel" value={filters.channel} onChange={(event) => setFilter("channel", event.target.value)}>
-          <option value="all">All channels</option><option value="video">Video</option><option value="audio">Audio</option></select></label>
-        <label>Category<select aria-label="Category" value={filters.category} onChange={(event) => setFilter("category", event.target.value)}>
-          <option value="all">All categories</option>{[...new Set(lookup.candidates.flatMap((candidate) => Object.keys(candidate.summary.taxonomy)))].sort().map((category) => <option key={category}>{category}</option>)}</select></label>
-        <label>Coverage<select aria-label="Coverage" value={filters.coverage} onChange={(event) => setFilter("coverage", event.target.value)}>
-          <option value="all">All coverage</option>{["complete", "partial", "failed", "disabled", "unsupported", "unknown"].map((state) => <option key={state}>{state}</option>)}</select></label>
-        {(["video", "audio"] as const).map((channel) => <label key={channel}>{channel === "video" ? "Video band" : "Audio band"}
-          <select aria-label={channel === "video" ? "Video band" : "Audio band"} value={filters[channel]} onChange={(event) => setFilter(channel, event.target.value)}>
-            <option value="all">All bands</option>{Object.entries(bandLabels).map(([band, label]) => <option key={band} value={band}>{label}</option>)}</select></label>)}
-        <label>Sort within bands<select aria-label="Sort within bands" value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>
-          <option value="compatibility">Catalog order</option><option value="newest">Newest</option><option value="uploader">Uploader</option>
-          <option value="imports">Most imported</option><option value="quality">Revision quality</option><option value="downloads" disabled>Most downloaded unavailable</option></select></label>
+        <CommunityMatchFilter bands={bands} counts={matchBandCounts(lookup.candidates, channel)} onChange={setBands} />
+        <label>Channel <select aria-label="Channel" value={channel} onChange={(event) => setChannel(event.target.value as ChannelFilter)}>
+          <option value="all">Any channel</option><option value="audio">Audio</option>
+          <option value="video">Video</option><option value="both">Audio and video</option>
+        </select></label>
+        <span role="status" className="muted-copy community-result-total">{visible.length} {visible.length === 1 ? "result" : "results"}</span>
       </div>
-      <div className="button-row"><button className="btn-secondary" type="button" disabled={disabled} onClick={() => selection.selectStrong(visible)}>Select strong channels</button>
-        <span role="status">{selection.selections.length} contributions selected
-          {selection.selections.some((entry) => !visible.some((candidate) => candidate.revisionId === entry.revisionId)) && " (includes hidden results)"}</span></div>
-      {renderGroup(false)}{renderGroup(true)}
-      {!visible.length && <p>No results match these filters.</p>}
+      {visible.length ? <div className="community-results-scroll">
+        <table className="community-results-table">
+          <caption className="visually-hidden">Community filter matches</caption>
+          <thead><tr>{columns.map(({ id, label }) => <th scope="col" key={id}
+            className={id === "filters" ? "community-filter-count" : undefined} aria-sort={sort.column === id ? sort.direction : "none"}>
+            <button type="button" className="community-sort-button" onClick={() => setSort({ column: id,
+              direction: sort.column === id ? sort.direction === "ascending" ? "descending" : "ascending" : id === "filters" ? "descending" : "ascending" })}>
+              {label}<CommunityIcon name={sort.column === id ? sort.direction : "sort"} />
+            </button></th>)}
+            <th scope="col" className="community-actions-column"><span className="visually-hidden">Actions</span></th></tr></thead>
+          <tbody>{visible.map((row) => {
+            const { candidate } = row;
+            const compatible = compatibleChannels(candidate, row.channels);
+            const downloaded = downloadedChannels(row);
+            return <CommunityFilterRow key={JSON.stringify([candidate.revisionId, candidate.artifactDigest])} {...row} disabled={!ready}
+              refreshKey={JSON.stringify([lookup.key, targetKey, candidate.artifactDigest])}
+              onDetails={(event) => open(event, row, "details")}
+              download={downloads?.allowed ? { available: canDownload && compatible.some((value) => !downloaded.has(value)),
+                complete: compatible.length > 0 && compatible.every((value) => downloaded.has(value)),
+                onClick: (event) => requestDownload(event, row) } : undefined} />;
+          })}</tbody>
+        </table>
+      </div> : <p>No results match these filters.</p>}
     </>}
-    {lookup.status === "ready" && !lookup.candidates.length && <p>No community filters were found.</p>}
-    {lookup.response?.page?.nextCursor && <button className="btn-secondary" type="button" disabled={disabled} onClick={() => void lookup.more()}>More community results</button>}
-    {downloads && <CommunityDownloadPanel downloads={downloads} candidates={lookup.candidates} selections={selection.selections}
-      targetKey={lookup.response?.targetKey || null} disabled={disabled} />}
+    {lookup.status === "ready" && !lookup.candidates.length && <p role="status">No community filters were found.</p>}
+    {lookup.response?.page?.nextCursor && <button className="btn-secondary" type="button" disabled={!ready || downloads?.running} onClick={() => void lookup.more()}>More community results</button>}
+    {downloads && <CommunityDownloadPanel downloads={downloads} candidates={lookup.candidates} targetKey={targetKey} disabled={!ready} />}
+    {popupRow && target && (popup?.kind === "details"
+      ? <CommunityFilterDetails candidate={popupRow.candidate} channels={popupRow.channels} target={target}
+        onClose={close} returnFocusRef={returnFocus} />
+      : canDownload && <CommunityFilterDownloadDialog candidate={popupRow.candidate} channels={downloadOptions(popupRow)} target={target}
+        onClose={close} returnFocusRef={returnFocus} onDownload={(selected, confirmed) => startDownload(popupRow, selected, confirmed)} />)}
   </section>;
 }

@@ -383,6 +383,8 @@ def _filter_rows_from_inputs(
     filters: list[ReviewFilterInput],
 ) -> list[ReviewFilterRow]:
     """Validate filter inputs against memberships and build storage rows."""
+    from .review_filter_tracking import cue_provenance, source_cue_flags
+
     valid_ids = {scan_id for scan_id in memberships}
     if len({value.id for value in filters}) != len(filters):
         raise ReviewMembershipError("Review filter IDs must be unique")
@@ -396,6 +398,9 @@ def _filter_rows_from_inputs(
     existing = {
         row.id: row
         for row in db.query(ReviewFilterRow).filter(ReviewFilterRow.review_id == review_id).all()
+    }
+    by_provenance = {
+        cue_provenance(row): row for row in existing.values() if row.source_finding_id is not None
     }
     review = db.get(SavedReviewRow, review_id)
     durations = {
@@ -453,6 +458,11 @@ def _filter_rows_from_inputs(
             and value.end_seconds > durations[value.source_scan_id]
         ):
             raise ValueError("Review filter range exceeds media duration")
+        prior_cue = previous or by_provenance.get(cue_provenance(value))
+        if prior_cue is not None:
+            added, edited = prior_cue.manually_added, prior_cue.manually_edited
+        else:
+            added, edited = source_cue_flags(source_scan, finding)
         rows.append(
             ReviewFilterRow(
                 review_id=review_id,
@@ -474,6 +484,8 @@ def _filter_rows_from_inputs(
                 confidence=value.confidence,
                 edit_action=value.edit_action.value,
                 selected=value.selected,
+                manually_added=added,
+                manually_edited=edited,
             )
         )
     return rows

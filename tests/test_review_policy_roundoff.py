@@ -27,6 +27,7 @@ from tests.owner_schema_support import (
     undo_explicit_filter_modes_migration,
     undo_jellyfin_admission_migration,
     undo_jellyfin_owner_migration,
+    undo_manual_filter_tracking_migration,
     undo_remove_passwords_migration,
 )
 from tests.scan_access_http import LIBRARY_A, guid
@@ -168,6 +169,7 @@ def test_legacy_nearest_import_cues_under_source_basis_binding(app, monkeypatch,
         ):
             db.connection().exec_driver_sql(f"ALTER TABLE media_item_exports DROP COLUMN {column}")
         db.connection().exec_driver_sql("PRAGMA foreign_keys = OFF")
+        undo_manual_filter_tracking_migration(db.connection())
         undo_explicit_filter_modes_migration(db.connection())
         undo_remove_passwords_migration(db.connection())
         db.connection().exec_driver_sql("DROP TABLE jellyfin_user_blocks")

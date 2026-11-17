@@ -21,6 +21,7 @@ beforeEach(() => {
   access.current = true;
   vi.mocked(api.fetchSharingContext).mockResolvedValue({ ...sharingContextFixture(), sourceOwnerId: 2 });
   vi.mocked(api.prepareSharingPreview).mockResolvedValue(sharingPreviewFixture());
+  vi.mocked(api.discardSharingPreview).mockResolvedValue({ discarded: true });
   vi.mocked(api.approveSharingPreview).mockResolvedValue(pendingPublication);
   vi.mocked(api.retryPublication).mockResolvedValue({ ...pendingPublication, state: "paused" });
 });
@@ -32,12 +33,9 @@ async function open() {
   return rendered;
 }
 async function prepare() {
-  fireEvent.click(await screen.findByLabelText("I confirm this TMDB/TVDB association."));
-  fireEvent.click(screen.getByRole("button", { name: "Generate preview" }));
-  await screen.findByRole("region", { name: "Outgoing contribution" });
+  await screen.findByRole("region", { name: "Filter summary" });
 }
 function approve() {
-  fireEvent.click(screen.getByLabelText("I may share this data and its notes, and I approve this exact preview."));
   fireEvent.click(screen.getByRole("button", { name: "Share contribution" }));
 }
 it("does not expose or fetch sharing without a publication capability", () => {
@@ -49,15 +47,16 @@ it("does not expose or fetch sharing without a publication capability", () => {
 it("does not let an own-review grant enable publishing another user's review", async () => {
   access.grants = new Set(["community.publish.own_review"]);
   await open();
-  expect(screen.queryByRole("button", { name: "Generate preview" })).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Contribution name")).not.toBeInTheDocument();
+  await screen.findByRole("button", { name: "Close" });
+  expect(screen.queryByRole("button", { name: "Share contribution" })).not.toBeInTheDocument();
+  expect(api.prepareSharingPreview).not.toHaveBeenCalled();
 });
 it("shows the acting contributor in a cross-user preview", async () => {
   const preview = sharingPreviewFixture();
   preview.preview.artifact.author.contributor_id = "acting-admin-contributor";
   vi.mocked(api.prepareSharingPreview).mockResolvedValue(preview);
   await open(); await prepare();
-  expect(within(screen.getByRole("region", { name: "Outgoing contribution" })).getByText("acting-admin-contributor")).toBeVisible();
+  expect(screen.getByText("Sharing as acting-admin-contributor")).toBeVisible();
   expect(api.approveSharingPreview).not.toHaveBeenCalled();
 });
 it("allows check-only management without publishing or borrowing own retry/retract grants", async () => {
@@ -70,7 +69,8 @@ it("allows check-only management without publishing or borrowing own retry/retra
   expect(screen.getByRole("button", { name: "Check outcome" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "Retry saved contribution" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Cancel publication" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Generate preview" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Share contribution" })).not.toBeInTheDocument();
+  expect(api.prepareSharingPreview).not.toHaveBeenCalled();
 });
 it("queues an approved contribution without sending when retry is not granted", async () => {
   access.grants.delete("community.publications.retry.own");
@@ -140,28 +140,29 @@ it("aborts a preview on unmount without emitting a late discard", async () => {
   let finish!: (preview: api.SharingPreview) => void;
   vi.mocked(api.prepareSharingPreview).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
   const rendered = await open();
-  fireEvent.click(await screen.findByLabelText("I confirm this TMDB/TVDB association."));
-  fireEvent.click(screen.getByRole("button", { name: "Generate preview" }));
+  await waitFor(() => expect(api.prepareSharingPreview).toHaveBeenCalledOnce());
   const signal = vi.mocked(api.prepareSharingPreview).mock.calls[0][2]!;
   rendered.unmount();
   expect(signal.aborted).toBe(true);
   await act(async () => finish(sharingPreviewFixture()));
   expect(api.discardSharingPreview).not.toHaveBeenCalled();
 });
-it("refreshes a stale preview source and requires association and exact consent again", async () => {
+it("refreshes a stale source automatically and waits for another share click", async () => {
   vi.mocked(api.approveSharingPreview).mockRejectedValue(new CommunityApiError("preview_stale", false, 409));
   await open(); await prepare(); approve();
   await waitFor(() => expect(api.fetchSharingContext).toHaveBeenCalledTimes(2));
-  expect(await screen.findByLabelText("I confirm this TMDB/TVDB association.")).not.toBeChecked();
-  expect(screen.queryByRole("region", { name: "Outgoing contribution" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Filter summary" })).not.toBeInTheDocument();
+  await prepare();
+  expect(api.prepareSharingPreview).toHaveBeenCalledTimes(2);
+  expect(api.approveSharingPreview).toHaveBeenCalledOnce();
   expect(api.retryPublication).not.toHaveBeenCalled();
 });
 it.each([403, 404])("clears private source and preview state on %s without follow-up sends", async status => {
   vi.mocked(api.approveSharingPreview).mockRejectedValue(new CommunityApiError(status === 403 ? "capability_denied" : "not_found", false, status));
   await open(); await prepare(); approve();
   await waitFor(() => expect(access.refresh).toHaveBeenCalledOnce());
-  expect(screen.queryByRole("region", { name: "Outgoing contribution" })).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Contribution name")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Filter summary" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Edit details" })).not.toBeInTheDocument();
   expect(api.fetchSharingContext).toHaveBeenCalledOnce();
   expect(api.retryPublication).not.toHaveBeenCalled();
   expect(api.discardSharingPreview).not.toHaveBeenCalled();

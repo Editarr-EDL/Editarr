@@ -13,7 +13,7 @@ import { searchLimits } from '../src/catalog/search-input';
 import { matchEvidenceSchema } from '../src/catalog/compatibility-inputs';
 import { publishArtifact } from '../src/contributions/publication';
 import { transitionPublication } from '../src/contributions/repository';
-import { fixtureKey, syntheticPublication } from './helpers/publication-signatures';
+import { fixtureKey, signedArtifact, syntheticPublication } from './helpers/publication-signatures';
 import { signedPost, signingKey } from './helpers/key-lifecycle';
 import { verifiedCase } from './helpers/catalog';
 import { db, now, limits as publicationCaps, setupPublication } from './helpers/publication';
@@ -394,4 +394,34 @@ it('rejects tampering, wrong methods, query strings and unconfigured/production 
   expect((await handle(await signedPost(await fixtureKey(), '/v1/matches?extra=1', '{}', crypto.randomUUID()))).status).toBe(400);
   expect((await service.fetch(signed, { APP_ENV: 'production' })).status).toBe(503);
   expect((await service.fetch(signed, { APP_ENV: 'local', TRUSTED_ACTOR_KEY: tunnelActor })).status).toBe(503);
+});
+
+it('returns extended filter details only to opted-in match clients', async () => {
+  const { artifact } = (await verifiedCase('ai')).artifact;
+  if (artifact.schema_version !== 'community-artifact-2') throw new Error('Expected v2');
+  const input = await signedArtifact({
+    ...artifact,
+    submission_id: crypto.randomUUID(),
+    sharing_terms: 'community-reuse-1',
+    manual_filter_tracking: 'manual-1',
+    findings: artifact.findings.map(finding => ({ ...finding, manual: { added: false, edited: false } })),
+  });
+  await publishArtifact(db, { contributorId: 'contributor-1', keyId: 'key-1', displayName: 'Public Name',
+    nonce: crypto.randomUUID(), operationId: crypto.randomUUID(), contentDigest: crypto.randomUUID(), expiresAt: now + 60 },
+  input, publicationCaps, now);
+  for (const include of [false, true, false]) {
+    const signed = await request('/v1/matches', { pageSize: 20, refresh: true });
+    if (include) signed.headers.set('Editarr-Filter-Details', '1');
+    const output = await handle(signed);
+    expect(output.status).toBe(200);
+    const result = await output.json() as { candidates: Candidate[] };
+    const summary = result.candidates.find(candidate => candidate.revisionId === input.submissionId)!.summary;
+    if (include) {
+      expect(summary).toMatchObject({ manual_filter_counts: { added: 0, edited: 0 },
+        models: [{ capability: 'audio_scan', model_id: 'test-model', model_revision: 'test-revision' }] });
+    } else {
+      expect(summary).not.toHaveProperty('manual_filter_counts');
+      expect(summary).not.toHaveProperty('models');
+    }
+  }
 });

@@ -388,6 +388,8 @@ class ScanFindingRow(Base):
     edit_action = Column(String, nullable=False, default="skip")
     group_key = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    manually_added = Column(Boolean, nullable=True)
+    manually_edited = Column(Boolean, nullable=True)
 
     scan = relationship("ScanRow")
 

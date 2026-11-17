@@ -20,6 +20,7 @@ from .artifact_v2 import (
     validate_v2,
     without_arr_provenance,
 )
+from .contribution_metadata import ManualFilterEvidence, contribution_metadata
 
 
 class ArtifactError(ValueError):
@@ -115,6 +116,7 @@ class Finding(StrictModel):
     note: str | None
     parent_event_id: str | None
     source_snapshot_id: str | None = None
+    manual: ManualFilterEvidence | None = None
 
 
 class Parent(StrictModel):
@@ -137,6 +139,7 @@ class Artifact(StrictModel):
     audio_association: Literal["none", "unknown", "identified"] | None = None
     audio_source_id: str | None = None
     analyzed_audio: AnalyzedAudio | None = None
+    manual_filter_tracking: Literal["manual-1"] | None = None
     submission_id: str
     kind: Literal["scan", "manual", "derived"]
     created_at: str
@@ -281,7 +284,7 @@ def _summary(artifact: Artifact) -> dict:
         result["analyzed_audio"] = (
             artifact.analyzed_audio.model_dump(mode="json") if artifact.analyzed_audio else None
         )
-    return result
+    return {**result, **contribution_metadata(artifact)}
 
 
 def parse_artifact(
@@ -325,10 +328,11 @@ def parse_artifact(
         "audio_association",
         "audio_source_id",
         "analyzed_audio",
+        "manual_filter_tracking",
     }
     if artifact.schema_version == "community-artifact-1" and (
         v2_fields & value.keys()
-        or any("source_snapshot_id" in item for item in value["findings"])
+        or any({"source_snapshot_id", "manual"} & item.keys() for item in value["findings"])
         or any(
             {"release_version", "scanner_behavior_version", "build_revision", "quantization"}
             & item.keys()
@@ -336,6 +340,11 @@ def parse_artifact(
         )
     ):
         raise ArtifactError("V1 artifact cannot contain V2 fields")
+    if artifact.manual_filter_tracking is not None:
+        if any(finding.manual is None for finding in artifact.findings):
+            raise ArtifactError("Manual filter tracking requires evidence for every finding")
+    elif "manual_filter_tracking" in value or any("manual" in item for item in value["findings"]):
+        raise ArtifactError("Manual filter evidence requires a tracking version")
     if artifact.schema_version == "community-artifact-2":
         if (
             not artifact.name
