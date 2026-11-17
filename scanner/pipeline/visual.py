@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -43,6 +44,8 @@ from scanner.settings.capabilities import (
 )
 from scanner.settings.capabilities import qwen_enrichment_capability as qwen_enrichment_capability
 from scanner.settings.config import settings
+
+from .inference_devices import CPU_PROVIDER, create_coreml_session
 
 if TYPE_CHECKING:
     from nudenet import NudeDetector
@@ -93,18 +96,18 @@ def _get_detector() -> NudeDetector:
 
     global _detector
     if _detector is None:
-        capability = capability_for("nudenet")
-        provider_candidates = (
-            ("CoreMLExecutionProvider", "CPUExecutionProvider")
-            if capability.device == "coreml"
-            else ("CPUExecutionProvider",)
-        )
-        providers = [
-            provider
-            for provider in provider_candidates
-            if provider in onnxruntime.get_available_providers()
-        ]
-        _detector = NudeDetector(providers=providers or ["CPUExecutionProvider"])
+        detector = NudeDetector(providers=[CPU_PROVIDER])
+        if capability_for("nudenet").device == "coreml":
+            # NudeNet 3.4.2 ignores providers in the constructor. Configure its session.
+            model_path = Path(str(files("nudenet").joinpath("320n.onnx")))
+            detector.onnx_session = create_coreml_session(
+                onnxruntime,
+                model_path,
+                compute_units="ALL",
+                dimensions={"height": detector.input_height, "width": detector.input_width},
+                cache_dir=settings.model_cache / "nudenet" / "coreml-cache",
+            )
+        _detector = detector
     return _detector
 
 

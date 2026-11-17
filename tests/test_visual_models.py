@@ -206,8 +206,8 @@ def test_wd_onnx_session_uses_static_cached_mlprogram_on_coreml(monkeypatch, tmp
     calls = []
     monkeypatch.setattr(
         image_safety_gate,
-        "capability_for",
-        lambda _backend_id: SimpleNamespace(device="metal"),
+        "current_environment",
+        lambda: SimpleNamespace(onnx_device="coreml"),
     )
 
     class FakeSessionOptions:
@@ -227,14 +227,14 @@ def test_wd_onnx_session_uses_static_cached_mlprogram_on_coreml(monkeypatch, tmp
         @staticmethod
         def InferenceSession(path, **kwargs):
             calls.append((path, kwargs))
-            return "session"
+            return SimpleNamespace(run=lambda *_args: "scores")
 
     monkeypatch.setattr(image_safety_gate.settings, "model_cache", tmp_path)
     model_path = tmp_path / "model.onnx"
 
     session = image_safety_gate._create_wd_onnx_session(FakeOnnxRuntime, model_path)
 
-    assert session == "session"
+    assert session.run(None, {}) == "scores"
     assert (tmp_path / "image_safety_gate" / "coreml-cache").is_dir()
     assert calls[0][0] == str(model_path)
     options = calls[0][1]["sess_options"]
@@ -261,8 +261,8 @@ def test_wd_onnx_session_does_not_select_an_undeclared_accelerator(monkeypatch, 
     calls = []
     monkeypatch.setattr(
         image_safety_gate,
-        "capability_for",
-        lambda _backend_id: SimpleNamespace(device="cpu"),
+        "current_environment",
+        lambda: SimpleNamespace(onnx_device="cpu"),
     )
 
     class FakeOnnxRuntime:
@@ -380,29 +380,6 @@ def test_siglip_head_cpu_capability_ignores_host_accelerators(monkeypatch, tmp_p
     siglip2_moderation._load_head("nsfw")
 
     assert received["providers"] == ["CPUExecutionProvider"]
-
-
-def test_wd_onnx_session_falls_back_to_cpu(tmp_path):
-    calls = []
-
-    class FakeOnnxRuntime:
-        @staticmethod
-        def get_available_providers():
-            return ["CPUExecutionProvider"]
-
-        @staticmethod
-        def InferenceSession(path, **kwargs):
-            calls.append((path, kwargs))
-            return "session"
-
-    model_path = tmp_path / "model.onnx"
-
-    session = image_safety_gate._create_wd_onnx_session(FakeOnnxRuntime, model_path)
-
-    assert session == "session"
-    assert calls == [
-        (str(model_path), {"providers": ["CPUExecutionProvider"]})
-    ]
 
 
 def test_scan_frames_caps_a_final_visual_finding_at_the_video_end(monkeypatch, tmp_path):

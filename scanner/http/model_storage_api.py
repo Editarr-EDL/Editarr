@@ -7,6 +7,7 @@ when it fetches and when it installs.
 """
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
@@ -36,11 +37,21 @@ def _model_storage_status() -> dict[str, object]:
     """Build the authenticated model view from the manifest and capability truth."""
 
     service = root.get_acquisition_service()
+    environment = current_environment()
+
+    def device_for(artifact_id: str) -> Literal["cpu", "coreml"] | None:
+        if artifact_id.startswith("wd-"):
+            return environment.onnx_device
+        if artifact_id.startswith("siglip2-moderation-head-"):
+            return "cpu"
+        return None
+
     return {
         "artifacts": [
             {
                 "artifact_id": status.artifact_id,
                 "backend_ids": list(status.backend_ids),
+                "device": device_for(status.artifact_id),
                 "state": status.download_state(),
                 "expected_size": status.bytes_total,
                 "source_url": status.source_url,
@@ -50,7 +61,7 @@ def _model_storage_status() -> dict[str, object]:
             }
             for status in service.list_artifacts()
         ],
-        "model_capabilities": list(root.model_capabilities(current_environment())),
+        "model_capabilities": list(root.model_capabilities(environment)),
     }
 
 

@@ -9,8 +9,10 @@ from pathlib import Path
 from threading import Lock
 
 from scanner.model_acquisition import get_acquisition_service, manifest
-from scanner.settings.capabilities import capability_for
+from scanner.settings.capabilities import capability_for, current_environment
 from scanner.settings.config import settings
+
+from .inference_devices import CPU_PROVIDER, TorchInference, create_coreml_session
 
 _WD_VARIANT_REPOS = {
     "vit": "SmilingWolf/wd-vit-tagger-v3",
@@ -81,53 +83,18 @@ def _ensure_files(repo_id: str, model_dir: Path, names: tuple[str, ...]) -> Path
 
 
 def _create_wd_onnx_session(onnxruntime, model_path: Path):
-    """Create a WD session using the best available execution provider.
-
-    WD v3 exports use a symbolic ``batch_size`` dimension.  Resolving it for
-    the frame-at-a-time gate lets Core ML compile a static ML Program instead
-    of repeatedly dispatching a fragmented dynamic-shape NeuralNetwork graph.
-    The compiled Core ML artifacts are cached because visual scans intentionally
-    run in disposable worker processes.
-    """
-    available_providers = set(onnxruntime.get_available_providers())
-    capability = capability_for("image_safety_gate")
-    if capability.device == "cpu":
-        return onnxruntime.InferenceSession(
-            str(model_path),
-            providers=["CPUExecutionProvider"],
+    """Use static Core ML for the frame-at-a-time WD tagger when available."""
+    if current_environment().onnx_device == "coreml":
+        return create_coreml_session(
+            onnxruntime,
+            model_path,
+            # Keep the tagger off the GPU while CLIP and NSFL use Metal.
+            compute_units="CPUAndNeuralEngine",
+            dimensions={"batch_size": 1},
+            cache_dir=_coreml_cache_dir(),
+            static_shapes=True,
         )
-    if "CoreMLExecutionProvider" in available_providers:
-        coreml_cache_dir = _coreml_cache_dir()
-        coreml_cache_dir.mkdir(parents=True, exist_ok=True)
-        session_options = onnxruntime.SessionOptions()
-        session_options.add_free_dimension_override_by_name("batch_size", 1)
-        return onnxruntime.InferenceSession(
-            str(model_path),
-            sess_options=session_options,
-            providers=[
-                (
-                    "CoreMLExecutionProvider",
-                    {
-                        "ModelFormat": "MLProgram",
-                        # The EVA02 MLProgram's GPU allocations grow on every
-                        # frame when it shares Metal with the gate's PyTorch
-                        # models.  Neural Engine execution remains bounded and
-                        # leaves MPS memory available for CLIP and NSFL.
-                        "MLComputeUnits": "CPUAndNeuralEngine",
-                        "RequireStaticInputShapes": "1",
-                        "EnableOnSubgraphs": "0",
-                        "SpecializationStrategy": "FastPrediction",
-                        "ModelCacheDirectory": str(coreml_cache_dir.resolve()),
-                    },
-                ),
-                "CPUExecutionProvider",
-            ],
-        )
-
-    return onnxruntime.InferenceSession(
-        str(model_path),
-        providers=["CPUExecutionProvider"],
-    )
+    return onnxruntime.InferenceSession(str(model_path), providers=[CPU_PROVIDER])
 
 
 def _load_wd_tagger(variant: str):
@@ -248,55 +215,44 @@ def _load_clip_model():
         if incompatible.missing_keys or incompatible.unexpected_keys:
             raise RuntimeError("CLIP safety checkpoint did not match its vision model")
 
-        concept_embeds = state_dict["concept_embeds"].to(device)
-        concept_weights = state_dict["concept_embeds_weights"].to(device)
-        projection_weight = state_dict["visual_projection.weight"].to(device)
-        # Release the full CPU checkpoint before allocating the MPS copy of
-        # the vision model.  PyTorch's allocator can otherwise preserve an
-        # additional gigabyte for the rest of the scan.
+        weights = [
+            state_dict["visual_projection.weight"],
+            state_dict["concept_embeds"],
+            state_dict["concept_embeds_weights"],
+        ]
         del vision_state
         del state_dict
 
-        vision_model.to(device)
+        def move(target):
+            vision_model.to(target)
+            weights[:] = [weight.to(target) for weight in weights]
+
         vision_model.eval()
-        _CACHE[cache_key] = (
-            vision_model,
-            projection_weight,
-            processor,
-            concept_embeds,
-            concept_weights,
-            device,
-            torch,
-        )
+        execution = TorchInference(torch, device, move)
+        _CACHE[cache_key] = (vision_model, processor, weights, execution, torch)
         return _CACHE[cache_key]
 
 
 def _run_clip_safety(pil_image, sensitivity: float) -> tuple[float, bool, float]:
     """Score an image with CLIP and return the normalized safety result."""
-    (
-        vision_model,
-        projection_weight,
-        processor,
-        concept_embeds,
-        concept_weights,
-        device,
-        torch,
-    ) = _load_clip_model()
+    vision_model, processor, weights, execution, torch = _load_clip_model()
     clip_inputs = processor([pil_image], return_tensors="pt")
-    pixel_values = clip_inputs.pixel_values.to(device)
-    with torch.no_grad():
-        pooled = vision_model(pixel_values).pooler_output
-        image_embeds = torch.nn.functional.linear(pooled, projection_weight)
-        image_embeds = torch.nn.functional.normalize(image_embeds, dim=-1)
-        target = torch.nn.functional.normalize(concept_embeds, dim=-1)
-        similarity = torch.nn.functional.cosine_similarity(
-            image_embeds.unsqueeze(1),
-            target.unsqueeze(0),
-            dim=-1,
-        )
-        adjusted = -0.1 + (0.14 * sensitivity)
-        concept_scores = similarity - concept_weights.unsqueeze(0) + adjusted
-        clip_max = float(concept_scores.max().item())
+
+    def score(device):
+        projection_weight, concept_embeds, concept_weights = weights
+        with torch.no_grad():
+            pooled = vision_model(clip_inputs.pixel_values.to(device)).pooler_output
+            image_embeds = torch.nn.functional.linear(pooled, projection_weight)
+            image_embeds = torch.nn.functional.normalize(image_embeds, dim=-1)
+            target = torch.nn.functional.normalize(concept_embeds, dim=-1)
+            similarity = torch.nn.functional.cosine_similarity(
+                image_embeds.unsqueeze(1), target.unsqueeze(0), dim=-1
+            )
+            adjusted = -0.1 + (0.14 * sensitivity)
+            concept_scores = similarity - concept_weights.unsqueeze(0) + adjusted
+            return float(concept_scores.max().item())
+
+    clip_max = execution.run(score)
     unsafe = clip_max > 0.0
     confidence = max(0.0, min(1.0, 0.5 + clip_max))
     return clip_max, unsafe, confidence
@@ -352,22 +308,25 @@ def _load_nsfl_model():
         model.load_state_dict(
             safetensors_torch.load_file(str(model_dir / "model.safetensors"), device="cpu")
         )
-        device = _select_torch_device(torch)
-        model.to(device)
+        execution = TorchInference(torch, _select_torch_device(torch), model.to)
         model.eval()
 
         nsfl_idx = class_names.index("NSFL") if "NSFL" in class_names else 0
-        _CACHE[cache_key] = (model, transform, nsfl_idx, device, torch)
+        _CACHE[cache_key] = (model, transform, nsfl_idx, execution, torch)
         return _CACHE[cache_key]
 
 
 def _run_nsfl(pil_image) -> float:
-    model, transform, nsfl_idx, device, torch = _load_nsfl_model()
-    with torch.inference_mode():
-        inputs = transform(pil_image.convert("RGB")).unsqueeze(0).to(device)
-        logits = _normalize_logits(model(inputs), torch)
-        probs = torch.softmax(logits, dim=-1).detach().cpu()
-    return float(probs[0, nsfl_idx].item())
+    model, transform, nsfl_idx, execution, torch = _load_nsfl_model()
+    inputs = transform(pil_image.convert("RGB")).unsqueeze(0)
+
+    def score(device):
+        with torch.inference_mode():
+            logits = _normalize_logits(model(inputs.to(device)), torch)
+            probs = torch.softmax(logits, dim=-1)
+            return float(probs[0, nsfl_idx].item())
+
+    return execution.run(score)
 
 
 def scan_image_safety_gate(frame_path: Path) -> ImageSafetyGateResult:

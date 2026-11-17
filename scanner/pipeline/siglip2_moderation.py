@@ -10,6 +10,8 @@ from scanner.model_acquisition import get_acquisition_service
 from scanner.settings.capabilities import capability_for
 from scanner.settings.config import settings
 
+from .inference_devices import CPU_PROVIDER, TorchInference
+
 _ENCODER_REPO_ID = "google/siglip2-base-patch16-256"
 _HEAD_REPO_ID = "khasinski/siglip2-moderation-heads"
 _HEAD_NAMES = {"nsfw", "violence"}
@@ -55,10 +57,9 @@ def _load_encoder():
         model_dir = get_acquisition_service().acquire("siglip2-base-patch16-256")
         processor = transformers.AutoProcessor.from_pretrained(str(model_dir))
         model = transformers.AutoModel.from_pretrained(str(model_dir))
-        device = _select_torch_device(torch)
-        model.to(device)
+        execution = TorchInference(torch, _select_torch_device(torch), model.to)
         model.eval()
-        _CACHE[cache_key] = (processor, model, device, torch)
+        _CACHE[cache_key] = (processor, model, execution, torch)
         return _CACHE[cache_key]
 
 
@@ -75,25 +76,13 @@ def _load_head(head_name: str):
             return _CACHE[cache_key]
 
         onnxruntime = _require_dependency("onnxruntime", "onnxruntime")
-        backend_id = f"siglip2_moderation_{head_name}"
         model_dir = get_acquisition_service().acquire(
             f"siglip2-moderation-head-{head_name}"
         )
-        filenames = (f"{head_name}_head.onnx", f"{head_name}_head.onnx.data")
-        capability = capability_for(backend_id)
-        provider_candidates = (
-            ("CoreMLExecutionProvider", "CPUExecutionProvider")
-            if capability.device == "metal"
-            else ("CPUExecutionProvider",)
-        )
-        providers = [
-            provider
-            for provider in provider_candidates
-            if provider in onnxruntime.get_available_providers()
-        ]
+        # These small heads run directly on the CPU after the embedding is copied back.
         _CACHE[cache_key] = onnxruntime.InferenceSession(
-            str(model_dir / filenames[0]),
-            providers=providers or ["CPUExecutionProvider"],
+            str(model_dir / f"{head_name}_head.onnx"),
+            providers=[CPU_PROVIDER],
         )
         return _CACHE[cache_key]
 
@@ -109,7 +98,7 @@ def score_images(frame_paths: list[Path], head_name: str) -> list[float]:
         return []
     image_module = _require_dependency("PIL.Image", "pillow")
     numpy = _require_dependency("numpy", "numpy")
-    processor, encoder, device, torch = _load_encoder()
+    processor, encoder, execution, torch = _load_encoder()
     head = _load_head(head_name)
 
     images = []
@@ -117,14 +106,17 @@ def score_images(frame_paths: list[Path], head_name: str) -> list[float]:
         with image_module.open(frame_path) as image:
             images.append(image.convert("RGB"))
     inputs = processor(images=images, return_tensors="pt")
-    device_inputs = {
-        key: value.to(device) if torch.is_tensor(value) else value
-        for key, value in inputs.items()
-    }
-    with torch.inference_mode():
-        embedding = _image_embedding(encoder.get_image_features(**device_inputs))
-        embedding = torch.nn.functional.normalize(embedding, dim=-1)
-    output = head.run(None, {"embedding": embedding.detach().cpu().float().numpy()})[0]
+
+    def embed(device):
+        device_inputs = {
+            key: value.to(device) if torch.is_tensor(value) else value
+            for key, value in inputs.items()
+        }
+        with torch.inference_mode():
+            features = _image_embedding(encoder.get_image_features(**device_inputs))
+            return torch.nn.functional.normalize(features, dim=-1).cpu().float().numpy()
+
+    output = head.run(None, {"embedding": execution.run(embed)})[0]
     logits = numpy.asarray(output).reshape(-1)
     if len(logits) != len(frame_paths):
         raise RuntimeError("SigLIP2 moderation head returned an unexpected batch size")

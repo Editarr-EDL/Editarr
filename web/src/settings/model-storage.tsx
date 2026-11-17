@@ -150,7 +150,9 @@ function ModelArtifactRow({ artifact, backends, working, act, mayDownload, mayCa
   const displayState = unavailable && ready ? "cached"
     : unavailable && (state.state === "not_downloaded" || state.state === "not_required") ? "unavailable"
       : state.state;
-  const devices = new Set(backends.map(({ device }) => device).filter((device) => device !== "none"));
+  const devices = new Set(artifact.device
+    ? [artifact.device]
+    : backends.map(({ device }) => device).filter((device) => device !== "none"));
   const deviceLabel = unavailable ? "Unavailable" : [...devices].map((device) => deviceNames[device]).join(", ") || "—";
   const license = artifact.license_spdx
     ?? (artifact.license_status === "license-review-required" ? "Review required" : "Not declared");
@@ -173,7 +175,7 @@ function ModelArtifactRow({ artifact, backends, working, act, mayDownload, mayCa
         <span className={`model-state model-state-${displayState}`}>{displayState.replace(/_/g, " ")}</span>
       </div>
       <dl className="model-details">
-        <div><dt>Device</dt><dd>{deviceLabel}</dd></div>
+        <div><dt>Preferred device</dt><dd>{deviceLabel}</dd></div>
         <div><dt>License</dt><dd><a href={source} target="_blank" rel="noreferrer">{license}</a></dd></div>
       </dl>
       <div className="button-row model-actions">

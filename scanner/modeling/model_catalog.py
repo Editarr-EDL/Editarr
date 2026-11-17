@@ -81,6 +81,7 @@ class ManagedModelArtifact(BaseModel):
     artifact_id: str
     backend_ids: list[str]
     state: ModelDownloadState
+    device: Literal["cpu", "coreml"] | None = None
     expected_size: int | None = None
     source_url: str
     license_spdx: str | None = None

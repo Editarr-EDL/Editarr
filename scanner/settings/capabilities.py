@@ -8,15 +8,16 @@ provider inventory through :class:`CapabilityEnvironment`.
 
 from __future__ import annotations
 
-import platform
-from collections.abc import Callable
-from dataclasses import dataclass
-from functools import lru_cache
-from importlib import import_module
-from importlib.util import find_spec
 from typing import Literal
 
 from scanner.models import ModelCapability, ModelDownloadState
+
+from .model_runtime import (
+    CapabilityEnvironment as CapabilityEnvironment,
+)
+from .model_runtime import (
+    current_environment as current_environment,
+)
 
 AvailabilityReason = Literal[
     "unsupported_platform",
@@ -63,110 +64,6 @@ QWEN_MODEL_DISPLAY_NAMES = {
     "qwen3-vl-8b-instruct-4bit": "Qwen3-VL 8B",
     "qwen3-vl-4b-instruct-4bit": "Qwen3-VL 4B",
 }
-
-PackageProbe = Callable[[str], bool]
-
-
-@dataclass(frozen=True)
-class CapabilityEnvironment:
-    """Small injectable runtime inventory; provider discovery never imports ONNX Runtime."""
-
-    system: str
-    machine: str
-    package_available: PackageProbe
-    providers: frozenset[str]
-    torch_devices: frozenset[str] = frozenset()
-    ctranslate2_devices: frozenset[str] = frozenset()
-
-    @property
-    def target_id(self) -> str:
-        machine = self.machine.lower()
-        if self.system == "Darwin" and machine in {"arm64", "aarch64"}:
-            return "macos-arm64"
-        if self.system == "Windows" and machine in {"amd64", "x86_64"}:
-            return "windows-x64"
-        if self.system == "Linux" and machine in {"x86_64", "amd64"}:
-            return "linux-x86_64"
-        return "unsupported"
-
-
-@lru_cache(maxsize=None)
-def _installed_package(name: str) -> bool:
-    """Return package presence without importing it or executing package code."""
-
-    try:
-        return find_spec(name) is not None
-    except (ImportError, AttributeError, ValueError):
-        return False
-
-
-@lru_cache(maxsize=1)
-def _packaged_onnx_providers() -> frozenset[str]:
-    """Return only the provider proven by the base packaged ORT distribution.
-
-    Accelerator library filenames and Python package stubs do not prove that a provider
-    can initialize on the current machine.  Importing ORT merely to ask it would load a
-    native inference runtime in the capability endpoint.  Until a frozen build supplies
-    a verified provider inventory, the side-effect-free source runtime therefore makes
-    the conservative CPU claim only.
-    """
-
-    if not _installed_package("onnxruntime"):
-        return frozenset()
-    return frozenset({"CPUExecutionProvider"})
-
-
-@lru_cache(maxsize=1)
-def _verified_ctranslate2_devices() -> frozenset[str]:
-    """Return CUDA only after CTranslate2 proves a usable device and runtime.
-
-    CTranslate2 wheels can contain CUDA-named libraries on machines that have no NVIDIA
-    driver.  File or module presence is therefore not evidence.  These calls initialize
-    no model and download nothing, but exercise the packaged native runtime against the
-    host driver.  Any missing/incompatible driver or runtime fails closed to CPU.
-    """
-
-    if not _installed_package("ctranslate2"):
-        return frozenset()
-    try:
-        ctranslate2 = import_module("ctranslate2")
-        if int(ctranslate2.get_cuda_device_count()) < 1:
-            return frozenset()
-        if not ctranslate2.get_supported_compute_types("cuda"):
-            return frozenset()
-    except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError):
-        return frozenset()
-    return frozenset({"cuda"})
-
-
-def current_environment() -> CapabilityEnvironment:
-    """Describe the current process without loading models or touching their caches."""
-
-    # Tests and frozen-runtime packaging can inject an exact, already-verified
-    # accelerator inventory through CapabilityEnvironment. Package/module presence by
-    # itself is deliberately insufficient to advertise Core ML, MPS, or CUDA.
-    system = platform.system()
-    machine = platform.machine()
-    target = CapabilityEnvironment(
-        system=system,
-        machine=machine,
-        package_available=_installed_package,
-        providers=_packaged_onnx_providers(),
-        torch_devices=frozenset(),
-    ).target_id
-    return CapabilityEnvironment(
-        system=system,
-        machine=machine,
-        package_available=_installed_package,
-        providers=_packaged_onnx_providers(),
-        torch_devices=frozenset(),
-        ctranslate2_devices=(
-            _verified_ctranslate2_devices()
-            if target in {"windows-x64", "linux-x86_64"}
-            else frozenset()
-        ),
-    )
-
 
 class CapabilityUnavailableError(ValueError):
     """A selected or required backend cannot run in this packaged runtime."""
@@ -314,12 +211,7 @@ def model_capabilities(
             "nudenet",
             "detector",
             ("nudenet", "onnxruntime"),
-            device=(
-                "coreml"
-                if environment.target_id == "macos-arm64"
-                and "CoreMLExecutionProvider" in environment.providers
-                else "cpu"
-            ),
+            device=environment.onnx_device,
             provider="CPUExecutionProvider",
             weight_requirement="none",
         ),
@@ -337,36 +229,21 @@ def model_capabilities(
                 "timm",
                 "safetensors",
             ),
-            device=(
-                "metal"
-                if environment.target_id == "macos-arm64"
-                and "mps" in environment.torch_devices
-                else "cpu"
-            ),
+            device=environment.torch_device,
             provider="CPUExecutionProvider",
         ),
         standard(
             "siglip2_moderation_nsfw",
             "detector",
             ("numpy", "onnxruntime", "torch", "transformers", "huggingface_hub", "PIL"),
-            device=(
-                "metal"
-                if environment.target_id == "macos-arm64"
-                and "mps" in environment.torch_devices
-                else "cpu"
-            ),
+            device=environment.torch_device,
             provider="CPUExecutionProvider",
         ),
         standard(
             "siglip2_moderation_violence",
             "detector",
             ("numpy", "onnxruntime", "torch", "transformers", "huggingface_hub", "PIL"),
-            device=(
-                "metal"
-                if environment.target_id == "macos-arm64"
-                and "mps" in environment.torch_devices
-                else "cpu"
-            ),
+            device=environment.torch_device,
             provider="CPUExecutionProvider",
         ),
     ]

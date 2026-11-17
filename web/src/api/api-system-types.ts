@@ -159,6 +159,7 @@ export interface ManagedModelArtifact {
   artifact_id: string;
   backend_ids: string[];
   state: ModelDownloadState;
+  device?: "cpu" | "coreml" | null;
   expected_size: number | null;
   source_url: string;
   license_spdx: string | null;
