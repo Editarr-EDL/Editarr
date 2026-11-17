@@ -172,7 +172,9 @@ function ModelArtifactRow({ artifact, backends, working, act, mayDownload, mayCa
       <div className="model-artifact-heading">
         <h2>{backends.map((item) => item.display_name).join(" · ") || id}</h2>
         {subtitle && <p>{subtitle}</p>}
-        <span className={`model-state model-state-${displayState}`}>{displayState.replace(/_/g, " ")}</span>
+        <span className={`model-state model-state-${displayState}`}>
+          {displayState === "not_required" ? "Included" : displayState.replace(/_/g, " ")}
+        </span>
       </div>
       <dl className="model-details">
         <div><dt>Preferred device</dt><dd>{deviceLabel}</dd></div>

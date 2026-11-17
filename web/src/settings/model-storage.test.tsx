@@ -98,6 +98,9 @@ it("groups artifacts by stage and preserves open groups through refresh", async 
   expect(within(video.closest("summary")!).getByText("1 item")).toBeVisible();
   expect(within(video.closest("summary")!).getByText("1 downloading")).toBeVisible();
 
+  fireEvent.click(screen.getByText("Supporting Packages"));
+  const bundled = within(screen.getByRole("article", { name: "support-package model" }));
+  expect(bundled.getByText("Included")).toBeVisible();
   fireEvent.click(video);
   fireEvent.click(screen.getByText("Audio"));
   expect(screen.getByRole("article", { name: "shared-weights model" })).toBeVisible();
