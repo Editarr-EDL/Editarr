@@ -3,6 +3,21 @@
 .model-storage p { margin: 0; }
 .model-storage-toolbar p { font-size: 14px; }
 
+.model-storage-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid #394454;
+  border-radius: 10px;
+  background: #171c25;
+}
+.model-storage-total dt { color: #aebacf; font-size: 14px; }
+.model-storage-total dd { margin: 0; color: #e2eafa; font-weight: 750; font-variant-numeric: tabular-nums; }
+
 .model-stage {
   container: model-stage / inline-size;
   min-width: 0;

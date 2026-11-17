@@ -82,6 +82,11 @@ function ModelInventory() {
     finally { setWorking(null); }
   };
   const groups = storage && groupArtifacts(storage);
+  const storageUsed = storage?.artifacts.reduce((total, { state, expected_size }) => {
+    if (state.state === "ready") return total + (state.bytes_downloaded ?? expected_size ?? 0);
+    if (state.state === "downloading") return total + (state.bytes_downloaded ?? 0);
+    return total;
+  }, 0);
   return (
     <section className="model-storage" aria-label="Model inventory">
       <div className="model-storage-toolbar">
@@ -90,6 +95,12 @@ function ModelInventory() {
       </div>
       {message && <p className="form-status" role="status">{message}</p>}
       {!storage && !message && <p className="loading-state">Loading model storage…</p>}
+      {storageUsed !== undefined && (
+        <dl className="model-storage-total">
+          <dt>Estimated Total Storage Used</dt>
+          <dd>{formatBytes(storageUsed)}</dd>
+        </dl>
+      )}
       {groups && stages.map(([stage, title]) => {
         const rows = groups[stage];
         if (rows.length === 0) return null;

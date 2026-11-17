@@ -111,3 +111,36 @@ it("groups artifacts by stage and preserves open groups through refresh", async 
   expect(screen.getByRole("article", { name: "shared-weights model" })).not.toBeVisible();
   expect(screen.getByRole("article", { name: "mlx-weights model" })).toBeVisible();
 });
+
+it("sums cached and in-progress downloads once across all stages", async () => {
+  const audio: ModelCapability = { ...detector, stage: "audio", id: "mlx_whisper", device: "mlx" };
+  const storage: ModelStorageStatus = {
+    artifacts: [
+      {
+        ...artifact("shared-weights", detector.id, "ready"),
+        backend_ids: [detector.id, audio.id],
+        state: { ...noDownload, state: "ready", bytes_downloaded: 1024 },
+      },
+      { ...artifact("cached", audio.id, "ready"), expected_size: 1024 },
+      {
+        ...artifact("partial", audio.id, "downloading"),
+        expected_size: 8192,
+        state: { ...noDownload, state: "downloading", bytes_downloaded: 512 },
+      },
+      {
+        ...artifact("interrupted", detector.id, "failed"),
+        state: { ...noDownload, state: "failed", bytes_downloaded: 999 },
+      },
+      artifact("never-downloaded", detector.id, "not_downloaded"),
+      { ...artifact("bundled", detector.id, "not_required"), removable: false },
+    ],
+    model_capabilities: [detector, audio],
+  };
+  renderInventory(storage);
+  const total = await screen.findByText("Estimated Total Storage Used");
+  expect(total.parentElement).toHaveTextContent("2.5 KB");
+
+  storage.artifacts = [];
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() => expect(total.parentElement).toHaveTextContent("0 B"));
+});

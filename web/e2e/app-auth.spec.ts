@@ -291,6 +291,7 @@ test("manages a mocked model download accessibly on a narrow viewport", async ({
   await expect(page.getByRole("heading", { name: "Model Storage", level: 1 })).toBeVisible();
   const audioStage = page.locator("summary").filter({ hasText: /^Audio/ });
   await expect(audioStage).toBeVisible();
+  await expect(page.getByText("0 B", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download" })).toBeHidden();
   await audioStage.press("Enter");
   await expect(page.getByRole("link", { name: "Source" })).toHaveCSS("text-decoration-line", "none");
@@ -298,6 +299,7 @@ test("manages a mocked model download accessibly on a narrow viewport", async ({
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "Cancel download" })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "faster-whisper-base download progress" })).toBeVisible();
+  await expect(page.getByText("50 B", { exact: true })).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
   await expectNoAccessibilityViolations(page);
   await audioStage.press("Space");
