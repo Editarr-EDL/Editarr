@@ -26,16 +26,14 @@ import {
 } from "../ui/ModalDialog";
 
 export function formatScanDuration(scan: Scan | ScanQueueItem, now = Date.now()): string {
-  if (typeof scan.scan_duration_seconds === "number") return formatTime(scan.scan_duration_seconds);
+  if (typeof scan.scan_duration_seconds === "number") {
+    const sampledAt = scan.scan_duration_as_of ? Date.parse(scan.scan_duration_as_of) : NaN;
+    const running = scan.status === "scanning" || scan.status === "cancelling";
+    const sinceSample = running && Number.isFinite(sampledAt) ? (now - sampledAt) / 1_000 : 0;
+    return formatTime(scan.scan_duration_seconds + sinceSample);
+  }
   if (scan.manual) return "N/A";
-  const isInProgress = ["scanning", "orphaned", "cancelling"].includes(scan.status);
-  const start = scan.scan_started_at || (isInProgress ? scan.created_at : null);
-  if (!start) return scan.status === "queued" ? "Not started" : "Unavailable";
-  const startedAt = new Date(start).getTime();
-  if (Number.isNaN(startedAt)) return "Unavailable";
-  const endedAt = isInProgress ? now : new Date(scan.updated_at).getTime();
-  if (Number.isNaN(endedAt)) return "Unavailable";
-  return formatTime((endedAt - startedAt) / 1000);
+  return scan.status === "queued" && !scan.scan_started_at ? "Not started" : "Unavailable";
 }
 
 function scanIsActive(scan: ScanQueueItem, now = Date.now()): boolean {
@@ -49,30 +47,8 @@ function ScanActivityIndicator({ scan, now }: { scan: ScanQueueItem; now: number
   return <span className={`scan-activity ${active ? "active" : "stalled"}`} role="status">{active ? "Active" : "Stalled"}</span>;
 }
 
-/** Display a scan's elapsed time, updating while it is active.
- * @param scan Scan or queued scan with timing fields.
- */
-export function ScanDuration({ scan }: { scan: Scan | ScanQueueItem }) {
-  const isInProgress = ["scanning", "orphaned", "cancelling"].includes(scan.status);
-  const [now, setNow] = useState(() => Date.now());
-  const [receivedAt, setReceivedAt] = useState(() => Date.now());
-
-  useEffect(() => {
-    setReceivedAt(Date.now());
-  }, [scan.id, scan.scan_duration_seconds, scan.status, scan.updated_at]);
-
-  useEffect(() => {
-    if (!isInProgress) return;
-    setNow(Date.now());
-    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(interval);
-  }, [isInProgress]);
-
-  const elapsedSinceReceipt = isInProgress ? Math.max(0, (now - receivedAt) / 1000) : 0;
-  const duration = typeof scan.scan_duration_seconds === "number"
-    ? formatTime(scan.scan_duration_seconds + elapsedSinceReceipt)
-    : formatScanDuration(scan, now);
-  return <time dateTime={scan.scan_started_at || undefined}>{duration}</time>;
+export function ScanDuration({ scan, now }: { scan: ScanQueueItem; now: number }) {
+  return <time dateTime={scan.scan_started_at || undefined}>{formatScanDuration(scan, now)}</time>;
 }
 
 export function ScanProgressDetails({ scan, now }: { scan: ScanQueueItem; now: number }) {

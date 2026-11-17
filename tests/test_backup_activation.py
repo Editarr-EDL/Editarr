@@ -183,7 +183,7 @@ def test_restore_brings_back_everything_and_pauses_the_queue(tmp_path, encrypted
     assert json.loads((target / REPORT).read_text()) == report
     assert not (target / JOURNAL).exists()
     assert (target / RECOVERY / "before" / "database.sqlite3").is_file()
-    assert inspect_schema(target / "scanner.db", target) == "0032_manual_filter_tracking"
+    assert inspect_schema(target / "scanner.db", target) == "0033_scan_worker_timing"
 
 
 def test_restore_into_a_directory_without_a_database(tmp_path):
@@ -489,6 +489,11 @@ def test_restore_expires_sessions_and_neutralizes_worker_metadata(tmp_path):
             "'queued', '{}', 12345, 12345, 'stale-token', '2026-09-27', '2026-09-27')"
         )
         database.execute(
+            "UPDATE scans SET worker_started_at = '2026-09-27 09:00:00', "
+            "worker_attempt_started_at = '2026-09-27 10:00:00', "
+            "worker_elapsed_seconds = 23, worker_heartbeat_at = '2026-09-27 10:00:07'"
+        )
+        database.execute(
             "INSERT INTO scan_queue (scan_id, sort_order, created_at, updated_at) "
             "VALUES ('scan', 0, '2026-09-27', '2026-09-27')"
         )
@@ -499,6 +504,9 @@ def test_restore_expires_sessions_and_neutralizes_worker_metadata(tmp_path):
         assert database.execute(
             "SELECT status, worker_pid, worker_pgid, worker_token FROM scans"
         ).fetchone() == ("orphaned", None, None, None)
+        assert database.execute(
+            "SELECT worker_elapsed_seconds, worker_attempt_started_at FROM scans"
+        ).fetchone() == (30, None)
         assert database.execute("SELECT count(*) FROM scan_queue").fetchone() == (1,)
     assert (target / HOLD).exists()
 
@@ -532,7 +540,7 @@ def _empty_again(target, *, database):
     if database:
         with sqlite3.connect(target / "scanner.db") as connection:
             assert connection.execute("SELECT count(*) FROM users").fetchone() == (0,)
-        assert inspect_schema(target / "scanner.db", target) == "0032_manual_filter_tracking"
+        assert inspect_schema(target / "scanner.db", target) == "0033_scan_worker_timing"
     else:
         assert not (target / "scanner.db").exists()
 

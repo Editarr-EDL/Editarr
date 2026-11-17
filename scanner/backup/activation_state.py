@@ -8,15 +8,17 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from scanner.db import ScanRow
 from scanner.persistence.migrations.adoption import _inspect_database
 from scanner.persistence.repository.activity_ownership import (
     activity_owner,
     assign_awaiting_activity,
 )
+from scanner.persistence.repository.scan_timing import stop_scan_attempt
 from scanner.security.access.records import AuditEvent, AuditOutcome
 from scanner.security.audit.actions import ActorKind, AuditAction
 from scanner.security.audit.store import stage_event
@@ -45,30 +47,38 @@ def _snapshot_db(source: Path, target: Path) -> None:
 
 def _sanitize_db(path: Path, move_disagreements: int) -> None:
     """Revoke sessions, stop restored workers, and record the restore in the database."""
-    with closing(sqlite3.connect(path)) as database:
-        with database:
-            database.execute("DELETE FROM auth_sessions")
-            database.execute(
+    engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(path), poolclass=NullPool)
+    try:
+        with Session(engine) as db:
+            attempts = db.scalars(
+                select(ScanRow).where(ScanRow.worker_attempt_started_at.is_not(None))
+            )
+            for scan in attempts:
+                stop_scan_attempt(scan, None)
+            db.flush()
+            run = db.connection().exec_driver_sql
+            run("DELETE FROM auth_sessions")
+            run(
                 "UPDATE scans SET worker_pid=NULL, worker_pgid=NULL, worker_token=NULL, "
-                "worker_started_at=NULL, worker_heartbeat_at=NULL, "
+                "worker_heartbeat_at=NULL, "
                 "status='orphaned' WHERE status IN ('scanning', 'cancelling')"
             )
-            database.execute(
+            run(
                 "UPDATE scans SET worker_pid=NULL, worker_pgid=NULL, worker_token=NULL, "
-                "worker_started_at=NULL, worker_heartbeat_at=NULL "
+                "worker_heartbeat_at=NULL "
                 "WHERE worker_pid IS NOT NULL OR worker_pgid IS NOT NULL "
                 "OR worker_token IS NOT NULL"
             )
-            database.execute(
+            run(
                 "UPDATE scans SET status='orphaned' WHERE status='queued' "
                 "AND id IN (SELECT scan_id FROM scan_queue)"
             )
-            # A Jellyfin read still in flight from the replaced database must not apply here.
-            database.execute("UPDATE account_settings SET jellyfin_read_epoch = NULL")
-        _validate(database)
-    # A backup can hold an owner beside work still awaiting one.
-    engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(path), poolclass=NullPool)
-    try:
+            # A Jellyfin read from the replaced database must not apply here.
+            run("UPDATE account_settings SET jellyfin_read_epoch = NULL")
+            db.commit()
+        with closing(sqlite3.connect(path)) as database:
+            _validate(database)
+        # A backup can hold an owner beside work still awaiting one.
         with engine.begin() as connection:
             owner = activity_owner(connection)
             if owner is not None:

@@ -53,6 +53,7 @@ export interface Scan {
   edited: boolean;
   scan_started_at: string | null;
   scan_duration_seconds: number | null;
+  scan_duration_as_of?: string | null;
   created_at: string;
   updated_at: string;
   name: string | null;

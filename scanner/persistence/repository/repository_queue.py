@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from scanner.db import ScanQueueRow, ScanRow
@@ -10,6 +10,7 @@ from scanner.models import ScanMode, ScanQueueItem
 from scanner.persistence.write_lock import write_lock
 
 from .repository_rows import _scan_queue_from_row
+from .scan_timing import start_scan_attempt, stop_scan_attempt
 
 
 def get_next_scan_queue(db: Session) -> ScanQueueItem | None:
@@ -58,7 +59,6 @@ def reserve_scan_worker(db: Session, scan_id: str, *, token: str) -> bool:
                 ScanRow.progress_stage: "setup",
                 ScanRow.progress_message: "Starting dedicated scan worker",
                 ScanRow.worker_token: token,
-                ScanRow.worker_started_at: func.coalesce(ScanRow.worker_started_at, now),
                 ScanRow.worker_heartbeat_at: now,
                 ScanRow.updated_at: now,
             },
@@ -73,20 +73,22 @@ def record_scan_worker_process(
     db: Session, scan_id: str, *, token: str, pid: int, pgid: int | None
 ) -> bool:
     """Persist the operating-system process identity for a reserved scan worker."""
-    row = db.get(ScanRow, scan_id)
-    if not row or row.worker_token != token or row.status not in {"scanning", "orphaned"}:
-        return False
-    now = datetime.now(timezone.utc)
-    row.worker_pid = pid
-    # POSIX uses a process group; Windows uses a named Job Object derived from
-    # the scan ID and worker token.
-    row.worker_pgid = pgid
-    if row.worker_started_at is None:
-        row.worker_started_at = now
-    row.worker_heartbeat_at = now
-    row.updated_at = now
-    db.commit()
-    return True
+    with write_lock(db):
+        row = db.get(ScanRow, scan_id)
+        if not row or row.worker_token != token or row.status not in {"scanning", "orphaned"}:
+            db.rollback()
+            return False
+        now = datetime.now(timezone.utc)
+        row.worker_pid = pid
+        # POSIX uses a process group; Windows uses a named Job Object derived from
+        # the scan ID and worker token.
+        row.worker_pgid = pgid
+        if row.status == "scanning":
+            start_scan_attempt(row, now)
+        row.worker_heartbeat_at = now
+        row.updated_at = now
+        db.commit()
+        return True
 
 
 def get_scan_queue_item_by_scan_id(db: Session, scan_id: str) -> ScanQueueItem | None:
@@ -96,59 +98,71 @@ def get_scan_queue_item_by_scan_id(db: Session, scan_id: str) -> ScanQueueItem |
 
 def heartbeat_scan_worker(db: Session, scan_id: str, token: str) -> bool:
     """Record a worker heartbeat only while it still owns the scan."""
-    row = db.get(ScanRow, scan_id)
-    if not row or row.worker_token != token or row.status in {"cancelled", "complete"}:
-        return False
-    if row.status == "orphaned":
-        row.status = "scanning"
-        row.progress_message = "Reattached to active scan"
-    row.worker_heartbeat_at = datetime.now(timezone.utc)
-    row.updated_at = row.worker_heartbeat_at
-    db.commit()
-    return True
+    with write_lock(db):
+        row = db.get(ScanRow, scan_id)
+        if (
+            not row
+            or row.worker_token != token
+            or row.status not in {"scanning", "cancelling", "orphaned"}
+            or (row.status == "orphaned" and row.progress_stage == "orphaned")
+        ):
+            db.rollback()
+            return False
+        if row.status == "orphaned":
+            row.status = "scanning"
+            row.progress_message = "Reattached to active scan"
+        now = datetime.now(timezone.utc)
+        start_scan_attempt(row, now)
+        row.worker_heartbeat_at = now
+        row.updated_at = now
+        db.commit()
+        return True
 
 
 def mark_orphaned_scan_workers(db: Session, active_pids: set[int]) -> list[ScanQueueItem]:
     """Adopt verified worker processes and orphan only workers that have stopped."""
-    rows = (
-        db.query(ScanQueueRow)
-        .join(ScanRow)
-        .filter(ScanRow.status == "scanning")
-        .order_by(ScanQueueRow.sort_order, ScanQueueRow.id)
-        .all()
-    )
-    now = datetime.now(timezone.utc)
-    for queue_row in rows:
-        scan = queue_row.scan
-        if scan.worker_pid in active_pids:
-            scan.status = "scanning"
-            scan.progress_message = "Reattached to active scan"
-        else:
-            scan.status = "orphaned"
-            scan.progress_message = "Orphaned scan — worker unavailable; ready to resume"
-        scan.updated_at = now
-    if rows:
+    with write_lock(db):
+        rows = (
+            db.query(ScanQueueRow)
+            .join(ScanRow)
+            .filter(ScanRow.status == "scanning")
+            .order_by(ScanQueueRow.sort_order, ScanQueueRow.id)
+            .all()
+        )
+        now = datetime.now(timezone.utc)
+        for queue_row in rows:
+            scan = queue_row.scan
+            if scan.worker_pid in active_pids:
+                scan.status = "scanning"
+                scan.progress_message = "Reattached to active scan"
+            else:
+                stop_scan_attempt(scan, None)
+                scan.status = "orphaned"
+                scan.progress_message = "Orphaned scan — worker unavailable; ready to resume"
+            scan.updated_at = now
         db.commit()
-    return [_scan_queue_from_row(row) for row in rows]
+        return [_scan_queue_from_row(row) for row in rows]
 
 
 def resume_orphaned_scan(db: Session, queue_id: int) -> bool:
     """Return an orphaned queue item to runnable state by ``queue_id``."""
-    queue_row = db.get(ScanQueueRow, queue_id)
-    if not queue_row or queue_row.scan.status != "orphaned":
-        return False
-    scan = queue_row.scan
-    scan.status = "queued"
-    scan.error_message = None
-    scan.progress_stage = "queued"
-    scan.progress_message = "Queued to resume from the latest checkpoint"
-    scan.worker_pid = None
-    scan.worker_pgid = None
-    scan.worker_token = None
-    scan.worker_heartbeat_at = None
-    scan.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    return True
+    with write_lock(db):
+        queue_row = db.get(ScanQueueRow, queue_id)
+        if not queue_row or queue_row.scan.status != "orphaned":
+            db.rollback()
+            return False
+        scan = queue_row.scan
+        scan.status = "queued"
+        scan.error_message = None
+        scan.progress_stage = "queued"
+        scan.progress_message = "Queued to resume from the latest checkpoint"
+        scan.worker_pid = None
+        scan.worker_pgid = None
+        scan.worker_token = None
+        scan.worker_heartbeat_at = None
+        scan.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return True
 
 
 def scan_worker_process(
@@ -190,6 +204,7 @@ def settle_stopped_scan_worker(db: Session, scan_id: str, *, token: str | None) 
             db.rollback()
             return
         scan = queue_row.scan
+        stop_scan_attempt(scan, None)
         if scan.status == "cancelling":
             scan.status = "cancelled"
             scan.error_message = None
@@ -204,19 +219,27 @@ def settle_stopped_scan_worker(db: Session, scan_id: str, *, token: str | None) 
 
 
 def mark_scan_orphaned(
-    db: Session, scan_id: str, message: str, error_message: str | None = None
+    db: Session,
+    scan_id: str,
+    message: str,
+    error_message: str | None = None,
+    *,
+    use_last_heartbeat: bool = False,
 ) -> None:
     """Mark an interrupted worker as orphaned while retaining resumable work."""
-    row = db.get(ScanRow, scan_id)
-    if not row:
-        return
-    now = datetime.now(timezone.utc)
-    row.status = "orphaned"
-    row.progress_stage = "orphaned"
-    row.progress_message = message
-    row.error_message = error_message
-    row.updated_at = now
-    db.commit()
+    with write_lock(db):
+        row = db.get(ScanRow, scan_id)
+        if not row or row.status not in {"scanning", "cancelling", "error", "orphaned"}:
+            db.rollback()
+            return
+        now = datetime.now(timezone.utc)
+        stop_scan_attempt(row, None if use_last_heartbeat else now)
+        row.status = "orphaned"
+        row.progress_stage = "orphaned"
+        row.progress_message = message
+        row.error_message = error_message
+        row.updated_at = now
+        db.commit()
 
 
 def reorder_scan_queue(db: Session, queue_ids: list[int], movable: set[int] | None = None) -> None:
@@ -261,6 +284,7 @@ def recover_cancelled_scan_queue_items(db: Session) -> int:
     """Discard cooperative cancellation markers left by a service restart."""
     rows = db.query(ScanQueueRow).join(ScanRow).filter(ScanRow.status == "cancelling").all()
     for row in rows:
+        stop_scan_attempt(row.scan, None)
         row.scan.status = "cancelled"
         row.scan.updated_at = datetime.now(timezone.utc)
         db.delete(row)
@@ -324,9 +348,12 @@ def update_scan_status(
     row = db.get(ScanRow, scan_id)
     if not row:
         return
+    now = datetime.now(timezone.utc)
+    if status not in {"scanning", "cancelling"}:
+        stop_scan_attempt(row, now)
     row.status = status
     row.error_message = error_message
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = now
     db.commit()
 
 
@@ -344,13 +371,17 @@ def update_scan_progress(db: Session, scan_id: str, update: dict[str, object]) -
     row = db.get(ScanRow, scan_id)
     if not row:
         return
+    if row.status == "orphaned" and row.progress_stage == "orphaned":
+        return
     row.progress_percent = round(float(update.get("percent", 0.0)), 2)
     row.progress_stage = str(update.get("stage", "setup"))
     row.progress_message = str(update.get("message", "Scanning"))
-    row.worker_heartbeat_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    row.worker_heartbeat_at = now
     if row.status == "orphaned":
+        start_scan_attempt(row, now)
         row.status = "scanning"
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = now
     db.commit()
 
 

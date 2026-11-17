@@ -54,7 +54,11 @@ function AuthorizedScansPanel({ principal }: { principal: Principal }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const queueLoadingRef = useRef(false);
   const [now, setNow] = useState(() => Date.now());
-  const showActivity = expanded && queueItems.some((item) => item.status === "scanning");
+  const [serverClockOffset, setServerClockOffset] = useState<number | null>(null);
+  const serverNow = now + (serverClockOffset ?? 0);
+  const showActivity = expanded && queueItems.some(
+    (item) => item.status === "scanning" || (item.status === "cancelling" && item.scan_duration_as_of),
+  );
 
   useEffect(() => {
     if (!showActivity) return;
@@ -78,7 +82,15 @@ function AuthorizedScansPanel({ principal }: { principal: Principal }) {
     if (queueLoadingRef.current) return IDLE_SCAN_POLL_MS;
     queueLoadingRef.current = true;
     try {
+      const requestedAt = Date.now();
       const loaded = (await fetchScanQueue()).filter((item) => scanActionAllowed(principal, item, "view"));
+      const receivedAt = Date.now();
+      const sample = loaded.find((item) => item.scan_duration_as_of)?.scan_duration_as_of;
+      setNow(receivedAt);
+      // Calibrate once while a timer is running so polling latency cannot reset its clock.
+      setServerClockOffset((offset) => sample
+        ? offset ?? Date.parse(sample) - (requestedAt + receivedAt) / 2
+        : null);
       setQueueItems(loaded);
       setQueueError(null);
       return scanPollDelay(loaded);
@@ -192,7 +204,7 @@ function AuthorizedScansPanel({ principal }: { principal: Principal }) {
     {expanded && <section className="scans-floating-popover" id="scans-floating-popover" role="region" aria-label="Scans queue and history">
       <header className="scans-floating-heading"><div><p className="eyebrow">Scans</p><h2>Queue</h2></div><button className="icon-button" type="button" onClick={() => setExpanded(false)} aria-label="Collapse scans panel">×</button></header>
       <section className="scans-floating-section" aria-label="Scan queue">
-        {queueError ? <div className="load-error compact-load-error" role="alert"><span>{queueError}</span><button className="btn-secondary compact-button" onClick={() => void loadQueue()}>Retry</button></div> : queueItems.length ? <div className="library-table-wrap scans-floating-table-wrap" tabIndex={0} aria-label="Queued scans table"><table className="library-table scans-floating-table"><thead><tr><th>Item</th><th>Status</th><th>Duration</th><th><span className="visually-hidden">Queue actions</span></th></tr></thead><tbody>{queueItems.map((item, index) => <tr key={item.id}><td><span className="queue-item-name">{item.library_id ? <button className="item-link" onClick={() => { navigate(`library/${encodeURIComponent(item.library_id!)}/item/${encodeURIComponent(item.jellyfin_item_id)}`); setExpanded(false); }}>{item.item_name}</button> : item.item_name}<ScanOptionsInfo scan={item} /></span><small>{scanLabel(item)} · {scanOriginLabel(item)}</small></td><td><strong>{item.status}</strong><ScanProgressDetails scan={item} now={now} /></td><td><ScanDuration scan={item} /></td><td><div className="queue-actions">{mayReorder && <><button className="icon-button" aria-label={`Move ${scanLabel(item)} up`} onClick={() => void reorder(item.queue_id, -1)} disabled={updating || index === 0}>↑</button><button className="icon-button" aria-label={`Move ${scanLabel(item)} down`} onClick={() => void reorder(item.queue_id, 1)} disabled={updating || index === queueItems.length - 1}>↓</button></>}{item.status === "orphaned" && scanActionAllowed(principal, item, "resume") && <button className="btn-secondary compact-button" onClick={() => void resume(item.queue_id)} disabled={updating}>Resume</button>}{scanActionAllowed(principal, item, "cancel") && <button className="danger-button compact-button" onClick={() => setItemToCancelQueueId(item.queue_id)} disabled={updating || item.status === "cancelling"}>{item.status === "scanning" ? "Cancel" : item.status === "orphaned" ? "Delete" : "Remove"}</button>}</div></td></tr>)}</tbody></table></div> : <p className="muted-copy">No queued scans.</p>}
+        {queueError ? <div className="load-error compact-load-error" role="alert"><span>{queueError}</span><button className="btn-secondary compact-button" onClick={() => void loadQueue()}>Retry</button></div> : queueItems.length ? <div className="library-table-wrap scans-floating-table-wrap" tabIndex={0} aria-label="Queued scans table"><table className="library-table scans-floating-table"><thead><tr><th>Item</th><th>Status</th><th>Duration</th><th><span className="visually-hidden">Queue actions</span></th></tr></thead><tbody>{queueItems.map((item, index) => <tr key={item.id}><td><span className="queue-item-name">{item.library_id ? <button className="item-link" onClick={() => { navigate(`library/${encodeURIComponent(item.library_id!)}/item/${encodeURIComponent(item.jellyfin_item_id)}`); setExpanded(false); }}>{item.item_name}</button> : item.item_name}<ScanOptionsInfo scan={item} /></span><small>{scanLabel(item)} · {scanOriginLabel(item)}</small></td><td><strong>{item.status}</strong><ScanProgressDetails scan={item} now={serverNow} /></td><td><ScanDuration scan={item} now={serverNow} /></td><td><div className="queue-actions">{mayReorder && <><button className="icon-button" aria-label={`Move ${scanLabel(item)} up`} onClick={() => void reorder(item.queue_id, -1)} disabled={updating || index === 0}>↑</button><button className="icon-button" aria-label={`Move ${scanLabel(item)} down`} onClick={() => void reorder(item.queue_id, 1)} disabled={updating || index === queueItems.length - 1}>↓</button></>}{item.status === "orphaned" && scanActionAllowed(principal, item, "resume") && <button className="btn-secondary compact-button" onClick={() => void resume(item.queue_id)} disabled={updating}>Resume</button>}{scanActionAllowed(principal, item, "cancel") && <button className="danger-button compact-button" onClick={() => setItemToCancelQueueId(item.queue_id)} disabled={updating || item.status === "cancelling"}>{item.status === "scanning" ? "Cancel" : item.status === "orphaned" ? "Delete" : "Remove"}</button>}</div></td></tr>)}</tbody></table></div> : <p className="muted-copy">No queued scans.</p>}
       </section>
       <section className="scans-floating-section scans-history-section" aria-label="Scan history"><div className="scans-floating-section-heading"><h3>History</h3><span>{historyItems.length} scans</span></div>{historyError ? <div className="load-error compact-load-error" role="alert"><span>{historyError}</span><button className="btn-secondary compact-button" onClick={() => void loadHistory()}>Retry</button></div> : historyItems.length ? <div className="library-table-wrap scans-floating-table-wrap" tabIndex={0} aria-label="Completed scans table"><ScanTable items={historyItems.slice(0, 12)} /></div> : <p className="muted-copy">No completed scans yet.</p>}</section>
     </section>}

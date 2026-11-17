@@ -146,7 +146,7 @@ def test_migration_resources_work_from_an_isolated_wheel(tmp_path):
             "import sqlite3; "
             "assert sqlite3.connect('fresh.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0032_manual_filter_tracking'",
+            "'0033_scan_worker_timing'",
         ],
         cwd=tmp_path,
         env=environment,
@@ -281,7 +281,7 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
             "import sqlite3; "
             "assert sqlite3.connect('data/scanner.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0032_manual_filter_tracking'",
+            "'0033_scan_worker_timing'",
         ],
         cwd=tmp_path,
         env=environment,

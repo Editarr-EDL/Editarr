@@ -289,7 +289,10 @@ def _full_quit_owned_workers() -> None:
             if identity is None:
                 cleanup_worker_control_endpoint(scan_id, token)
                 mark_scan_orphaned(
-                    db, scan_id, "Interrupted by application Quit — ready to resume"
+                    db,
+                    scan_id,
+                    "Interrupted by application Quit — ready to resume",
+                    use_last_heartbeat=True,
                 )
                 continue
             control.request_stop(identity)

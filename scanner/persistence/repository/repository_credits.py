@@ -22,6 +22,7 @@ from .repository_rows import _scan_from_row
 from .repository_settings import (
     get_structured_filter_defaults_settings,
 )
+from .scan_timing import stop_scan_attempt
 
 
 class MediaRuntimeUnavailable(ValueError):
@@ -123,6 +124,7 @@ def complete_credits_detection(
         result.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
     )
     row.credits_detection.completed_at = now
+    stop_scan_attempt(row, now)
     row.status = "complete"
     row.progress_percent = 100.0
     row.progress_stage = "complete"
