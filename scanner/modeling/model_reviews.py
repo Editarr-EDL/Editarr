@@ -114,7 +114,7 @@ class CreditsModelConsent(BaseModel):
     availability: Literal["available", "unavailable"]
     device: Literal["cpu", "cuda", "coreml", "metal", "mlx", "none"]
     license_spdx: str | None = None
-    license_status: Literal["declared", "license-review-required"]
+    license_status: Literal["declared", "undeclared", "license-review-required"]
 
 
 class CreditsDetectionStartRequest(ReviewWriteModel):

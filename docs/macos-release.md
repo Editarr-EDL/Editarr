@@ -14,11 +14,9 @@ the app from the disk image to Applications.
 - PyAV 18.1.0 uses those same shared FFmpeg libraries. OpenCV 5.0.0.93 uses its
   source-distribution image codecs and is built without FFmpeg. Editarr uses
   PyAV to decode media during scene detection in this release.
-- Editarr offers only its model downloads with cleared license metadata. The
-  two unresolved pinned weights are outside this release. The app retains
-  Faster-Whisper for speech, NudeNet and SigLIP2 for visual detection, and MLX
-  for the licensed Qwen models. No model weights are bundled in the DMG apart
-  from the NudeNet model supplied by its MIT-licensed Python package.
+- Editarr downloads model weights on demand from pinned upstream repositories.
+  Model Storage shows the license metadata for each artifact. The DMG includes
+  the NudeNet model supplied by its MIT-licensed Python package.
 
 `Editarr.app/Contents/Resources/Licenses` contains the license texts and the
 release notice. The GitHub release provides the corresponding source archives,

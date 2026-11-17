@@ -11,7 +11,6 @@ import { useCan } from "../auth/auth-gate";
 import { ModelDownloads } from "./model-downloads";
 
 const unavailabilityMessages: Record<string, string> = {
-  license_review_required: "A required model is pending license review for this build.",
   unsupported_platform: "This backend does not support the server’s operating system.",
   unsupported_architecture: "This backend does not support the server’s processor architecture.",
   missing_package: "This build is missing a required runtime package.",
@@ -70,7 +69,13 @@ function ModelInventory() {
       const backendId = artifact.backend_ids[0];
       return <article className="model-artifact" key={artifact.artifact_id} aria-label={`${artifact.artifact_id} model`}>
         <div className="model-artifact-heading"><div><h3>{backends.map((item) => item.display_name).join(" · ") || artifact.artifact_id}</h3><p>{artifact.artifact_id} · {formatBytes(artifact.expected_size)}</p></div><span className={`model-state model-state-${displayState}`}>{displayState.replace(/_/g, " ")}</span></div>
-        <dl className="model-details"><div><dt>Stage</dt><dd>{[...new Set(backends.map((item) => item.stage))].join(", ") || "Managed artifact"}</dd></div><div><dt>Device</dt><dd>{unavailable ? "Unavailable" : [...devices].join(", ") || "—"}</dd></div><div><dt>License</dt><dd><a href={artifact.source_url} target="_blank" rel="noreferrer">{artifact.license_spdx || "Review required"}</a>{artifact.license_status === "license-review-required" ? " · release review required" : ""}</dd></div></dl>
+        <dl className="model-details">
+          <div><dt>Stage</dt><dd>{[...new Set(backends.map((item) => item.stage))].join(", ") || "Managed artifact"}</dd></div>
+          <div><dt>Device</dt><dd>{unavailable ? "Unavailable" : [...devices].join(", ") || "—"}</dd></div>
+          <div><dt>License</dt><dd><a href={artifact.source_url} target="_blank" rel="noreferrer">
+            {artifact.license_spdx ?? (artifact.license_status === "license-review-required" ? "Review required" : "Not declared")}
+          </a></dd></div>
+        </dl>
         {downloading && <div className="model-progress"><progress value={progress ?? undefined} max="100" aria-label={`${artifact.artifact_id} download progress`} /> <span>{formatBytes(artifact.state.bytes_downloaded)} of {formatBytes(artifact.state.bytes_total)}</span></div>}
         {artifact.state.error_detail && <p className="form-error" role="alert">{artifact.state.error_detail}</p>}
         {unavailable && <p className="muted-copy">{[...availabilityNotes].join(" ")}</p>}

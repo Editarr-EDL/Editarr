@@ -12,23 +12,18 @@ upstream sources, and license metadata.
 | Backend/artifact | Upstream revision | Expected bytes | License status |
 | --- | --- | ---: | --- |
 | Faster-Whisper base | `Systran/faster-whisper-base@ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66` | 147,882,941 | MIT declared |
-| MLX Whisper base | `mlx-community/whisper-base-mlx@1e3e249fb8d01c655324bd6841b1deadffd6d04c` | 143,724,466 | **License review required** |
+| MLX Whisper base | `mlx-community/whisper-base-mlx@1e3e249fb8d01c655324bd6841b1deadffd6d04c` | 143,724,466 | Undeclared |
 | WD v3 taggers: ViT, ConvNeXt, SwinV2, ViT Large, EVA02 Large | pinned separately in the manifest | 378,844,778–1,260,954,141 each | Apache-2.0 declared |
-| Stable Diffusion safety checker | `CompVis/stable-diffusion-safety-checker@cb41f3a270d63d454d385fc2e4f571c487c253c5` | 1,216,072,194 | **License review required** |
+| Stable Diffusion safety checker | `CompVis/stable-diffusion-safety-checker@cb41f3a270d63d454d385fc2e4f571c487c253c5` | 1,216,072,194 | Undeclared |
 | Image Safety Classifier S | `OwenElliott/image-safety-classifier-s@015042b0eab17f1b17f2986527386346fb0d94be` | 22,648,677 | MIT declared |
 | SigLIP2 base encoder | `google/siglip2-base-patch16-256@3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab` | 1,539,637,736 | Apache-2.0 declared |
 | SigLIP2 NSFW and violence heads | `khasinski/siglip2-moderation-heads@b88fe03369e3dc6aa9887cd3b4cd3e9b7cf76ee5` | 789,337 / 789,349 | Apache-2.0 declared |
 | Qwen3-VL 4B Instruct 4-bit | `mlx-community/Qwen3-VL-4B-Instruct-4bit@2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b` | 3,109,729,929 | Apache-2.0 declared |
 | Qwen3-VL 8B Instruct 4-bit | `mlx-community/Qwen3-VL-8B-Instruct-4bit@defcdea7cc7a4b0858fea563cbbce171d328e457` | 5,776,630,909 | Apache-2.0 declared |
 
-The MLX Whisper repository does not currently declare a repository license even though
-the original Whisper project is MIT-licensed. The CompVis safety-checker repository also
-does not publish model-license metadata. Both remain available for development and are marked `license-review-required` in the manifest.
-
-The first native macOS release excludes these two downloads and disables their
-backends, MLX Whisper and Image Safety Gate. Faster-Whisper, NudeNet and SigLIP2
-remain available. Source and development builds retain their original model
-options. See [macOS release inputs and notices](macos-release.md).
+The pinned MLX Whisper and CompVis safety-checker repositories have undeclared
+licenses. Editarr downloads both artifacts on demand from their upstream
+repositories when the corresponding backend is available.
 
 ## Package-supplied resources and helper binaries
 

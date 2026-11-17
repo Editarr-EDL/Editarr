@@ -17,14 +17,12 @@ from importlib.util import find_spec
 from typing import Literal
 
 from scanner.models import ModelCapability, ModelDownloadState
-from scanner.runtime.distribution import is_macos_release
 
 AvailabilityReason = Literal[
     "unsupported_platform",
     "unsupported_architecture",
     "missing_package",
     "missing_provider",
-    "license_review_required",
     "deferred_gap",
 ]
 
@@ -224,21 +222,6 @@ def _target_failure(
     return "unsupported_platform"
 
 
-def _requires_macos_release_license_review(backend_id: str) -> bool:
-    if not is_macos_release():
-        return False
-    from scanner.modeling.model_acquisition_manifest import (
-        artifact_ids_for_backend,
-        artifact_offered_in_macos_release,
-        manifest,
-    )
-
-    return any(
-        not artifact_offered_in_macos_release(manifest().artifact(artifact_id))
-        for artifact_id in artifact_ids_for_backend(backend_id)
-    )
-
-
 def model_capabilities(
     environment: CapabilityEnvironment | None = None,
 ) -> tuple[ModelCapability, ...]:
@@ -252,7 +235,7 @@ def model_capabilities(
         stage: Literal["audio", "detector"],
         packages: tuple[str, ...],
         *,
-        device: Literal["cpu", "cuda", "coreml", "metal"] = "cpu",
+        device: Literal["cpu", "cuda", "coreml", "metal", "mlx"] = "cpu",
         provider: str | None = None,
         weight_requirement: Literal["none", "on_demand"] = "on_demand",
     ) -> ModelCapability:
@@ -264,14 +247,6 @@ def model_capabilities(
                 available=False,
                 reason=target_failure,
                 weight_requirement=weight_requirement,
-            )
-        if _requires_macos_release_license_review(backend_id):
-            return _capability(
-                backend_id,
-                stage,
-                available=False,
-                reason="license_review_required",
-                weight_requirement="none",
             )
         if _missing_package(environment, *packages):
             return _capability(

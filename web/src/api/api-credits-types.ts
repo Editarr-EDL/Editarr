@@ -50,7 +50,7 @@ export interface CreditsModelConsent {
   availability: "available" | "unavailable";
   device: "cpu" | "cuda" | "coreml" | "metal" | "mlx" | "none";
   license_spdx: string | null;
-  license_status: "declared" | "license-review-required";
+  license_status: "declared" | "undeclared" | "license-review-required";
 }
 
 export interface CreditsDetectionStartRequest {

@@ -22,24 +22,28 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("explains the macOS license restriction and distinguishes unavailable and cached weights", async () => {
+it("offers downloads with undeclared licenses and distinguishes unavailable and cached weights", async () => {
   const blocked: ModelCapability = {
-    id: "image_safety_gate", display_name: "Image Safety Gate", stage: "detector",
-    availability: "unavailable", reason: "license_review_required", device: "none",
-    weight_requirement: "none", download: noDownload, enrichment_behavior: "none",
+    id: "siglip2_moderation_nsfw", display_name: "SigLIP2 Moderation — NSFW", stage: "detector",
+    availability: "unavailable", reason: "missing_package", device: "none",
+    weight_requirement: "on_demand", download: noDownload, enrichment_behavior: "none",
   };
   const available: ModelCapability = {
-    ...blocked, id: "siglip2_moderation_nsfw", display_name: "SigLIP2 Moderation — NSFW",
-    availability: "available", reason: null, device: "cpu", weight_requirement: "on_demand",
+    ...blocked, id: "image_safety_gate", display_name: "Image Safety Gate",
+    availability: "available", reason: null, device: "cpu",
   };
   const fallback = installProductionApi();
   vi.stubGlobal("fetch", vi.fn((input: string | URL | Request, init?: RequestInit) => {
     if (new URL(String(input), "http://editarr.test").pathname === "/api/models") {
       return Promise.resolve(json({
         artifacts: [
-          artifact("wd-default", blocked.id, "ready"),
-          artifact("wd-alternate", blocked.id, "not_downloaded"),
-          artifact("siglip2-head", available.id, "not_downloaded"),
+          artifact("siglip2-base", blocked.id, "ready"),
+          artifact("siglip2-head", blocked.id, "not_downloaded"),
+          {
+            ...artifact("stable-diffusion-safety-checker", available.id, "not_downloaded"),
+            license_spdx: null,
+            license_status: "undeclared",
+          },
         ],
         model_capabilities: [blocked, available],
       }));
@@ -49,17 +53,18 @@ it("explains the macOS license restriction and distinguishes unavailable and cac
 
   render(<AuthenticationGate><ModelStorage /></AuthenticationGate>);
 
-  const cached = within(await screen.findByRole("article", { name: "wd-default model" }));
+  const cached = within(await screen.findByRole("article", { name: "siglip2-base model" }));
   expect(cached.getByText("cached", { exact: true })).toBeVisible();
-  expect(cached.getByText("A required model is pending license review for this build.")).toBeVisible();
+  expect(cached.getByText("This build is missing a required runtime package.")).toBeVisible();
   expect(cached.getByRole("button", { name: "Remove" })).toBeEnabled();
 
-  const unavailable = within(screen.getByRole("article", { name: "wd-alternate model" }));
+  const unavailable = within(screen.getByRole("article", { name: "siglip2-head model" }));
   expect(unavailable.getByText("unavailable", { exact: true })).toBeVisible();
   expect(unavailable.queryByRole("button", { name: "Download" })).toBeNull();
 
-  const supported = within(screen.getByRole("article", { name: "siglip2-head model" }));
+  const supported = within(screen.getByRole("article", { name: "stable-diffusion-safety-checker model" }));
   expect(supported.getByText("cpu", { exact: true })).toBeVisible();
+  expect(supported.getByRole("link", { name: "Not declared" })).toBeVisible();
   expect(supported.getByRole("button", { name: "Download" })).toBeEnabled();
   expect(screen.queryByText(/Windows|Linux|CUDA|deferred gap/)).toBeNull();
 });

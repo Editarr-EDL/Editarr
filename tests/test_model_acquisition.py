@@ -21,7 +21,7 @@ from scanner.model_acquisition import (
     manifest,
     scoped_acquisition_cancellation,
 )
-from scanner.modeling import model_acquisition_manifest
+from scanner.modeling import model_acquisition_manifest, model_acquisition_service
 
 _PAYLOADS = {"config.json": b'{"model":"fake"}', "weights.bin": b"fake-weights" * 128}
 
@@ -123,7 +123,7 @@ def _service(tmp_path: Path, repository=None, *, disk_free=10**9):
     )
 
 
-def test_bundled_manifest_is_exhaustive_pinned_and_licensed():
+def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
     declared = manifest()
     downloaded = [item for item in declared.artifacts if item.distribution == "huggingface"]
 
@@ -148,11 +148,10 @@ def test_bundled_manifest_is_exhaustive_pinned_and_licensed():
     assert all(item.files and item.expected_size > 0 for item in downloaded)
     assert all(item.license.url and item.source_url for item in declared.artifacts)
     assert {
-        item.id for item in declared.artifacts if item.license.status == "license-review-required"
+        item.id for item in declared.artifacts if item.license.status == "undeclared"
     } == {
         "mlx-whisper-base",
         "stable-diffusion-safety-checker",
-        "ffmpeg-package-binary",
     }
     assert declared.artifact("imageio-ffmpeg-python").license.spdx == "BSD-2-Clause"
     assert declared.artifact("ffmpeg-package-binary").license.spdx is None
@@ -184,6 +183,19 @@ def test_bundled_manifest_is_exhaustive_pinned_and_licensed():
         "image-safety-classifier-s",
     )
     assert artifact_ids_for_backend("qwen") == artifact_ids_for_backend("qwen3_vl")
+
+
+def test_macos_release_offers_models_with_undeclared_licenses(tmp_path, monkeypatch):
+    monkeypatch.setattr(model_acquisition_service, "is_macos_release", lambda: True)
+    service = ModelAcquisitionService(tmp_path / "models")
+    listed = {entry.artifact_id: entry for entry in service.list_artifacts()}
+    assert "ffmpeg-package-binary" not in listed
+    for artifact_id in ("mlx-whisper-base", "stable-diffusion-safety-checker"):
+        assert listed[artifact_id].license_status == "undeclared"
+        assert listed[artifact_id].license_spdx is None
+        with pytest.raises(AcquisitionError) as error:
+            service.acquire(artifact_id, offline=True)
+        assert error.value.code == "offline_missing"
 
 
 def test_scoped_acquisition_cancellation_stops_lazy_download_without_leaking(tmp_path):

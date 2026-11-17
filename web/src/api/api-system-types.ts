@@ -162,7 +162,7 @@ export interface ManagedModelArtifact {
   expected_size: number | null;
   source_url: string;
   license_spdx: string | null;
-  license_status: "declared" | "license-review-required";
+  license_status: "declared" | "undeclared" | "license-review-required";
   removable: boolean;
 }
 

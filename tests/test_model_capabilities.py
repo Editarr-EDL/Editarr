@@ -48,35 +48,6 @@ def _environment(
     )
 
 
-def test_macos_release_defers_only_backends_with_uncleared_downloads(monkeypatch):
-    monkeypatch.setattr(capabilities, "is_macos_release", lambda: True)
-    environment = _environment("Darwin", "arm64")
-    models = {cap.id: cap for cap in capabilities.model_capabilities(environment)}
-    assert {cap.id for cap in models.values() if cap.availability == "unavailable"} == {
-        "mlx_whisper",
-        "image_safety_gate",
-    }
-    assert models["mlx_whisper"].reason == "license_review_required"
-    assert models["image_safety_gate"].reason == "license_review_required"
-
-
-def test_macos_release_refuses_uncleared_download_before_touching_cache(tmp_path, monkeypatch):
-    from scanner.modeling import model_acquisition_service as acquisition
-
-    monkeypatch.setattr(acquisition, "is_macos_release", lambda: True)
-    cache = tmp_path / "models"
-    service = acquisition.ModelAcquisitionService(cache)
-    ids = {entry.artifact_id for entry in service.list_artifacts()}
-    assert "faster-whisper-base" in ids
-    assert "mlx-whisper-base" not in ids
-    assert "stable-diffusion-safety-checker" not in ids
-    with pytest.raises(acquisition.AcquisitionError, match="unavailable in this release"):
-        service.acquire("mlx-whisper-base")
-    with pytest.raises(acquisition.AcquisitionError, match="unavailable in this release"):
-        service.prefetch_backend("image_safety_gate")
-    assert not cache.exists()
-
-
 @pytest.mark.parametrize(
     ("system", "machine", "target"),
     [

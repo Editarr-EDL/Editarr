@@ -54,7 +54,6 @@ class ModelCapability(ScanModelCapability):
             "unsupported_architecture",
             "missing_package",
             "missing_provider",
-            "license_review_required",
             "deferred_gap",
         ]
         | None
@@ -85,7 +84,7 @@ class ManagedModelArtifact(BaseModel):
     expected_size: int | None = None
     source_url: str
     license_spdx: str | None = None
-    license_status: Literal["declared", "license-review-required"]
+    license_status: Literal["declared", "undeclared", "license-review-required"]
     removable: bool
 
 
