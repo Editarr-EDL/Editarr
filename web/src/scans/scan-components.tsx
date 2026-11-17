@@ -96,22 +96,6 @@ export function scanOptionsSummary(scan: Scan | ScanQueueItem): string {
   return `${scanAnalysisDetails(scan)}${scan.media_source_name ? ` · ${scan.media_source_name}` : ""}${mcf} · ${coverage} · Scanner ${scan.scanner_behavior_version || "unknown"}`;
 }
 
-export function ScanOptionsInfo({ scan }: { scan: Scan | ScanQueueItem }) {
-  const [visible, setVisible] = useState(false);
-  return <span className="scan-options-info" onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
-    <button
-      className="scan-options-button"
-      type="button"
-      aria-label={`Show options for ${scanLabel(scan)}`}
-      aria-expanded={visible}
-      onClick={() => setVisible((value) => !value)}
-      onFocus={() => setVisible(true)}
-      onBlur={() => setVisible(false)}
-    >i</button>
-    {visible && <span className="scan-options-tooltip" role="tooltip"><strong>Scan options</strong><span>{scanOptionsSummary(scan)} · {scanOriginLabel(scan)}</span></span>}
-  </span>;
-}
-
 /** Edit a scan name and report a successful save.
  * @param scan Scan to rename.
  * @param onRenamed Refresh callback after saving.

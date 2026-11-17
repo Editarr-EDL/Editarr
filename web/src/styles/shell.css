@@ -70,11 +70,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .scans-floating-table td:nth-child(2) { width: 180px; }
 .scans-floating-table td:last-child { width: 152px; }
 .scans-floating-table .queue-actions { flex-wrap: wrap; }
-.queue-item-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.scan-options-info { position: relative; display: inline-flex; flex: 0 0 auto; }
-.scan-options-button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid #58709a; border-radius: 50%; color: #b9d6ff; background: #202b3d; font-family: Georgia, serif; font-size: 12px; font-style: italic; font-weight: 700; line-height: 1; }
+.scan-item-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.scan-options-button { display: grid; flex: 0 0 auto; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid #58709a; border-radius: 50%; color: #b9d6ff; background: #202b3d; font-family: Georgia, serif; font-size: 12px; font-style: italic; font-weight: 700; line-height: 1; }
 .scan-options-button:hover, .scan-options-button[aria-expanded="true"] { color: #f2f7ff; border-color: #8baeff; background: #304b73; }
-.scan-options-tooltip { position: absolute; z-index: 5; top: calc(100% + 7px); left: 0; display: grid; gap: 4px; width: max-content; min-width: 245px; max-width: min(360px, calc(100vw - 48px)); padding: 9px 10px; border: 1px solid #5f7394; border-radius: 7px; color: #dce7f7; background: #111824; box-shadow: 0 8px 22px #000a; font-size: 12px; font-weight: 500; line-height: 1.35; white-space: normal; }
+.scan-options-tooltip { position: fixed; z-index: 5; visibility: hidden; display: grid; gap: 4px; box-sizing: border-box; width: max-content; min-width: min(245px, calc(100vw - 24px)); max-width: min(360px, calc(100vw - 24px)); padding: 9px 10px; overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; border: 1px solid #5f7394; border-radius: 7px; color: #dce7f7; background: #111824; box-shadow: 0 8px 22px #000a; font-size: 12px; font-weight: 500; line-height: 1.35; white-space: normal; }
 .scan-options-tooltip strong { color: #f2f7ff; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
 .compact-load-error { align-items: center; grid-template-columns: minmax(0, 1fr) auto; padding: 9px 11px; font-size: 12px; }
 .page-header { margin-bottom: 30px; }
