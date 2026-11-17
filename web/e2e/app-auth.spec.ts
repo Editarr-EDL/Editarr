@@ -330,11 +330,15 @@ test("browses a library in both views and opens item metadata", async ({ page })
   await expect(page.getByText("EDL · Current").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Files" })).toBeVisible();
   await expect(page.getByText("Media sources reported by Jellyfin.")).toHaveCount(0);
-  await expect(page.getByRole("columnheader", { name: "Scene Name" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Release Group" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Edition" })).toBeVisible();
-  await expect(page.getByText("Example.Movie.2025.2160p.WEB-DL-GROUP")).toBeVisible();
-  await expect(page.getByText("Example.Movie.2025.2160p.WEB-DL-GROUP").locator("..").getByText("EDL · Current")).toBeVisible();
+  const files = page.getByRole("region", { name: "Media files" });
+  await expect(files.getByRole("columnheader")).toHaveText([
+    "File name", "Resolution", "Format", "Audio Tracks", "Length", "Size",
+  ]);
+  const mainFile = files.getByRole("row").filter({ hasText: "example-4k.mkv" });
+  await expect(mainFile.getByRole("cell", { name: "2", exact: true })).toBeVisible();
+  await expect(mainFile.getByText("EDL · Current")).toBeVisible();
+  const alternateFile = files.getByRole("row").filter({ hasText: "example-1080p.mkv" });
+  await expect(alternateFile.getByRole("cell", { name: "0", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Manage exports" }).click();
   await expect(page.getByRole("dialog", { name: "Manage exports" })).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Delete EDL" }).click();

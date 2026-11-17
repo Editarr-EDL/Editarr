@@ -60,7 +60,7 @@ def test_jellyfin_client_uses_server_side_token_and_normalizes_payloads():
                             "Container": "mkv",
                             "ProviderIds": {"Tmdb": "123"},
                             "RunTimeTicks": 57_000_000_000,
-                            "MediaSourceCount": 2,
+                            "MediaSourceCount": 3,
                             "MediaStreams": [
                                 {"Type": "Video", "Codec": "h264", "Height": 2160}
                             ],
@@ -75,9 +75,18 @@ def test_jellyfin_client_uses_server_side_token_and_normalizes_payloads():
                                     "RunTimeTicks": 57_000_000_000,
                                     "Size": 10_000_000_000,
                                     "MediaStreams": [
-                                        {"Type": "Video", "Codec": "hevc", "Height": 2160}
+                                        {"Type": "Video", "Codec": "hevc", "Height": 2160},
+                                        {"Type": "Audio", "Codec": "aac"},
+                                        {"Type": "Audio", "Codec": "ac3", "IsExternal": False},
+                                        {"Type": "Audio", "Codec": "ac3", "IsExternal": True},
+                                        {"Type": "Subtitle", "Codec": "srt"},
                                     ],
-                                }
+                                },
+                                {
+                                    "Id": "source-2",
+                                    "MediaStreams": [{"Type": "Video"}],
+                                },
+                                {"Id": "source-3"},
                             ],
                             "OfficialRating": "PG-13",
                         }
@@ -117,13 +126,14 @@ def test_jellyfin_client_uses_server_side_token_and_normalizes_payloads():
     assert item.duration_seconds == 5700
     assert detail.id == "movie-1"
     assert detail.library_id == "movies"
-    assert detail.media_source_count == 2
+    assert detail.media_source_count == 3
     assert detail.versions[0].name == "4K HDR"
     assert detail.versions[0].scene_name == "Example.2025.2160p.WEB-DL-GROUP"
     assert detail.versions[0].release_group == "GROUP"
     assert detail.versions[0].edition == "Director's Cut"
     assert detail.versions[0].media_format == "MKV · HEVC"
     assert detail.versions[0].size_bytes == 10_000_000_000
+    assert [version.audio_track_count for version in detail.versions] == [2, 0, None]
     assert seasons[0].index_number == 1
     episode = JellyfinClient._media_item(
         {

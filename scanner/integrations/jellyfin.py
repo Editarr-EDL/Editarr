@@ -430,6 +430,14 @@ def _media_version(
         container=str(source["Container"]) if source.get("Container") else None,
         resolution=_resolution_category(normalized_streams),
         media_format=_media_format(source.get("Container"), normalized_streams),
+        audio_track_count=(
+            sum(
+                stream.get("Type") == "Audio" and not stream.get("IsExternal")
+                for stream in normalized_streams
+            )
+            if isinstance(streams, list)
+            else None
+        ),
         duration_seconds=runtime_ticks / 10_000_000 if runtime_ticks else None,
         size_bytes=int(size) if isinstance(size, int) else None,
         media_identity=media_identity,

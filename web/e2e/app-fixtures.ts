@@ -25,8 +25,8 @@ export const items = [{
   official_rating: "PG-13", index_number: null,
   runtime_ticks: null, duration_seconds: 5700, resolution: "4K", media_format: "MKV · HEVC", media_source_count: 2,
   versions: [
-    { id: "source-1", name: "4K HDR", scene_name: "Example.Movie.2025.2160p.WEB-DL-GROUP", release_group: "GROUP", edition: "Director's Cut", path: "/media/movies/example-4k.mkv", container: "mkv", resolution: "4K", media_format: "MKV · HEVC", duration_seconds: 5700, size_bytes: 10_000_000_000, exports: previousEdl },
-    { id: "source-2", name: "1080p SDR", scene_name: "Example.Movie.2025.1080p.WEB-DL-OTHER", release_group: "OTHER", edition: null, path: "/media/movies/example-1080p.mkv", container: "mkv", resolution: "1080p", media_format: "MKV · H264", duration_seconds: 5700, size_bytes: 5_000_000_000, exports: emptyExports() },
+    { id: "source-1", name: "4K HDR", scene_name: "Example.Movie.2025.2160p.WEB-DL-GROUP", release_group: "GROUP", edition: "Director's Cut", path: "/media/movies/example-4k.mkv", file_name: "example-4k.mkv", audio_track_count: 2, container: "mkv", resolution: "4K", media_format: "MKV · HEVC", duration_seconds: 5700, size_bytes: 10_000_000_000, exports: previousEdl },
+    { id: "source-2", name: "1080p SDR", scene_name: "Example.Movie.2025.1080p.WEB-DL-OTHER", release_group: "OTHER", edition: null, path: "/media/movies/example-1080p.mkv", file_name: "example-1080p.mkv", audio_track_count: 0, container: "mkv", resolution: "1080p", media_format: "MKV · H264", duration_seconds: 5700, size_bytes: 5_000_000_000, exports: emptyExports() },
   ],
   image_tags: { Primary: "poster-tag" }, image_url: "/api/library-items/movie-1/image",
   exports: previousEdl,

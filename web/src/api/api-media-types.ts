@@ -57,6 +57,8 @@ export interface JellyfinMediaVersion {
   release_group: string | null;
   edition: string | null;
   path: string | null;
+  file_name: string | null;
+  audio_track_count: number | null;
   container: string | null;
   resolution: string | null;
   media_format: string | null;

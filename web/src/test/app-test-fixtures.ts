@@ -75,6 +75,8 @@ export const mediaItem = {
     release_group: "GROUP",
     edition: null,
     path: "/media/movie.mkv",
+    file_name: "movie.mkv",
+    audio_track_count: 1,
     container: "mkv",
     resolution: "4K",
     media_format: "MKV",

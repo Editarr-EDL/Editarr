@@ -7,7 +7,7 @@ read. The `CatalogViewer` decides source-server records through MU-11's
 it. Handlers decide before they count, facet, decorate, page, or read a cache
 entry, so shared caches hold only unfiltered server reads and no filtered
 result is cached. Records leave without server paths unless the caller holds
-`media.paths.view`. The owner's records pass unchanged.
+`media.paths.view`.
 """
 
 from __future__ import annotations
@@ -54,6 +54,7 @@ from scanner.security.media_access.keys import SourceRef
 from scanner.security.media_access.matching import MediaTarget
 from scanner.security.media_access.resolver import LinkedSubject, LocalSubject, OwnerSubject
 from scanner.security.media_access.service import decide_media, load_subject
+from scanner.server_paths import parse_server_path
 
 from .catalog_artwork import artwork_url
 
@@ -285,23 +286,34 @@ def not_found() -> AccessDenied:
     return AccessDenied(AccessErrorCode.NOT_FOUND)
 
 
-def jellyfin_record(item: JellyfinMediaItem, viewer: CatalogViewer) -> JellyfinMediaItem:
-    """The item as the caller may see it: without server paths unless they may see them."""
+def _file_name(path: str | None) -> str | None:
+    parsed = parse_server_path(path) if path else None
+    return (parsed.names[-1] or None) if parsed and parsed.names else None
 
+
+def jellyfin_record(item: JellyfinMediaItem, viewer: CatalogViewer) -> JellyfinMediaItem:
+    """Expose filenames for reachable files and redact full paths when required."""
+    sees_paths = viewer.sees_paths()
+    updates: dict[str, object] = {
+        "versions": [
+            version.model_copy(
+                update={
+                    "file_name": _file_name(version.path),
+                    "path": version.path if sees_paths else None,
+                }
+            )
+            for version in item.versions
+        ],
+    }
     if item.image_url:
-        item = item.model_copy(update={"image_url": artwork_url(item.image_url, viewer)})
-    if viewer.sees_paths():
-        return item
-    return item.model_copy(
-        update={
-            "path": None,
-            "versions": [version.model_copy(update={"path": None}) for version in item.versions],
-            "media_streams": [
-                {key: value for key, value in stream.items() if key.casefold() != "path"}
-                for stream in item.media_streams
-            ],
-        }
-    )
+        updates["image_url"] = artwork_url(item.image_url, viewer)
+    if not sees_paths:
+        updates["path"] = None
+        updates["media_streams"] = [
+            {key: value for key, value in stream.items() if key.casefold() != "path"}
+            for stream in item.media_streams
+        ]
+    return item.model_copy(update=updates)
 
 
 def library_record(library: JellyfinLibrary, viewer: CatalogViewer) -> JellyfinLibrary:

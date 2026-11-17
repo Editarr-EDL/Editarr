@@ -328,6 +328,8 @@ class JellyfinMediaVersion(BaseModel):
     release_group: str | None = None
     edition: str | None = None
     path: str | None = None
+    file_name: str | None = None
+    audio_track_count: int | None = None
     container: str | None = None
     resolution: str | None = None
     media_format: str | None = None
