@@ -1,3 +1,7 @@
+.model-scan-settings-form { display: grid; gap: 8px; }
+.model-scan-settings-form .field { max-width: 240px; }
+.model-scan-settings-form p { margin: 0 0 6px; }
+.model-storage-heading { margin-bottom: 12px; }
 .model-storage { display: grid; gap: 12px; }
 .model-storage-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .model-storage p { margin: 0; }

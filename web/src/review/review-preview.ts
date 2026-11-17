@@ -1,12 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchSavedReviewMutePreview, fetchSavedReviewVideoPreview } from "../api/api-reviews";
-import type { SavedReview } from "../api/api-review-types";
-import { isReviewDraftDirty, type ReviewDraft } from "./review-draft";
+import { fetchDraftFilterPreview, fetchSavedReviewMutePreview, fetchSavedReviewVideoPreview } from "../api/api-reviews";
+import type { ReviewFilter, ReviewTargetRequest, SavedReview } from "../api/api-review-types";
+import type { ReviewDraft } from "./review-draft";
 import { useReviewLifetime } from "./review-access";
 
-/** Own review preview URLs from allocation until replacement or workspace teardown. */
-export function useReviewPreview({ selected, draft, setBusy, setError, disabled = false, onDenied }: {
+export type PreviewFilter = Pick<ReviewFilter, "id" | "source" | "edit_action" | "start_seconds" | "end_seconds">
+  & Partial<Pick<ReviewFilter, "source_scan_id" | "source_finding_id">>;
+
+function sameClip(saved: ReviewFilter, draft: PreviewFilter): boolean {
+  return saved.source_scan_id === draft.source_scan_id && saved.source_finding_id === draft.source_finding_id
+    && saved.source === draft.source && saved.edit_action === draft.edit_action
+    && saved.start_seconds === draft.start_seconds && saved.end_seconds === draft.end_seconds;
+}
+
+/** Own preview URLs from allocation until the draft changes or the workspace closes. */
+export function useReviewPreview({ target, selected, draft, setBusy, setError, disabled = false, onDenied }: {
+  target: ReviewTargetRequest;
   selected: SavedReview | null;
   draft: ReviewDraft | null;
   setBusy: (busy: boolean) => void;
@@ -14,59 +24,74 @@ export function useReviewPreview({ selected, draft, setBusy, setError, disabled 
   disabled?: boolean;
   onDenied?: (reason: unknown) => Promise<void>;
 }) {
-  const [preview, setPreview] = useState<{ reviewId: string; filterId: string; url: string } | null>(null);
+  const [preview, setPreview] = useState<{ draft: ReviewDraft; filterId: string; url: string } | null>(null);
   const ownedUrl = useRef<string | null>(null);
   const lifetime = useRef(0);
+  const previewRequest = useRef(0);
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
   const isCurrent = useReviewLifetime();
+
+  const revoke = useCallback(() => {
+    if (ownedUrl.current) URL.revokeObjectURL(ownedUrl.current);
+    ownedUrl.current = null;
+  }, []);
+  const clearPreview = useCallback(() => {
+    previewRequest.current += 1;
+    revoke();
+    setPreview(null);
+  }, [revoke]);
 
   useEffect(() => {
     lifetime.current += 1;
     return () => {
       lifetime.current += 1;
-      if (ownedUrl.current) URL.revokeObjectURL(ownedUrl.current);
-      ownedUrl.current = null;
+      revoke();
     };
-  }, []);
+  }, [revoke]);
 
   useEffect(() => {
-    if (!preview) return;
-    if (
-      !selected
-      || preview.reviewId !== selected.id
-      || !draft
-      || isReviewDraftDirty(draft)
-      || !draft.filters.some((filter) => filter.id === preview.filterId)
-    ) {
-      if (ownedUrl.current) URL.revokeObjectURL(ownedUrl.current);
-      ownedUrl.current = null;
-      setPreview(null);
-    }
-  }, [draft, preview, selected]);
+    if (preview && preview.draft !== draft) clearPreview();
+  }, [draft, preview, clearPreview]);
 
-  const previewFilter = async (filter: SavedReview["filters"][number]) => {
-    if (!selected || !draft || disabled || !isCurrent() || isReviewDraftDirty(draft)) return;
-    const request = lifetime.current;
+  const previewFilter = async (filter: PreviewFilter) => {
+    if (!draft || disabled || !isCurrent()) return;
+    const request = ++previewRequest.current;
+    const generation = lifetime.current;
+    const stillRequested = () => isCurrent() && request === previewRequest.current
+      && generation === lifetime.current && currentDraft.current === draft;
     setBusy(true); setError(null);
     try {
-      const blob = filter.edit_action === "mute"
-        ? await fetchSavedReviewMutePreview(selected.id, filter.id)
-        : await fetchSavedReviewVideoPreview(selected.id, filter.id);
+      const saved = selected?.filters.find((candidate) => candidate.id === filter.id);
+      const blob = selected && saved && sameClip(saved, filter)
+        ? await (filter.edit_action === "mute"
+          ? fetchSavedReviewMutePreview(selected.id, filter.id)
+          : fetchSavedReviewVideoPreview(selected.id, filter.id))
+        : await fetchDraftFilterPreview(target, {
+          review_id: selected?.id,
+          source_scan_id: filter.source_scan_id,
+          source_finding_id: filter.source_finding_id,
+          start_seconds: filter.start_seconds,
+          end_seconds: filter.end_seconds,
+          edit_action: filter.edit_action,
+          source: filter.source,
+        });
       const url = URL.createObjectURL(blob);
-      if (!isCurrent() || request !== lifetime.current) {
+      if (!stillRequested()) {
         URL.revokeObjectURL(url);
         return;
       }
-      if (ownedUrl.current) URL.revokeObjectURL(ownedUrl.current);
+      revoke();
       ownedUrl.current = url;
-      setPreview({ reviewId: selected.id, filterId: filter.id, url });
+      setPreview({ draft, filterId: filter.id, url });
     } catch (reason) {
-      if (!isCurrent()) return;
+      if (!stillRequested()) return;
       await onDenied?.(reason);
-      if (request === lifetime.current) setError(reason instanceof Error ? reason.message : "Unable to render review preview.");
+      if (stillRequested()) setError(reason instanceof Error ? reason.message : "Unable to render review preview.");
     } finally {
-      if (request === lifetime.current) setBusy(false);
+      if (generation === lifetime.current) setBusy(false);
     }
   };
 
-  return { preview, previewFilter };
+  return { preview: preview?.draft === draft ? preview : null, previewFilter, clearPreview };
 }

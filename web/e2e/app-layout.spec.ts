@@ -44,7 +44,7 @@ for (const width of [320, 375, 760, 761, 768, 1024, 1280, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     const routes = [
       ["settings/connections", "Connections"], ["settings/filters", "Filters"], ["settings/filters/server", "Filters"],
-      ["settings/models", "Model Storage"], ["settings/general", "General"],
+      ["settings/models", "Models"], ["settings/general", "General"],
       ["library/movies", "Movies"], ["library/movies/item/movie-1", "Example Movie"],
       ["settings/audit", "Audit History"],
     ];

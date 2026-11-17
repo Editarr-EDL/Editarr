@@ -9,7 +9,7 @@ when it fetches and when it installs.
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from scanner import api as root
@@ -22,15 +22,51 @@ from scanner.models import (
     ScanMode,
 )
 from scanner.security.access.capability_ids import Capability as C
+from scanner.security.audit.actions import AuditAction
 from scanner.security.scan_jobs.authority import JobRefusedError
 from scanner.security.scan_jobs.operation_gate import OperationGate
 from scanner.settings.capabilities import current_environment
+from scanner.settings.config import settings
+from scanner.settings.model_scan_settings import (
+    ModelScanSettings,
+    ModelScanSettingsError,
+    load_model_scan_settings,
+    save_model_scan_settings,
+)
 
 from . import background
 from .operations_access import Operator, operation
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get(
+    "/api/settings/models/scans",
+    dependencies=[Depends(operation(C.MODELS_INVENTORY_VIEW))],
+)
+def api_get_model_scan_settings() -> ModelScanSettings:
+    """Read the instance settings applied to future scans."""
+    try:
+        return load_model_scan_settings(
+            settings.data_dir, default_audio_padding=settings.profanity_pad_seconds
+        )
+    except ModelScanSettingsError as error:
+        raise HTTPException(503, str(error)) from error
+
+
+@router.put("/api/settings/models/scans")
+def api_save_model_scan_settings(
+    update: ModelScanSettings,
+    caller: Operator = Depends(operation(C.DEPLOYMENT_EDIT, AuditAction.SCAN_SETTINGS_CHANGE)),
+) -> ModelScanSettings:
+    """Save the instance's preferred settings for future scans."""
+    try:
+        save_model_scan_settings(settings.data_dir, update)
+    except ModelScanSettingsError as error:
+        raise HTTPException(503, str(error)) from error
+    caller.record(AuditAction.SCAN_SETTINGS_CHANGE, {})
+    return update
 
 
 def _model_storage_status() -> dict[str, object]:

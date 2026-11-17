@@ -319,12 +319,12 @@ describe("production saved-review UI authority", () => {
     expect(screen.getByRole("status")).toHaveTextContent("1 selection, 0 severity, and 0 channel changes");
 
     const previewButton = screen.getByRole("button", { name: "Preview filter visual-1" });
-    expect(previewButton).toBeDisabled();
+    expect(previewButton).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(previewButton).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Edit filter visual-1" }));
-    fireEvent.change(screen.getByLabelText("Filter visual-1 label"), { target: { value: "Changed" } });
-    expect(previewButton).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Filter visual-1 start seconds"), { target: { value: "10.5" } });
+    expect(previewButton).toBeEnabled();
   });
 
   it("renders ordered MCF tiers with independent row sorting and synchronized linked instances", async () => {

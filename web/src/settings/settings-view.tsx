@@ -18,6 +18,7 @@ import { DeploymentSettings } from "./deployment-settings";
 import { FiltersPage, type FilterTab } from "./filters/filters-page";
 import { RestartEditarr } from "./restart-editarr";
 import { ModelStorage } from "./model-storage";
+import { ModelScanSettings } from "./model-scan-settings";
 import { DiagnosticsPanel } from "./diagnostics-panel";
 import { About } from "./about";
 import { BackupSettings } from "./backup-settings";
@@ -32,7 +33,7 @@ export function settingsSectionTitle(section: SettingsSection): string {
   if (section === "users") return "Users";
   if (section === "profile") return "My Profile";
   if (section === "filters") return "Filters";
-  if (section === "models") return "Model Storage";
+  if (section === "models") return "Models";
   if (section === "general") return "General";
   if (section === "audit") return "Audit History";
   return "Connections";
@@ -230,7 +231,7 @@ export function SettingsView({ section, filterTab, settings, onSaved }: { sectio
     </section>
     </>}
     {section === "filters" && <FiltersPage tab={filterTab} />}
-    {section === "models" && <ModelStorage />}
+    {section === "models" && <><ModelScanSettings /><ModelStorage /></>}
     {section === "general" && <>
     {(mayCreateBackup || mayScheduleBackup || mayViewBackupStatus) && <BackupSettings />}
     {mayViewDeployment && <DeploymentSettings onDirtyChange={setDeploymentDirty} />}

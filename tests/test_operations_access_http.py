@@ -121,6 +121,15 @@ CASES = (
         {"remote_path": "/remote/a/movie.mkv"},
     ),
     Case("GET", "/api/models", C.MODELS_INVENTORY_VIEW, 200),
+    Case("GET", "/api/settings/models/scans", C.MODELS_INVENTORY_VIEW, 200),
+    Case(
+        "PUT",
+        "/api/settings/models/scans",
+        C.DEPLOYMENT_EDIT,
+        200,
+        {"audio_padding_seconds": 0.45},
+        audited=A.SCAN_SETTINGS_CHANGE,
+    ),
     Case("POST", "/api/models/prefetch", C.MODELS_DOWNLOAD, 202, {"backend_id": BACKEND}),
     Case("POST", "/api/models/{artifact_id}/cancel", C.MODELS_DOWNLOAD_CANCEL, 200),
     Case("DELETE", "/api/models/{artifact_id}", C.MODELS_DELETE, 200),
@@ -227,6 +236,7 @@ OPERATION_ROUTES = frozenset(
         ("GET", "/api/models"),
         ("GET", "/api/settings/deployment"),
         ("GET", "/api/settings/jellyfin"),
+        ("GET", "/api/settings/models/scans"),
         ("GET", "/api/settings/path-mappings"),
         ("GET", "/api/system/logs/settings"),
         ("GET", "/api/system/logs/{channel}"),
@@ -245,6 +255,7 @@ OPERATION_ROUTES = frozenset(
         ("PUT", "/api/backups/schedule"),
         ("PUT", "/api/settings/deployment"),
         ("PUT", "/api/settings/jellyfin"),
+        ("PUT", "/api/settings/models/scans"),
         ("PUT", "/api/system/logs/settings"),
     }
 )

@@ -117,8 +117,8 @@ class Settings(BaseSettings):
     whisper_model: str = "base"
     audio_filter: str = "better_profanity"
     # Include a small lead-in and tail after each detected audio word. A
-    # deployment can override this with EDITARR_PROFANITY_PAD_SECONDS.
-    profanity_pad_seconds: float = 0.1
+    # deployment can set the default using EDITARR_PROFANITY_PAD_SECONDS.
+    profanity_pad_seconds: float = Field(default=0.1, ge=0, allow_inf_nan=False)
 
     # Scene-aware visual scans can optionally gate fine scans with coarse samples.
     coarse_scan_interval_seconds: float = 5.0

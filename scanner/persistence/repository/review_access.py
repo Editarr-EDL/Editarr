@@ -164,6 +164,7 @@ class ReviewAccess:
         allow_jobs=False,
         repair=False,
         extra_capabilities=(),
+        authorize: Callable[[ResourceRef], None] | None = None,
         **kwargs,
     ):
         """Gather evidence first, then decide and execute against locked stored authority."""
@@ -228,6 +229,8 @@ class ReviewAccess:
                     evidence=captured_scan,
                 )[0]
                 self.require_scan(item, media, allow_jobs=allow_jobs)
+            if authorize is not None:
+                authorize(target)
             if draft is not None:
                 self.require_changes(review_id, draft, target)
             if prepared is not None:

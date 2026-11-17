@@ -124,6 +124,26 @@ export function fetchSavedReviewVideoPreview(reviewId: string, filterId: string)
   });
 }
 
+export interface DraftFilterPreview {
+  review_id?: string;
+  source_scan_id?: string;
+  source_finding_id?: number | null;
+  source: "audio" | "visual";
+  edit_action: "mute" | "skip";
+  start_seconds: number;
+  end_seconds: number | null;
+}
+
+export async function fetchDraftFilterPreview(target: ReviewTargetRequest, filter: DraftFilterPreview): Promise<Blob> {
+  const response = await fetch(`${runtimeApiBasePath()}/library-items/${encodeURIComponent(target.item_id)}/reviews/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...filter, media_source_id: target.media_source_id ?? null }),
+  });
+  if (!response.ok) throw await responseError(response, "Unable to render review preview");
+  return response.blob();
+}
+
 export function fetchMcfPreflight(reviewId: string): Promise<McfPreflight> {
   return jsonApi(`${runtimeApiBasePath()}/reviews/${encodeURIComponent(reviewId)}/mcf/preflight`, {}, "Unable to validate MCF export");
 }

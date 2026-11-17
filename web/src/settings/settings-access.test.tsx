@@ -75,6 +75,8 @@ const permissionRoutes: Record<string, Capability> = {
   "GET /api/auth/api-key": "profile.view.own",
   "GET /api/settings/deployment": "deployment.view",
   "PUT /api/settings/deployment": "deployment.edit",
+  "GET /api/settings/models/scans": "models.inventory.view",
+  "PUT /api/settings/models/scans": "deployment.edit",
   "GET /api/system/logs/settings": "logs.view",
   "PUT /api/system/logs/settings": "logs.settings.edit",
   "GET /api/capabilities": "scans.start",
@@ -195,6 +197,7 @@ it("acquires a model with a nullable status and never reads global inventory", a
   fireEvent.click(screen.getByRole("button", { name: "Download" }));
   expect(await screen.findByText("Model download requested.")).toBeVisible();
   expect(paths).not.toContain("/api/models");
+  expect(paths).not.toContain("/api/settings/models/scans");
   expect(paths.filter((path) => path.startsWith("/api/models/"))).toEqual(["/api/models/prefetch"]);
 });
 
@@ -262,10 +265,13 @@ it.each(([[], ["path_mappings.view", "path_mappings.test"]] as Capability[][]).m
 });
 
 it.each(([[], ["models.download"], ["models.download.cancel"], ["models.delete"], ["models.download", "models.download.cancel", "models.delete"]] as Capability[][]).map((operations) => ({ operations })))("gates each inventory operation independently ($operations)", async ({ operations }) => {
-  const paths = renderSettings("models", ["models.inventory.view", ...operations], () => json({ model_capabilities: [], artifacts: ["missing", "downloading", "ready"].map((state) => ({
-    artifact_id: state, backend_ids: [state], source_url: "https://models.test", removable: true,
-    state: { state, bytes_downloaded: null, bytes_total: null, error_detail: null },
-  })) }));
+  const paths = renderSettings("models", ["models.inventory.view", ...operations], (path) => {
+    if (path === "/api/settings/models/scans") return json({ audio_padding_seconds: 0.1 });
+    return json({ model_capabilities: [], artifacts: ["missing", "downloading", "ready"].map((state) => ({
+      artifact_id: state, backend_ids: [state], source_url: "https://models.test", removable: true,
+      state: { state, bytes_downloaded: null, bytes_total: null, error_detail: null },
+    })) });
+  });
   fireEvent.click(await screen.findByText("Supporting Packages"));
   await screen.findByRole("article", { name: "ready model" });
   for (const [capability, name] of [["models.download", "Download"], ["models.download.cancel", "Cancel download"], ["models.delete", "Remove"]] as const) {

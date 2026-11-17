@@ -18,6 +18,7 @@ from scanner.http import (
     filter_policy_api,
     jellyfin_accounts_api,
     media_access_api,
+    model_storage_api,
     restart_api,
     scan_catalog_api,
 )
@@ -59,6 +60,7 @@ def audited_dependencies():
         backup_schedule_api,
         catalog_settings_api,
         deployment_api,
+        model_storage_api,
         restart_api,
         scan_catalog_api,
     )
@@ -168,5 +170,5 @@ def test_instance_defaults_visibility_matches_both_actual_authorization_layers()
 
 
 def test_every_registered_action_has_a_reviewed_visibility_rule():
-    assert len(ACTION_SPECS) == 42
+    assert len(ACTION_SPECS) == 43
     assert set(ACTION_CAPABILITIES) == set(ACTION_SPECS) == set(A)

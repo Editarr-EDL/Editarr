@@ -55,7 +55,10 @@ function groupArtifacts({ artifacts, model_capabilities }: ModelStorageStatus) {
 /** Show model availability and manage artifact downloads and removal. */
 export function ModelStorage() {
   const mayView = useCan("models.inventory.view");
-  return mayView ? <ModelInventory /> : <ModelDownloads />;
+  return <section aria-labelledby="model-storage-heading">
+    <div className="section-heading model-storage-heading"><h2 id="model-storage-heading">Storage</h2></div>
+    {mayView ? <ModelInventory /> : <ModelDownloads />}
+  </section>;
 }
 
 function ModelInventory() {

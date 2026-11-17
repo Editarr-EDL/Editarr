@@ -110,6 +110,7 @@ export function installProductionApi() {
       { token: "dispensable_scenes", label: "Dispensable scenes", categories: [{ token: "dispensable", label: "Dispensable scenes (General)" }] },
     ] });
     if (url.pathname === "/api/settings/jellyfin") return json({ server_url: "http://jellyfin.test", api_key_configured: true, last_checked_at: null, last_error: null });
+    if (url.pathname === "/api/settings/models/scans") return json({ audio_padding_seconds: 0.1 });
     if (url.pathname === "/api/settings/filters/personal") return json({
       user_id: 1, mode: "live", mode_locked: false,
       revision: 0, policy_revision: 0, instance_revision: 0,

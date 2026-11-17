@@ -228,9 +228,12 @@ def test_audio_scan_passes_flagged_language_to_qwen(monkeypatch):
         }],
     )
 
-    def categorize(findings, model, *, progress_callback, transcript_segments, video_id):
+    def categorize(
+        findings, model, *, progress_callback, transcript_segments, video_id, audio_padding_seconds
+    ):
         assert video_id == "scan-1"
         assert transcript_segments is None
+        assert audio_padding_seconds == 0.1
         seen["model"] = model
         seen["context"] = findings[0].details
         progress_callback(1.0, "Categorizing language")

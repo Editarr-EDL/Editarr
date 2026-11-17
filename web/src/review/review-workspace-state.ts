@@ -104,7 +104,8 @@ export function useSavedReviewWorkspace({
     itemId: item.id, mediaItemId: mediaItemId ?? selected?.media_item_id ?? reviews[0]?.media_item_id ?? null,
     mediaSourceId, exportStatus, onExportStatusChange,
   });
-  const { preview, previewFilter } = useReviewPreview({ selected, draft, setBusy, setError,
+  const reviewTarget: ReviewTargetRequest = { source: "jellyfin", item_id: item.id, media_source_id: mediaSourceId };
+  const { preview, previewFilter, clearPreview } = useReviewPreview({ target: reviewTarget, selected, draft, setBusy, setError,
     disabled: Boolean(conflict) || !access.preview, onDenied: refreshAfterConflict });
   const pendingNameValidation = validateDisplayName(name, true);
   const draftNameValidation = draft ? validateDisplayName(draft.name, true) : null;
@@ -115,7 +116,6 @@ export function useSavedReviewWorkspace({
   )));
   const metadataSourceRequired = metadataCandidates.length > 0 && !draft?.mcfMetadataSeed;
   const invalidMcfDocument = Boolean(draft && Object.keys(validateMcfDocument(draft.mcfDocument)).length);
-  const reviewTarget: ReviewTargetRequest = { source: "jellyfin", item_id: item.id, media_source_id: mediaSourceId };
   const toggleReviewSort = (nextSort: typeof sort) => {
     if (sort === nextSort) setDirection((current) => current === "asc" ? "desc" : "asc");
     else { setSort(nextSort); setDirection("asc"); }
@@ -394,7 +394,7 @@ export function useSavedReviewWorkspace({
     setShowNewReview, setShowDuplicateReview, setEditingReviewName,
     setReviewNameBeforeEdit, setShowManualFilter, setPreflightFocusFilterId,
     toggleReviewSort, selectReview, createEmpty, duplicateReview, renameReview,
-    forgetDeletedReview, applyFilterDefaults, previewFilter, save, afterPublish, exports,
+    forgetDeletedReview, applyFilterDefaults, previewFilter, clearPreview, save, afterPublish, exports,
     setMcfPreflightIssues,
     toggleScanMembership, changeScanMembership, stageCreditsAcceptance,
     focusPreflightIssue, refreshAfterConflict, refreshReviews, setSelected,

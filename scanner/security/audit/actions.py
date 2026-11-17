@@ -330,6 +330,7 @@ ACTION_SPECS: Mapping[AuditAction, ActionSpec] = MappingProxyType(
             Scope.OPTIONAL,
         ),
         AuditAction.DEPLOYMENT_CHANGE: _settings({"base_url": FLAG, "port": FLAG}),
+        AuditAction.SCAN_SETTINGS_CHANGE: _settings({}),
         AuditAction.LOGGING_CHANGE: _settings({"debug_enabled": FLAG}),
         AuditAction.RESTART: _settings({}),
         AuditAction.BACKUP_CREATE: _settings(

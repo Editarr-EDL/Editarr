@@ -24,6 +24,7 @@ const routePermissions: Record<string, readonly Capability[]> = {
   "POST /api/community/keys/rotation-status": ["community.identity.keys.own"],
   "POST /api/community/keys/recovery/check": ["community.identity.keys.own"],
   "GET /api/models": ["models.inventory.view"],
+  "GET /api/settings/models/scans": ["models.inventory.view"],
   "GET /api/settings/path-mappings": ["path_mappings.view", "media.paths.view"],
   "POST /api/settings/path-mappings": ["path_mappings.create", "media.paths.view"],
   "POST /api/settings/path-mappings/resolve": ["path_mappings.test", "media.paths.view"],
@@ -185,6 +186,7 @@ it.each(["community.identity.profile.own", "community.identity.keys.own"] as con
 
 it.each([false, true])("R3 model cancel and removal require inventory and action grants, inventory=%s", async inventory => {
   const calls = serve("models", ["models.download", "models.download.cancel", "models.delete", ...(inventory ? ["models.inventory.view" as const] : [])], {
+    "GET /api/settings/models/scans": { audio_padding_seconds: 0.1 },
     "GET /api/models": { model_capabilities: [], artifacts: ["downloading", "ready"].map(state => ({
       artifact_id: state, backend_ids: [state], source_url: "https://models.test", removable: true,
       state: { state, bytes_downloaded: null, bytes_total: null, error_detail: null },
@@ -193,6 +195,7 @@ it.each([false, true])("R3 model cancel and removal require inventory and action
   if (inventory) fireEvent.click(await screen.findByText("Supporting Packages"));
   else await screen.findByRole("heading", { name: "Download models" });
   expect(calls.some(call => call.request === "GET /api/models")).toBe(inventory);
+  expect(calls.some(call => call.request === "GET /api/settings/models/scans")).toBe(inventory);
   expect(screen.queryByRole("button", { name: "Cancel download" }) !== null).toBe(inventory);
   expect(screen.queryByRole("button", { name: "Remove" }) !== null).toBe(inventory);
 });

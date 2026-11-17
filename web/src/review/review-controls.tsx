@@ -5,6 +5,7 @@ import {
 import { fetchMcfRegistry } from "../api/api-service";
 import { retimeSavedReview, reviewPolicyToken } from "../api/api-reviews";
 import { useReviewLifetime } from "./review-access";
+import type { PreviewFilter } from "./review-preview";
 import type {
   ExportFormat,
   ExportStatus,
@@ -40,10 +41,16 @@ export function ManualReviewFilterDialog({
   onClose,
   onAdd,
   disabled = false,
+  onPreview,
+  preview,
+  previewError,
 }: {
   onClose: () => void;
   onAdd: (filter: NewManualReviewFilter) => void;
   disabled?: boolean;
+  onPreview?: (filter: PreviewFilter) => void;
+  preview?: { filterId: string; url: string } | null;
+  previewError?: string | null;
 }) {
   const [registry, setRegistry] = useState<McfRegistry | null>(null);
   const [source, setSource] = useState<"audio" | "visual">("audio");
@@ -57,7 +64,11 @@ export function ManualReviewFilterDialog({
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(1);
   useEffect(() => { void fetchMcfRegistry().then(setRegistry); }, []);
-  const invalid = disabled || !label.trim() || startSeconds < 0 || endSeconds <= startSeconds
+  const invalidTiming = !Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)
+    || startSeconds < 0 || endSeconds <= startSeconds;
+  const action = source === "audio" ? "mute" : "skip";
+  const previewId = `manual-preview:${source}:${startSeconds}:${endSeconds}`;
+  const invalid = disabled || !label.trim() || invalidTiming
     || !classificationIsValid(registry, category, subcategory)
     || Boolean(comment?.includes("-->"));
   return <ModalDialog labelledBy="manual-review-filter-heading" className="finding-editor" onClose={onClose}>
@@ -68,7 +79,14 @@ export function ManualReviewFilterDialog({
     {registry ? <McfClassificationFields controlId="Manual filter" registry={registry} value={{ category, subcategory, severity, mcf_channel: channel, mcf_comment: comment }} onChange={(patch) => { if (patch.category !== undefined) setCategory(patch.category || "language"); if (patch.subcategory !== undefined) setSubcategory(patch.subcategory || ""); if (patch.severity !== undefined) setSeverity(patch.severity); if (patch.mcf_channel !== undefined) setChannel(patch.mcf_channel); if (patch.mcf_comment !== undefined) setComment(patch.mcf_comment); }} /> : <p className="loading-state">Loading MCF categories…</p>}
     <label className="field"><span>Description</span><textarea aria-label="Manual filter description" value={details} onChange={(event) => setDetails(event.target.value)} rows={3} /></label>
     <div className="finding-timing-fields"><label className="field"><span>Start seconds</span><input aria-label="Manual filter start seconds" type="number" min="0" step="0.1" value={startSeconds} onChange={(event) => setStartSeconds(Number(event.target.value))} /></label><label className="field"><span>End seconds</span><input aria-label="Manual filter end seconds" type="number" min="0.1" step="0.1" value={endSeconds} onChange={(event) => setEndSeconds(Number(event.target.value))} /></label></div>
-    <div className="button-row"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={invalid} onClick={() => onAdd({ id: "", source, category, subcategory, severity, mcf_channel: channel, mcf_comment: comment, label: label.trim(), details: details.trim() || null, group_key: null, start_seconds: startSeconds, end_seconds: endSeconds, confidence: null, edit_action: source === "audio" ? "mute" : "skip", selected: true })}>Add Filter</button></div>
+    {preview?.filterId === previewId && <div className="finding-preview">{source === "audio"
+      ? <audio controls src={preview.url} aria-label="Manual audio preview" />
+      : <video controls src={preview.url} aria-label="Manual video preview" />}</div>}
+    {previewError && <p className="form-error" role="alert">{previewError}</p>}
+    <div className="button-row">{onPreview && <button type="button" className="btn-secondary"
+      disabled={disabled || invalidTiming} onClick={() => onPreview({
+        id: previewId, source, edit_action: action, start_seconds: startSeconds, end_seconds: endSeconds,
+      })}>Preview</button>}<button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={invalid} onClick={() => onAdd({ id: "", source, category, subcategory, severity, mcf_channel: channel, mcf_comment: comment, label: label.trim(), details: details.trim() || null, group_key: null, start_seconds: startSeconds, end_seconds: endSeconds, confidence: null, edit_action: action, selected: true })}>Add Filter</button></div>
   </ModalDialog>;
 }
 

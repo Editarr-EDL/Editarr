@@ -5,19 +5,26 @@ import json
 import pytest
 
 import scanner.api as root
-from scanner.db import SavedReviewRow, ScanRow
+from scanner import repository
+from scanner.db import SavedReviewRow, ScanFindingRow, ScanRow
 from scanner.http import (
     catalog_targets,
     review_edit_api,
     review_import_routes_api,
     review_target_routes,
 )
-from scanner.models import JellyfinLibrary, JellyfinMediaItem, ReviewCreate, ReviewScanMembership
+from scanner.models import (
+    JellyfinLibrary,
+    JellyfinMediaItem,
+    JellyfinMediaVersion,
+    ReviewCreate,
+    ReviewScanMembership,
+)
 from scanner.persistence.repository.review_access import RENAME, ReviewAccess
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import ADMIN, PEER_USER, USER, live_accounts
-from tests.scan_access_http import serve_scans
+from tests.scan_access_http import LIBRARY_A, guid, serve_scans
 
 
 @pytest.fixture
@@ -118,8 +125,6 @@ def test_admin_copy_changes_owner_preserves_author_and_shared_evidence(app):
 
 
 def test_create_owns_review_and_list_excludes_foreign_reviews(app):
-    from tests.scan_access_http import LIBRARY_A, guid
-
     item_id = app.jellyfin_item(guid("creation"), LIBRARY_A)
     path = f"/api/library-items/{item_id}/reviews"
     response = app.send("POST", path, app.accounts.unsafe_cookie(USER), {"name": "mine"})
@@ -146,8 +151,6 @@ IMPORTS = {
 
 @pytest.mark.parametrize("kind", ["edl", "mcf"])
 def test_uploaded_import_is_actor_owned(app, monkeypatch, kind):
-    from tests.scan_access_http import LIBRARY_A, guid
-
     item_id = app.jellyfin_item(guid("import"), LIBRARY_A)
     monkeypatch.setattr(root, "get_video_duration", lambda _path: 60.0)
     options = {"target": {"source": "jellyfin", "item_id": item_id}, "name": "upload"}
@@ -327,3 +330,112 @@ def test_repository_private_actions_never_invoke_an_operation_for_hidden_ids(app
                 )
             assert denied.value.code == AccessErrorCode.NOT_FOUND
     assert calls == []
+
+
+def test_draft_preview_renders_evidence_only_for_its_target(app, monkeypatch):
+    scan_id, _ = app.seed_scan(USER, "filter-evidence", status="complete")
+    with app.accounts.factory() as db:
+        scan = db.get(ScanRow, scan_id)
+        path = scan.source_path
+        item_id = scan.media_item.jellyfin_id
+        scan.duration_seconds = 60
+        scan.media_source_id = "theatrical"
+        evidence = ScanFindingRow(
+            scan_id=scan_id, source="visual", start_seconds=10, end_seconds=18
+        )
+        db.add(evidence)
+        db.commit()
+        finding_id = evidence.id
+    app.items[item_id] = JellyfinMediaItem(
+        id=item_id,
+        library_id=LIBRARY_A,
+        name="Evidence film",
+        item_type="Movie",
+        path=path,
+        duration_seconds=60,
+        versions=[
+            JellyfinMediaVersion(id="theatrical", path=path),
+            JellyfinMediaVersion(id="extended", path=path),
+        ],
+    )
+    rendered = []
+
+    def render(media, start, end):
+        rendered.append((str(media), start, end))
+        return b"preview video"
+
+    monkeypatch.setattr(repository, "render_video_preview", render)
+    body = {
+        "media_source_id": "theatrical",
+        "source_scan_id": scan_id,
+        "source_finding_id": finding_id,
+        "source": "visual",
+        "edit_action": "skip",
+        "start_seconds": 10,
+        "end_seconds": 18,
+    }
+    app.accounts.set_override(USER, C.REVIEWS_CUES_EDIT_OWN, OverrideEffect.DENY)
+    headers = app.accounts.unsafe_cookie(USER)
+    route = f"/api/library-items/{item_id}/reviews/preview"
+    response = app.send("POST", route, headers, body)
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "video/mp4"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.content == b"preview video"
+    assert rendered == [(path, 10, 18)]
+
+    denied = app.send("POST", route, headers, {**body, "start_seconds": 11})
+    assert denied.status_code == 403, denied.text
+    other = app.jellyfin_item(guid("different-preview-item"), LIBRARY_A)
+    wrong_item = app.send(
+        "POST",
+        f"/api/library-items/{other}/reviews/preview",
+        headers,
+        {**body, "media_source_id": None},
+    )
+    assert wrong_item.status_code == 404, wrong_item.text
+    wrong_version = app.send("POST", route, headers, {**body, "media_source_id": "extended"})
+    assert wrong_version.status_code == 404, wrong_version.text
+    assert rendered == [(path, 10, 18)]
+    with app.accounts.factory() as db:
+        assert db.query(SavedReviewRow).count() == 0
+
+
+def test_draft_preview_uses_unsaved_timing_without_storing_it(app, monkeypatch):
+    review = seeded_review(app, PEER_USER, "timing-preview")
+    route = f"/api/library-items/{review.target.item_id}/reviews/preview"
+    rendered = []
+
+    def render(media, start, end):
+        rendered.append((str(media), start, end))
+        return b"preview audio"
+
+    monkeypatch.setattr(repository, "render_mute_preview", render)
+    body = {"source": "audio", "edit_action": "mute", "start_seconds": 11.5, "end_seconds": 16.5}
+    app.accounts.set_override(USER, C.REVIEWS_PREVIEW_OWN, OverrideEffect.DENY)
+    denied = app.send("POST", route, app.accounts.unsafe_cookie(USER), body)
+    assert denied.status_code == 403, denied.text
+    foreign = app.send(
+        "POST", route, app.accounts.unsafe_cookie(USER), {**body, "review_id": review.id}
+    )
+    assert foreign.status_code == 404, foreign.text
+    assert rendered == []
+
+    unsaved = app.send("POST", route, app.accounts.unsafe_cookie(PEER_USER), body)
+    assert unsaved.status_code == 200, unsaved.text
+    assert unsaved.content == b"preview audio"
+
+    # An administrator can preview an authorized other-owner draft using the
+    # current cue values, without creating a new review or a manual scan.
+    response = app.send(
+        "POST", route, app.accounts.unsafe_cookie(ADMIN), {**body, "review_id": review.id}
+    )
+    assert response.status_code == 200, response.text
+    assert response.content == b"preview audio"
+    assert response.headers["content-type"] == "audio/mpeg"
+    assert rendered == [(app.items[review.target.item_id].path, 11.5, 16.5)] * 2
+
+    with app.accounts.factory() as db:
+        assert db.query(SavedReviewRow).count() == 1
+        assert db.query(ScanRow).count() == 1
+        assert db.get(SavedReviewRow, review.id).revision == review.revision

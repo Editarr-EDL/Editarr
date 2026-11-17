@@ -175,6 +175,7 @@ ACTION_CAPABILITIES: Mapping[AuditAction, Required | ByAccount | ByDetail | None
                 },
             ),
             AuditAction.DEPLOYMENT_CHANGE: Capability.DEPLOYMENT_EDIT,
+            AuditAction.SCAN_SETTINGS_CHANGE: Capability.DEPLOYMENT_EDIT,
             AuditAction.LOGGING_CHANGE: Capability.LOGS_SETTINGS_EDIT,
             AuditAction.RESTART: Capability.SYSTEM_RESTART,
             AuditAction.BACKUP_CREATE: Capability.BACKUPS_CREATE,

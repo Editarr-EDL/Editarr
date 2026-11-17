@@ -269,6 +269,8 @@ def scan_audio(
     progress_callback: Callable[[float, str], None] | None = None,
     qwen_model: str | None = None,
     provenance_callback: Callable[[str], None] | None = None,
+    *,
+    audio_padding_seconds: float | None = None,
 ) -> list[FindingCreate]:
     """
     Transcribe audio and detect profanity with timestamps.
@@ -276,6 +278,9 @@ def scan_audio(
     Uses the selected transcription backend for word-level timestamps,
     then checks each word/segment against the profanity filter.
     """
+    padding = (
+        settings.profanity_pad_seconds if audio_padding_seconds is None else audio_padding_seconds
+    )
     requested_filter = (filter_name or settings.audio_filter or "better_profanity").strip().lower()
     selected_filter = _AUDIO_FILTER_ALIASES.get(requested_filter, requested_filter)
     if selected_filter == "qwen":
@@ -317,10 +322,9 @@ def scan_audio(
                         ProfanityDetection(
                             start_seconds=max(
                                 0,
-                                float(word_info["start_seconds"]) - settings.profanity_pad_seconds,
+                                float(word_info["start_seconds"]) - padding,
                             ),
-                            end_seconds=float(word_info["end_seconds"])
-                            + settings.profanity_pad_seconds,
+                            end_seconds=float(word_info["end_seconds"]) + padding,
                             word=normalized_word,
                             text=str(segment.get("text", "")).strip(),
                         )
@@ -329,9 +333,9 @@ def scan_audio(
             segment_text = str(segment.get("text", "")).strip()
             segment_start = max(
                 0,
-                float(segment.get("start_seconds", 0.0)) - settings.profanity_pad_seconds,
+                float(segment.get("start_seconds", 0.0)) - padding,
             )
-            segment_end = float(segment.get("end_seconds", 0.0)) + settings.profanity_pad_seconds
+            segment_end = float(segment.get("end_seconds", 0.0)) + padding
             deny_matches = _deny_matches_in_segment(segment_text, runtime_deny)
             for deny_word in deny_matches:
                 detections.append(
@@ -379,6 +383,7 @@ def scan_audio(
             findings,
             qwen_model,
             transcript_segments=transcript_segments if selected_filter == "qwen" else None,
+            audio_padding_seconds=padding,
             video_id=video_id,
             **({"provenance_callback": provenance_callback} if provenance_callback else {}),
             progress_callback=(

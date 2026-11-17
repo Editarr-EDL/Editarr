@@ -15,7 +15,7 @@ the app from the disk image to Applications.
   source-distribution image codecs and is built without FFmpeg. Editarr uses
   PyAV to decode media during scene detection in this release.
 - Editarr downloads model weights on demand from pinned upstream repositories.
-  Model Storage shows the license metadata for each artifact. The DMG includes
+  The Storage section of Models shows the license metadata for each artifact. The DMG includes
   the NudeNet model supplied by its MIT-licensed Python package.
 
 `Editarr.app/Contents/Resources/Licenses` contains the license texts and the

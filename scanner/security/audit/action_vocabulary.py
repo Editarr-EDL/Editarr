@@ -31,6 +31,7 @@ class AuditAction(StrEnum):
     CONNECTION_CHANGE = "settings.connection.change"
     PATH_MAPPING_CHANGE = "settings.path_mapping.change"
     DEPLOYMENT_CHANGE = "settings.deployment.change"
+    SCAN_SETTINGS_CHANGE = "settings.scan.change"
     LOGGING_CHANGE = "settings.logging.change"
     RESTART = "system.restart"
     BACKUP_CREATE = "backup.create"

@@ -255,6 +255,9 @@ export async function mockApi(page: Page) {
       await json(route, { revision: 0, selection_rules: [], severity_defaults: [] }); return;
     }
     if (url.pathname === "/api/capabilities") { await json(route, { audio_models: [{ id: "whisper", display_name: "Whisper" }], audio_filters: [{ id: "better_profanity", display_name: "better-profanity" }], video_models: [{ id: "nudenet", display_name: "NudeNet" }], qwen_models: [] }); return; }
+    if (url.pathname === "/api/settings/models/scans") {
+      await json(route, { audio_padding_seconds: 0.1 }); return;
+    }
     if (url.pathname === "/api/models") {
       await json(route, { artifacts: [{ artifact_id: "faster-whisper-base", backend_ids: ["whisper"], state: { state: modelState, bytes_downloaded: modelState === "downloading" ? 50 : modelState === "ready" ? 100 : null, bytes_total: 100, error_code: null, error_detail: null }, expected_size: 100, source_url: "https://example.test/model", license_spdx: "MIT", license_status: "declared", removable: true }], model_capabilities: [{ id: "whisper", display_name: "Whisper", stage: "audio", availability: "available", reason: null, device: "cpu", weight_requirement: "on_demand", download: { state: modelState, bytes_downloaded: null, bytes_total: 100, error_code: null, error_detail: null }, enrichment_behavior: "none" }] }); return;
     }

@@ -3,7 +3,7 @@
   "info": {
     "title": "Editarr",
     "description": "Local Editarr API. X-Api-Key grants administrator access. Browser sessions require same-origin CSRF protection for mutations.",
-    "version": "0.1.1"
+    "version": "0.1.2"
   },
   "paths": {
     "/api/auth/api-key": {
@@ -5956,6 +5956,86 @@
         ]
       }
     },
+    "/api/settings/macos/dock": {
+      "get": {
+        "summary": "Get Dock Settings",
+        "description": "Expose the preference only for a packaged macOS app instance.",
+        "operationId": "get_dock_settings_api_settings_macos_dock_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DockSettings"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Dock Settings Api Settings Macos Dock Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Update Dock Settings",
+        "description": "Save a Dock preference for the running launcher to pick up.",
+        "operationId": "update_dock_settings_api_settings_macos_dock_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DockSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
     "/api/system/restart": {
       "get": {
         "summary": "Get Restart",
@@ -7623,6 +7703,62 @@
               }
             },
             "description": "Bad Gateway"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/library-items/{item_id}/reviews/preview": {
+      "post": {
+        "summary": "Api Draft Filter Preview",
+        "description": "Preview one filter without creating or modifying a review or scan.",
+        "operationId": "api_draft_filter_preview_api_library_items__item_id__reviews_preview_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftFilterPreview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -10429,6 +10565,78 @@
         ]
       }
     },
+    "/api/settings/models/scans": {
+      "get": {
+        "summary": "Api Get Model Scan Settings",
+        "description": "Read the instance settings applied to future scans.",
+        "operationId": "api_get_model_scan_settings_api_settings_models_scans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelScanSettings"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Api Save Model Scan Settings",
+        "description": "Save the instance's preferred settings for future scans.",
+        "operationId": "api_save_model_scan_settings_api_settings_models_scans_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelScanSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelScanSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
     "/api/models": {
       "get": {
         "summary": "Api Model Storage",
@@ -12167,6 +12375,7 @@
           "settings.connection.change",
           "settings.path_mapping.change",
           "settings.deployment.change",
+          "settings.scan.change",
           "settings.logging.change",
           "system.restart",
           "backup.create",
@@ -13823,6 +14032,7 @@
             "type": "string",
             "enum": [
               "declared",
+              "undeclared",
               "license-review-required"
             ],
             "title": "License Status"
@@ -13961,6 +14171,11 @@
           },
           "restart": {
             "$ref": "#/components/schemas/RestartCapability"
+          },
+          "macos_dock_supported": {
+            "type": "boolean",
+            "title": "Macos Dock Supported",
+            "default": false
           }
         },
         "type": "object",
@@ -14152,6 +14367,19 @@
         "title": "DisableCause",
         "description": "Why a disabled account is disabled; an active account has none."
       },
+      "DockSettings": {
+        "properties": {
+          "show_in_dock": {
+            "type": "boolean",
+            "title": "Show In Dock"
+          }
+        },
+        "type": "object",
+        "required": [
+          "show_in_dock"
+        ],
+        "title": "DockSettings"
+      },
       "DownloadChoice": {
         "properties": {
           "contributionId": {
@@ -14242,6 +14470,94 @@
           "choices"
         ],
         "title": "DownloadStatusRequest"
+      },
+      "DraftFilterPreview": {
+        "properties": {
+          "media_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Source Id"
+          },
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id"
+          },
+          "source_scan_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Scan Id"
+          },
+          "source_finding_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Finding Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "audio",
+              "visual"
+            ],
+            "title": "Source"
+          },
+          "edit_action": {
+            "$ref": "#/components/schemas/EditAction"
+          },
+          "start_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "edit_action",
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "DraftFilterPreview"
       },
       "DurationEvidence": {
         "properties": {
@@ -15923,6 +16239,28 @@
             ],
             "title": "Path"
           },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "audio_track_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Track Count"
+          },
           "container": {
             "anyOf": [
               {
@@ -16733,6 +17071,21 @@
           "state": {
             "$ref": "#/components/schemas/ModelDownloadState"
           },
+          "device": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cpu",
+                  "coreml"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device"
+          },
           "expected_size": {
             "anyOf": [
               {
@@ -16763,6 +17116,7 @@
             "type": "string",
             "enum": [
               "declared",
+              "undeclared",
               "license-review-required"
             ],
             "title": "License Status"
@@ -17581,6 +17935,21 @@
           "backend_id"
         ],
         "title": "ModelPrefetchRequest"
+      },
+      "ModelScanSettings": {
+        "properties": {
+          "audio_padding_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Audio Padding Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "audio_padding_seconds"
+        ],
+        "title": "ModelScanSettings"
       },
       "ModelStorageStatus": {
         "properties": {
@@ -20970,6 +21339,19 @@
             ],
             "title": "Scan Duration Seconds"
           },
+          "scan_duration_as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scan Duration As Of",
+            "description": "Server timestamp of the duration sample while a scan is running."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -21986,6 +22368,19 @@
               }
             ],
             "title": "Scan Duration Seconds"
+          },
+          "scan_duration_as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scan Duration As Of",
+            "description": "Server timestamp of the duration sample while a scan is running."
           },
           "created_at": {
             "type": "string",
