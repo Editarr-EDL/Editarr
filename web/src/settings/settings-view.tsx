@@ -27,13 +27,14 @@ import { ModalDialog } from "../ui/ModalDialog";
 import { useCan, usePrincipal } from "../auth/auth-gate";
 import { maySeeSettings } from "../auth/route-access";
 
-export type SettingsSection = "connections" | "filters" | "models" | "general" | "users" | "profile";
+export type SettingsSection = "connections" | "filters" | "models" | "general" | "users" | "profile" | "audit";
 export function settingsSectionTitle(section: SettingsSection): string {
   if (section === "users") return "Users";
   if (section === "profile") return "My Profile";
   if (section === "filters") return "Filters";
   if (section === "models") return "Model Storage";
   if (section === "general") return "General";
+  if (section === "audit") return "Audit History";
   return "Connections";
 }
 

@@ -19,7 +19,6 @@ import { SettingsView, settingsSectionTitle } from "./settings/settings-view";
 import { UsersView } from "./settings/users/users-view";
 import { ProfileView } from "./settings/profile/profile-view";
 import { ScansFloatingPanel } from "./scans/scans-floating-panel";
-import { ArchiveView } from "./catalog/archive-view";
 import { LibraryViewPage, MediaDetailPage, SeriesSeasonsPage, SeasonEpisodesPage } from "./catalog/library-pages";
 import { AppSidebar } from "./ui/AppSidebar";
 import { EmptyPage } from "./ui/EmptyPage";
@@ -138,8 +137,6 @@ function App() {
     : undefined;
   const routeTitle = route.kind === "settings"
     ? `Settings — ${settingsSectionTitle(route.section)}`
-    : route.kind === "audit" ? "Audit history"
-    : route.kind === "archive" ? "Archive"
     : activeLibrary?.name || "Library";
   usePageTitle(routeTitle);
 
@@ -152,16 +149,15 @@ function App() {
     <main className="app-main">
       {!allowed && <EmptyPage title="Page unavailable" body="Your account cannot open this page. Choose another page from the navigation." />}
       {allowed && <>
-      {route.kind === "audit" && <AuditHistory eventId={route.eventId} />}
+      {route.kind === "settings" && route.section === "audit" && <AuditHistory eventId={route.eventId} />}
       {route.kind === "settings" && route.section === "users" && <UsersView deleteAccountId={route.deleteAccountId} />}
       {route.kind === "settings" && route.section === "profile" && <ProfileView />}
-      {route.kind === "settings" && route.section !== "users" && route.section !== "profile" && <SettingsView section={route.section} filterTab={route.filterTab} settings={settings} onSaved={async () => { libraryPageCacheRef.current.clear(); await refreshNavigation(); }} />}
+      {route.kind === "settings" && route.section !== "users" && route.section !== "profile" && route.section !== "audit" && <SettingsView section={route.section} filterTab={route.filterTab} settings={settings} onSaved={async () => { libraryPageCacheRef.current.clear(); await refreshNavigation(); }} />}
       {route.kind === "library" && activeLibrary && route.itemId && <CatalogItemBoundary key={`jellyfin:${route.itemId}`} source="jellyfin" itemId={route.itemId} onUnavailable={clearUnavailableMedia}><MediaDetailPage library={activeLibrary} itemId={route.itemId} seriesId={route.seriesId} seasonId={route.seasonId} onNavigate={guardedNavigate} onDirtyChange={setReviewDirty} /></CatalogItemBoundary>}
       {route.kind === "library" && activeLibrary && route.seriesId && route.seasonId && !route.itemId && <SeasonEpisodesPage library={activeLibrary} seriesId={route.seriesId} seasonId={route.seasonId} />}
       {route.kind === "library" && activeLibrary && route.seriesId && !route.seasonId && !route.itemId && <SeriesSeasonsPage library={activeLibrary} seriesId={route.seriesId} />}
       {route.kind === "library" && activeLibrary && !route.itemId && !route.seriesId && <LibraryViewPage key={activeLibrary.id} library={activeLibrary} cache={libraryPageCacheRef.current} />}
       {route.kind === "library" && !activeLibrary && <EmptyPage title="Library unavailable" body="Reconnect Jellyfin or choose a library from the sidebar." />}
-      {route.kind === "archive" && <ArchiveView />}
       </>}
     </main>
     {can(principal, "scan_jobs.view.own") && <ScansFloatingPanel />}

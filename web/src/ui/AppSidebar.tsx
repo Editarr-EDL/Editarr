@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { JellyfinLibrary, JellyfinSettings } from "../api/api-media-types";
 import { AccountMenu } from "../auth/account-menu";
-import { mayOpen, maySeeSettings } from "../auth/route-access";
+import { maySeeSettings } from "../auth/route-access";
 import { can, type Principal } from "../auth/session";
 import { libraryLastRoute, type Route } from "../routes";
 import { settingsSectionTitle } from "../settings/settings-view";
@@ -51,7 +51,7 @@ export function AppSidebar({ principal, route, libraries, settings, error, onRet
   }
 
   const mayViewConnections = can(principal, "connections.view");
-  const settingsSections = (["users", "connections", "filters", "models", "general"] as const)
+  const settingsSections = (["users", "connections", "filters", "models", "general", "audit"] as const)
     .filter((section) => maySeeSettings(principal, section));
   const navigation = <>
     <nav className="sidebar-scroll" aria-label="Primary navigation">
@@ -75,8 +75,6 @@ export function AppSidebar({ principal, route, libraries, settings, error, onRet
           >{settingsSectionTitle(section)}</button>)}
         </SidebarDisclosure>
       </div>
-      {mayOpen(principal, { kind: "archive" }) && <button className={`sidebar-link ${route.kind === "archive" ? "active" : ""}`} onClick={() => openRoute("archive")} aria-current={route.kind === "archive" ? "page" : undefined}>Archive</button>}
-      {mayOpen(principal, { kind: "audit" }) && <button className={`sidebar-link ${route.kind === "audit" ? "active" : ""}`} onClick={() => openRoute("audit")} aria-current={route.kind === "audit" ? "page" : undefined}>Audit history</button>}
     </nav>
     {error && <div className="sidebar-error" role="alert"><span>{error}</span><button onClick={onRetry}>Retry</button></div>}
   </>;

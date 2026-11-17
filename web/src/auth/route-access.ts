@@ -10,20 +10,19 @@ const SETTINGS: Record<SettingsSection, Capability | null> = {
   general: null,
   users: "accounts.list",
   profile: "profile.view.own",
+  audit: "audit.read",
 };
 
 /** The capability a page needs before any of its content renders; null means every account. */
 export function routeCapability(route: Route): Capability | null {
   switch (route.kind) {
-    case "audit": return "audit.read";
     case "settings": return SETTINGS[route.section];
     case "library": return "media.browse";
-    case "archive": return "archive.view";
   }
 }
 
 export function mayOpen(principal: Principal, route: Route): boolean {
-  if (route.kind === "audit" && principal.role === "user") return false;
+  if (route.kind === "settings" && route.section === "audit" && principal.role === "user") return false;
   if (route.kind === "settings" && route.section === "models") {
     return can(principal, "models.inventory.view") || can(principal, "models.download");
   }

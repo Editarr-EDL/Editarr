@@ -3,10 +3,10 @@ import type { FilterTab } from "./settings/filters/filters-page";
 import type { SettingsSection } from "./settings/settings-view";
 
 export type Route =
-  | { kind: "settings"; section: SettingsSection; deleteAccountId?: number; filterTab?: FilterTab }
-  | { kind: "audit"; eventId?: string }
-  | { kind: "archive" }
+  | { kind: "settings"; section: SettingsSection; deleteAccountId?: number; filterTab?: FilterTab; eventId?: string }
   | { kind: "library"; libraryId: string; itemId?: string; seriesId?: string; seasonId?: string };
+
+export const AUDIT_SETTINGS_ROUTE = "settings/audit";
 
 export function libraryLastRoute(libraryId: string): string {
   const root = `library/${encodeURIComponent(libraryId)}`;
@@ -23,8 +23,8 @@ export function libraryLastRoute(libraryId: string): string {
  */
 export function parseRoute(hash = window.location.hash): Route {
   const path = hash.replace(/^#\/?/, "");
-  if (path === "audit") return { kind: "audit" };
-  if (path.startsWith("audit/")) return { kind: "audit", eventId: decodeURIComponent(path.slice("audit/".length)) };
+  const audit = /^(?:settings\/)?audit(?:\/(.*))?$/.exec(path);
+  if (audit) return { kind: "settings", section: "audit", eventId: audit[1] ? decodeURIComponent(audit[1]) : undefined };
   if (path === "settings" || path === "settings/connections") return { kind: "settings", section: "connections" };
   if (path === "settings/filters") return { kind: "settings", section: "filters" };
   if (path === "settings/filters/server") return { kind: "settings", section: "filters", filterTab: "server" };
@@ -34,7 +34,6 @@ export function parseRoute(hash = window.location.hash): Route {
   const deletion = /^settings\/users\/(\d+)\/delete$/.exec(path);
   if (deletion) return { kind: "settings", section: "users", deleteAccountId: Number(deletion[1]) };
   if (path === "settings/profile") return { kind: "settings", section: "profile" };
-  if (path === "archive") return { kind: "archive" };
   if (path.startsWith("library/")) {
     const [, rawLibraryId, section, rawId, childSection, rawChildId, itemSection, rawItemId] = path.split("/");
     if (rawLibraryId) {

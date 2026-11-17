@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { CAPABILITIES } from "../src/auth/capabilities";
-import { libraries, items, series, season, episode, json, mockApi, expectNoHorizontalPageOverflow, authenticationStatus } from "./app-fixtures";
+import { auditEvent, libraries, items, series, season, episode, json, mockApi, expectNoHorizontalPageOverflow, authenticationStatus } from "./app-fixtures";
 
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
@@ -19,7 +19,7 @@ for (const width of [320, 1440]) {
     for (const [route, heading] of [
       ["settings/general", "General"],
       ["library/movies/item/movie-1", "Example Movie"],
-      ["archive", "Archive"],
+      ["settings/audit", "Audit History"],
     ]) {
       await page.goto(`/?idle-route=${encodeURIComponent(route)}#/${route}`);
       await expect(page.locator(".app-main").getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
@@ -46,7 +46,7 @@ for (const width of [320, 375, 760, 761, 768, 1024, 1280, 1920]) {
       ["settings/connections", "Connections"], ["settings/filters", "Filters"], ["settings/filters/server", "Filters"],
       ["settings/models", "Model Storage"], ["settings/general", "General"],
       ["library/movies", "Movies"], ["library/movies/item/movie-1", "Example Movie"],
-      ["archive", "Archive"],
+      ["settings/audit", "Audit History"],
     ];
     for (const [route, heading] of routes) {
       await page.goto(`/#/${route}`);
@@ -195,22 +195,39 @@ test("shows completed Editarr work in the scans panel", async ({ page }) => {
 });
 
 for (const width of [320, 1440]) {
-  test(`shows the read-only archive only with archive.view at ${width}px`, async ({ page }) => {
+  test(`groups Audit History in Settings and removes Archive at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.getByRole("button", { name: "Archive", exact: true }).click();
+    if (width <= 760) await page.getByRole("button", { name: "Open navigation" }).click();
+    const nav = page.getByRole("navigation", { name: "Primary navigation" });
+    const settings = nav.getByRole("button", { name: "Settings", exact: true });
+    const audit = nav.getByRole("button", { name: "Audit History" });
+    await expect(nav.getByRole("button", { name: "Archive", exact: true })).toHaveCount(0);
+    await settings.click();
+    await expect(audit).toHaveCount(0);
+    await settings.click();
+    await audit.click();
+    await expect(page).toHaveURL(/#settings\/audit$/);
     const main = page.locator(".app-main");
-    await expect(main.getByRole("heading", { name: /Archived Movie/ })).toBeVisible();
-    await expect(main.getByText("Radarr · Movie")).toBeVisible();
-    await expect(main.getByRole("button")).toHaveCount(0);
-    await expect(main.getByRole("link")).toHaveCount(0);
+    await expect(main.getByRole("heading", { name: "Audit History" })).toBeVisible();
     await expectNoHorizontalPageOverflow(page);
+    await main.getByRole("link", { name: auditEvent.action }).click();
+    await expect(page).toHaveURL(`/#/settings/audit/${auditEvent.event_id}`);
+    await expect(main.getByRole("heading", { name: auditEvent.action })).toBeVisible();
+    await main.getByRole("link", { name: "Back to audit history" }).click();
+    await expect(page).toHaveURL("/#/settings/audit");
+
+    await page.goto(`/#/audit/${auditEvent.event_id}`);
+    await expect(main.getByRole("heading", { name: auditEvent.action })).toBeVisible();
+    await page.goto("/#/archive");
+    await expect(main.getByRole("heading", { name: "Connections", level: 1 })).toBeVisible();
 
     const status = authenticationStatus("authenticated");
-    status.access!.capabilities = CAPABILITIES.filter((capability) => capability !== "archive.view");
+    status.access!.capabilities = CAPABILITIES.filter((capability) => capability !== "audit.read");
     await page.route("**/api/auth/status", (route) => json(route, status));
-    await page.goto("/#/archive");
+    await page.goto("/#/settings/audit");
     await page.reload();
     await expect(main.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Archive", exact: true })).toHaveCount(0);
+    if (width <= 760) await page.getByRole("button", { name: "Open navigation" }).click();
+    await expect(audit).toHaveCount(0);
   });
 }
