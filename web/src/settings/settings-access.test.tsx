@@ -266,6 +266,7 @@ it.each(([[], ["models.download"], ["models.download.cancel"], ["models.delete"]
     artifact_id: state, backend_ids: [state], source_url: "https://models.test", removable: true,
     state: { state, bytes_downloaded: null, bytes_total: null, error_detail: null },
   })) }));
+  fireEvent.click(await screen.findByText("Supporting Packages"));
   await screen.findByRole("article", { name: "ready model" });
   for (const [capability, name] of [["models.download", "Download"], ["models.download.cancel", "Cancel download"], ["models.delete", "Remove"]] as const) {
     expect(screen.queryByRole("button", { name }) !== null).toBe(operations.includes(capability));

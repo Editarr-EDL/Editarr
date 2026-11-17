@@ -190,7 +190,7 @@ it.each([false, true])("R3 model cancel and removal require inventory and action
       state: { state, bytes_downloaded: null, bytes_total: null, error_detail: null },
     })) },
   });
-  if (inventory) await screen.findByRole("article", { name: "ready model" });
+  if (inventory) fireEvent.click(await screen.findByText("Supporting Packages"));
   else await screen.findByRole("heading", { name: "Download models" });
   expect(calls.some(call => call.request === "GET /api/models")).toBe(inventory);
   expect(screen.queryByRole("button", { name: "Cancel download" }) !== null).toBe(inventory);
