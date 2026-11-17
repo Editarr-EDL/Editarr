@@ -7,6 +7,11 @@ private struct RuntimeResult {
     let stdout: String
 }
 
+private struct RuntimeStatus: Decodable {
+    let running: Bool
+    let show_in_dock: Bool?
+}
+
 private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let statusMenuItem = NSMenuItem(title: "Status: Starting…", action: nil, keyEquivalent: "")
@@ -14,6 +19,7 @@ private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
     private let loginMenuItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
     private var backendProcess: Process?
     private var statusTimer: Timer?
+    private var refreshingStatus = false
     private var isRunning = false
     private var quitting = false
 
@@ -37,7 +43,7 @@ private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
         hasVisibleWindows flag: Bool
     ) -> Bool {
         openEditarr()
-        return true
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -87,6 +93,9 @@ private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
         let process = Process()
         process.executableURL = runtimeExecutable
         process.arguments = arguments
+        var environment = ProcessInfo.processInfo.environment
+        environment["EDITARR_MACOS_APP"] = "1"
+        process.environment = environment
         process.currentDirectoryURL = FileManager.default.temporaryDirectory
         return process
     }
@@ -138,9 +147,19 @@ private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func refreshStatus() {
+        guard !refreshingStatus else { return }
+        refreshingStatus = true
         runLifecycle("status") { [weak self] result in
             guard let self else { return }
-            self.isRunning = result.status == 0 && result.stdout.contains("\"running\": true")
+            self.refreshingStatus = false
+            let status = try? JSONDecoder().decode(RuntimeStatus.self, from: Data(result.stdout.utf8))
+            self.isRunning = result.status == 0 && status?.running == true
+            if let showInDock = status?.show_in_dock {
+                let policy: NSApplication.ActivationPolicy = showInDock ? .regular : .accessory
+                if NSApp.activationPolicy() != policy {
+                    NSApp.setActivationPolicy(policy)
+                }
+            }
             self.statusMenuItem.title = self.isRunning ? "Status: Running" : "Status: Stopped"
             self.startStopMenuItem.title = self.isRunning ? "Stop Editarr" : "Start Editarr"
         }
@@ -148,7 +167,8 @@ private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openEditarr() {
         runLifecycle("open-ui") { [weak self] result in
-            if result.status != 0 { self?.startBackend(openBrowser: true) }
+            guard let self, result.status == 1, !self.isRunning else { return }
+            self.startBackend(openBrowser: true)
         }
     }
 

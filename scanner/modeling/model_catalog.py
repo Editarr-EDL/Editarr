@@ -179,6 +179,7 @@ class DeploymentConfiguration(BaseModel):
     saved: DeploymentSavedOverrides
     restart_required: bool
     restart: RestartCapability
+    macos_dock_supported: bool = False
 
 
 class FilterRuleDisposition(str, Enum):

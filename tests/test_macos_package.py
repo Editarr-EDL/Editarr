@@ -176,11 +176,15 @@ def test_validate_app_layout_requires_menu_agent_contract(tmp_path: Path):
         executable.write_text("#!/bin/sh\n", encoding="utf-8")
         executable.chmod(0o755)
     (contents / "Resources" / "Editarr.icns").write_bytes(b"icon")
+    catalog = contents / "Resources" / "Assets.car"
+    catalog.write_bytes(b"catalog")
     with (contents / "Info.plist").open("wb") as destination:
         plistlib.dump(
             {
                 "CFBundleExecutable": "Editarr",
                 "CFBundleIdentifier": "org.editarr.app",
+                "CFBundleIconName": "Editarr",
+                "CFBundleIconFile": "Editarr",
                 "CFBundlePackageType": "APPL",
                 "LSMinimumSystemVersion": "26.2",
                 "LSUIElement": True,
@@ -190,6 +194,10 @@ def test_validate_app_layout_requires_menu_agent_contract(tmp_path: Path):
         )
 
     package._validate_app_layout(tmp_path / "Editarr.app", minimum_macos="26.2")
+    catalog.unlink()
+    with pytest.raises(package.PackageError, match="Assets.car"):
+        package._validate_app_layout(tmp_path / "Editarr.app", minimum_macos="26.2")
+    catalog.write_bytes(b"catalog")
     os.chmod(launcher, 0o644)
     with pytest.raises(package.PackageError, match="not executable"):
         package._validate_app_layout(tmp_path / "Editarr.app", minimum_macos="26.2")

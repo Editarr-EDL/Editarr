@@ -19,10 +19,10 @@ from typing import Any
 
 from native_build.artifact_size import SIZE_ACCOUNTING
 from native_build.artifact_size import tree_size as _tree_size
+from native_build.macos_icon import ICON_NAME, IconBuildError, build_icon
 
 ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER_SOURCE = ROOT / "native_build" / "macos" / "EditarrLauncher.swift"
-ICON_SOURCE = ROOT / "web" / "public" / "editarr-app-icon.png"
 BUNDLE_IDENTIFIER = "org.editarr.app"
 TARGET = "macos-arm64"
 APP_NAME = "Editarr.app"
@@ -192,17 +192,6 @@ def _minimum_macos(records: list[dict[str, Any]]) -> tuple[str, list[dict[str, A
     return minimum, forcing
 
 
-def _build_icon(destination: Path, build_root: Path) -> None:
-    iconset = build_root / "Editarr.iconset"
-    iconset.mkdir()
-    for points, pixels in ((16, 16), (16, 32), (32, 32), (32, 64), (128, 128), (128, 256),
-                           (256, 256), (256, 512), (512, 512), (512, 1024)):
-        suffix = "@2x" if pixels == points * 2 else ""
-        output = iconset / f"icon_{points}x{points}{suffix}.png"
-        _run(["sips", "-z", str(pixels), str(pixels), str(ICON_SOURCE), "--out", str(output)])
-    _run(["iconutil", "-c", "icns", str(iconset), "-o", str(destination)])
-
-
 def _build_launcher(destination: Path, minimum_macos: str) -> None:
     _run(
         [
@@ -225,12 +214,14 @@ def _build_launcher(destination: Path, minimum_macos: str) -> None:
     destination.chmod(0o755)
 
 
-def _write_info_plist(path: Path, *, version: str, minimum_macos: str) -> None:
+def _write_info_plist(
+    path: Path, *, version: str, minimum_macos: str, icon_metadata: dict[str, object]
+) -> None:
     values: dict[str, object] = {
         "CFBundleDevelopmentRegion": "en",
         "CFBundleDisplayName": "Editarr",
         "CFBundleExecutable": "Editarr",
-        "CFBundleIconFile": "Editarr.icns",
+        **icon_metadata,
         "CFBundleIdentifier": BUNDLE_IDENTIFIER,
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": "Editarr",
@@ -287,6 +278,8 @@ def _validate_app_layout(app: Path, *, minimum_macos: str) -> None:
     expected = {
         "CFBundleExecutable": "Editarr",
         "CFBundleIdentifier": BUNDLE_IDENTIFIER,
+        "CFBundleIconName": ICON_NAME,
+        "CFBundleIconFile": ICON_NAME,
         "CFBundlePackageType": "APPL",
         "LSMinimumSystemVersion": minimum_macos,
         "LSUIElement": True,
@@ -301,8 +294,9 @@ def _validate_app_layout(app: Path, *, minimum_macos: str) -> None:
         raise PackageError("macOS application launcher is missing or not executable")
     if not runtime.is_file() or not os.access(runtime, os.X_OK):
         raise PackageError("macOS application embedded runtime is missing or not executable")
-    if not (contents / "Resources" / "Editarr.icns").is_file():
-        raise PackageError("macOS application icon is missing")
+    for resource in ("Assets.car", f"{ICON_NAME}.icns"):
+        if not (contents / "Resources" / resource).is_file():
+            raise PackageError(f"macOS application icon resource is missing: {resource}")
 
 
 def _create_dmg(app: Path, destination: Path, build_root: Path) -> None:
@@ -329,9 +323,7 @@ def _create_dmg(app: Path, destination: Path, build_root: Path) -> None:
 
 
 def package(args: argparse.Namespace) -> int:
-    _require_commands(
-        "codesign", "file", "hdiutil", "iconutil", "lipo", "otool", "sips", "swiftc", "xcrun"
-    )
+    _require_commands("codesign", "file", "hdiutil", "lipo", "otool", "sips", "swiftc", "xcrun")
     source_runtime = args.runtime.resolve()
     _read_runtime_inventory(source_runtime)
     _require_distributable_runtime(source_runtime, test_fake_models=args.test_fake_models)
@@ -364,9 +356,12 @@ def package(args: argparse.Namespace) -> int:
         records = _runtime_macho_records(embedded_runtime)
         minimum_macos, forcing_dependencies = _minimum_macos(records)
         _build_launcher(macos / "Editarr", minimum_macos)
-        _build_icon(resources / "Editarr.icns", build_root)
+        icon_metadata = build_icon(resources, build_root, minimum_macos, run=_run)
         _write_info_plist(
-            contents / "Info.plist", version=_project_version(), minimum_macos=minimum_macos
+            contents / "Info.plist",
+            version=_project_version(),
+            minimum_macos=minimum_macos,
+            icon_metadata=icon_metadata,
         )
         (contents / "PkgInfo").write_text("APPL????", encoding="ascii")
         _validate_app_layout(app, minimum_macos=minimum_macos)
@@ -440,7 +435,9 @@ def _arguments() -> argparse.Namespace:
 def main() -> int:
     try:
         return package(_arguments())
-    except (PackageError, OSError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
+    except (
+        PackageError, IconBuildError, OSError, subprocess.CalledProcessError, json.JSONDecodeError
+    ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 

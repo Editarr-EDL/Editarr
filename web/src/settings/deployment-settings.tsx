@@ -7,6 +7,7 @@ import type {
   DeploymentUpdate,
 } from "../api/api-system-types";
 import { useCan } from "../auth/auth-gate";
+import { MacOSDockSettings } from "./macos-dock-settings";
 
 function baseUrlDraft(configuration: DeploymentConfiguration): string {
   return configuration.saved.base_url
@@ -133,7 +134,9 @@ export function DeploymentSettings({ onDirtyChange }: { onDirtyChange?: (dirty: 
     return `${base} ${savedPort}`;
   }, [configuration]);
 
-  return <section className="settings-card deployment-settings" aria-labelledby="deployment-heading">
+  return <>
+  {configuration?.macos_dock_supported && <MacOSDockSettings />}
+  <section className="settings-card deployment-settings" aria-labelledby="deployment-heading">
     <div className="section-heading"><div><h2 id="deployment-heading">Deployment</h2><p>Set Editarr’s public Base URL and its upstream listening port. Saved changes apply only when Editarr restarts.</p></div></div>
     {loading && <p className="loading-state">Loading deployment settings…</p>}
     {!loading && error && !configuration && <div className="load-error" role="alert"><span>{error}</span><button className="btn-secondary" type="button" onClick={() => void load()}>Retry</button></div>}
@@ -155,5 +158,6 @@ export function DeploymentSettings({ onDirtyChange }: { onDirtyChange?: (dirty: 
       {error && <p className="form-error" role="alert">{error}</p>}
       {notice && <p className="form-status" role="status">{notice}</p>}
     </>}
-  </section>;
+  </section>
+  </>;
 }

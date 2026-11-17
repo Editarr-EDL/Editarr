@@ -107,6 +107,7 @@ export interface DeploymentConfiguration {
   saved: DeploymentSavedOverrides;
   restart_required: boolean;
   restart: RestartCapability;
+  macos_dock_supported?: boolean;
 }
 
 /** Fields omitted from a deployment update retain their explicit saved override. */

@@ -27,7 +27,8 @@ checksums. Editarr's own source is available at the release tag.
 
 ## Rebuild the media inputs
 
-Use the Apple command-line tools and Python 3.11. From a checkout of the release
+Use Xcode 26 or later and Python 3.11. Select Xcode with `DEVELOPER_DIR` for the
+packaging command if the standalone command-line tools are selected globally. From a checkout of the release
 tag, while the build environment has the locked Editarr dependencies, run:
 
 ```sh

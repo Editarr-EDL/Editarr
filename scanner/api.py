@@ -55,6 +55,7 @@ from scanner.http.filter_policy_api import router as filter_policy_router
 from scanner.http.jellyfin_accounts_api import router as jellyfin_accounts_router
 from scanner.http.jellyfin_login_api import router as jellyfin_login_router
 from scanner.http.jellyfin_quick_connect_api import router as jellyfin_quick_connect_router
+from scanner.http.macos_dock_api import router as macos_dock_router
 from scanner.http.openapi import configure_api_documentation
 from scanner.http.restart_api import router as restart_router
 from scanner.http.review_policy_errors import install_review_policy_errors
@@ -346,6 +347,7 @@ app.include_router(backup_schedule_router)
 app.include_router(community_router)
 app.include_router(setup_restore_router)
 app.include_router(deployment_router)
+app.include_router(macos_dock_router)
 app.include_router(restart_router)
 
 

@@ -49,6 +49,7 @@ function deploymentConfiguration(overrides: Record<string, unknown> = {}) {
 function installApi(
   initial = deploymentConfiguration(),
   save: (request: Record<string, unknown>) => Response | Promise<Response> = () => json(initial),
+  dock: (request?: RequestInit) => Response = () => json(null),
 ) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), "http://editarr.test");
@@ -61,6 +62,7 @@ function installApi(
       server_url: null, api_key_configured: false, last_checked_at: null, last_error: null,
     });
     if (url.pathname === "/api/scans/queue" || url.pathname === "/api/scans/history" || url.pathname === "/api/settings/path-mappings") return json([]);
+    if (url.pathname === "/api/settings/macos/dock") return dock(init);
     if (url.pathname === "/api/settings/deployment" && init?.method !== "PUT") return json(initial);
     if (url.pathname === "/api/settings/deployment" && init?.method === "PUT") {
       return save(JSON.parse(String(init.body)) as Record<string, unknown>);
@@ -99,6 +101,23 @@ describe("deployment settings", () => {
       target: { value: "https://editarr.example.com/unsaved" },
     });
     expect(await screen.findByText(/You have unsaved changes/)).toHaveTextContent("these edits will not be applied");
+  });
+
+  it("saves the macOS app Dock preference immediately", async () => {
+    const save = vi.fn((request?: RequestInit) => json(request?.body
+      ? JSON.parse(String(request.body))
+      : { show_in_dock: false }));
+    vi.stubGlobal("fetch", installApi(deploymentConfiguration({ macos_dock_supported: true }), undefined, save));
+    renderAuthenticatedApp();
+
+    const toggle = await screen.findByRole("checkbox", { name: "Show app icon in the Dock" });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify({ show_in_dock: true }),
+    }));
   });
 
   it("renders server-derived nested path data and keeps active values separate from the pending next start", async () => {
