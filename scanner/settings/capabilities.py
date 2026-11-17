@@ -24,6 +24,7 @@ AvailabilityReason = Literal[
     "unsupported_architecture",
     "missing_package",
     "missing_provider",
+    "license_review_required",
     "deferred_gap",
 ]
 
@@ -223,7 +224,7 @@ def _target_failure(
     return "unsupported_platform"
 
 
-def _deferred_for_macos_release(backend_id: str) -> bool:
+def _requires_macos_release_license_review(backend_id: str) -> bool:
     if not is_macos_release():
         return False
     from scanner.modeling.model_acquisition_manifest import (
@@ -264,9 +265,13 @@ def model_capabilities(
                 reason=target_failure,
                 weight_requirement=weight_requirement,
             )
-        if _deferred_for_macos_release(backend_id):
+        if _requires_macos_release_license_review(backend_id):
             return _capability(
-                backend_id, stage, available=False, reason="deferred_gap", weight_requirement="none"
+                backend_id,
+                stage,
+                available=False,
+                reason="license_review_required",
+                weight_requirement="none",
             )
         if _missing_package(environment, *packages):
             return _capability(

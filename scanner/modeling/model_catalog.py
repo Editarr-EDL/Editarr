@@ -54,6 +54,7 @@ class ModelCapability(ScanModelCapability):
             "unsupported_architecture",
             "missing_package",
             "missing_provider",
+            "license_review_required",
             "deferred_gap",
         ]
         | None

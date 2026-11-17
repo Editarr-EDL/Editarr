@@ -10,6 +10,15 @@ import { formatBytes } from "../shared/display";
 import { useCan } from "../auth/auth-gate";
 import { ModelDownloads } from "./model-downloads";
 
+const unavailabilityMessages: Record<string, string> = {
+  license_review_required: "A required model is pending license review for this build.",
+  unsupported_platform: "This backend does not support the server’s operating system.",
+  unsupported_architecture: "This backend does not support the server’s processor architecture.",
+  missing_package: "This build is missing a required runtime package.",
+  missing_provider: "A required inference provider is unavailable.",
+  deferred_gap: "This backend is unavailable in this build.",
+};
+
 /** Show model availability and manage artifact downloads and removal. */
 export function ModelStorage() {
   const mayView = useCan("models.inventory.view");
@@ -45,22 +54,29 @@ function ModelInventory() {
     {message && <p className="form-status" role="status">{message}</p>}
     {!storage && !message && <p className="loading-state">Loading model storage…</p>}
     {storage?.artifacts.map((artifact: ManagedModelArtifact) => {
-      const backends = artifact.backend_ids.map((id) => capability(id)).filter(Boolean);
-      const unavailable = backends.length > 0 && backends.every((item) => item?.availability === "unavailable");
-      const downloading = artifact.state.state === "downloading";
-      const stateLabel = artifact.state.state.replace(/_/g, " ");
+      const backends = artifact.backend_ids.map(capability).filter((item) => item !== undefined);
+      const unavailable = backends.length > 0 && backends.every((item) => item.availability === "unavailable");
+      const state = artifact.state.state;
+      const downloading = state === "downloading";
+      const displayState = unavailable && state === "ready" ? "cached"
+        : unavailable && (state === "not_downloaded" || state === "not_required") ? "unavailable"
+          : state;
+      const devices = new Set(backends.map(({ device }) => device).filter((device) => device !== "none"));
+      const availabilityNotes = new Set(backends.map(({ reason }) =>
+        unavailabilityMessages[reason ?? "deferred_gap"] ?? unavailabilityMessages.deferred_gap
+      ));
       const progress = artifact.state.bytes_total && artifact.state.bytes_downloaded !== null
         ? Math.min(100, (artifact.state.bytes_downloaded / artifact.state.bytes_total) * 100) : null;
       const backendId = artifact.backend_ids[0];
       return <article className="model-artifact" key={artifact.artifact_id} aria-label={`${artifact.artifact_id} model`}>
-        <div className="model-artifact-heading"><div><h3>{backends.map((item) => item?.display_name).filter(Boolean).join(" · ") || artifact.artifact_id}</h3><p>{artifact.artifact_id} · {formatBytes(artifact.expected_size)}</p></div><span className={`model-state model-state-${artifact.state.state}`}>{stateLabel}</span></div>
-        <dl className="model-details"><div><dt>Stage</dt><dd>{[...new Set(backends.map((item) => item?.stage).filter(Boolean))].join(", ") || "Managed artifact"}</dd></div><div><dt>Device</dt><dd>{[...new Set(backends.map((item) => item?.device).filter(Boolean))].join(", ") || "Unavailable"}</dd></div><div><dt>License</dt><dd><a href={artifact.source_url} target="_blank" rel="noreferrer">{artifact.license_spdx || "Review required"}</a>{artifact.license_status === "license-review-required" ? " · release review required" : ""}</dd></div></dl>
+        <div className="model-artifact-heading"><div><h3>{backends.map((item) => item.display_name).join(" · ") || artifact.artifact_id}</h3><p>{artifact.artifact_id} · {formatBytes(artifact.expected_size)}</p></div><span className={`model-state model-state-${displayState}`}>{displayState.replace(/_/g, " ")}</span></div>
+        <dl className="model-details"><div><dt>Stage</dt><dd>{[...new Set(backends.map((item) => item.stage))].join(", ") || "Managed artifact"}</dd></div><div><dt>Device</dt><dd>{unavailable ? "Unavailable" : [...devices].join(", ") || "—"}</dd></div><div><dt>License</dt><dd><a href={artifact.source_url} target="_blank" rel="noreferrer">{artifact.license_spdx || "Review required"}</a>{artifact.license_status === "license-review-required" ? " · release review required" : ""}</dd></div></dl>
         {downloading && <div className="model-progress"><progress value={progress ?? undefined} max="100" aria-label={`${artifact.artifact_id} download progress`} /> <span>{formatBytes(artifact.state.bytes_downloaded)} of {formatBytes(artifact.state.bytes_total)}</span></div>}
         {artifact.state.error_detail && <p className="form-error" role="alert">{artifact.state.error_detail}</p>}
-        {unavailable && <p className="muted-copy">Unavailable here: {backends.map((item) => item?.reason?.replace(/_/g, " ")).filter(Boolean).join(", ")}. Windows and Linux retain CPU fallback; CUDA is shown only when the packaged backend and host NVIDIA driver pass the runtime probe.</p>}
+        {unavailable && <p className="muted-copy">{[...availabilityNotes].join(" ")}</p>}
         <div className="button-row"><a className="btn-secondary compact-button" href={artifact.source_url} target="_blank" rel="noreferrer">Source</a>{downloading ? mayCancel && <button className="danger-button compact-button" onClick={() => void act(`cancel-${artifact.artifact_id}`, () => cancelModelDownload(artifact.artifact_id))} disabled={working !== null}>{working === `cancel-${artifact.artifact_id}` ? "Cancelling…" : "Cancel download"}</button> : mayDownload && artifact.removable && backendId && artifact.state.state !== "ready" && !unavailable && <button className="btn-primary compact-button" onClick={() => void act(`download-${backendId}`, () => prefetchModel(backendId))} disabled={working !== null}>{working === `download-${backendId}` ? "Starting…" : "Download"}</button>}{mayDelete && artifact.state.state === "ready" && artifact.removable && <button className="danger-button compact-button" onClick={() => void act(`remove-${artifact.artifact_id}`, () => removeModel(artifact.artifact_id))} disabled={working !== null}>{working === `remove-${artifact.artifact_id}` ? "Removing…" : "Remove"}</button>}</div>
       </article>;
     })}
-    {storage?.model_capabilities.some((item) => item.enrichment_behavior === "detector_findings_only") && <p className="muted-copy">On Windows and Linux, scans retain detector findings when Qwen enrichment is unavailable. Supported models use CUDA when available, with CPU as a fallback.</p>}
+    {storage?.model_capabilities.some((item) => item.enrichment_behavior === "detector_findings_only") && <p className="muted-copy">Video scans retain detector findings when Qwen enrichment is unavailable.</p>}
   </section>;
 }

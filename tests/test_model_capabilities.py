@@ -56,7 +56,8 @@ def test_macos_release_defers_only_backends_with_uncleared_downloads(monkeypatch
         "mlx_whisper",
         "image_safety_gate",
     }
-    assert models["mlx_whisper"].reason == models["image_safety_gate"].reason == "deferred_gap"
+    assert models["mlx_whisper"].reason == "license_review_required"
+    assert models["image_safety_gate"].reason == "license_review_required"
 
 
 def test_macos_release_refuses_uncleared_download_before_touching_cache(tmp_path, monkeypatch):
