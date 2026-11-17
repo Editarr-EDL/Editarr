@@ -17,13 +17,18 @@ from scanner.formats.community.codec import (
     parse_artifact,
     parse_manifest,
 )
-from scanner.pipeline.audio_tracks import _file_state
+from scanner.pipeline.audio_tracks import AudioSelectionError, _file_state
 from scanner.security.community_artifact_signatures import SignedArtifact, sign_artifact
 
 from .donation_projection import DonationOptions, project_source
 from .donation_sources import CapturedSource, SourceRef, canonical, capture_source
 from .fingerprints import FingerprintCache
-from .stream_fingerprints import StreamUnsupported, fingerprint_analyzed_audio, fingerprint_video
+from .pcm_fingerprints import fingerprint_pcm_audio
+from .stream_fingerprints import (
+    StreamUnsupported,
+    analyzed_audio_source,
+    fingerprint_video,
+)
 
 _files = FingerprintCache()
 _UNSUPPORTED = {
@@ -35,6 +40,8 @@ _UNSUPPORTED = {
     "invalid_avcc",
     "invalid_nal_packet",
     "missing_stream",
+    "audio_pcm_budget",
+    "audio_pcm_unavailable",
 }
 
 
@@ -88,9 +95,19 @@ def prepare_donation(
                 raise ArtifactError("Donation preparation cancelled")
             if channel == "audio":
                 with Session(bind) as db:
-                    result = fingerprint_analyzed_audio(db, scan["id"], should_cancel=should_cancel)
-            else:
-                result = fingerprint_video(path, should_cancel=should_cancel)
+                    analyzed_path, selection = analyzed_audio_source(db, scan["id"])
+                if Path(analyzed_path) != path:
+                    raise ArtifactError("Scanned media changed; prepare a new source snapshot")
+                return asdict(
+                    fingerprint_pcm_audio(
+                        path,
+                        selection,
+                        provenance="analyzed",
+                        description=payload["analyzed_audio"]["description"],
+                        should_cancel=should_cancel,
+                    )
+                )
+            result = fingerprint_video(path, should_cancel=should_cancel)
         except FileNotFoundError:
             warnings.append(f"{channel}_media_unavailable")
             return None
@@ -99,13 +116,15 @@ def prepare_donation(
                 raise ArtifactError("Stream evidence could not be captured safely") from exc
             warnings.append(f"{channel}_fingerprint_unsupported")
             return None
+        except AudioSelectionError as exc:
+            raise ArtifactError("Scanned media changed; prepare a new source snapshot") from exc
         return {
             "algorithm": result.algorithm,
             "digest": result.digest,
             "playback_start": result.playback_start,
             "duration": result.duration,
-            "provenance": "analyzed" if channel == "audio" else "unknown",
-            "description": payload["analyzed_audio"]["description"] if channel == "audio" else None,
+            "provenance": "unknown",
+            "description": None,
         }
 
     if payload["analyzed_audio"]:

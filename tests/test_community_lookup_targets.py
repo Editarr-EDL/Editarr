@@ -73,9 +73,9 @@ def test_unknown_audio_and_unsupported_streams_do_not_fabricate_evidence(
     assert "audio_selection_required" in unknown.warnings
 
     def unsupported(*_args, **_kwargs):
-        raise targets.StreamUnsupported("unsupported_codec_configuration")
+        raise targets.StreamUnsupported("audio_pcm_unavailable")
 
-    monkeypatch.setattr(targets, "fingerprint_stream", unsupported)
+    monkeypatch.setattr(targets, "fingerprint_pcm_audio", unsupported)
     inventory = probe_audio_tracks(path)
     value = targets.capture_target(
         None, request(AudioSelection.from_selection(inventory.select(1)))
@@ -240,8 +240,9 @@ def test_preserves_selected_language_description_but_not_path_text(
         tracks=tuple(track if item.stream_index == 1 else item for item in original_probe.tracks),
     )
     monkeypatch.setattr(targets, "probe_audio_tracks", lambda _path: inventory)
-    result = targets.fingerprint_stream(tagged, 1)
-    monkeypatch.setattr(targets, "fingerprint_stream", lambda *_args, **_kwargs: result)
+    from scanner.integrations.community import pcm_fingerprints
+
+    monkeypatch.setattr(pcm_fingerprints, "probe_audio_tracks", lambda _path: inventory)
     captured = targets.capture_target(None, request(AudioSelection.from_selection(selected)))
     assert captured.evidence.media.release.audio.language == "eng"
     assert captured.evidence.audio_stream.description == expected

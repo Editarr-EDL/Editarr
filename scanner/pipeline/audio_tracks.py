@@ -14,6 +14,8 @@ from .bounded_media import BoundedInput
 MAX_STREAMS = 128
 MAX_TAG_LENGTH = 512
 PROBE_OPTIONS = {"probesize": "4194304", "analyzeduration": "2000000"}
+AUDIO_PCM_RATE = 16_000
+AUDIO_PCM_OPTIONS = ("-acodec", "pcm_s16le", "-ar", str(AUDIO_PCM_RATE), "-ac", "1")
 
 
 class AudioSelectionError(ValueError):

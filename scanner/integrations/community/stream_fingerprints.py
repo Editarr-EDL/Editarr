@@ -14,7 +14,7 @@ from scanner.formats.community.stream_fingerprints import (
     stream_digest,
 )
 from scanner.modeling.model_audio_tracks import AudioSelection
-from scanner.pipeline.audio_tracks import _file_state
+from scanner.pipeline.audio_tracks import AudioTrackSelection, _file_state
 
 from .stream_experiments import SamplingCandidate, StreamUnsupported, sample_stream
 
@@ -100,6 +100,20 @@ def fingerprint_analyzed_audio(
     db: Session, scan_id: str, *, should_cancel=None
 ) -> StreamFingerprint:
     """Fingerprint only a generated scan's immutable actually analyzed track."""
+    path, selection = analyzed_audio_source(db, scan_id)
+    result = fingerprint_stream(
+        path,
+        selection.track.stream_index,
+        should_cancel=should_cancel,
+        audio_selection=selection,
+    )
+    if result.channel != "audio":
+        raise StreamUnsupported("analyzed_audio_stream_missing")
+    return result
+
+
+def analyzed_audio_source(db: Session, scan_id: str) -> tuple[str, AudioTrackSelection]:
+    """Load the generated scan's media path and recorded analyzed selection."""
     row = db.get(ScanRow, scan_id)
     if (
         row is None
@@ -108,16 +122,10 @@ def fingerprint_analyzed_audio(
         or not row.analyzed_audio_selection_json
     ):
         raise StreamUnsupported("analyzed_audio_unknown")
-    selection = AudioSelection.model_validate_json(row.analyzed_audio_selection_json).selection()
-    result = fingerprint_stream(
+    return (
         row.resolved_local_path,
-        selection.track.stream_index,
-        should_cancel=should_cancel,
-        audio_selection=selection,
+        AudioSelection.model_validate_json(row.analyzed_audio_selection_json).selection(),
     )
-    if result.channel != "audio":
-        raise StreamUnsupported("analyzed_audio_stream_missing")
-    return result
 
 
 def fingerprint_video(video_path: str | Path, *, should_cancel=None) -> StreamFingerprint:

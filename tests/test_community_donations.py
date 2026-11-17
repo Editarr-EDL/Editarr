@@ -386,16 +386,16 @@ def test_zero_findings_and_redacted_public_text(source_database):
 
 
 def test_actual_stream_preparation_and_file_change_guard(source_database, generated_streams):
-    from scanner.integrations.community.stream_fingerprints import (
-        fingerprint_stream,
-        fingerprint_video,
-    )
+    from scanner.formats.community.stream_fingerprints import PCM_AUDIO_ALGORITHM
+    from scanner.integrations.community.pcm_fingerprints import fingerprint_pcm_audio
+    from scanner.integrations.community.stream_fingerprints import fingerprint_video
     from scanner.modeling.model_audio_tracks import AudioSelection
     from scanner.pipeline.audio_tracks import probe_audio_tracks
     from scanner.repository import compute_video_md5
 
     path, _ = generated_streams
-    selected = AudioSelection.from_selection(probe_audio_tracks(path).select(2))
+    inventory = probe_audio_tracks(path)
+    selected = AudioSelection.from_selection(inventory.select(2))
     with Session(source_database) as db:
         scan = db.get(ScanRow, "scan")
         scan.source_path = scan.resolved_local_path = str(path)
@@ -409,8 +409,14 @@ def test_actual_stream_preparation_and_file_change_guard(source_database, genera
         db.commit()
     prepared = prepare(source_database, duration_seconds=3)
     payload = json.loads(prepared.preview_bytes)["artifact"]
-    assert payload["matching"]["audio_stream"]["digest"] == fingerprint_stream(path, 2).digest
-    assert payload["matching"]["audio_stream"]["digest"] != fingerprint_stream(path, 1).digest
+    actual = payload["matching"]["audio_stream"]
+    recipient = fingerprint_pcm_audio(path, inventory.select(2), provenance="selected")
+    requested = fingerprint_pcm_audio(path, inventory.select(1), provenance="selected")
+    assert actual["algorithm"] == recipient.algorithm == PCM_AUDIO_ALGORITHM
+    assert actual["digest"] == recipient.digest != requested.digest
+    assert actual["playback_start"] == recipient.playback_start == "0"
+    assert actual["duration"] == recipient.duration
+    assert actual["provenance"] == "analyzed"
     assert payload["matching"]["video_stream"]["digest"] == fingerprint_video(path).digest
     assert payload["matching"]["fingerprints"]
     assert b"stream_index" not in prepared.preview_bytes

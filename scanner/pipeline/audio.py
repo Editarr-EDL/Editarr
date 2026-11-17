@@ -35,7 +35,7 @@ from .audio_filters import (
     _load_glin_detector as _load_glin_detector,
 )
 from .audio_timing import audio_playback_offset as audio_playback_offset
-from .audio_tracks import AudioTrackSelection, probe_audio_tracks
+from .audio_tracks import AUDIO_PCM_OPTIONS, AudioTrackSelection, probe_audio_tracks
 from .audio_transcription import (
     _load_transcript_chunk as _load_transcript_chunk,
 )
@@ -197,12 +197,7 @@ def extract_audio(
         "-i",
         video_path,
         "-vn",
-        "-acodec",
-        "pcm_s16le",
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
+        *AUDIO_PCM_OPTIONS,
         "-progress",
         "pipe:2",
         "-nostats",

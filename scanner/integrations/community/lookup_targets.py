@@ -25,7 +25,8 @@ from scanner.repository import get_jellyfin_credentials, resolve_local_path
 
 from .donation_projection import _PRIVATE_TEXT
 from .fingerprints import FileChangedError, FingerprintCache
-from .stream_fingerprints import StreamUnsupported, fingerprint_stream, fingerprint_video
+from .pcm_fingerprints import fingerprint_pcm_audio
+from .stream_fingerprints import StreamUnsupported, fingerprint_video
 from .transport import CommunityFailure
 
 _files = FingerprintCache()
@@ -38,6 +39,8 @@ _unsupported = {
     "invalid_avcc",
     "invalid_nal_packet",
     "missing_stream",
+    "audio_pcm_budget",
+    "audio_pcm_unavailable",
 }
 
 
@@ -161,6 +164,7 @@ def capture_target(
         raise CommunityFailure("file_changed") from error
     audio = None
     audio_stream = None
+    description = None
     selection = request.audio_selection.selection() if request.audio_selection else None
     if selection:
         try:
@@ -168,6 +172,7 @@ def capture_target(
         except (OSError, ValueError) as error:
             raise CommunityFailure("audio_selection_stale") from error
         track = selection.track
+        description = track.title if track.title and not _PRIVATE_TEXT.search(track.title) else None
         language = (
             track.language
             if track.language and re.fullmatch(r"[A-Za-z0-9-]{1,64}", track.language)
@@ -187,16 +192,15 @@ def capture_target(
     def stream(channel):
         check()
         try:
-            result = (
-                fingerprint_stream(
+            if channel == "audio":
+                return fingerprint_pcm_audio(
                     path,
-                    selection.track.stream_index,
+                    selection,
+                    provenance="selected",
+                    description=description,
                     should_cancel=should_cancel,
-                    audio_selection=selection,
                 )
-                if channel == "audio"
-                else fingerprint_video(path, should_cancel=should_cancel)
-            )
+            result = fingerprint_video(path, should_cancel=should_cancel)
             if result.channel != channel:
                 raise CommunityFailure("unsupported_stream")
             return StreamEvidence(
@@ -204,12 +208,6 @@ def capture_target(
                 result.digest,
                 result.playback_start,
                 result.duration,
-                "selected" if channel == "audio" else "unknown",
-                selection.track.title
-                if channel == "audio"
-                and selection.track.title
-                and not _PRIVATE_TEXT.search(selection.track.title)
-                else None,
             )
         except StreamUnsupported as error:
             if str(error) in {"cancelled", "file_changed"}:
@@ -220,6 +218,11 @@ def capture_target(
                 raise CommunityFailure("stream_evidence_unavailable") from error
             warnings.append(f"{channel}_fingerprint_unsupported")
             return None
+        except (OSError, AudioSelectionError) as error:
+            check()
+            if channel == "audio":
+                raise CommunityFailure("audio_selection_stale") from error
+            raise
 
     video = stream("video")
     if selection:

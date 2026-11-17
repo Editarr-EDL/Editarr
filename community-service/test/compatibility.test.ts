@@ -3,6 +3,7 @@ import fixture from '../../tests/fixtures/community/compatibility-core-v1.json';
 import streamFixture from '../../tests/fixtures/community/compatibility-stream-v1.json';
 import { POLICY_VERSION, matchEvidenceSchema } from '../src/catalog/compatibility-inputs';
 import { classify, classifyCandidates, compatibilityCacheKey } from '../src/catalog/compatibility';
+import { PCM_AUDIO_ALGORITHM } from '../src/catalog/stream-compatibility';
 
 function merge(base: Record<string, unknown>, changes: Record<string, unknown>): Record<string, unknown> {
   const result = { ...base };
@@ -104,6 +105,26 @@ it.each(streamFixture.cases)('classifies shared stream $name evidence', async (t
   const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
     byte => byte.toString(16).padStart(2, '0')).join('');
   expect(digest).toBe(streamFixture.dto_sha256[testCase.name as keyof typeof streamFixture.dto_sha256]);
+});
+
+it('requires matching PCM samples and playback timing for a strong audio match', () => {
+  const seed = merge(fixture.target, streamFixture.target);
+  const target = matchEvidenceSchema.parse(merge(seed, {
+    media: { release: { audio: { language: null, role: 'unknown' } } },
+    audio_stream: { algorithm: PCM_AUDIO_ALGORITHM, provenance: 'selected', playback_start: '1/4', duration: '16001/16000' },
+  }));
+  const candidate = matchEvidenceSchema.parse(merge(target, {
+    audio_stream: { provenance: 'analyzed', playback_start: '250/1000' },
+  }));
+  expect(classify(target, candidate).audio.strong_eligible).toBe(true);
+  for (const [field, value] of [['playback_start', '0'], ['duration', '1']] as const) {
+    const shifted = matchEvidenceSchema.parse(merge(candidate, { audio_stream: { [field]: value } }));
+    expect(classify(target, shifted).audio.conflicts).toContain(`audio_stream_${field}`);
+  }
+  for (const patch of [{ digest: 'f'.repeat(64) }, { playback_start: null }, { provenance: 'selected' }]) {
+    const uncertain = matchEvidenceSchema.parse(merge(candidate, { audio_stream: patch }));
+    expect(classify(target, uncertain).audio.strong_eligible).toBe(false);
+  }
 });
 
 it('bounds rational timing, metadata and channel domains', () => {

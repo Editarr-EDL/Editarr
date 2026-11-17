@@ -3,7 +3,7 @@ import {
   matchEvidenceSchema, type Band, type ChannelCompatibility, type Compatibility,
   type EpisodeNumber, type Identifier, type MatchEvidence, type MatchEvidenceInput,
 } from './compatibility-inputs';
-import { compareStreams } from './stream-compatibility';
+import { PCM_AUDIO_ALGORITHM, compareStreams } from './stream-compatibility';
 
 function ids(left: Identifier[], right: Identifier[]): [boolean, boolean] {
   const first = new Map(left.map(item => [`${item.provider}:${item.entity_type}`, item.value]));
@@ -110,7 +110,11 @@ export function classify(target: MatchEvidence, candidate: MatchEvidence): Compa
     const stream = compareStreams(name, firstStream, secondStream);
     const finalConflicts = [...channelConflicts, ...stream.conflicts];
     let finalMissing = channelMissing.filter(key => key !== 'analyzed_audio_stream');
-    if (stream.equal) finalMissing = finalMissing.filter(key => key !== 'matching_fingerprint');
+    if (stream.equal) {
+      finalMissing = finalMissing.filter(key => key !== 'matching_fingerprint');
+      if (name === 'audio' && firstStream?.algorithm === PCM_AUDIO_ALGORITHM)
+        finalMissing = finalMissing.filter(key => key !== 'audio_track_metadata');
+    }
     finalMissing.push(...stream.missing);
     const streamReady = !stream.missing.length && !finalMissing.includes('audio_track_metadata');
     let finalBand: Band;

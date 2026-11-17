@@ -122,10 +122,15 @@ samples, merging overlapping or adjacent ranges and binding the file size and
 ordered offsets and lengths with big-endian framing. It identifies the sampled
 file bytes. `sha256-full-1` is independent whole-file evidence.
 
-Stream fingerprints sample compressed data separately for audio and video.
-The first profile supports AAC-LC and H.264-AVCC with three 250 ms samples.
-Stream identity and playback-relative start time and duration are independent
-fields. Track index by itself does not identify a track across different remuxes.
+The video fingerprint samples three 250 ms windows of H.264-AVCC. The audio
+algorithm `editarr-community-audio-pcm-s16le-16000-mono-sha256-1` hashes its ASCII
+name, a zero byte, and all normalized 16 kHz mono signed 16-bit little-endian PCM.
+Sharing uses the recorded analyzed track and reuses its scan WAV when available.
+Lookup normalizes the recipient's selected track with the same settings. The
+playback start is relative to the container playback origin. Audio duration is
+the normalized sample count divided by 16,000. Lossy re-encoding can change
+the fingerprint. PCM capture is bounded to four hours of samples and a
+three-minute decode.
 The audio contribution describes the track actually analyzed. Unknown
 historical or imported track information stays unknown. For a derived review
 with multiple audio tracks, the outgoing preview includes the chosen track's
@@ -134,10 +139,10 @@ intact.
 
 `community-compatibility-stream-1` provides separate audio and video bands.
 Strong stream matches require known matching playback-relative start and
-duration, compared as exact rational seconds. Strong audio matches also require
-known compatible language and track role and actual analyzed provenance for
-the candidate. A target may use selected or analyzed provenance. Matching
-container bytes alone do not establish which audio track was analyzed.
+duration, compared as exact rational seconds. Strong audio matches require
+actual analyzed provenance for the candidate and selected or analyzed
+provenance for the target. An exact PCM match can establish track identity
+when language or track role is unknown. Known conflicts still require review.
 The fixed inclusive 2.0-second file-duration tolerance is a compatibility
 check. It does not authorize retiming. Unknown or conflicting stream evidence
 can require review or make that channel incompatible.

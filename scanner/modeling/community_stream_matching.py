@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Literal
 
-from scanner.formats.community.stream_fingerprints import AUDIO_ALGORITHM, VIDEO_ALGORITHM
+from scanner.formats.community.stream_fingerprints import (
+    AUDIO_ALGORITHM,
+    PCM_AUDIO_ALGORITHM,
+    VIDEO_ALGORITHM,
+)
 
 
 def rational(value: str) -> Fraction:
@@ -53,9 +57,12 @@ def compare_streams(
     reasons: list[str] = []
     conflicts: list[str] = []
     missing: list[str] = []
-    algorithm = AUDIO_ALGORITHM if channel == "audio" else VIDEO_ALGORITHM
+    algorithms = {AUDIO_ALGORITHM, PCM_AUDIO_ALGORITHM} if channel == "audio" else {VIDEO_ALGORITHM}
     supported = (
-        left is not None and right is not None and left.algorithm == right.algorithm == algorithm
+        left is not None
+        and right is not None
+        and left.algorithm == right.algorithm
+        and left.algorithm in algorithms
     )
     equal = bool(supported and left.digest == right.digest)
     if equal:
@@ -64,7 +71,7 @@ def compare_streams(
         missing.append(f"{channel}_stream_fingerprint")
         if supported:
             reasons.append(f"{channel}_stream_digest_differs")
-    if any(item is not None and item.algorithm != algorithm for item in (left, right)):
+    if any(item is not None and item.algorithm not in algorithms for item in (left, right)):
         reasons.append("unsupported_stream_fingerprint_ignored")
     timed = True
     for field in ("playback_start", "duration"):

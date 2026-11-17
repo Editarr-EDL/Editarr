@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AUDIO_ALGORITHM, VIDEO_ALGORITHM, streamEvidenceSchema } from './stream-compatibility';
+import { AUDIO_ALGORITHM, PCM_AUDIO_ALGORITHM, VIDEO_ALGORITHM, streamEvidenceSchema } from './stream-compatibility';
 
 export const POLICY_VERSION = 'community-compatibility-stream-1';
 export const DURATION_TOLERANCE_SECONDS = 2;
@@ -52,7 +52,8 @@ export const matchEvidenceSchema = z.strictObject({
 })
   .superRefine((input, context) => {
     const fail = (message: string) => context.addIssue({ code: 'custom', message });
-    if (input.video_stream?.algorithm === AUDIO_ALGORITHM || input.audio_stream?.algorithm === VIDEO_ALGORITHM)
+    if (input.video_stream?.algorithm === AUDIO_ALGORITHM || input.video_stream?.algorithm === PCM_AUDIO_ALGORITHM ||
+      input.audio_stream?.algorithm === VIDEO_ALGORITHM)
       fail('Stream fingerprint channel mismatch');
     for (const [identifiers, kind] of [[input.media.identifiers, input.media.entity_type],
       [input.media.series_identifiers, 'series']] as const) {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const AUDIO_ALGORITHM = 'editarr-community-audio-sha256-sampled-1';
+export const PCM_AUDIO_ALGORITHM = 'editarr-community-audio-pcm-s16le-16000-mono-sha256-1';
 export const VIDEO_ALGORITHM = 'editarr-community-video-sha256-sampled-1';
 const maximum = (1n << 63n) - 1n;
 
@@ -35,15 +36,15 @@ function sameSeconds(left: string, right: string): boolean {
 
 export function compareStreams(channel: 'video' | 'audio', left: StreamEvidence | null, right: StreamEvidence | null) {
   const reasons: string[] = [], conflicts: string[] = [], missing: string[] = [];
-  const algorithm = channel === 'audio' ? AUDIO_ALGORITHM : VIDEO_ALGORITHM;
-  const supported = left !== null && right !== null && left.algorithm === algorithm && right.algorithm === algorithm;
+  const algorithms = channel === 'audio' ? [AUDIO_ALGORITHM, PCM_AUDIO_ALGORITHM] : [VIDEO_ALGORITHM];
+  const supported = left !== null && right !== null && left.algorithm === right.algorithm && algorithms.includes(left.algorithm);
   const equal = Boolean(supported && left!.digest === right!.digest);
   if (equal) reasons.push(`${channel}_stream_digest_match`);
   else {
     missing.push(`${channel}_stream_fingerprint`);
     if (supported) reasons.push(`${channel}_stream_digest_differs`);
   }
-  if ([left, right].some(item => item !== null && item.algorithm !== algorithm))
+  if ([left, right].some(item => item !== null && !algorithms.includes(item.algorithm)))
     reasons.push('unsupported_stream_fingerprint_ignored');
   let timed = true;
   for (const field of ['playback_start', 'duration'] as const) {

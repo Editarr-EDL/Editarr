@@ -2,8 +2,10 @@ import { beforeAll, expect, it } from 'vitest';
 import { searchPlans, searchRows } from '../src/catalog/search-repository';
 import { searchLimits, type SearchTarget } from '../src/catalog/search-input';
 import { matchEvidenceSchema } from '../src/catalog/compatibility-inputs';
+import { releaseStatements } from '../src/catalog/releases';
+import { PCM_AUDIO_ALGORITHM } from '../src/catalog/stream-compatibility';
 import { reserveRevision, transitionPublication } from '../src/contributions/repository';
-import { db, fixtureOperation, limits, setupCatalog, verifiedCase } from './helpers/catalog';
+import { db, fixtureOperation, limits, rawRevision, setupCatalog, verifiedCase } from './helpers/catalog';
 
 export const caps = searchLimits({ requestBytes: 131072, responseBytes: 1048576, maxItems: 50,
   maxKeys: 300, maxQueries: 12, maxCandidates: 96, maxRows: 500, maxPageSize: 20,
@@ -55,4 +57,20 @@ it('keeps typed namespaces and channel/episode key plans indexed', async () => {
     expect(result.results.some(row => row.detail.includes(index))).toBe(true);
   }
   expect((await searchRows(db, [{ id: 'episode', evidence: episode }], 100, caps))[0].rows).toEqual([]);
+});
+
+it('discovers a published revision by the selected audio PCM digest', async () => {
+  const audio = { algorithm: PCM_AUDIO_ALGORITHM, digest: 'c'.repeat(64), playback_start: '0', duration: '16001/16000' };
+  const donated = matchEvidenceSchema.parse({ ...evidence, audio_stream: { ...audio, provenance: 'analyzed' } });
+  const release = await releaseStatements(db, 'pcm-release', donated, 5, limits);
+  await db.batch(release.statements);
+  await rawRevision('pcm-revision', release.releaseId);
+  await transitionPublication(db, { revisionId: 'pcm-revision', from: 'reserved', to: 'object_stored', objectEtag: 'pcm-fixture', now: 6 });
+  await transitionPublication(db, { revisionId: 'pcm-revision', from: 'object_stored', to: 'published', now: 7 });
+
+  const selected = matchEvidenceSchema.parse({ media: { entity_type: 'movie', identifiers: [], release: {} },
+    audio_stream: { ...audio, provenance: 'selected' } });
+  const [result] = await searchRows(db, [{ id: 'pcm', evidence: selected }], 100, caps);
+  expect(result.rows.map(item => item.revision_id)).toEqual(['pcm-revision']);
+  expect(JSON.parse(result.rows[0].evidence_json).audio_stream).toMatchObject(audio);
 });

@@ -242,7 +242,7 @@ def test_source_changes_during_preparation_require_new_preview(source_database, 
 @pytest.mark.parametrize(
     "reason,allowed",
     [
-        ("unsupported_codec_configuration", True),
+        ("audio_pcm_unavailable", True),
         ("read_budget_exceeded", False),
         ("source_changed", False),
     ],
@@ -264,7 +264,7 @@ def test_only_known_unsupported_formats_can_omit_audio_digest(
     def unavailable(*args, **kwargs):
         raise StreamUnsupported(reason)
 
-    monkeypatch.setattr(donations, "fingerprint_analyzed_audio", unavailable)
+    monkeypatch.setattr(donations, "fingerprint_pcm_audio", unavailable)
     if not allowed:
         with pytest.raises(ArtifactError, match="could not be captured safely"):
             donations.prepare_donation(

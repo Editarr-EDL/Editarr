@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from typing import Literal
 
 from scanner.formats.community.fingerprints import FULL_ALGORITHM, SAMPLED_ALGORITHM
-from scanner.formats.community.stream_fingerprints import AUDIO_ALGORITHM, VIDEO_ALGORITHM
+from scanner.formats.community.stream_fingerprints import (
+    AUDIO_ALGORITHM,
+    PCM_AUDIO_ALGORITHM,
+    VIDEO_ALGORITHM,
+)
 
 from .community_stream_matching import StreamEvidence, compare_streams
 from .media_identity import (
@@ -66,6 +70,7 @@ class MatchEvidence:
     def __post_init__(self) -> None:
         for stream, wrong_algorithm in (
             (self.video_stream, AUDIO_ALGORITHM),
+            (self.video_stream, PCM_AUDIO_ALGORITHM),
             (self.audio_stream, VIDEO_ALGORITHM),
         ):
             if stream is not None and stream.algorithm == wrong_algorithm:
@@ -325,6 +330,8 @@ def classify(target: MatchEvidence, candidate: MatchEvidence) -> Compatibility:
         final_missing = [key for key in channel_missing if key != "analyzed_audio_stream"]
         if stream_equal:
             final_missing = [key for key in final_missing if key != "matching_fingerprint"]
+            if first_stream is not None and first_stream.algorithm == PCM_AUDIO_ALGORITHM:
+                final_missing = [key for key in final_missing if key != "audio_track_metadata"]
         final_missing += stream_missing
         stream_ready = not stream_missing and "audio_track_metadata" not in final_missing
         if final_conflicts:

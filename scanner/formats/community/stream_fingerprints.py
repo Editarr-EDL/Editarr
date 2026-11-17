@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Literal
 
 AUDIO_ALGORITHM = "editarr-community-audio-sha256-sampled-1"
+PCM_AUDIO_ALGORITHM = "editarr-community-audio-pcm-s16le-16000-mono-sha256-1"
 VIDEO_ALGORITHM = "editarr-community-video-sha256-sampled-1"
 MAX_PAYLOAD = 3 * 1024 * 1024
 
