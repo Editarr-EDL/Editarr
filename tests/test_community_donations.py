@@ -419,6 +419,11 @@ def test_actual_stream_preparation_and_file_change_guard(source_database, genera
     assert actual["provenance"] == "analyzed"
     assert payload["matching"]["video_stream"]["digest"] == fingerprint_video(path).digest
     assert payload["matching"]["fingerprints"]
+    assert payload["matching"]["media"]["release"]["duration"] == {
+        "seconds": 3.0,
+        "source": "file_probe",
+        "precision_seconds": None,
+    }
     assert b"stream_index" not in prepared.preview_bytes
     with path.open("ab") as output:
         output.write(b"changed-generation")

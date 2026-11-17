@@ -17,7 +17,9 @@ from scanner.formats.community.codec import (
     parse_artifact,
     parse_manifest,
 )
+from scanner.modeling.media_identity import DurationEvidence
 from scanner.pipeline.audio_tracks import AudioSelectionError, _file_state
+from scanner.pipeline.frames import probe_video_duration
 from scanner.security.community_artifact_signatures import SignedArtifact, sign_artifact
 
 from .donation_projection import DonationOptions, project_source
@@ -141,7 +143,8 @@ def prepare_donation(
         except FileNotFoundError:
             warnings.append("video_media_unavailable")
     if verified_file:
-        result = _files.fingerprint(Path(primary["resolved_local_path"]))
+        path = Path(primary["resolved_local_path"])
+        result = _files.fingerprint(path)
         payload["matching"]["fingerprints"] = [
             {
                 key: value
@@ -149,6 +152,12 @@ def prepare_donation(
                 if key in {"algorithm", "digest", "size_bytes"}
             }
         ]
+        try:
+            duration = DurationEvidence(probe_video_duration(path, should_cancel), "file_probe")
+        except (OSError, RuntimeError, ValueError):
+            warnings.append("measured_duration_unavailable")
+        else:
+            payload["matching"]["media"]["release"]["duration"] = asdict(duration)
     for path, state in states.items():
         if _file_state(Path(path)) != state:
             raise ArtifactError("Media changed during donation preparation")

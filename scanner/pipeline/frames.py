@@ -7,6 +7,9 @@ from scanner.pipeline.processes import run_command, run_ffmpeg_with_optional_mac
 from scanner.runtime.runtime_support import resolve_ffmpeg
 from scanner.settings.config import settings
 
+from .audio_tracks import PROBE_OPTIONS
+from .bounded_media import BoundedInput
+
 _ATTACHED_PICTURE_DISPOSITION = 1 << 10
 
 
@@ -68,6 +71,28 @@ def _positive_stream_duration(streams: Iterable[object]) -> float | None:
     return None
 
 
+def _container_duration(container, time_base: int) -> float | None:
+    duration = _positive_stream_duration(container.streams.video)
+    if duration is not None:
+        return duration
+    if container.duration is not None and container.duration > 0:
+        return float(container.duration / time_base)
+    return None
+
+
+def probe_video_duration(path: Path, should_cancel=None) -> float:
+    """Read playback duration within the media probe budget, without counting frames."""
+    import av
+
+    with BoundedInput(path, should_cancel) as source:
+        with av.open(source, options=dict(PROBE_OPTIONS), timeout=5.0) as container:
+            duration = _container_duration(container, av.time_base)
+        source.check()
+    if duration is None:
+        raise ValueError("Duration metadata unavailable")
+    return duration
+
+
 def prepare_playable_video_stream(video_path: str, output_dir: Path) -> str:
     """Create a video-only source when cover art precedes the real video stream."""
     try:
@@ -112,11 +137,7 @@ def get_video_duration(video_path: str) -> float:
         import av
 
         with av.open(video_path) as container:
-            duration = _positive_stream_duration(container.streams.video)
-            if duration is None and container.duration is not None:
-                container_duration = float(container.duration / av.time_base)
-                if container_duration > 0:
-                    duration = container_duration
+            duration = _container_duration(container, av.time_base)
         if duration is not None:
             return duration
     except (ImportError, OSError, ValueError):

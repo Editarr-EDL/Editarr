@@ -13,14 +13,8 @@ from scanner.modeling.community_matching import POLICY_VERSION, FingerprintEvide
 from scanner.modeling.community_stream_matching import StreamEvidence
 from scanner.modeling.media_identity import AudioEvidence, DurationEvidence, MediaIdentity
 from scanner.modeling.model_community_lookup import LookupRequest, LookupTarget
-from scanner.pipeline.audio_tracks import (
-    PROBE_OPTIONS,
-    AudioSelectionError,
-    _file_state,
-    probe_audio_tracks,
-)
-from scanner.pipeline.bounded_media import BoundedInput
-from scanner.pipeline.frames import _positive_stream_duration
+from scanner.pipeline.audio_tracks import AudioSelectionError, _file_state, probe_audio_tracks
+from scanner.pipeline.frames import probe_video_duration
 from scanner.repository import get_jellyfin_credentials, resolve_local_path
 
 from .donation_projection import _PRIVATE_TEXT
@@ -49,26 +43,6 @@ class MissingTarget(CommunityFailure):
 
     def __init__(self):
         super().__init__("invalid_target")
-
-
-def _measured_duration(path: Path, should_cancel=None) -> float:
-    """Read duration metadata inside the existing probe budget; never count frames."""
-    import av
-
-    try:
-        with BoundedInput(path, should_cancel) as source:
-            with av.open(source, options=dict(PROBE_OPTIONS), timeout=5.0) as container:
-                duration = _positive_stream_duration(container.streams.video)
-                if duration is None and container.duration is not None:
-                    duration = float(container.duration / av.time_base)
-            source.check()
-    except StreamUnsupported as error:
-        if str(error) == "cancelled":
-            raise CommunityFailure("lookup_cancelled") from error
-        raise
-    if duration is None:
-        raise ValueError("Duration metadata unavailable")
-    return duration
 
 
 @dataclass(frozen=True)
@@ -228,8 +202,9 @@ def capture_target(
     if selection:
         audio_stream = stream("audio")
     try:
-        duration = DurationEvidence(_measured_duration(path, should_cancel), "file_probe")
+        duration = DurationEvidence(probe_video_duration(path, should_cancel), "file_probe")
     except (OSError, RuntimeError, ValueError):
+        check()
         duration = None
         warnings.append("measured_duration_unavailable")
     media = replace(

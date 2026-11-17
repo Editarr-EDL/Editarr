@@ -265,7 +265,7 @@ def test_duration_is_unknown_when_bounded_metadata_is_unavailable(
     def unavailable(*_args):
         raise error
 
-    monkeypatch.setattr(targets, "_measured_duration", unavailable)
+    monkeypatch.setattr(targets, "probe_video_duration", unavailable)
     captured = targets.capture_target(None, request())
     assert captured.evidence.media.release.duration is None
     assert "measured_duration_unavailable" in captured.warnings
