@@ -12,6 +12,61 @@ private struct RuntimeStatus: Decodable {
     let show_in_dock: Bool?
 }
 
+/// Draw the split filmstrip and scissors from the app icon as a menu bar template.
+private func makeMenuBarIcon() -> NSImage {
+    let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { bounds in
+        guard let context = NSGraphicsContext.current?.cgContext else { return false }
+        context.saveGState()
+        defer { context.restoreGState() }
+        let drawingBounds = bounds.insetBy(dx: 0.5, dy: 0.5)
+        context.translateBy(x: drawingBounds.minX, y: drawingBounds.minY)
+        context.scaleBy(x: drawingBounds.width / 24, y: drawingBounds.height / 24)
+        context.setFillColor(NSColor.black.cgColor)
+        context.setStrokeColor(NSColor.black.cgColor)
+
+        // Draw the strip along its own axis so both rows of sprocket holes line up.
+        context.saveGState()
+        context.translateBy(x: 11.9, y: 11.8)
+        context.rotate(by: -.pi / 4)
+        let film = CGMutablePath()
+        film.addRoundedRect(in: CGRect(x: -12.4, y: -4.25, width: 10.7, height: 8.5),
+                            cornerWidth: 1.15, cornerHeight: 1.15)
+        film.addRoundedRect(in: CGRect(x: 1.7, y: -4.25, width: 10.7, height: 8.5),
+                            cornerWidth: 1.15, cornerHeight: 1.15)
+        for x in [-11.1, -7.8, -4.5, 3.0, 6.3, 9.6] {
+            film.addRoundedRect(in: CGRect(x: x, y: -3.45, width: 1.85, height: 1.45),
+                                cornerWidth: 0.25, cornerHeight: 0.25)
+            film.addRoundedRect(in: CGRect(x: x, y: 2.1, width: 1.85, height: 1.45),
+                                cornerWidth: 0.25, cornerHeight: 0.25)
+        }
+        film.move(to: CGPoint(x: 4.95, y: -1.6))
+        film.addLine(to: CGPoint(x: 9.35, y: 0))
+        film.addLine(to: CGPoint(x: 4.95, y: 1.6))
+        film.closeSubpath()
+        context.addPath(film)
+        context.fillPath(using: .evenOdd)
+        context.restoreGState()
+
+        let scissors = CGMutablePath()
+        scissors.move(to: CGPoint(x: 9.15, y: 9.0))
+        scissors.addLine(to: CGPoint(x: 13.0, y: 12.85))
+        scissors.addLine(to: CGPoint(x: 16.1, y: 18.7))
+        scissors.move(to: CGPoint(x: 13.0, y: 12.85))
+        scissors.addLine(to: CGPoint(x: 18.8, y: 14.9))
+        scissors.addEllipse(in: CGRect(x: 18.65, y: 13.2, width: 4.15, height: 4.15))
+        scissors.addEllipse(in: CGRect(x: 14.0, y: 18.35, width: 4.15, height: 4.15))
+        context.setLineWidth(1.5)
+        context.setLineJoin(.round)
+        context.setLineCap(.round)
+        context.addPath(scissors)
+        context.strokePath()
+        return true
+    }
+    image.isTemplate = true
+    image.accessibilityDescription = "Editarr"
+    return image
+}
+
 private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let statusMenuItem = NSMenuItem(title: "Status: Starting…", action: nil, keyEquivalent: "")
@@ -55,7 +110,7 @@ private final class EditarrAppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureMenu() {
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "film.stack", accessibilityDescription: "Editarr")
+            button.image = makeMenuBarIcon()
             button.toolTip = "Editarr"
         }
         statusMenuItem.isEnabled = false
