@@ -38,13 +38,15 @@ def test_only_mac_app_exposes_dock_settings_and_lifecycle_reads_saved_value(
             monkeypatch.setenv("EDITARR_MACOS_APP", "1")
             deployment = client.get("/editarr/api/settings/deployment", headers=headers)
             assert deployment.json()["macos_dock_supported"] is True
-            assert client.get(path, headers=headers).json() == {"show_in_dock": False}
+            assert client.get(path, headers=headers).json() == {"show_in_dock": True}
+            assert cli._run_lifecycle(SimpleNamespace(action="status")) == 1
+            assert json.loads(capsys.readouterr().out)["show_in_dock"] is True
             assert client.put(path, json={"show_in_dock": True}).status_code == 401
             assert (
                 client.put(path, headers=headers, json={"show_in_dock": "yes"}).status_code == 422
             )
 
-            for enabled in (True, False):
+            for enabled in (False, True):
                 saved = {"show_in_dock": enabled}
                 assert client.put(path, headers=headers, json=saved).json() == saved
                 assert client.get(path, headers=headers).json() == saved

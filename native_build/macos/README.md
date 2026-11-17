@@ -6,10 +6,11 @@ runtime; Open Editarr, Open Logs, status, Stop, and Quit use the authenticated
 lifecycle adapter exposed by the runtime CLI. `SMAppService.mainApp` owns Launch at
 Login.
 
-The application starts as an `LSUIElement` menu-bar agent. General Settings can
-show its Dock icon without restarting the service. The app has no App Sandbox
-entitlement. Current macOS distribution policy deliberately ships an unsigned app and
-DMG: it does not claim a Developer ID identity, hardened-runtime coverage, notarization,
+The menu-bar launcher uses `LSUIElement` and shows its Dock icon by default.
+Use General Settings to hide or show the icon without restarting the service.
+The app has no App Sandbox entitlement. Current macOS distribution policy
+deliberately ships an unsigned app and DMG: it does not claim a Developer ID
+identity, hardened-runtime coverage, notarization,
 stapling, or Gatekeeper acceptance. The distributable does not use `runtime.entitlements`.
 
 After moving `Editarr.app` to `/Applications`, the end user performs this local ad-hoc

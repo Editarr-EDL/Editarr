@@ -16,11 +16,11 @@ def macos_launcher_available() -> bool:
 
 
 def read_show_in_dock(data_dir: Path) -> bool:
-    """Read the saved preference, defaulting to menu-bar-only operation."""
+    """Read the saved preference, defaulting to a visible Dock icon."""
     try:
         value = (data_dir / _FILENAME).read_bytes()
     except FileNotFoundError:
-        return False
+        return True
     if value not in {b"0\n", b"1\n"}:
         raise ValueError("Invalid Dock icon preference")
     return value == b"1\n"

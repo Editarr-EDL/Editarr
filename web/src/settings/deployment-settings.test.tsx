@@ -103,20 +103,20 @@ describe("deployment settings", () => {
     expect(await screen.findByText(/You have unsaved changes/)).toHaveTextContent("these edits will not be applied");
   });
 
-  it("saves the macOS app Dock preference immediately", async () => {
+  it("shows the enabled Dock preference and saves when it is turned off", async () => {
     const save = vi.fn((request?: RequestInit) => json(request?.body
       ? JSON.parse(String(request.body))
-      : { show_in_dock: false }));
+      : { show_in_dock: true }));
     vi.stubGlobal("fetch", installApi(deploymentConfiguration({ macos_dock_supported: true }), undefined, save));
     renderAuthenticatedApp();
 
     const toggle = await screen.findByRole("checkbox", { name: "Show app icon in the Dock" });
-    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeChecked();
     fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).toBeChecked());
+    await waitFor(() => expect(toggle).not.toBeChecked());
     expect(save).toHaveBeenLastCalledWith(expect.objectContaining({
       method: "PUT",
-      body: JSON.stringify({ show_in_dock: true }),
+      body: JSON.stringify({ show_in_dock: false }),
     }));
   });
 
