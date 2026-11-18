@@ -147,27 +147,42 @@ test("drills through a series season and episode", async ({ page }) => {
 
 test("tests a path mapping resolution from Settings", async ({ page }) => {
   await page.getByRole("button", { name: "General" }).click();
-  await page.getByLabel("Test a remote path").fill("/media/example.mkv");
-  await page.getByRole("button", { name: "Test resolution" }).click();
+  await page.locator("summary").filter({ hasText: "Base path mappings" }).click();
+  const resolution = page.getByRole("button", { name: "Test resolution", exact: true });
+  const pathInput = page.getByLabel("Test a remote path");
+  await expect(pathInput).toBeHidden();
+  await resolution.press("Enter");
+  await pathInput.fill("/media/example.mkv");
+  await resolution.press("Space");
+  await expect(pathInput).toBeHidden();
+  await resolution.press("Enter");
+  await expect(pathInput).toHaveValue("/media/example.mkv");
+  await page.getByRole("button", { name: "Resolve path" }).click();
   await expect(page.getByText("Maps to /mnt/media/example.mkv")).toBeVisible();
 });
 
 test("manages path mappings from Settings", async ({ page }) => {
   await page.getByRole("button", { name: "General" }).click();
+  const mappingSummary = page.locator("summary").filter({ hasText: "Base path mappings" });
+  await mappingSummary.click();
+  await page.getByRole("button", { name: "Add mapping", exact: true }).click();
   const mappingForm = page.locator(".mapping-form");
   await mappingForm.getByLabel("Remote path").fill("/remote/movies");
   await mappingForm.getByLabel("Local path").fill("/local/movies");
-  await page.getByRole("button", { name: "Add mapping" }).click();
+  await mappingForm.getByRole("button", { name: "Save mapping" }).click();
   await expect(page.getByText("/remote/movies")).toBeVisible();
+  await expect(mappingSummary.getByText("1 mapping", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Local path for mapping 1").fill("/scanner/movies");
-  await page.getByRole("button", { name: "Save mapping" }).click();
+  await page.getByRole("row").filter({ has: page.getByLabel("Local path for mapping 1") }).getByRole("button", { name: "Save mapping" }).click();
   await expect(page.getByText("/scanner/movies")).toBeVisible();
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page.getByRole("dialog", { name: "Delete path mapping?" })).toBeVisible();
   await page.getByRole("button", { name: "Delete mapping" }).click();
+  await expect(mappingSummary).toContainText(/(?:0 mappings|no mappings)/i);
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page.getByText("Path mapping restored.")).toBeVisible();
+  await expect(mappingSummary.getByText("1 mapping", { exact: true })).toBeVisible();
 });
 
 test("shows active Editarr work in the scans panel", async ({ page }) => {

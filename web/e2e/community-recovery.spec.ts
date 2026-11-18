@@ -31,6 +31,14 @@ for (const width of [320, 1440]) {
           pending: null, recoveryStatus: undefined };
       }
       if (path.includes("/keys/recovery")) { await json(route, recovery); return; }
+      if (!recovery.completed && path.endsWith("/connection/status")) {
+        await json(route, {
+          configured: true, connected: true, pending: null, profile: null, serviceUrl: recovery.serviceUrl,
+          identity: { installationId: identity.installationId, keyId: identity.keyId, lastKnownKeyState: "active" },
+          pendingRecovery: Boolean(recovery.pending),
+        } satisfies CommunityConnection);
+        return;
+      }
       if (!recovery.completed) { await json(route, { code: "identity_incomplete", retryable: false }, 409); return; }
       const connection: CommunityConnection = { configured: true, connected: true, pending: null, serviceUrl: "https://community.test",
         identity: { installationId: identity.installationId, keyId: candidate, lastKnownKeyState: "active" },
@@ -76,6 +84,7 @@ for (const width of [320, 1440]) {
     await expectNoAccessibilityViolations(page); await expectNoHorizontalPageOverflow(page);
     await page.screenshot({ path: `test-results/css33-completed-${width}.png`, fullPage: true });
     await panel.getByRole("link", { name: "Create identity backup" }).click();
+    await page.getByRole("button", { name: "Create backup", exact: true }).click();
     await expect(page.getByLabel("Encrypt backup")).not.toBeChecked();
   });
 }

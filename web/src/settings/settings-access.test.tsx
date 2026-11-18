@@ -250,8 +250,9 @@ it("lets an admin inspect and resolve mappings without create, update, delete, o
   for (const name of ["Add mapping", "Edit", "Delete", "Move /synthetic/remote up", "Move /synthetic/remote down"]) {
     expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   }
-  fireEvent.change(screen.getByLabelText("Test a remote path"), { target: { value: "/synthetic/remote/movie.mkv" } });
   fireEvent.click(screen.getByRole("button", { name: "Test resolution" }));
+  fireEvent.change(screen.getByLabelText("Test a remote path"), { target: { value: "/synthetic/remote/movie.mkv" } });
+  fireEvent.click(screen.getByRole("button", { name: "Resolve path" }));
   expect(await screen.findByText("Maps to /synthetic/local/movie.mkv")).toBeVisible();
   expect(paths).toContain("/api/settings/path-mappings/resolve");
 });
@@ -297,10 +298,11 @@ it.each([false, true])("separates backup creation from download and deletion, an
   const capabilities: Capability[] = ["backups.create", ...(sensitive ? ["backups.download", "backups.delete"] as const : [])];
   renderSettings("general", capabilities, () => json({ id: "synthetic-job", state: "ready", action: "export", kind: "full", inventory: null }));
   fireEvent.click(await screen.findByRole("button", { name: "Create backup" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create backup" }));
   await screen.findByText(sensitive ? "Backup ready for download." : "Backup created.");
   for (const name of ["Download backup", "Cancel job"]) expect(screen.queryByRole("button", { name }) !== null).toBe(sensitive);
   expect(screen.queryByLabelText("Backup file")).not.toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Scheduled backups" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Scheduled backups" })).not.toBeInTheDocument();
 });
 
 it.each([
@@ -315,7 +317,8 @@ it.each([
     if (path === "/api/backups/schedule") return json({ config: null, next_run: null, last_attempt: null, last_success: null, retained_count: 0 });
     throw new Error(`Unexpected protected request ${path}`);
   });
-  await screen.findByRole("heading", { name: "Scheduled backups" });
+  await screen.findByRole("region", { name: "Scheduled backups" });
+  fireEvent.click(screen.getByRole("button", { name: edit ? "Manage schedule" : "Schedule details" }));
   if (view) await screen.findByText("Disabled", { exact: true });
   expect(screen.queryByRole("button", { name: "Refresh status" }) !== null).toBe(view);
   expect(screen.queryByRole("button", { name: "Save schedule" }) !== null).toBe(edit);

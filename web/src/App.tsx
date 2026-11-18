@@ -152,7 +152,7 @@ function App() {
       {route.kind === "settings" && route.section === "audit" && <AuditHistory eventId={route.eventId} />}
       {route.kind === "settings" && route.section === "users" && <UsersView deleteAccountId={route.deleteAccountId} />}
       {route.kind === "settings" && route.section === "profile" && <ProfileView />}
-      {route.kind === "settings" && route.section !== "users" && route.section !== "profile" && route.section !== "audit" && <SettingsView section={route.section} filterTab={route.filterTab} settings={settings} onSaved={async () => { libraryPageCacheRef.current.clear(); await refreshNavigation(); }} />}
+      {route.kind === "settings" && route.section !== "users" && route.section !== "profile" && route.section !== "audit" && <SettingsView section={route.section} filterTab={route.filterTab} openBackups={route.openBackups} settings={settings} onSaved={async () => { libraryPageCacheRef.current.clear(); await refreshNavigation(); }} />}
       {route.kind === "library" && activeLibrary && route.itemId && <CatalogItemBoundary key={`jellyfin:${route.itemId}`} source="jellyfin" itemId={route.itemId} onUnavailable={clearUnavailableMedia}><MediaDetailPage library={activeLibrary} itemId={route.itemId} seriesId={route.seriesId} seasonId={route.seasonId} onNavigate={guardedNavigate} onDirtyChange={setReviewDirty} /></CatalogItemBoundary>}
       {route.kind === "library" && activeLibrary && route.seriesId && route.seasonId && !route.itemId && <SeasonEpisodesPage library={activeLibrary} seriesId={route.seriesId} seasonId={route.seasonId} />}
       {route.kind === "library" && activeLibrary && route.seriesId && !route.seasonId && !route.itemId && <SeriesSeasonsPage library={activeLibrary} seriesId={route.seriesId} />}

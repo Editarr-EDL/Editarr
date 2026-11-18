@@ -22,7 +22,7 @@ beforeEach(() => { auth.authenticated = true; auth.edit = true; auth.view = true
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 async function fillSchedule() {
-  await screen.findByText("Disabled");
+  await waitFor(() => expect(screen.getByLabelText("Enable scheduled backups")).toBeEnabled());
   fireEvent.click(screen.getByLabelText("Enable scheduled backups"));
   fireEvent.change(screen.getByLabelText("Interval (hours)"), { target: { value: "24" } });
   fireEvent.change(screen.getByLabelText("Backups to keep"), { target: { value: "7" } });
@@ -31,8 +31,11 @@ async function fillSchedule() {
 
 it("never configures or enables on mount and requires explicit interval/count", async () => {
   render(<BackupScheduleSettings />);
-  await screen.findByText("Disabled");
-  expect(screen.getByLabelText("Enable scheduled backups")).not.toBeChecked();
+  const toggle = await screen.findByLabelText("Enable scheduled backups");
+  expect(toggle).not.toBeChecked();
+  expect(screen.queryByRole("spinbutton", { name: "Interval (hours)" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Manage schedule" }));
+  expect(await screen.findByText("Disabled")).toBeVisible();
   expect(screen.getByLabelText("Interval (hours)")).toHaveValue(null);
   expect(screen.getByLabelText("Backups to keep")).toHaveValue(null);
   expect(screen.getByRole("button", { name: "Save schedule" })).toBeDisabled();
@@ -71,6 +74,7 @@ it("disables an existing schedule without requiring a usable credential", async 
   vi.mocked(api.fetchBackupSchedule).mockResolvedValue({ ...empty, config });
   vi.mocked(api.disableBackupSchedule).mockResolvedValue({ ...empty, config: { ...config, enabled: false } });
   render(<BackupScheduleSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Manage schedule" }));
   fireEvent.click(await screen.findByRole("button", { name: "Disable schedule" }));
   await waitFor(() => expect(api.disableBackupSchedule).toHaveBeenCalledOnce());
   expect(await screen.findByText("Scheduled backups disabled.")).toBeVisible();
@@ -79,7 +83,7 @@ it("disables an existing schedule without requiring a usable credential", async 
 it("does not render or fetch without the schedule capability", () => {
   auth.authenticated = false;
   render(<BackupScheduleSettings />);
-  expect(screen.queryByRole("heading", { name: "Scheduled backups" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "Scheduled backups" })).toBeNull();
   expect(api.fetchBackupSchedule).not.toHaveBeenCalled();
   expect(screen.queryByLabelText("Enable scheduled backups")).toBeNull();
 });
@@ -87,6 +91,7 @@ it("does not render or fetch without the schedule capability", () => {
 it("blocks changes during a running backup and displays request failures", async () => {
   vi.mocked(api.fetchBackupSchedule).mockResolvedValue({ ...empty, config, outcome: "running" });
   render(<BackupScheduleSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Manage schedule" }));
   expect(await screen.findByText("Running")).toBeVisible();
   expect(screen.getByRole("button", { name: "Disable schedule" })).toBeDisabled();
   vi.mocked(api.fetchBackupSchedule).mockRejectedValue(new Error("Status unavailable"));
@@ -97,6 +102,7 @@ it("blocks changes during a running backup and displays request failures", async
 it("reads status without mounting unavailable schedule mutations", async () => {
   auth.edit = false;
   render(<BackupScheduleSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Schedule details" }));
   expect(await screen.findByText("Disabled")).toBeVisible();
   expect(screen.queryByLabelText("Enable scheduled backups")).toBeNull();
   expect(screen.queryByRole("button", { name: "Save schedule" })).toBeNull();
@@ -113,6 +119,7 @@ it("allows explicit configuration without requesting forbidden schedule status",
 it("explains that a saved settings-only schedule now makes full backups", async () => {
   vi.mocked(api.fetchBackupSchedule).mockResolvedValue({ ...empty, config, notice: "settings_schedule_now_full" });
   render(<BackupScheduleSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Manage schedule" }));
   expect(await screen.findByText(/settings-only backups, which no longer exist/)).toBeVisible();
   expect(screen.queryByLabelText("Scheduled backup contents")).toBeNull();
 });

@@ -58,10 +58,9 @@
   .media-detail .library-table-wrap, .saved-review-table-wrap { max-width: 100%; overflow-x: auto; }
   .saved-review-filter-editor-row .saved-review-filter { position: sticky; left: 0; width: min(calc(100vw - 88px), 100%); }
   .general-settings-page-header { align-items: stretch; flex-direction: column; }
-  .general-restart-action-slot { min-width: 0; }
+  .general-restart-action-slot { flex: 0 1 auto; min-width: 0; }
   .restart-editarr-action { justify-items: start; text-align: left; }
   .restart-editarr-status { justify-content: flex-start; }
-  .deployment-snapshots { grid-template-columns: 1fr; }
   .scans-floating-control { top: 14px; right: 16px; }
   .scans-floating-popover { top: 60px; width: min(680px, calc(100vw - 24px)); max-height: calc(100vh - 82px); padding: 14px; }
   .mapping-form, .resolution-test { grid-template-columns: 1fr; }

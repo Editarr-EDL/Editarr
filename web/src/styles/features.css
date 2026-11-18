@@ -241,8 +241,10 @@
 .catalog-scan-dialog label.field { display: grid; gap: 6px; }
 .catalog-scan-dialog input:not([type="checkbox"]), .catalog-scan-dialog select { box-sizing: border-box; width: 100%; min-width: 0; }
 .catalog-scan-dialog p { overflow-wrap: anywhere; }
-.diagnostics-panel { align-items: start; }
-.diagnostics-source { width: min(280px, 100%); }
+.diagnostics-options > p { margin: 0; }
+.diagnostics-options .diagnostics-toolbar { align-items: flex-end; }
+.diagnostics-source { flex: 0 1 220px; min-width: 0; }
+.diagnostics-toolbar button { min-height: 37px; }
 .diagnostics-log { box-sizing: border-box; width: 100%; max-height: 420px; margin: 0; overflow: auto; padding: 14px; border: 1px solid #394454; border-radius: 8px; background: #11151c; color: #d7e4f6; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .scan-capability-disclosure { display: grid; gap: 6px; padding: 10px; border: 1px solid #425878; border-radius: 7px; background: #182536; color: #d7e4f6; font-size: 13px; line-height: 1.4; }
 .scan-capability-disclosure p { margin: 0; }

@@ -22,6 +22,7 @@ import { ModelScanSettings } from "./model-scan-settings";
 import { DiagnosticsPanel } from "./diagnostics-panel";
 import { About } from "./about";
 import { BackupSettings } from "./backup-settings";
+import { GeneralSettingsSection } from "./general-settings-section";
 import { CommunitySettings } from "./community/community-settings";
 import { usePageTitle } from "../shared/display";
 import { ModalDialog } from "../ui/ModalDialog";
@@ -40,7 +41,13 @@ export function settingsSectionTitle(section: SettingsSection): string {
 }
 
 /** Render the selected settings section and manage connection and path mapping edits. */
-export function SettingsView({ section, filterTab, settings, onSaved }: { section: SettingsSection; filterTab?: FilterTab; settings: JellyfinSettings | null; onSaved: () => Promise<void> }) {
+export function SettingsView({ section, filterTab, openBackups, settings, onSaved }: {
+  section: SettingsSection;
+  filterTab?: FilterTab;
+  openBackups?: boolean;
+  settings: JellyfinSettings | null;
+  onSaved: () => Promise<void>;
+}) {
   usePageTitle(`Settings — ${settingsSectionTitle(section)}`);
   const principal = usePrincipal();
   const mayTestConnection = useCan("connections.test");
@@ -62,6 +69,12 @@ export function SettingsView({ section, filterTab, settings, onSaved }: { sectio
   const mayScheduleBackup = useCan("backups.schedule.edit");
   const mayViewBackupStatus = useCan("backups.status.view");
   const mayViewVersion = useCan("system.version.view");
+  const showBackups = mayCreateBackup || mayScheduleBackup || mayViewBackupStatus;
+  const showMappings = mayViewMappings || (maySeePaths && (mayCreateMapping || mayTestMapping));
+  const showDiagnostics = mayViewLogs || mayEditLogs;
+  const initiallyOpen = openBackups && showBackups ? "backups"
+    : mayViewDeployment ? "deployment" : showBackups ? "backups" : showMappings ? "mappings"
+    : showDiagnostics ? "diagnostics" : "about";
   const [serverURL, setServerURL] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [feedback, setFeedback] = useState<{ section: SettingsSection; message: string | null } | null>(null);
@@ -72,6 +85,8 @@ export function SettingsView({ section, filterTab, settings, onSaved }: { sectio
   const [working, setWorking] = useState<"test" | "save" | "disconnect" | "mapping" | "resolve" | "edit" | "delete" | "reorder" | "undo" | null>(null);
   const [showDisconnectJellyfin, setShowDisconnectJellyfin] = useState(false);
   const [mappings, setMappings] = useState<PathMapping[]>([]);
+  const [mappingLoadState, setMappingLoadState] = useState<"loading" | "loaded" | "failed">("loading");
+  const [mappingTool, setMappingTool] = useState<"add" | "resolve" | null>(null);
   const [remotePath, setRemotePath] = useState("");
   const [localPath, setLocalPath] = useState("");
   const [resolutionPath, setResolutionPath] = useState("");
@@ -85,8 +100,14 @@ export function SettingsView({ section, filterTab, settings, onSaved }: { sectio
 
   useEffect(() => { setServerURL(settings?.server_url || ""); }, [settings?.server_url]);
   const refreshMappings = useCallback(async () => {
-    try { setMappings(await fetchPathMappings()); }
-    catch (error) { setStatus(error instanceof Error ? error.message : "Unable to load path mappings."); }
+    setMappingLoadState((current) => current === "loaded" ? current : "loading");
+    try {
+      setMappings(await fetchPathMappings());
+      setMappingLoadState("loaded");
+    } catch (error) {
+      setMappingLoadState((current) => current === "loaded" ? current : "failed");
+      setStatus(error instanceof Error ? error.message : "Unable to load path mappings.");
+    }
   }, [setStatus]);
   useEffect(() => {
     if (section === "general" && mayViewMappings) void refreshMappings();
@@ -194,7 +215,9 @@ export function SettingsView({ section, filterTab, settings, onSaved }: { sectio
     } catch (error) { setStatus(error instanceof Error ? error.message : "Unable to restore path mapping."); }
     finally { setWorking(null); }
   };
-  const testResolution = async () => {
+  const testResolution = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (working || !resolutionPath.trim()) return;
     setWorking("resolve"); setResolution(null);
     try {
       const result = await resolvePathMapping(resolutionPath);
@@ -213,6 +236,9 @@ export function SettingsView({ section, filterTab, settings, onSaved }: { sectio
     ))
   );
   const generalSettingsDirty = deploymentDirty || mappingDirty;
+  const mappingSummary = !mayViewMappings ? null : mappingLoadState === "loaded"
+    ? `${mappings.length} ${mappings.length === 1 ? "mapping" : "mappings"}`
+    : mappingLoadState === "failed" ? "Unavailable" : "Loading…";
 
   if (!principal || !maySeeSettings(principal, section)) return <div className="content-page"><h1>Page unavailable</h1></div>;
 
@@ -233,29 +259,46 @@ export function SettingsView({ section, filterTab, settings, onSaved }: { sectio
     {section === "filters" && <FiltersPage tab={filterTab} />}
     {section === "models" && <><ModelScanSettings /><ModelStorage /></>}
     {section === "general" && <>
-    {(mayCreateBackup || mayScheduleBackup || mayViewBackupStatus) && <BackupSettings />}
-    {mayViewDeployment && <DeploymentSettings onDirtyChange={setDeploymentDirty} />}
-    {(mayViewLogs || mayEditLogs) && <DiagnosticsPanel />}
-    {mayViewVersion && <About />}
-    {(mayViewMappings || (maySeePaths && (mayCreateMapping || mayTestMapping))) && <>
-    <section className="settings-card" aria-labelledby="mapping-heading">
-      <div className="section-heading"><div><h2 id="mapping-heading">Base path mappings</h2><p>Optionally translate a Jellyfin server path to the local path visible to the Editarr scanner.</p></div></div>
-      {mayCreateMapping && maySeePaths && <form className="mapping-form" onSubmit={(event) => void addMapping(event)}>
-        <label className="field"><span>Remote path</span><input value={remotePath} onChange={(event) => setRemotePath(event.target.value)} placeholder="/media/movies" required /></label>
-        <label className="field"><span>Local path</span><input value={localPath} onChange={(event) => setLocalPath(event.target.value)} placeholder="/mnt/media/movies" required /></label>
-        <button className="btn-secondary" type="submit" disabled={working !== null}>{working === "mapping" ? "Adding…" : "Add mapping"}</button>
-      </form>}
-      {mayViewMappings && (mappings.length ? <div className="mapping-table-wrap" role="region" aria-label="Path mappings table" tabIndex={0}><table><thead><tr><th>Remote path</th><th>Local path</th><th><span className="visually-hidden">Actions</span></th></tr></thead><tbody>{mappings.map((mapping, index) => <tr key={mapping.id}>{editingMapping?.id === mapping.id ? <>
+    {(mayViewDeployment || showBackups || showMappings || showDiagnostics || mayViewVersion) && <div className="general-settings-stack">
+    {mayViewDeployment && <DeploymentSettings onDirtyChange={setDeploymentDirty} initiallyOpen={initiallyOpen === "deployment"} />}
+    {showBackups && <BackupSettings initiallyOpen={initiallyOpen === "backups"} />}
+    {showMappings && <GeneralSettingsSection id="mappings" title="Base path mappings" value={mappingSummary}
+      initiallyOpen={initiallyOpen === "mappings"}>
+      <p className="general-settings-note">Translate Jellyfin paths to paths the Editarr scanner can access.</p>
+      {mayViewMappings && mappingLoadState === "loading" && <p className="general-settings-note">Loading path mappings…</p>}
+      {mayViewMappings && mappingLoadState === "loaded" && (mappings.length ? <div className="mapping-table-wrap general-mapping-table" role="region" aria-label="Path mappings table" tabIndex={0}><table><thead><tr><th scope="col">Remote path</th><th scope="col">Local path</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead><tbody>{mappings.map((mapping, index) => <tr key={mapping.id}>{editingMapping?.id === mapping.id ? <>
         <td><input aria-label={`Remote path for mapping ${mapping.id}`} value={editingRemotePath} onChange={(event) => setEditingRemotePath(event.target.value)} required /></td>
         <td><input aria-label={`Local path for mapping ${mapping.id}`} value={editingLocalPath} onChange={(event) => setEditingLocalPath(event.target.value)} required /></td>
         <td><div className="mapping-actions"><button className="btn-primary compact-button" onClick={() => void saveMapping()} disabled={working !== null || !editingRemotePath.trim() || !editingLocalPath.trim()}>Save mapping</button><button className="btn-secondary compact-button" onClick={() => setEditingMapping(null)} disabled={working !== null}>Cancel</button></div></td>
       </> : <>
         <td>{mapping.remote_path}</td><td>{mapping.local_path}</td><td><div className="mapping-actions">{mayReorderMappings && <><button className="icon-button" onClick={() => void moveMapping(mapping, -1)} disabled={working !== null || index === 0} aria-label={`Move ${mapping.remote_path} up`} title="Move up">↑</button><button className="icon-button" onClick={() => void moveMapping(mapping, 1)} disabled={working !== null || index === mappings.length - 1} aria-label={`Move ${mapping.remote_path} down`} title="Move down">↓</button></>}{mayEditMapping && <button className="btn-secondary compact-button" onClick={() => startEditing(mapping)} disabled={working !== null}>Edit</button>}{mayDeleteMapping && <button className="danger-button compact-button" onClick={() => setPendingDeletion(mapping)} disabled={working !== null}>Delete</button>}</div></td>
-      </>}</tr>)}</tbody></table></div> : <p className="muted-copy">No mappings configured. The scanner will use the Jellyfin path unchanged.</p>)}
+      </>}</tr>)}</tbody></table></div> : <p className="general-settings-note">No mappings configured. The scanner will use the Jellyfin path unchanged.</p>)}
       {undoDeletion && mayCreateMapping && mayReorderMappings && mayViewMappings && <div className="undo-notice" role="status"><span>Path mapping deleted.</span><button className="btn-secondary compact-button" onClick={() => void undoDelete()} disabled={working !== null}>Undo</button></div>}
-      {mayTestMapping && maySeePaths && <div className="resolution-test"><label className="field"><span>Test a remote path</span><input value={resolutionPath} onChange={(event) => setResolutionPath(event.target.value)} placeholder="/media/movies/example.mkv" /></label><button className="btn-secondary" onClick={() => void testResolution()} disabled={!resolutionPath.trim() || working !== null}>{working === "resolve" ? "Testing…" : "Test resolution"}</button></div>}
-      {resolution && <p className="form-status" role="status">{resolution}</p>}
-    </section>
+      {maySeePaths && (mayCreateMapping || mayTestMapping) && <div className="general-settings-actions">
+        {mayCreateMapping && <button type="button" className="btn-secondary compact-button" aria-expanded={mappingTool === "add"} aria-controls="general-add-mapping"
+          onClick={() => setMappingTool(mappingTool === "add" ? null : "add")}>Add mapping</button>}
+        {mayTestMapping && <button type="button" className="btn-secondary compact-button" aria-expanded={mappingTool === "resolve"} aria-controls="general-resolve-path"
+          onClick={() => setMappingTool(mappingTool === "resolve" ? null : "resolve")}>Test resolution</button>}
+      </div>}
+      {mayCreateMapping && maySeePaths && <div id="general-add-mapping" className="general-settings-inline" hidden={mappingTool !== "add"}>
+        <form className="mapping-form" onSubmit={(event) => void addMapping(event)}>
+          <label className="field"><span>Remote path</span><input value={remotePath} onChange={(event) => setRemotePath(event.target.value)} placeholder="/media/movies" required /></label>
+          <label className="field"><span>Local path</span><input value={localPath} onChange={(event) => setLocalPath(event.target.value)} placeholder="/mnt/media/movies" required /></label>
+          <button className="btn-primary compact-button" type="submit" disabled={working !== null}>{working === "mapping" ? "Adding…" : "Save mapping"}</button>
+        </form>
+      </div>}
+      {mayTestMapping && maySeePaths && <div id="general-resolve-path" className="general-settings-inline" hidden={mappingTool !== "resolve"}>
+        <form className="resolution-test" onSubmit={(event) => void testResolution(event)}>
+          <label className="field"><span>Test a remote path</span><input value={resolutionPath} onChange={(event) => setResolutionPath(event.target.value)} placeholder="/media/movies/example.mkv" required /></label>
+          <button className="btn-secondary compact-button" type="submit" disabled={!resolutionPath.trim() || working !== null}>{working === "resolve" ? "Testing…" : "Resolve path"}</button>
+        </form>
+        {resolution && <p className="form-status" role="status">{resolution}</p>}
+      </div>}
+    </GeneralSettingsSection>}
+    {showDiagnostics && <DiagnosticsPanel initiallyOpen={initiallyOpen === "diagnostics"} />}
+    {mayViewVersion && <About initiallyOpen={initiallyOpen === "about"} />}
+    </div>}
+    {showMappings && <>
     {status && <p className="form-status" role="status">{status}</p>}
     {pendingDeletion && <ModalDialog labelledBy="delete-mapping-heading" className="confirmation-dialog" onClose={working === null ? () => setPendingDeletion(null) : undefined}><h2 id="delete-mapping-heading">Delete path mapping?</h2><p><strong>{pendingDeletion.remote_path}</strong> will no longer be translated to <strong>{pendingDeletion.local_path}</strong>.</p><div className="button-row"><button className="btn-secondary" onClick={() => setPendingDeletion(null)} disabled={working !== null}>Cancel</button><button className="danger-button" onClick={() => void deleteMapping()} disabled={working !== null}>{working === "delete" ? "Deleting…" : "Delete mapping"}</button></div></ModalDialog>}
     </>}

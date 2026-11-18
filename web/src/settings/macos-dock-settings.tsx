@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchDockSettings, saveDockSettings } from "../api/api-macos-settings";
 import { useCan } from "../auth/auth-gate";
+import { GeneralSettingsSection } from "./general-settings-section";
 
 export function MacOSDockSettings() {
   const mayEdit = useCan("deployment.edit");
@@ -31,17 +32,16 @@ export function MacOSDockSettings() {
   }
 
   if (showInDock === null) return null;
-  return <section className="settings-card" aria-labelledby="macos-settings-heading">
-    <div className="section-heading"><div><h2 id="macos-settings-heading">macOS</h2></div></div>
-    <label className="deployment-choice">
+  return <GeneralSettingsSection id="macos" title="macOS" value={showInDock ? "Dock icon shown" : "Dock icon hidden"}>
+    <label className="general-setting-toggle">
+      <span>Show app icon in the Dock</span>
       <input
         type="checkbox"
         checked={showInDock}
         disabled={!mayEdit || saving}
         onChange={(event) => void save(event.target.checked)}
       />
-      Show app icon in the Dock
     </label>
     {error && <p className="form-error" role="alert">{error}</p>}
-  </section>;
+  </GeneralSettingsSection>;
 }

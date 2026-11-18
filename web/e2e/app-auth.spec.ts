@@ -310,7 +310,7 @@ test("manages a mocked model download accessibly on a narrow viewport", async ({
 
 test("keeps General settings accessible and signs out without a reload", async ({ page }) => {
   await page.getByRole("button", { name: "General" }).click();
-  await expect(page.getByRole("heading", { name: "Base path mappings" })).toBeVisible();
+  await expect(page.locator("summary").filter({ hasText: "Base path mappings" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Account menu for / })).toBeVisible();
   await expectNoAccessibilityViolations(page);
 

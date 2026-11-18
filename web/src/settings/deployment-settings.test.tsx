@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
@@ -110,6 +110,9 @@ describe("deployment settings", () => {
     vi.stubGlobal("fetch", installApi(deploymentConfiguration({ macos_dock_supported: true }), undefined, save));
     renderAuthenticatedApp();
 
+    const summary = (await screen.findByText("macOS", { exact: true })).closest("summary")!;
+    expect(summary).toHaveTextContent("Dock icon shown");
+    fireEvent.click(summary);
     const toggle = await screen.findByRole("checkbox", { name: "Show app icon in the Dock" });
     expect(toggle).toBeChecked();
     fireEvent.click(toggle);
@@ -118,6 +121,7 @@ describe("deployment settings", () => {
       method: "PUT",
       body: JSON.stringify({ show_in_dock: false }),
     }));
+    expect(summary).toHaveTextContent("Dock icon hidden");
   });
 
   it("renders server-derived nested path data and keeps active values separate from the pending next start", async () => {
@@ -139,10 +143,16 @@ describe("deployment settings", () => {
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/settings/deployment")).toBe(true));
     expect(await screen.findByRole("textbox", { name: /^Base URL/ })).toBeVisible();
-    expect(screen.getByRole("region", { name: "Active now" })).toHaveTextContent("/editarr");
-    expect(screen.getByRole("region", { name: "Next start" })).toHaveTextContent("/media/editarr");
-    expect(screen.getByText("Restart required.")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Active now" })).toHaveTextContent("https://editarr.example.com/editarr");
+    expect(screen.getByRole("region", { name: "Next start" })).toHaveTextContent("https://editarr.example.com/media/editarr");
+    expect(screen.getByText("Restart required to apply the next-start settings.")).toBeVisible();
     expect(screen.getByRole("textbox", { name: /^Base URL/ })).toHaveValue("https://editarr.example.com/media/editarr");
+    expect(screen.getByText("/media/editarr", { exact: true })).not.toBeVisible();
+    fireEvent.click(screen.getByText("Connection details", { exact: true }));
+    const activeConnection = within(screen.getByRole("region", { name: "Active connection" }));
+    const nextConnection = within(screen.getByRole("region", { name: "Next connection" }));
+    expect(activeConnection.getByText("/editarr", { exact: true })).toBeVisible();
+    expect(nextConnection.getByText("/media/editarr", { exact: true })).toBeVisible();
   });
 
   it("saves only an edited port and does not freeze the environment Base URL seed", async () => {
@@ -164,6 +174,7 @@ describe("deployment settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save deployment settings" }));
 
     expect(await screen.findByText(/Deployment settings saved. Restart Editarr/)).toBeVisible();
+    fireEvent.click(screen.getByText("Connection details", { exact: true }));
     expect(screen.getByText(/Base URL has no saved override/)).toBeVisible();
     const put = fetchMock.mock.calls.find(([input, init]) => new URL(String(input), "http://editarr.test").pathname === "/api/settings/deployment" && init?.method === "PUT");
     expect(new Headers(put?.[1]?.headers).get("X-CSRF-Token")).toBe("A".repeat(43));
@@ -186,6 +197,7 @@ describe("deployment settings", () => {
     fireEvent.click(screen.getByLabelText("Save the displayed Base URL as an override"));
     fireEvent.click(screen.getByRole("button", { name: "Save deployment settings" }));
 
+    fireEvent.click(screen.getByText("Connection details", { exact: true }));
     expect(await screen.findByText(/Saved Base URL override: https:\/\/editarr.example.com\/editarr/)).toBeVisible();
   });
 
@@ -245,8 +257,11 @@ describe("deployment settings", () => {
     renderAuthenticatedApp();
 
     expect(await screen.findByText("CLI port override is active.")).toBeVisible();
-    expect(screen.getByRole("region", { name: "Next start" })).toHaveTextContent("Base path/");
     expect(screen.getByText(/--port 9000 masks the saved Listening Port/)).toBeVisible();
+    fireEvent.click(screen.getByText("Connection details", { exact: true }));
+    const nextConnection = within(screen.getByRole("region", { name: "Next connection" }));
+    expect(nextConnection.getByText("Base path", { exact: true })).toBeVisible();
+    expect(nextConnection.getByText("/", { exact: true })).toBeVisible();
   });
 
   it("prevents a duplicate save while the first request is pending", async () => {
