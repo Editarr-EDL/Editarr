@@ -10,7 +10,7 @@ mkdir -p "$sources" "$notices"
 download() {
     local url=$1 filename=$2 digest=$3
     curl --fail --location --retry 3 --silent --show-error --output "$sources/$filename" "$url"
-    (cd "$sources" && printf '%s  %s\n' "$digest" "$filename" | sha256sum --check --strict)
+    (cd "$sources" && printf '%s  %s\n' "$digest" "$filename" | sha256sum -c -)
 }
 
 runtime_commit=dd6cebedcbddde9c82f89b011e8e1d40b6e43868
@@ -24,6 +24,11 @@ download https://github.com/vasi/squashfuse/archive/0.5.2.tar.gz \
 tar xf "$sources/$runtime_archive" -O "type2-runtime-$runtime_commit/LICENSE" > "$notices/type2-runtime-LICENSE.txt"
 tar xf "$sources/fuse-3.15.0.tar.xz" -O fuse-3.15.0/LGPL2.txt > "$notices/libfuse-LGPL2.txt"
 tar xf "$sources/squashfuse-0.5.2.tar.gz" -O squashfuse-0.5.2/LICENSE > "$notices/squashfuse-LICENSE.txt"
+(
+    sources="$bootstrap/sources"
+    download https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.xz \
+        nasm-2.16.03.tar.xz 1412a1c760bbd05db026b6c0d1657affd6631cd0a63cddb6f73cc6d4aa616148
+)
 cat >> "$bootstrap/notices/THIRD-PARTY-NOTICES.md" <<'NOTICE'
 
 The AppImage includes AppImage type-2 runtime 20251108. The source archive

@@ -8,18 +8,17 @@ test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"
 dnf install -y python3.11 python3.11-pip git curl tar xz file binutils \
     desktop-file-utils libappstream-glib util-linux procps-ng jq findutils \
     gcc-toolset-14-gcc gcc-toolset-14-gcc-c++ make patch diffutils gzip
-dnf install -y epel-release
-dnf install -y nasm
-
 export HOME="$output/home" TMPDIR="$output/tmp" UV_CACHE_DIR="$output/uv-cache"
 export UV_PROJECT_ENVIRONMENT="$output/venv" UV_PYTHON_INSTALL_DIR="$output/python"
-export UV_PYTHON=3.11.16 SOURCE_DATE_EPOCH=315532800
+export UV_PYTHON=3.11.16
 export NPM_CONFIG_PREFIX="$output/node-packages"
 export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
 export GOTOOLCHAIN=local CGO_ENABLED=0
 mkdir -p "$HOME" "$TMPDIR" "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
 # CI sets this repository up outside the container, under the runner user's UID.
 git config --global --add safe.directory "$PWD"
+SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+export SOURCE_DATE_EPOCH
 set +u
 source /opt/rh/gcc-toolset-14/enable
 set -u
@@ -75,10 +74,15 @@ done
 uv run python -m scripts.verify_installed_release --runtime "$runtime" --target linux-x86_64 \
     "${verification_flags[@]}" --json-out "$output/native14-baseline-raw-verifier.json"
 
+packaging_flags=()
+if [[ -n ${VERSION:-} ]]; then
+    uv run python -m scripts.prepare_alpha_distribution collect-notices "$output/bootstrap"
+    packaging_flags+=(--notices "$output/bootstrap/notices")
+fi
 package="$output/package output"
 uv run python -m scripts.package_linux --runtime "$runtime" --out-dir "$package" \
     --work-dir "$TMPDIR" --appimagetool "$output/appimagetool" \
-    --appimage-runtime "$output/runtime-x86_64"
+    --appimage-runtime "$output/runtime-x86_64" "${packaging_flags[@]}"
 rm -rf "$output/raw output"
 packaged_runtime="$package/Editarr.AppDir/usr/lib/editarr"
 uv run python -m scripts.verify_installed_release --runtime "$packaged_runtime" --target linux-x86_64 \

@@ -27,10 +27,14 @@ def _load_build_release():
     "workflow", sorted(Path(".github/workflows").glob("native*.yml")), ids=lambda path: path.stem
 )
 def test_native_workflow_python_inputs_exist(workflow):
-    inputs = re.findall(
-        r"\b(?:native_build|scanner|scripts|tests)/[\w./-]+\.py\b",
-        workflow.read_text(encoding="utf-8"),
-    )
+    workflow_text = workflow.read_text(encoding="utf-8")
+    commands = [workflow_text]
+    for shell_script in re.findall(r"\bnative_build/[\w./-]+\.sh\b", workflow_text):
+        commands.append(Path(shell_script).read_text(encoding="utf-8"))
+    commands_text = "\n".join(commands)
+    inputs = re.findall(r"\b(?:native_build|scanner|scripts|tests)/[\w./-]+\.py\b", commands_text)
+    modules = re.findall(r"\bpython(?:3)? -m ((?:scripts|native_build)\.[\w.]+)\b", commands_text)
+    inputs.extend(module.replace(".", "/") + ".py" for module in modules)
     assert inputs
     for source in inputs:
         assert Path(source).is_file(), f"{workflow}: {source}"

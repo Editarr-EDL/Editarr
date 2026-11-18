@@ -11,6 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from native_build.windows import package_identity
+
 
 def _packager():
     path = Path("scripts/package_windows.py")
@@ -41,7 +43,7 @@ def test_windows_product_contract_is_stable_and_per_user():
     assert packager.TARGET == "windows-x64"
     assert packager.APP_GUID == "{B1956A76-50E9-49E4-9A12-03683D04AB64}"
     assert packager.APP_ID == "{{B1956A76-50E9-49E4-9A12-03683D04AB64}"
-    assert packager.DEVELOPMENT_PUBLISHER == (
+    assert package_identity.DEVELOPMENT_PUBLISHER == (
         "Unsigned development build - no publisher identity"
     )
     assert packager.INSTALL_LOCATION == r"%LOCALAPPDATA%\Programs\Editarr"
@@ -129,9 +131,9 @@ def test_unsigned_development_identity_is_explicit_and_cannot_borrow_production_
         timestamp_url=None,
     )
 
-    identity = packager._resolve_identity(arguments, "0.1.0")
+    identity = package_identity.resolve_identity(arguments, "0.1.0")
 
-    assert identity.publisher == packager.DEVELOPMENT_PUBLISHER
+    assert identity.publisher == package_identity.DEVELOPMENT_PUBLISHER
     assert identity.development_only is True
     assert identity.signed is False
     assert identity.artifact_base == "Editarr-Setup-0.1.0-unsigned-development"
@@ -139,7 +141,7 @@ def test_unsigned_development_identity_is_explicit_and_cannot_borrow_production_
 
     arguments.publisher = "Unapproved Publisher"
     with pytest.raises(packager.PackageError, match="cannot be combined"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
 
 def test_production_identity_fails_closed_without_complete_signing_authority(tmp_path):
@@ -152,19 +154,19 @@ def test_production_identity_fails_closed_without_complete_signing_authority(tmp
         timestamp_url=None,
     )
     with pytest.raises(packager.PackageError, match="approved Windows Publisher"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
     arguments.publisher = "Approved Publisher"
     with pytest.raises(packager.PackageError, match="requires --certificate"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
     arguments.certificate = tmp_path / "identity.p12"
     arguments.timestamp_url = "http://timestamp.test"
     with pytest.raises(packager.PackageError, match="must use HTTPS"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
     arguments.timestamp_url = "https://timestamp.test"
-    identity = packager._resolve_identity(arguments, "0.1.0")
+    identity = package_identity.resolve_identity(arguments, "0.1.0")
     assert identity.signed is True
     assert identity.development_only is False
     assert identity.publisher == "Approved Publisher"
@@ -180,9 +182,9 @@ def test_unsigned_alpha_identity_is_labeled_and_cannot_borrow_signing_options():
         timestamp_url=None,
     )
 
-    identity = packager._resolve_identity(arguments, "0.1.5")
+    identity = package_identity.resolve_identity(arguments, "0.1.5")
 
-    assert identity.publisher == packager.ALPHA_PUBLISHER
+    assert identity.publisher == package_identity.ALPHA_PUBLISHER
     assert identity.development_only is False
     assert identity.signed is False
     assert identity.artifact_base == "Editarr-v0.1.5-Windows-x64-Setup"
@@ -190,7 +192,7 @@ def test_unsigned_alpha_identity_is_labeled_and_cannot_borrow_signing_options():
 
     arguments.publisher = "Publisher"
     with pytest.raises(packager.PackageError, match="cannot be combined"):
-        packager._resolve_identity(arguments, "0.1.5")
+        package_identity.resolve_identity(arguments, "0.1.5")
 
 
 def test_launcher_exposes_required_tray_actions_without_network_or_service_control():

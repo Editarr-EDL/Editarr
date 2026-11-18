@@ -14,13 +14,12 @@ import subprocess
 import sys
 import tempfile
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
 from native_build.artifact_size import SIZE_ACCOUNTING, write_sized_inventory
 from native_build.artifact_size import tree_size as _tree_size
+from native_build.windows.package_identity import PackageError, resolve_identity
 
 ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER_SOURCE = ROOT / "native_build" / "windows" / "EditarrLauncher.cpp"
@@ -29,28 +28,11 @@ ICON_SOURCE = ROOT / "web" / "public" / "favicon.ico"
 TARGET = "windows-x64"
 APP_GUID = "{B1956A76-50E9-49E4-9A12-03683D04AB64}"
 APP_ID = "{" + APP_GUID
-DEVELOPMENT_PUBLISHER = "Unsigned development build - no publisher identity"
-ALPHA_PUBLISHER = "Unsigned alpha build - no publisher identity"
 INSTALL_LOCATION = r"%LOCALAPPDATA%\Programs\Editarr"
 DATA_LOCATION = r"%LOCALAPPDATA%\Editarr\Data"
 CACHE_LOCATION = r"%LOCALAPPDATA%\Editarr\Cache"
 LOG_LOCATION = r"%LOCALAPPDATA%\Editarr\Logs"
 _VERSION = re.compile(r"^[0-9]+(?:\.[0-9]+){1,3}$")
-_PUBLISHER = re.compile(r"^[\w .,&'()\-]{1,128}$", re.UNICODE)
-
-
-class PackageError(RuntimeError):
-    """A Windows package input or tool result is unsafe or incomplete."""
-
-
-@dataclass(frozen=True, slots=True)
-class PackageIdentity:
-    publisher: str
-    signed: bool
-    development_only: bool
-    artifact_base: str
-    display_name: str
-    description: str
 
 
 def _run(
@@ -313,58 +295,11 @@ def _iscc_define(name: str, value: str) -> str:
     return f"/D{name}={value}"
 
 
-def _resolve_identity(args: argparse.Namespace, version: str) -> PackageIdentity:
-    if args.unsigned_alpha:
-        if args.publisher or args.certificate or args.timestamp_url:
-            raise PackageError(
-                "--unsigned-alpha cannot be combined with production identity/signing options"
-            )
-        return PackageIdentity(
-            publisher=ALPHA_PUBLISHER,
-            signed=False,
-            development_only=False,
-            artifact_base=f"Editarr-v{version}-Windows-x64-Setup",
-            display_name="Editarr (Unsigned Alpha)",
-            description="Editarr per-user installer - unsigned alpha release",
-        )
-
-    if args.unsigned_development:
-        if args.publisher or args.certificate or args.timestamp_url:
-            raise PackageError(
-                "--unsigned-development cannot be combined with production identity/signing options"
-            )
-        return PackageIdentity(
-            publisher=DEVELOPMENT_PUBLISHER,
-            signed=False,
-            development_only=True,
-            artifact_base=f"Editarr-Setup-{version}-unsigned-development",
-            display_name="Editarr (Unsigned Development Build)",
-            description="Editarr per-user installer - unsigned development build",
-        )
-
-    if _PUBLISHER.fullmatch(args.publisher or "") is None:
-        raise PackageError("an approved Windows Publisher display name is required")
-    if not args.certificate or not args.timestamp_url:
-        raise PackageError(
-            "production packaging requires --certificate and an HTTPS --timestamp-url"
-        )
-    if urlsplit(args.timestamp_url).scheme.lower() != "https":
-        raise PackageError("--timestamp-url must use HTTPS")
-    return PackageIdentity(
-        publisher=args.publisher,
-        signed=True,
-        development_only=False,
-        artifact_base=f"Editarr-Setup-{version}",
-        display_name="Editarr",
-        description="Editarr per-user installer",
-    )
-
-
 def package_windows(args: argparse.Namespace) -> int:
     _require_windows_x64()
     _require_commands("cl.exe", "rc.exe", "ISCC.exe")
     version = _project_version()
-    identity = _resolve_identity(args, version)
+    identity = resolve_identity(args, version)
     if identity.signed:
         _require_commands("signtool.exe")
         assert args.certificate

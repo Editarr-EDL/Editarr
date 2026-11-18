@@ -43,7 +43,9 @@ def detect_scenes(
     logger.info("Detecting scenes (threshold=%.1f)...", threshold)
     # The release's OpenCV is built without video codecs; PyAV shares our FFmpeg.
     video = (
-        open_video(video_path, backend="pyav") if has_source_built_media() else open_video(video_path)
+        open_video(video_path, backend="pyav")
+        if has_source_built_media()
+        else open_video(video_path)
     )
     detected_duration = duration_seconds
     if detected_duration is None and video.duration is not None:

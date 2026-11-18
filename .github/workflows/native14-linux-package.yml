@@ -53,6 +53,7 @@ jobs:
           task_root="$RUNNER_TEMP/editarr-native14"
           mkdir "$task_root"
           python3 -m scripts.prepare_alpha_distribution prepare linux-x86_64 "$task_root/bootstrap"
+          bash native_build/linux/prepare_appimage_sources.sh "$task_root/bootstrap"
 
       - name: Build and verify on the glibc 2.28 baseline
         shell: bash
@@ -93,6 +94,7 @@ jobs:
             ${{ runner.temp }}/editarr-native14/package output/*.sha256
           if-no-files-found: warn
           retention-days: 14
+          overwrite: true
 
       - name: Upload verified release AppImage and source archives
         if: inputs.version != ''
@@ -103,6 +105,7 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 3
+          overwrite: true
 
       - name: Retain the development AppImage for acceptance reproduction
         if: inputs.version == ''
@@ -116,3 +119,4 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
+          overwrite: true

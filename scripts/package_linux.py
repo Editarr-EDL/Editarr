@@ -265,7 +265,14 @@ def _normalize_tree(root: Path, epoch: int) -> None:
     os.utime(root, (epoch, epoch), follow_symlinks=False)
 
 
-def _assemble_appdir(runtime: Path, appdir: Path, *, version: str, epoch: int) -> None:
+def _assemble_appdir(
+    runtime: Path,
+    appdir: Path,
+    *,
+    version: str,
+    epoch: int,
+    notices: Path | None = None,
+) -> None:
     embedded = appdir / "usr" / "lib" / "editarr"
     shutil.copytree(runtime, embedded, symlinks=True)
     applications = appdir / "usr" / "share" / "applications"
@@ -275,6 +282,8 @@ def _assemble_appdir(runtime: Path, appdir: Path, *, version: str, epoch: int) -
     for directory in (applications, metainfo, icons, binary_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
+    if notices is not None:
+        shutil.copytree(notices, appdir / "usr" / "share" / "doc" / "editarr" / "licenses")
     shutil.copy2(APPRUN_SOURCE, appdir / "AppRun")
     release_date = datetime.fromtimestamp(epoch, UTC).date().isoformat()
     desktop = applications / f"{APP_ID}.desktop"
@@ -337,7 +346,9 @@ def package_linux(args: argparse.Namespace) -> int:
         raise PackageError("SOURCE_DATE_EPOCH must be a non-negative integer")
     try:
         staged_appdir = build_root / "Editarr.AppDir"
-        _assemble_appdir(runtime, staged_appdir, version=version, epoch=epoch)
+        _assemble_appdir(
+            runtime, staged_appdir, version=version, epoch=epoch, notices=args.notices
+        )
         desktop = staged_appdir / "usr" / "share" / "applications" / f"{APP_ID}.desktop"
         appstream = staged_appdir / "usr" / "share" / "metainfo" / f"{APP_ID}.metainfo.xml"
         _run(["desktop-file-validate", str(desktop)])
@@ -427,6 +438,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--runtime", type=Path, required=True, help="Linux PyInstaller onedir")
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()))
+    parser.add_argument("--notices", type=Path, help="License notices to bundle in the AppImage")
     parser.add_argument("--appimagetool", type=Path, required=True)
     parser.add_argument("--appimage-runtime", type=Path, required=True)
     return parser.parse_args()

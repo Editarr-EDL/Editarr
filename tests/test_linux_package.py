@@ -198,7 +198,10 @@ def test_appdir_layout_uses_immutable_runtime_metadata_and_large_icon(tmp_path):
     runtime = _runtime(tmp_path, package)
     appdir = tmp_path / "Editarr.AppDir"
 
-    package._assemble_appdir(runtime, appdir, version="0.1.0", epoch=315532800)
+    notices = tmp_path / "notices"
+    notices.mkdir()
+    (notices / "LICENSE.txt").write_text("License text", encoding="utf-8")
+    package._assemble_appdir(runtime, appdir, version="0.1.0", epoch=315532800, notices=notices)
 
     assert os.readlink(appdir / "usr" / "bin" / "Editarr") == "../lib/editarr/Editarr"
     assert os.readlink(appdir / f"{package.APP_ID}.desktop") == (
@@ -224,6 +227,8 @@ def test_appdir_layout_uses_immutable_runtime_metadata_and_large_icon(tmp_path):
         / "editarr.png"
     )
     assert icon.read_bytes() == package.ICON_SOURCE.read_bytes()
+    license_file = appdir / "usr" / "share" / "doc" / "editarr" / "licenses" / "LICENSE.txt"
+    assert license_file.read_text(encoding="utf-8") == "License text"
     assert (appdir / "editarr.png").resolve(strict=True) == icon
     assert (appdir / ".DirIcon").resolve(strict=True) == icon
 
@@ -240,6 +245,7 @@ def test_package_records_staged_outputs_only_after_success(tmp_path, monkeypatch
         runtime=runtime,
         out_dir=tmp_path / "out",
         work_dir=tmp_path / "work",
+        notices=None,
         appimagetool=appimagetool,
         appimage_runtime=appimage_runtime,
     )

@@ -16,7 +16,7 @@ export LD_LIBRARY_PATH="$prefix/lib"
 (cd "$sources" && sha256sum --strict -c MEDIA-SHA256SUMS.txt)
 mkdir "$output/src"
 cd "$output/src"
-for archive in pkgconf-2.5.1.tar.xz x264-b35605a.tar.gz lame-4.0.tar.gz \
+for archive in nasm-2.16.03.tar.xz pkgconf-2.5.1.tar.xz x264-b35605a.tar.gz lame-4.0.tar.gz \
     ffmpeg-8.1.3.tar.xz opencv_python_headless-5.0.0.93.tar.gz; do
     tar xf "$sources/$archive"
 done
@@ -29,6 +29,7 @@ build() (
     make install
 )
 
+build nasm-2.16.03
 build pkgconf-2.5.1 --disable-shared
 ln -s pkgconf "$prefix/bin/pkg-config"
 build x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55 --disable-cli --enable-static --enable-pic
