@@ -23,10 +23,16 @@ const job = (state: string) => ({
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+function openBackupOptions() {
+  fireEvent.click(screen.getByRole("button", { name: "Create backup" }));
+  expect(backups.startBackupExport).not.toHaveBeenCalled();
+}
+
 describe("backup settings", () => {
   it("creates a plain full backup without requesting a passphrase", async () => {
     vi.mocked(backups.startBackupExport).mockResolvedValue(job("ready") as never);
-    render(<BackupSettings />);
+    render(<BackupSettings initiallyOpen />);
+    openBackupOptions();
     expect(screen.getByText(/Unencrypted: included credentials/)).toBeVisible();
     expect(screen.queryByLabelText("Passphrase")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Create backup" }));
@@ -35,7 +41,7 @@ describe("backup settings", () => {
   });
 
   it("offers no settings-only backup and no restore or inspection controls", () => {
-    render(<BackupSettings />);
+    render(<BackupSettings initiallyOpen />);
     expect(screen.queryByLabelText("Backup contents")).toBeNull();
     expect(screen.queryByLabelText("Backup file")).toBeNull();
     expect(screen.queryByRole("button", { name: "Inspect backup" })).toBeNull();
@@ -45,7 +51,8 @@ describe("backup settings", () => {
 
   it("only requests a passphrase when encryption is selected", async () => {
     vi.mocked(backups.startBackupExport).mockResolvedValue(job("ready") as never);
-    render(<BackupSettings />);
+    render(<BackupSettings initiallyOpen />);
+    openBackupOptions();
     fireEvent.click(screen.getByLabelText("Encrypt backup"));
     expect(screen.getByLabelText("Passphrase")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Create backup" }));
@@ -62,7 +69,8 @@ describe("backup settings", () => {
   it("reports an unavailable download without claiming that it saved a file", async () => {
     vi.mocked(backups.startBackupExport).mockResolvedValue(job("ready") as never);
     vi.mocked(backups.checkBackupDownload).mockRejectedValue(new Error("Backup download expired"));
-    render(<BackupSettings />);
+    render(<BackupSettings initiallyOpen />);
+    openBackupOptions();
     fireEvent.click(screen.getByRole("button", { name: "Create backup" }));
     fireEvent.click(await screen.findByRole("button", { name: "Download backup" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Backup download expired");
@@ -71,7 +79,8 @@ describe("backup settings", () => {
   it("cancels a finished job", async () => {
     vi.mocked(backups.startBackupExport).mockResolvedValue(job("ready") as never);
     vi.mocked(backups.cancelBackup).mockResolvedValue(job("cancelled") as never);
-    render(<BackupSettings />);
+    render(<BackupSettings initiallyOpen />);
+    openBackupOptions();
     fireEvent.click(screen.getByRole("button", { name: "Create backup" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel job" }));
     expect(await screen.findByText("Backup cancelled.")).toBeVisible();

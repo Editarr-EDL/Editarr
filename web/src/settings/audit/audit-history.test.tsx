@@ -33,7 +33,7 @@ describe("permission-scoped audit history", () => {
 
   it("shows attribution, server counts, and secret-free details", async () => {
     render(<AuditHistory />);
-    expect(await screen.findByRole("link", { name: "api_key.issue" })).toHaveAttribute("href", `#/audit/${entry.event_id}`);
+    expect(await screen.findByRole("link", { name: "api_key.issue" })).toHaveAttribute("href", `#/settings/audit/${entry.event_id}`);
     expect(screen.getByText("Account #1")).toBeVisible();
     expect(screen.getByText("Account #4")).toBeVisible();
     expect(screen.getByText("1 event")).toBeVisible();

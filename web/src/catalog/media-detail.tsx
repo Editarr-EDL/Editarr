@@ -28,7 +28,6 @@ import {
   validateDisplayName,
 } from "../shared/name-validation";
 import {
-  formatBytes,
   usePageTitle,
 } from "../shared/display";
 import {
@@ -44,6 +43,7 @@ import {
   formatRating,
   MediaDuration,
 } from "./media-display";
+import { MediaFiles } from "./media-files";
 import {
   navigate,
 } from "../routes";
@@ -111,12 +111,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const [qwenSummariesPerSegment, setQwenSummariesPerSegment] = useState(4);
   const [qwenSegmentJoinGapSeconds, setQwenSegmentJoinGapSeconds] = useState(3);
   const [versions, setVersions] = useState(() => item.versions.map((version) => ({ ...version, exports: normalizedExportStatus(version) })));
-  useEffect(() => {
-    const filesTable = document.querySelector<HTMLElement>(".media-versions > .library-table-wrap");
-    if (!filesTable) return;
-    filesTable.tabIndex = 0;
-    filesTable.setAttribute("aria-label", "Media files");
-  }, [versions.length]);
   const [mediaSourceId, setMediaSourceId] = useState<string | null>(
     () => item.versions.find((version) => version.id)?.id || null,
   );
@@ -339,7 +333,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   return <div className="content-page media-detail">
     <LibraryBreadcrumbs crumbs={breadcrumbs} onNavigate={leaveDetail} />
     <div className="detail-summary"><div className="detail-poster">{imageUrl ? <img src={imageUrl} alt="" /> : <span>{item.name.slice(0, 1).toUpperCase()}</span>}</div><div><p className="eyebrow">{item.item_type}</p><h1>{item.name}</h1><p className="detail-meta">{item.year || "Year unavailable"} · Rating {formatRating(item)}</p><ExportBadges status={activeExportStatus} /><p>{item.overview || "No overview is available from Jellyfin."}</p><dl className="detail-metadata"><div><dt>Resolution</dt><dd>{item.resolution || "Unavailable"}</dd></div><div><dt>Format</dt><dd>{item.media_format || "Unavailable"}</dd></div><div><dt>Length</dt><dd><MediaDuration seconds={item.duration_seconds} /></dd></div><div><dt>Files</dt><dd>{item.media_source_count ?? item.versions.length}</dd></div></dl></div></div>
-    {versions.length > 0 && <section className="settings-card media-versions"><div className="section-heading"><div><h2>Files</h2></div></div><div className="library-table-wrap"><table className="library-table"><thead><tr><th>Scene Name</th><th>Release Group</th><th>Edition</th><th>Resolution</th><th>Format</th><th>Length</th><th>Size</th></tr></thead><tbody>{versions.map((version, index) => <tr key={version.id || `${version.name || "file"}-${index}`}><td>{version.scene_name || version.name || "—"}<span className="version-edl-badge"><ExportBadges status={version.exports} /></span></td><td>{version.release_group || "—"}</td><td>{version.edition || "—"}</td><td>{version.resolution || "—"}</td><td>{version.media_format || version.container?.toUpperCase() || "—"}</td><td><MediaDuration seconds={version.duration_seconds} /></td><td>{formatBytes(version.size_bytes, { unit: "gb", unavailable: "—" })}</td></tr>)}</tbody></table></div></section>}
+    <MediaFiles versions={versions} />
     <div className="detail-actions">{mayScan && <button className="btn-primary" ref={newScanTriggerRef} onClick={() => setShowNewScan(true)}>New Scan</button>}{mayReadFindings && <button className="btn-secondary" ref={findFiltersTriggerRef} onClick={() => { setFindFiltersActive(true); void filters.find(false); }} disabled={filters.finding}>{filters.finding ? "Finding Filters…" : "Find Filters"}</button>}{mayDeleteLegacy && Object.values(legacyExports(activeExportStatus)).some((status) => status.present) && <button className="btn-secondary" onClick={() => setShowManageExports(true)}>Manage exports</button>}</div>
     {message && <p className="form-status" role="status">{message}</p>}
     {filters.open && <FindFiltersDialog candidates={filters.candidates} results={filters.results} selectedIds={filters.selectedIds} associating={filters.associating} onSelect={filters.select} onAssociate={() => void filters.associate()} onClose={() => { filters.close(); setFindFiltersActive(false); }} returnFocusRef={findFiltersTriggerRef}

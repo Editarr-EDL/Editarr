@@ -11,10 +11,12 @@ from pathlib import Path
 from scanner.security.community_identity import holds_identity, read_identity_backup_snapshot
 from scanner.security.community_identity_homes import owner_home, owner_identity_root
 from scanner.security.private_identity_files import HOMES, IdentityHome
+from scanner.settings.model_scan_settings import MODEL_SCAN_SETTINGS_FILENAME
 
 EXTERNAL_FILES = (
     "deployment.json",
     "diagnostics.json",
+    MODEL_SCAN_SETTINGS_FILENAME,
     "secrets/auth-csrf.key",
     "secrets/api-key-wrap.key",
 )

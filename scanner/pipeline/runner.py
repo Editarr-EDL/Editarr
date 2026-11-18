@@ -66,6 +66,7 @@ from scanner.settings.capabilities import (
     require_available,
 )
 from scanner.settings.config import settings
+from scanner.settings.model_scan_settings import load_model_scan_settings
 from scanner.testing.test_fake_models import enabled as _test_fake_models_enabled
 
 logger = logging.getLogger(__name__)
@@ -269,10 +270,16 @@ def run_scan(
     if qwen_model not in SUPPORTED_QWEN_MODELS:
         raise ValueError(f"Unsupported Qwen model: {qwen_model}")
 
+    audio_padding = settings.profanity_pad_seconds
+    if scan_audio and "audio_scan" not in completed_stages:
+        audio_padding = load_model_scan_settings(
+            settings.data_dir, default_audio_padding=audio_padding
+        ).audio_padding_seconds
     stage_settings = effective_stage_settings(
         video_model=video_model,
         audio_model=audio_model,
         audio_filter=audio_filter,
+        audio_padding_seconds=audio_padding,
         qwen_model=qwen_model,
         scene_detection_threshold=settings.scene_detection_threshold,
         coarse_scan_enabled=coarse_scan_enabled,
@@ -433,6 +440,7 @@ def run_scan(
                 video_id=video_id,
                 audio_model=audio_model,
                 audio_filter=audio_filter,
+                audio_padding_seconds=audio_padding,
                 qwen_model=qwen_model,
                 audio_selection=audio_selection,
                 should_cancel=should_cancel,

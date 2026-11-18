@@ -1,12 +1,13 @@
 """Native model capability contract and detector-only enrichment coverage."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from scanner.models import FindingCreate, McfCategoryFamily, ModelCapability, Severity
 from scanner.pipeline import runner, visual
-from scanner.settings import capabilities
+from scanner.settings import capabilities, model_runtime
 
 _PACKAGES = {
     "faster_whisper",
@@ -46,34 +47,6 @@ def _environment(
         torch_devices=torch_devices,
         ctranslate2_devices=ctranslate2_devices,
     )
-
-
-def test_macos_release_defers_only_backends_with_uncleared_downloads(monkeypatch):
-    monkeypatch.setattr(capabilities, "is_macos_release", lambda: True)
-    environment = _environment("Darwin", "arm64")
-    models = {cap.id: cap for cap in capabilities.model_capabilities(environment)}
-    assert {cap.id for cap in models.values() if cap.availability == "unavailable"} == {
-        "mlx_whisper",
-        "image_safety_gate",
-    }
-    assert models["mlx_whisper"].reason == models["image_safety_gate"].reason == "deferred_gap"
-
-
-def test_macos_release_refuses_uncleared_download_before_touching_cache(tmp_path, monkeypatch):
-    from scanner.modeling import model_acquisition_service as acquisition
-
-    monkeypatch.setattr(acquisition, "is_macos_release", lambda: True)
-    cache = tmp_path / "models"
-    service = acquisition.ModelAcquisitionService(cache)
-    ids = {entry.artifact_id for entry in service.list_artifacts()}
-    assert "faster-whisper-base" in ids
-    assert "mlx-whisper-base" not in ids
-    assert "stable-diffusion-safety-checker" not in ids
-    with pytest.raises(acquisition.AcquisitionError, match="unavailable in this release"):
-        service.acquire("mlx-whisper-base")
-    with pytest.raises(acquisition.AcquisitionError, match="unavailable in this release"):
-        service.prefetch_backend("image_safety_gate")
-    assert not cache.exists()
 
 
 @pytest.mark.parametrize(
@@ -241,10 +214,10 @@ def test_windows_and_linux_advertise_only_verified_ctranslate2_cuda():
 
 
 def test_ctranslate2_cuda_probe_requires_device_and_compute_runtime(monkeypatch):
-    capabilities._verified_ctranslate2_devices.cache_clear()
-    monkeypatch.setattr(capabilities, "_installed_package", lambda name: name == "ctranslate2")
+    model_runtime._verified_ctranslate2_devices.cache_clear()
+    monkeypatch.setattr(model_runtime, "_installed_package", lambda name: name == "ctranslate2")
     monkeypatch.setattr(
-        capabilities,
+        model_runtime,
         "import_module",
         lambda _name: type(
             "CTranslate2",
@@ -256,48 +229,82 @@ def test_ctranslate2_cuda_probe_requires_device_and_compute_runtime(monkeypatch)
         ),
     )
     try:
-        assert capabilities._verified_ctranslate2_devices() == frozenset({"cuda"})
+        assert model_runtime._verified_ctranslate2_devices() == frozenset({"cuda"})
     finally:
-        capabilities._verified_ctranslate2_devices.cache_clear()
+        model_runtime._verified_ctranslate2_devices.cache_clear()
 
 
 @pytest.mark.parametrize("failure", [OSError("missing runtime"), RuntimeError("no driver")])
 def test_ctranslate2_cuda_probe_fails_closed_to_cpu(monkeypatch, failure):
-    capabilities._verified_ctranslate2_devices.cache_clear()
-    monkeypatch.setattr(capabilities, "_installed_package", lambda name: name == "ctranslate2")
+    model_runtime._verified_ctranslate2_devices.cache_clear()
+    monkeypatch.setattr(model_runtime, "_installed_package", lambda name: name == "ctranslate2")
 
     def fail_import(_name):
         raise failure
 
-    monkeypatch.setattr(capabilities, "import_module", fail_import)
+    monkeypatch.setattr(model_runtime, "import_module", fail_import)
     try:
-        assert capabilities._verified_ctranslate2_devices() == frozenset()
+        assert model_runtime._verified_ctranslate2_devices() == frozenset()
     finally:
-        capabilities._verified_ctranslate2_devices.cache_clear()
+        model_runtime._verified_ctranslate2_devices.cache_clear()
 
 
 def test_current_environment_does_not_infer_accelerators_from_package_stubs(monkeypatch):
-    capabilities._packaged_onnx_providers.cache_clear()
-    monkeypatch.setattr(capabilities.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(capabilities.platform, "machine", lambda: "arm64")
-    monkeypatch.setattr(capabilities, "_installed_package", lambda _name: True)
+    stub = SimpleNamespace(backends=SimpleNamespace(
+        mps=SimpleNamespace(is_available=lambda: False)
+    ))
+    _macos_probe_inputs(monkeypatch, stub, ["CPUExecutionProvider"])
+    environment = capabilities.current_environment()
+    assert environment.onnx_device == "cpu"
+    assert environment.torch_device == "cpu"
 
-    try:
-        environment = capabilities.current_environment()
-        assert environment.providers == frozenset({"CPUExecutionProvider"})
-        assert environment.torch_devices == frozenset()
-    finally:
-        capabilities._packaged_onnx_providers.cache_clear()
+
+def test_macos_current_environment_verifies_metal_and_discovers_coreml(monkeypatch):
+    class Scalar:
+        def __add__(self, other):
+            return self
+
+        def item(self):
+            return 2
+
+    def on_metal(_size, *, device):
+        assert device == "mps"
+        return Scalar()
+
+    torch = SimpleNamespace(
+        backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
+        ones=on_metal,
+    )
+    _macos_probe_inputs(monkeypatch, torch, ["CoreMLExecutionProvider", "CPUExecutionProvider"])
+    environment = capabilities.current_environment()
+    assert environment.onnx_device == "coreml"
+    assert environment.torch_device == "metal"
+    assert capabilities.capability_for("nudenet", environment=environment).device == "coreml"
+    gate = capabilities.capability_for("image_safety_gate", environment=environment)
+    assert gate.device == "metal"
+
+
+def _macos_probe_inputs(monkeypatch, torch, providers):
+    monkeypatch.setattr(model_runtime.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(model_runtime.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(model_runtime, "_installed_package", lambda _name: True)
+    for probe in ("_packaged_onnx_providers", "_verified_mps_devices"):
+        monkeypatch.setattr(model_runtime, probe, getattr(model_runtime, probe).__wrapped__)
+    modules = {
+        "onnxruntime": SimpleNamespace(get_available_providers=lambda: providers),
+        "torch": torch,
+    }
+    monkeypatch.setattr(model_runtime, "import_module", modules.__getitem__)
 
 
 def test_windows_current_environment_falls_back_when_cuda_runtime_probe_fails(monkeypatch):
-    capabilities._packaged_onnx_providers.cache_clear()
-    capabilities._verified_ctranslate2_devices.cache_clear()
-    monkeypatch.setattr(capabilities.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(capabilities.platform, "machine", lambda: "AMD64")
-    monkeypatch.setattr(capabilities, "_installed_package", lambda _name: True)
+    model_runtime._packaged_onnx_providers.cache_clear()
+    model_runtime._verified_ctranslate2_devices.cache_clear()
+    monkeypatch.setattr(model_runtime.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(model_runtime.platform, "machine", lambda: "AMD64")
+    monkeypatch.setattr(model_runtime, "_installed_package", lambda _name: True)
     monkeypatch.setattr(
-        capabilities,
+        model_runtime,
         "import_module",
         lambda _name: (_ for _ in ()).throw(OSError("no compatible NVIDIA driver")),
     )
@@ -307,8 +314,8 @@ def test_windows_current_environment_falls_back_when_cuda_runtime_probe_fails(mo
         assert environment.ctranslate2_devices == frozenset()
         assert capabilities.capability_for("whisper", environment=environment).device == "cpu"
     finally:
-        capabilities._packaged_onnx_providers.cache_clear()
-        capabilities._verified_ctranslate2_devices.cache_clear()
+        model_runtime._packaged_onnx_providers.cache_clear()
+        model_runtime._verified_ctranslate2_devices.cache_clear()
 
 
 def _detector_finding() -> FindingCreate:

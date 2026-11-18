@@ -4,6 +4,7 @@ import { fetchQuickConnectAvailability, loginWithJellyfin } from "../api/api-aut
 import { applicationAssetUrl } from "../shared/runtime-urls";
 import { useAuthenticationGate } from "./auth-gate";
 import { QuickConnectSignIn } from "./auth-quick-connect";
+import { RememberMe } from "./remember-me";
 import { RetryAfterNotice, useRetryAfter } from "./retry-after";
 import { signInError } from "./sign-in-errors";
 
@@ -90,16 +91,7 @@ export function AdministratorLogin() {
             disabled={pending}
           />
         </div>
-        <label className="auth-remember">
-          <input
-            name="remember_me"
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(event) => setRememberMe(event.target.checked)}
-            disabled={pending}
-          />
-          <span>Remember me</span>
-        </label>
+        <RememberMe checked={rememberMe} disabled={pending} onChange={setRememberMe} />
         {notice && <p className="auth-success" role="status">{notice}</p>}
         {formError && <p className="auth-form-error" role="alert" aria-live="assertive">{formError}<RetryAfterNotice retry={retry} /></p>}
         <button className="auth-submit btn-primary" type="submit" disabled={pending || retry.remaining > 0}>

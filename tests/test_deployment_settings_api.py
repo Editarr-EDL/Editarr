@@ -130,6 +130,7 @@ def test_read_exposes_immutable_active_and_seeded_next_start_at_prefix(monkeypat
             },
             "saved": {"base_url": None, "port": None},
             "restart_required": False,
+            "macos_dock_supported": False,
             "restart": {
                 "supported": False,
                 "mode": "unsupported",

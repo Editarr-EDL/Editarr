@@ -28,8 +28,8 @@ export function ScanCapabilityDisclosure({
     {(!download && !qwenGap && !languageQwenUnavailable) ? null : <div className="scan-capability-disclosure" role="status">
     {download?.state === "not_downloaded" && <p>This scan will download {capability?.display_name || backendId} ({formatBytes(download.bytes_total)}) before inference starts.</p>}
     {download?.state === "downloading" && <p>{capability?.display_name || backendId} is downloading. The scan starts after the model is ready; download progress is separate from inference progress.</p>}
-    {download?.state === "failed" && <p className="form-error">Model download needs attention: {download.error_detail || download.error_code || "retry from Model Storage"}.</p>}
-    {download?.state === "cancelled" && <p className="form-error">Model download was cancelled. Restart it from Model Storage before scanning.</p>}
+    {download?.state === "failed" && <p className="form-error">Model download needs attention: {download.error_detail || download.error_code || "retry in Models"}.</p>}
+    {download?.state === "cancelled" && <p className="form-error">Model download was cancelled. Restart it in Models before scanning.</p>}
     {qwenGap && <p>Windows and Linux preserve detector findings without Qwen enrichment. Supported models may use CUDA when shown by the capability response; CPU remains available.</p>}
     {languageQwenUnavailable && <p>Qwen language detection and categorization are unavailable here. Multilingual profanity and blasphemy coverage depends on the selected filter and your Deny words. Detected words remain Swearing / Medium.</p>}
     </div>}

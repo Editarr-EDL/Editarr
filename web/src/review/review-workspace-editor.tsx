@@ -30,7 +30,7 @@ export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
     availableScans, setName, setError, setDraft, setMetadataCandidates,
     setApplyStatus, setShowDuplicateReview, setEditingReviewName,
     setReviewNameBeforeEdit, setShowManualFilter, setPreflightFocusFilterId,
-    renameReview, applyFilterDefaults, previewFilter, save, reviews, exports,
+    renameReview, applyFilterDefaults, previewFilter, clearPreview, save, reviews, exports,
     toggleScanMembership, changeScanMembership, access, conflict,
   } = workspace;
   if (!draft) return null;
@@ -123,7 +123,7 @@ export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
       onApplyDefaults={() => void applyFilterDefaults()}
       onPreviewFilter={(filter) => void previewFilter(filter)}
       preview={preview}
-      previewDisabled={!access.preview || isReviewDraftDirty(draft)}
+      previewDisabled={!access.preview}
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
     />
@@ -203,8 +203,11 @@ export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
     {selected && dialog === "delete" && <ReviewDeletionDialog review={selected} onClose={() => setDialog(null)}
       onDeleted={(result) => { setDialog(null); workspace.forgetDeletedReview(result.review_id, result.retained.length, result.removed.length); }} />}
     {showManualFilter && <ManualReviewFilterDialog
-      disabled={Boolean(conflict) || !access.field("cues")}
-      onClose={() => setShowManualFilter(false)}
+      disabled={busy || Boolean(conflict) || !access.field("cues")}
+      preview={preview}
+      previewError={workspace.error}
+      onPreview={access.preview ? (filter) => void previewFilter(filter) : undefined}
+      onClose={() => { clearPreview(); setError(null); setShowManualFilter(false); }}
       onAdd={(filter) => { setDraft(stageManualReviewFilter(draft, filter)); setShowManualFilter(false); }}
     />}
   </>;

@@ -24,6 +24,7 @@ const routePermissions: Record<string, readonly Capability[]> = {
   "POST /api/community/keys/rotation-status": ["community.identity.keys.own"],
   "POST /api/community/keys/recovery/check": ["community.identity.keys.own"],
   "GET /api/models": ["models.inventory.view"],
+  "GET /api/settings/models/scans": ["models.inventory.view"],
   "GET /api/settings/path-mappings": ["path_mappings.view", "media.paths.view"],
   "POST /api/settings/path-mappings": ["path_mappings.create", "media.paths.view"],
   "POST /api/settings/path-mappings/resolve": ["path_mappings.test", "media.paths.view"],
@@ -57,9 +58,10 @@ it("R1 mapping test remains usable without permission to list every mapping", as
     "POST /api/settings/path-mappings/resolve": { mapping_id: null, local_path: "/synthetic/movie.mkv" },
   });
   await screen.findByRole("heading", { name: "General" });
-  expect(screen.queryByLabelText("Test a remote path")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Test a remote path"), { target: { value: "/synthetic/movie.mkv" } });
   fireEvent.click(screen.getByRole("button", { name: "Test resolution" }));
+  expect(screen.getByLabelText("Test a remote path")).toBeVisible();
+  fireEvent.change(screen.getByLabelText("Test a remote path"), { target: { value: "/synthetic/movie.mkv" } });
+  fireEvent.click(screen.getByRole("button", { name: "Resolve path" }));
   expect(await screen.findByText("No mapping applies; scanner will use /synthetic/movie.mkv")).toBeVisible();
   expect(calls).toContainEqual({ request: "POST /api/settings/path-mappings/resolve", status: 200 });
   expect(calls.some(call => call.request === "GET /api/settings/path-mappings")).toBe(false);
@@ -70,10 +72,10 @@ it("R1 mapping creation does not read the list without list permission", async (
     "POST /api/settings/path-mappings": { id: 1, remote_path: "/remote", local_path: "/local" },
   });
   await screen.findByRole("heading", { name: "General" });
-  expect(screen.queryByRole("button", { name: "Add mapping" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Add mapping" }));
   fireEvent.change(screen.getByLabelText("Remote path", { exact: true }), { target: { value: "/remote" } });
   fireEvent.change(screen.getByLabelText("Local path", { exact: true }), { target: { value: "/local" } });
-  fireEvent.click(screen.getByRole("button", { name: "Add mapping" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save mapping" }));
   expect(await screen.findByText("Path mapping added.")).toBeVisible();
   expect(calls).toContainEqual({ request: "POST /api/settings/path-mappings", status: 200 });
   expect(calls.some(call => call.request === "GET /api/settings/path-mappings")).toBe(false);
@@ -88,9 +90,10 @@ it.each([false, true])("mapping feedback stays scoped to General when completion
     "POST /api/settings/path-mappings": late ? pending : mapping,
   }, true);
   await screen.findByRole("heading", { name: "General" });
+  fireEvent.click(screen.getByRole("button", { name: "Add mapping" }));
   fireEvent.change(screen.getByLabelText("Remote path", { exact: true }), { target: { value: "/remote" } });
   fireEvent.change(screen.getByLabelText("Local path", { exact: true }), { target: { value: "/local" } });
-  fireEvent.click(screen.getByRole("button", { name: "Add mapping" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save mapping" }));
   if (!late) expect(await screen.findByText("Path mapping added.")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Open connections" }));
   await screen.findByRole("heading", { name: /^Jellyfin$/ });
@@ -185,14 +188,16 @@ it.each(["community.identity.profile.own", "community.identity.keys.own"] as con
 
 it.each([false, true])("R3 model cancel and removal require inventory and action grants, inventory=%s", async inventory => {
   const calls = serve("models", ["models.download", "models.download.cancel", "models.delete", ...(inventory ? ["models.inventory.view" as const] : [])], {
+    "GET /api/settings/models/scans": { audio_padding_seconds: 0.1 },
     "GET /api/models": { model_capabilities: [], artifacts: ["downloading", "ready"].map(state => ({
       artifact_id: state, backend_ids: [state], source_url: "https://models.test", removable: true,
       state: { state, bytes_downloaded: null, bytes_total: null, error_detail: null },
     })) },
   });
-  if (inventory) await screen.findByRole("article", { name: "ready model" });
+  if (inventory) fireEvent.click(await screen.findByText("Supporting Packages"));
   else await screen.findByRole("heading", { name: "Download models" });
   expect(calls.some(call => call.request === "GET /api/models")).toBe(inventory);
+  expect(calls.some(call => call.request === "GET /api/settings/models/scans")).toBe(inventory);
   expect(screen.queryByRole("button", { name: "Cancel download" }) !== null).toBe(inventory);
   expect(screen.queryByRole("button", { name: "Remove" }) !== null).toBe(inventory);
 });

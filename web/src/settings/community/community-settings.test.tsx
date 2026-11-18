@@ -60,7 +60,7 @@ it("keeps backup access available when community is disabled", async () => {
   render(<CommunitySettings />);
   await screen.findByText(/Community service is not configured/);
   expect(screen.queryByRole("button", { name: "Connect with Discord" })).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Backup and restore" })).toHaveAttribute("href", "#/settings/general");
+  expect(screen.getByRole("link", { name: "Backup and restore" })).toHaveAttribute("href", "#/settings/general/backups");
   expect(api.fetchCommunityConnection).not.toHaveBeenCalled();
 });
 

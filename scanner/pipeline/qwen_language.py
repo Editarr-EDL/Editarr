@@ -129,6 +129,7 @@ def categorize_language_findings(
     provenance_callback: Callable[[str], None] | None = None,
     transcript_segments: list[dict] | None = None,
     video_id: str | None = None,
+    audio_padding_seconds: float | None = None,
 ) -> list[FindingCreate]:
     """Classify detections and optionally discover missed expressions in a timed transcript."""
     keys = list(
@@ -227,6 +228,7 @@ def categorize_language_findings(
             video_id,
             generate,
             _LANGUAGE_POLICY,
+            audio_padding_seconds=audio_padding_seconds,
             progress_callback=(
                 (
                     lambda fraction, message: progress_callback(

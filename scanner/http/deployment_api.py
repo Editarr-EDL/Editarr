@@ -32,6 +32,7 @@ from scanner.settings.deployment_config import (
     DeploymentStore,
     resolve_deployment_snapshot,
 )
+from scanner.settings.macos_dock import macos_launcher_available
 
 from .operations_access import Operator, operation
 
@@ -129,6 +130,7 @@ def _configuration_response(
         saved=DeploymentSavedOverrides(base_url=overrides.base_url, port=overrides.port),
         restart_required=restart_required,
         restart=_restart_capability(request),
+        macos_dock_supported=macos_launcher_available(),
     )
 
 

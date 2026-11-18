@@ -123,6 +123,8 @@ class ScanRow(Base):
     # Who started the job or created the record, and their permission revision then.
     initiator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     initiator_permission_revision = Column(Integer, nullable=True)
+    worker_elapsed_seconds = Column(Float, nullable=True)
+    worker_attempt_started_at = Column(DateTime, nullable=True)
 
     media_item = relationship("MediaItemRow")
     mcf_document = relationship(

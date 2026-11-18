@@ -1,7 +1,7 @@
 """Convert persisted scan rows to API models."""
 
 import json
-from datetime import datetime, timezone
+from datetime import timezone
 
 from scanner.db import ScanFindingRow, ScanQueueRow, ScanRow
 from scanner.models import (
@@ -15,11 +15,8 @@ from scanner.models import (
     ScanStageCoverage,
 )
 
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+from .scan_timing import as_utc as _utc
+from .scan_timing import scan_timing
 
 
 def _scan_from_row(row: ScanRow, *, finding_count: int = 0) -> Scan:
@@ -27,6 +24,7 @@ def _scan_from_row(row: ScanRow, *, finding_count: int = 0) -> Scan:
     from .community_import_targets import scan_target_approvals
 
     item = row.media_item
+    duration, as_of = scan_timing(row)
     return Scan(
         id=row.id,
         scan_id=row.scan_number,
@@ -109,7 +107,8 @@ def _scan_from_row(row: ScanRow, *, finding_count: int = 0) -> Scan:
         manual=row.origin == ScanOrigin.MANUAL.value,
         edited=row.selection_revision > 0,
         scan_started_at=row.worker_started_at,
-        scan_duration_seconds=_scan_duration_seconds(row),
+        scan_duration_seconds=duration,
+        scan_duration_as_of=as_of,
         created_at=_utc(row.created_at),
         updated_at=_utc(row.updated_at),
         mcf_document=(
@@ -143,23 +142,6 @@ def _scan_from_row(row: ScanRow, *, finding_count: int = 0) -> Scan:
         ),
         community_approvals=scan_target_approvals(row),
     )
-
-
-def _scan_duration_seconds(row: ScanRow) -> float | None:
-    """Read a valid duration from the scan row or its recorded progress."""
-    if row.origin == ScanOrigin.IMPORTED.value or row.worker_started_at is None:
-        return None
-    started_at = row.worker_started_at
-    if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=timezone.utc)
-    ended_at = (
-        datetime.now(timezone.utc)
-        if row.status in {"scanning", "orphaned", "cancelling"}
-        else row.updated_at
-    )
-    if ended_at.tzinfo is None:
-        ended_at = ended_at.replace(tzinfo=timezone.utc)
-    return max(0.0, (ended_at - started_at).total_seconds())
 
 
 def _scan_finding_from_row(

@@ -96,7 +96,7 @@ test("installed artifact serves real HTTPS Jellyfin setup, settings, prefix rest
   await page.locator("input[name=deployment_base_url]").fill(`${baseURL}${nextPrefix}`);
   await page.locator("input[name=deployment_port]").fill(String(newUpstreamPort));
   await page.getByRole("button", { name: "Save deployment settings" }).click();
-  await expect(page.getByText("Restart required.")).toBeVisible();
+  await expect(page.getByText("Restart required to apply the next-start settings.")).toBeVisible();
   // Save is staged: the live root listener and mount still serve this authenticated page.
   await expect(page).toHaveURL(new RegExp(`${baseURL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${initialPrefix}/#`));
 
@@ -128,7 +128,7 @@ test("installed artifact serves real HTTPS Jellyfin setup, settings, prefix rest
   // only after the 202 acknowledgement, then the browser follows that real link.
   await page.locator("input[name=deployment_base_url]").fill(`${secondaryBaseURL}/cross`);
   await page.getByRole("button", { name: "Save deployment settings" }).click();
-  await expect(page.getByText("Restart required.")).toBeVisible();
+  await expect(page.getByText("Restart required to apply the next-start settings.")).toBeVisible();
   await page.getByRole("button", { name: "Restart Editarr" }).click();
   await expect(page.getByText("Restart accepted at a different public address")).toBeVisible();
   await fixtureControl({ action: "reconfigure_secondary", prefix: "/cross", upstream_port: newUpstreamPort });

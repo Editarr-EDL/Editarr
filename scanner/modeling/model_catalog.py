@@ -81,10 +81,11 @@ class ManagedModelArtifact(BaseModel):
     artifact_id: str
     backend_ids: list[str]
     state: ModelDownloadState
+    device: Literal["cpu", "coreml"] | None = None
     expected_size: int | None = None
     source_url: str
     license_spdx: str | None = None
-    license_status: Literal["declared", "license-review-required"]
+    license_status: Literal["declared", "undeclared", "license-review-required"]
     removable: bool
 
 
@@ -179,6 +180,7 @@ class DeploymentConfiguration(BaseModel):
     saved: DeploymentSavedOverrides
     restart_required: bool
     restart: RestartCapability
+    macos_dock_supported: bool = False
 
 
 class FilterRuleDisposition(str, Enum):
@@ -328,6 +330,8 @@ class JellyfinMediaVersion(BaseModel):
     release_group: str | None = None
     edition: str | None = None
     path: str | None = None
+    file_name: str | None = None
+    audio_track_count: int | None = None
     container: str | None = None
     resolution: str | None = None
     media_format: str | None = None

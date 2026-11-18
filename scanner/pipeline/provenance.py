@@ -10,6 +10,7 @@ def effective_stage_settings(
     video_model: str | None,
     audio_model: str | None,
     audio_filter: str | None,
+    audio_padding_seconds: float,
     qwen_model: str,
     scene_detection_threshold: float,
     coarse_scan_enabled: bool,
@@ -32,10 +33,14 @@ def effective_stage_settings(
         "audio_scan": {
             "audio_model": audio_model or "whisper",
             "audio_filter": audio_filter or "better_profanity",
+            "audio_padding_seconds": audio_padding_seconds,
             "qwen_model_requested": qwen_model,
         },
         "visual_qwen": {"qwen_model_requested": qwen_model},
-        "audio_qwen": {"qwen_model_requested": qwen_model},
+        "audio_qwen": {
+            "qwen_model_requested": qwen_model,
+            "audio_padding_seconds": audio_padding_seconds,
+        },
     }
 
 

@@ -8,6 +8,7 @@ from scanner.model_acquisition import get_acquisition_service
 from scanner.models import FindingCreate, McfCategoryFamily
 from scanner.pipeline import runner
 from scanner.pipeline.runner_workers import _collect_isolated_findings
+from scanner.settings.model_scan_settings import ModelScanSettings, save_model_scan_settings
 
 
 def test_audio_worker_relays_transcription_progress(monkeypatch):
@@ -16,6 +17,7 @@ def test_audio_worker_relays_transcription_progress(monkeypatch):
 
     def fake_scan_audio(*_args, progress_callback, **kwargs):
         models.append(kwargs.get("qwen_model"))
+        assert kwargs["audio_padding_seconds"] == 0.45
         progress_callback(0.5, "Transcribed audio chunk 1/2")
         return []
 
@@ -30,6 +32,7 @@ def test_audio_worker_relays_transcription_progress(monkeypatch):
         SimpleNamespace(put=events.append),
         Event(),
         "qwen3-vl-4b-instruct-4bit",
+        0.45,
     )
 
     assert models == ["qwen3-vl-4b-instruct-4bit"]
@@ -92,7 +95,9 @@ def test_isolated_audio_scan_settles_a_cooperative_acquisition_cancellation(monk
         def Event(self):
             return cancelled
 
-        def Process(self, **_kwargs):
+        def Process(self, *, target, args):
+            assert target is runner._scan_audio_worker
+            assert args[-1] == 0.45
             return FakeProcess()
 
     monkeypatch.setattr(runner.mp, "get_context", lambda _name: FakeContext())
@@ -102,6 +107,7 @@ def test_isolated_audio_scan_settles_a_cooperative_acquisition_cancellation(monk
             "audio.wav",
             "scan-1",
             should_cancel=lambda: True,
+            audio_padding_seconds=0.45,
         )
 
     assert cancelled.is_set()
@@ -338,9 +344,14 @@ def test_run_scan_does_not_apply_review_time_defaults_to_audio_findings(
     video_path.write_bytes(b"video-bytes")
 
     captured: dict[str, object] = {}
+    stage_values = {}
+    monkeypatch.setattr(runner.settings, "data_dir", tmp_path)
+    save_model_scan_settings(tmp_path, ModelScanSettings(audio_padding_seconds=0.45))
 
     def fake_scan_audio_isolated(_audio_path, _video_id, **kwargs):
         captured["deny_words"] = kwargs.get("deny_words")
+        captured["audio_padding_seconds"] = kwargs["audio_padding_seconds"]
+        save_model_scan_settings(tmp_path, ModelScanSettings(audio_padding_seconds=0.7))
         return [
             FindingCreate(
                 video_id="scan-1",
@@ -390,8 +401,12 @@ def test_run_scan_does_not_apply_review_time_defaults_to_audio_findings(
         video_id="scan-1",
         status_updater=lambda _db, _video_id, _status: None,
         findings_writer=lambda _db, _video_id, findings: saved_findings.extend(findings),
+        stage_callback=lambda stage, _state, values: stage_values.update({stage: values}),
     )
 
     assert captured["deny_words"] is None
+    assert captured["audio_padding_seconds"] == 0.45
+    assert stage_values["audio_scan"]["audio_padding_seconds"] == 0.45
+    assert stage_values["audio_qwen"]["audio_padding_seconds"] == 0.45
     assert len(saved_findings) == 1
     assert saved_findings[0].selected is True

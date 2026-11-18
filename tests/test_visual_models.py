@@ -202,96 +202,6 @@ def test_extracted_frames_default_to_a_512_pixel_height_ceiling():
     assert frames.extracted_frame_scale_filter() == "scale=-2:min(512\\,ih)"
 
 
-def test_wd_onnx_session_uses_static_cached_mlprogram_on_coreml(monkeypatch, tmp_path):
-    calls = []
-    monkeypatch.setattr(
-        image_safety_gate,
-        "capability_for",
-        lambda _backend_id: SimpleNamespace(device="metal"),
-    )
-
-    class FakeSessionOptions:
-        def __init__(self):
-            self.dimension_overrides = []
-
-        def add_free_dimension_override_by_name(self, name, value):
-            self.dimension_overrides.append((name, value))
-
-    class FakeOnnxRuntime:
-        SessionOptions = FakeSessionOptions
-
-        @staticmethod
-        def get_available_providers():
-            return ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-
-        @staticmethod
-        def InferenceSession(path, **kwargs):
-            calls.append((path, kwargs))
-            return "session"
-
-    monkeypatch.setattr(image_safety_gate.settings, "model_cache", tmp_path)
-    model_path = tmp_path / "model.onnx"
-
-    session = image_safety_gate._create_wd_onnx_session(FakeOnnxRuntime, model_path)
-
-    assert session == "session"
-    assert (tmp_path / "image_safety_gate" / "coreml-cache").is_dir()
-    assert calls[0][0] == str(model_path)
-    options = calls[0][1]["sess_options"]
-    assert options.dimension_overrides == [("batch_size", 1)]
-    assert calls[0][1]["providers"] == [
-        (
-            "CoreMLExecutionProvider",
-            {
-                "ModelFormat": "MLProgram",
-                "MLComputeUnits": "CPUAndNeuralEngine",
-                "RequireStaticInputShapes": "1",
-                "EnableOnSubgraphs": "0",
-                "SpecializationStrategy": "FastPrediction",
-                "ModelCacheDirectory": str(
-                    (tmp_path / "image_safety_gate" / "coreml-cache").resolve()
-                ),
-            },
-        ),
-        "CPUExecutionProvider",
-    ]
-
-
-def test_wd_onnx_session_does_not_select_an_undeclared_accelerator(monkeypatch, tmp_path):
-    calls = []
-    monkeypatch.setattr(
-        image_safety_gate,
-        "capability_for",
-        lambda _backend_id: SimpleNamespace(device="cpu"),
-    )
-
-    class FakeOnnxRuntime:
-        @staticmethod
-        def get_available_providers():
-            return [
-                "CUDAExecutionProvider",
-                "CoreMLExecutionProvider",
-                "CPUExecutionProvider",
-            ]
-
-        @staticmethod
-        def InferenceSession(path, **kwargs):
-            calls.append((path, kwargs))
-            return "session"
-
-    model_path = tmp_path / "model.onnx"
-
-    session = image_safety_gate._create_wd_onnx_session(FakeOnnxRuntime, model_path)
-
-    assert session == "session"
-    assert calls == [
-        (
-            str(model_path),
-            {"providers": ["CPUExecutionProvider"]},
-        )
-    ]
-
-
 def test_nudenet_cpu_capability_ignores_host_accelerators(monkeypatch):
     received = {}
 
@@ -318,6 +228,32 @@ def test_nudenet_cpu_capability_ignores_host_accelerators(monkeypatch):
     visual._get_detector()
 
     assert received["providers"] == ["CPUExecutionProvider"]
+
+
+def test_nudenet_replaces_upstream_session_for_coreml(monkeypatch, tmp_path):
+    old_session = object()
+    detector = SimpleNamespace(input_width=320, input_height=320, onnx_session=old_session)
+    ort = SimpleNamespace()
+    coreml_session = object()
+    calls = []
+    monkeypatch.setitem(sys.modules, "onnxruntime", ort)
+    monkeypatch.setitem(sys.modules, "nudenet", SimpleNamespace(NudeDetector=lambda **_: detector))
+    monkeypatch.setattr(visual, "_detector", None)
+    monkeypatch.setattr(visual.settings, "model_cache", tmp_path)
+    monkeypatch.setattr(visual, "capability_for", lambda _id: SimpleNamespace(device="coreml"))
+    monkeypatch.setattr(visual, "files", lambda _package: tmp_path)
+
+    def create_coreml(runtime, path, **options):
+        calls.append((runtime, path, options))
+        return coreml_session
+
+    monkeypatch.setattr(visual, "create_coreml_session", create_coreml)
+    assert visual._get_detector().onnx_session is coreml_session
+    assert visual._get_detector() is detector
+    assert calls == [(ort, tmp_path / "320n.onnx", {
+        "dimensions": {"height": 320, "width": 320},
+        "cache_dir": tmp_path / "nudenet" / "coreml-cache",
+    })]
 
 
 @pytest.mark.parametrize(
@@ -380,29 +316,6 @@ def test_siglip_head_cpu_capability_ignores_host_accelerators(monkeypatch, tmp_p
     siglip2_moderation._load_head("nsfw")
 
     assert received["providers"] == ["CPUExecutionProvider"]
-
-
-def test_wd_onnx_session_falls_back_to_cpu(tmp_path):
-    calls = []
-
-    class FakeOnnxRuntime:
-        @staticmethod
-        def get_available_providers():
-            return ["CPUExecutionProvider"]
-
-        @staticmethod
-        def InferenceSession(path, **kwargs):
-            calls.append((path, kwargs))
-            return "session"
-
-    model_path = tmp_path / "model.onnx"
-
-    session = image_safety_gate._create_wd_onnx_session(FakeOnnxRuntime, model_path)
-
-    assert session == "session"
-    assert calls == [
-        (str(model_path), {"providers": ["CPUExecutionProvider"]})
-    ]
 
 
 def test_scan_frames_caps_a_final_visual_finding_at_the_video_end(monkeypatch, tmp_path):

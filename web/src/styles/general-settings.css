@@ -1,0 +1,188 @@
+.general-settings-stack {
+  min-width: 0;
+  border: 1px solid #303641;
+  border-radius: 12px;
+  background: #1a1e26;
+}
+
+.general-settings-section + .general-settings-section { border-top: 1px solid #303641; }
+.general-settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 16px;
+  list-style: none;
+  cursor: pointer;
+}
+.general-settings-summary::-webkit-details-marker { display: none; }
+.general-settings-summary:focus-visible { outline: 2px solid #8dafef; outline-offset: -3px; border-radius: 7px; }
+.general-settings-summary:hover h2 { color: #b9d4ff; }
+.general-settings-summary h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  margin: 0 auto 0 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+.general-settings-summary h2 svg { width: 16px; height: 16px; flex: none; color: #aebbd0; }
+.general-settings-value { min-width: 0; color: #aebbd0; font-size: 13px; text-align: end; overflow-wrap: anywhere; }
+.general-settings-value.needs-attention { color: #f0c484; }
+.general-settings-chevron {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-inline: 1px 3px;
+  border-inline-end: 1px solid #aebbd0;
+  border-block-start: 1px solid #aebbd0;
+  transform: rotate(45deg);
+}
+.general-settings-section[open] > .general-settings-summary .general-settings-chevron { transform: translateY(-2px) rotate(135deg); }
+.general-settings-section-body {
+  display: grid;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  padding: 0 16px 16px 41px;
+}
+.general-settings-section-body > p { margin: 0; }
+.general-settings-section-body .general-settings-action { justify-self: start; }
+.general-settings-section-body .field { gap: 5px; }
+.general-settings-section-body .field :is(input:not([type="checkbox"]), select) {
+  min-height: 35px;
+  padding: 7px 9px;
+}
+.general-settings-note { margin: 0; color: #aebbd0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.general-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.general-settings-actions > button[aria-expanded="true"] { border-color: #84a6e3; }
+.general-settings-inline {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #303641;
+}
+.general-settings-inline[hidden] { display: none; }
+
+.general-settings-more > summary {
+  width: fit-content;
+  max-width: 100%;
+  color: #bacce9;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.general-settings-more > summary:hover { color: #e6f0ff; }
+.general-settings-more-content {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-top: 10px;
+}
+.general-settings-facts { display: grid; gap: 5px; min-width: 0; margin: 0; font-size: 13px; }
+.general-settings-facts > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr);
+  gap: 6px 12px;
+}
+.general-settings-facts dt { color: #aebbd0; }
+.general-settings-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.general-about-facts > div { grid-template-columns: minmax(0, 1fr) auto; }
+.general-about-facts dd { font-variant-numeric: tabular-nums; text-align: end; }
+
+.general-settings-section-body .general-setting-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  color: #d8e2f0;
+  font-size: 14px;
+}
+.general-settings-section-body .general-setting-toggle input {
+  appearance: none;
+  display: grid;
+  align-items: center;
+  flex: none;
+  width: 36px;
+  height: 21px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid #46526a;
+  border-radius: 12px;
+  background: #161b23;
+}
+.general-setting-toggle input::before { content: ""; width: 13px; height: 13px; border-radius: 50%; background: #aebbd0; }
+.general-settings-section-body .general-setting-toggle input:checked { border-color: #8dafef; background: #8dafef; }
+.general-setting-toggle input:checked::before { justify-self: end; background: #17243b; }
+.general-setting-toggle input:disabled { opacity: .65; }
+
+.deployment-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(93px, .47fr);
+  align-items: start;
+  gap: 12px;
+}
+.deployment-form > :is(.deployment-choice, .deployment-actions) { grid-column: 1 / -1; }
+.deployment-snapshots, .deployment-connection-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.deployment-snapshots { border-top: 1px solid #303641; padding-top: 12px; }
+.deployment-snapshot { display: grid; gap: 3px; min-width: 0; }
+.deployment-snapshot + .deployment-snapshot { border-inline-start: 1px solid #303641; padding-inline-start: 12px; }
+.deployment-snapshot h3, .deployment-connection-details h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 4px;
+  color: #dce8ff;
+  font-size: 13px;
+}
+.deployment-snapshot-url { margin: 0; overflow-wrap: anywhere; color: #e3ebf8; font-size: 13px; }
+.deployment-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #aebbd0; }
+.deployment-dot.active { background: #7ce5bd; }
+.deployment-restart-required { color: #f0c484; font-size: 13px; }
+
+.general-settings-section-body .general-mapping-table { border: 0; border-radius: 0; }
+.general-mapping-table table { table-layout: fixed; }
+.general-mapping-table th:last-child { width: 200px; }
+.general-mapping-table :is(th, td) { padding: 7px 8px 7px 0; overflow-wrap: anywhere; }
+.general-mapping-table th { text-transform: none; letter-spacing: normal; }
+.general-mapping-table td:not(:last-child) { font: 13px/1.4 ui-monospace, monospace; }
+.general-mapping-table tr:last-child td { border-bottom: 1px solid #303641; }
+.general-mapping-table .mapping-actions { flex-wrap: wrap; }
+
+@media (forced-colors: active) {
+  .general-settings-section-body .general-setting-toggle input { appearance: auto; }
+  .general-setting-toggle input::before { content: none; }
+}
+
+@media (min-width: 761px) {
+  /* Clear the 52px scan button, its 26px right inset, and a 16px gap. */
+  .editarr-shell:has(> .scans-floating-control) .general-settings-page-header {
+    padding-inline-end: max(0px, calc(94px - clamp(20px, 5vw, 72px)));
+  }
+}
+
+@media (pointer: coarse) {
+  .general-settings-section-body .general-setting-toggle, .general-settings-actions > button { min-height: 44px; }
+  .general-settings-section-body .field :is(input:not([type="checkbox"]), select) { font-size: 16px; }
+}
+
+@media (max-width: 540px) {
+  .general-settings-summary { padding-inline: 12px; gap: 8px; }
+  .general-settings-summary h2 { gap: 7px; }
+  .general-settings-value { max-width: 44%; font-size: 12px; }
+  .general-settings-section-body { padding-inline: 12px; }
+  .deployment-connection-columns { grid-template-columns: minmax(0, 1fr); }
+  .general-mapping-table th:last-child { width: 96px; }
+}
+
+@media (max-width: 359px) {
+  .deployment-form { grid-template-columns: minmax(0, 1fr); }
+}

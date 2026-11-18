@@ -137,7 +137,10 @@ def test_audio_scan_supports_mlx_whisper_backend(monkeypatch):
     )
 
 
-def test_audio_findings_preserve_raw_whisper_word_boundaries(monkeypatch):
+@pytest.mark.parametrize(("padding", "bounds"), [
+    (None, [12.24, 12.88]), (0.0, [12.34, 12.78]), (0.35, [11.99, 13.13]),
+])
+def test_audio_findings_pad_raw_whisper_word_boundaries(monkeypatch, padding, bounds):
     audio._audio_filter_detectors.clear()
     word = SimpleNamespace(word="fuck", start=12.34, end=12.78)
     segment = SimpleNamespace(words=[word], text="fuck")
@@ -145,7 +148,7 @@ def test_audio_findings_preserve_raw_whisper_word_boundaries(monkeypatch):
     monkeypatch.setattr(audio, "_get_whisper_model", lambda _model_name: model)
     monkeypatch.setattr(audio.profanity, "contains_profanity", lambda _word: True)
 
-    findings = audio.scan_audio("example.wav", "scan-1", "whisper")
+    findings = audio.scan_audio("example.wav", "scan-1", "whisper", audio_padding_seconds=padding)
 
     assert audio.settings.profanity_pad_seconds == 0.1
     boundaries = [
@@ -153,7 +156,7 @@ def test_audio_findings_preserve_raw_whisper_word_boundaries(monkeypatch):
         for finding in findings
         for value in (finding.start_seconds, finding.end_seconds)
     ]
-    assert boundaries == pytest.approx([12.24, 12.88])
+    assert boundaries == pytest.approx(bounds)
 
 
 def test_audio_scan_supports_glin_filter(monkeypatch):

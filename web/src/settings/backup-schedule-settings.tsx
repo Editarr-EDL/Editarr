@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   disableBackupSchedule, fetchBackupSchedule, saveBackupSchedule,
   type BackupScheduleConfig, type BackupScheduleStatus,
@@ -15,17 +15,23 @@ const errors: Record<string, string> = {
 };
 const timestamp = (value: number | null) => value === null ? "Never" : new Date(value * 1000).toLocaleString();
 
-export function BackupScheduleSettings() {
+type SummaryListener = (summary: string | null) => void;
+
+export function BackupScheduleSettings({ onSummaryChange }: { onSummaryChange?: SummaryListener }) {
   const mayEdit = useCan("backups.schedule.edit");
   const mayView = useCan("backups.status.view");
   if (!mayEdit && !mayView) return null;
-  return <section className="backup-schedule" aria-labelledby="backup-schedule-heading">
-    <h3 id="backup-schedule-heading">Scheduled backups</h3>
-    <ScheduleForm mayEdit={mayEdit} mayView={mayView} />
-  </section>;
+  return <ScheduleForm mayEdit={mayEdit} mayView={mayView} onSummaryChange={onSummaryChange} />;
 }
 
-function ScheduleForm({ mayEdit, mayView }: { mayEdit: boolean; mayView: boolean }) {
+function ScheduleForm({ mayEdit, mayView, onSummaryChange }: {
+  mayEdit: boolean;
+  mayView: boolean;
+  onSummaryChange?: SummaryListener;
+}) {
+  const headingId = useId();
+  const editorId = useId();
+  const [showDetails, setShowDetails] = useState(false);
   const [status, setStatus] = useState<BackupScheduleStatus | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [hours, setHours] = useState("");
@@ -90,6 +96,7 @@ function ScheduleForm({ mayEdit, mayView }: { mayEdit: boolean; mayView: boolean
     && Number.isInteger(keepCount) && keepCount >= 1 && keepCount <= 1000
     && destination.trim().length > 0 && (!encrypted || credential.trim().length > 0);
   const running = status?.outcome === "running";
+  const cannotEdit = (mayView && !status) || busy || running;
 
   async function mutate(disable: boolean) {
     if (saving.current || (!disable && !valid)) return;
@@ -114,39 +121,65 @@ function ScheduleForm({ mayEdit, mayView }: { mayEdit: boolean; mayView: boolean
   const stateLabel = status?.restore_hold ? "Paused for restore reconciliation" : !status?.config?.enabled ? "Disabled"
     : running ? "Running" : status?.outcome === "failed" ? "Failed"
     : status?.outcome === "interrupted" ? "Interrupted" : "Scheduled";
+  const scheduleSummary = !mayView ? null : !status ? (error ? "Schedule unavailable" : "Loading schedule…")
+    : stateLabel === "Disabled" ? "Schedule disabled" : stateLabel === "Scheduled" ? "Schedule enabled" : stateLabel;
+  useEffect(() => { onSummaryChange?.(scheduleSummary); }, [onSummaryChange, scheduleSummary]);
 
-  return <>
-    {mayView && <div className="backup-schedule-status">
-      <p role="status">{status ? stateLabel : "Loading schedule..."}</p>
-      <button className="btn-secondary" type="button" disabled={busy} onClick={() => setRefresh((current) => current + 1)}>Refresh status</button>
-    </div>}
-    {status && <dl className="backup-schedule-summary">
-      <div><dt>Next attempt</dt><dd>{status.next_run === null ? "Not scheduled" : timestamp(status.next_run)}</dd></div>
-      <div><dt>Last attempt</dt><dd>{timestamp(status.last_attempt)}</dd></div>
-      <div><dt>Last successful backup</dt><dd>{timestamp(status.last_success)}</dd></div>
-      <div><dt>Verified backups retained</dt><dd>{status.retained_count}</dd></div>
-    </dl>}
+  return <section className="backup-schedule" aria-labelledby={headingId}>
+    <div className="backup-schedule-toolbar">
+      <div className="backup-schedule-label">
+        <h3 id={headingId}>Scheduled backups</h3>
+        {mayView && <p className="muted-copy general-settings-note" role="status">
+          {status ? stateLabel : error ? "Schedule unavailable" : "Loading schedule…"}
+        </p>}
+      </div>
+      <div className="general-settings-actions backup-schedule-controls">
+        <button className="btn-secondary compact-button" type="button" aria-expanded={showDetails} aria-controls={editorId}
+          onClick={() => setShowDetails((value) => !value)}>
+          {showDetails ? "Hide schedule details" : mayEdit ? "Manage schedule" : "Schedule details"}
+        </button>
+        {mayEdit && <label className="general-setting-toggle">
+          <span className="visually-hidden">Enable scheduled backups</span>
+          <input type="checkbox" checked={enabled} disabled={cannotEdit} aria-controls={editorId} onChange={(event) => {
+            setEnabled(event.target.checked);
+            setShowDetails(true);
+          }} />
+        </label>}
+      </div>
+    </div>
     {status?.notice === "settings_schedule_now_full" && <p role="status" className="form-status">This schedule made settings-only backups, which no longer exist. It now makes full backups. Save the schedule to dismiss this notice.</p>}
     {status?.error && <p role="status" className="form-status">{errors[status.error] ?? "Scheduled backups need review."}</p>}
-    {mayEdit && <form onSubmit={submit}>
-      <fieldset className="backup-schedule-fields" aria-label="Backup schedule configuration" disabled={(mayView && !status) || busy || running}>
-        <label className="backup-schedule-toggle"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>Enable scheduled backups</span></label>
-        <div className="backup-schedule-grid">
-          <label className="field"><span>Interval (hours)</span><input type="number" min="1" max="8760" step="1" required value={hours} onChange={(event) => setHours(event.target.value)} /></label>
-          <label className="field"><span>Backups to keep</span><input type="number" min="1" max="1000" step="1" required value={keep} onChange={(event) => setKeep(event.target.value)} /></label>
-          <label className="field backup-schedule-wide"><span>Backup destination</span><input type="text" required autoComplete="off" spellCheck={false} value={destination} onChange={(event) => setDestination(event.target.value)} /></label>
-        </div>
-        <label className="backup-schedule-toggle"><input type="checkbox" checked={encrypted} onChange={(event) => { setEncrypted(event.target.checked); setCredential(""); }} /><span>Encrypt scheduled backups</span></label>
-        {encrypted && <label className="field"><span>Protected passphrase file</span><input type="text" required autoComplete="off" spellCheck={false} value={credential} onChange={(event) => setCredential(event.target.value)} /></label>}
-        <p className="muted-copy">{encrypted ? "Encryption requires an external owner-only passphrase file. Missing credentials fail the run." : "Unencrypted backups contain included credentials and signing keys."}</p>
-        <p className="muted-copy">Oldest scheduled backups beyond the retained count are deleted only after a verified backup succeeds. Manual backups are not deleted.</p>
-        <div className="backup-schedule-actions">
-          <button className="btn-primary" type="submit" disabled={!valid}>{busy ? "Saving..." : "Save schedule"}</button>
-          {(status?.config?.enabled || !mayView) && <button className="btn-secondary" type="button" onClick={() => void mutate(true)}>Disable schedule</button>}
-        </div>
-      </fieldset>
-    </form>}
+    <div id={editorId} hidden={!showDetails} className="general-settings-inline">
+      {showDetails && <>
+        {mayView && status && <dl className="general-settings-facts backup-schedule-summary">
+          <div><dt>Next attempt</dt><dd>{status.next_run === null ? "Not scheduled" : timestamp(status.next_run)}</dd></div>
+          <div><dt>Last attempt</dt><dd>{timestamp(status.last_attempt)}</dd></div>
+          <div><dt>Last successful backup</dt><dd>{timestamp(status.last_success)}</dd></div>
+          <div><dt>Verified backups retained</dt><dd>{status.retained_count}</dd></div>
+        </dl>}
+        {mayView && <div className="general-settings-actions">
+          <button className="btn-secondary compact-button" type="button" disabled={busy} onClick={() => setRefresh((current) => current + 1)}>Refresh status</button>
+        </div>}
+        {mayEdit && <form onSubmit={submit}>
+          <fieldset className="backup-schedule-fields" aria-label="Backup schedule configuration" disabled={cannotEdit}>
+            <div className="backup-schedule-grid">
+              <label className="field"><span>Interval (hours)</span><input type="number" min="1" max="8760" step="1" required value={hours} onChange={(event) => setHours(event.target.value)} /></label>
+              <label className="field"><span>Backups to keep</span><input type="number" min="1" max="1000" step="1" required value={keep} onChange={(event) => setKeep(event.target.value)} /></label>
+              <label className="field backup-schedule-wide"><span>Backup destination</span><input type="text" required autoComplete="off" spellCheck={false} value={destination} onChange={(event) => setDestination(event.target.value)} /></label>
+            </div>
+            <label className="backup-schedule-toggle"><input type="checkbox" checked={encrypted} onChange={(event) => { setEncrypted(event.target.checked); setCredential(""); }} /><span>Encrypt scheduled backups</span></label>
+            {encrypted && <label className="field"><span>Protected passphrase file</span><input type="text" required autoComplete="off" spellCheck={false} value={credential} onChange={(event) => setCredential(event.target.value)} /></label>}
+            <p className="muted-copy general-settings-note">{encrypted ? "Encryption requires an external owner-only passphrase file. Missing credentials fail the run." : "Unencrypted backups contain included credentials and signing keys."}</p>
+            <p className="muted-copy general-settings-note">Oldest scheduled backups beyond the retained count are deleted only after a verified backup succeeds. Manual backups are not deleted.</p>
+            <div className="general-settings-actions">
+              <button className="btn-primary compact-button" type="submit" disabled={!valid}>{busy ? "Saving…" : "Save schedule"}</button>
+              {(status?.config?.enabled || !mayView) && <button className="btn-secondary compact-button" type="button" onClick={() => void mutate(true)}>Disable schedule</button>}
+            </div>
+          </fieldset>
+        </form>}
+      </>}
+    </div>
     {notice && <p role="status" className="form-status">{notice}</p>}
     {error && <p role="alert" className="form-status">{error}</p>}
-  </>;
+  </section>;
 }

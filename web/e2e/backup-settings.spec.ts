@@ -27,13 +27,22 @@ for (const width of [320, 1440]) {
         await json(route, status);
       });
       await page.goto("/#/settings/general");
+      const backupsSummary = page.locator("summary").filter({ hasText: "Backup and restore" });
+      await expect(backupsSummary).toContainText(/schedule.*(?:off|disabled)/i);
+      await backupsSummary.click();
       const schedule = page.getByRole("region", { name: "Scheduled backups" });
-      await expect(schedule.getByText("Disabled", { exact: true })).toBeVisible();
+      const enableSchedule = schedule.getByLabel("Enable scheduled backups");
+      const manageSchedule = schedule.getByRole("button", { name: "Manage schedule" });
       expect(writes).toHaveLength(0);
-      await expect(schedule.getByLabel("Enable scheduled backups")).not.toBeChecked();
+      await expect(enableSchedule).toBeEnabled();
+      await expect(enableSchedule).not.toBeChecked();
+      await expect(schedule.getByLabel("Interval (hours)")).toBeHidden();
+      await manageSchedule.press("Enter");
+      await expect(schedule.getByText("Disabled", { exact: true })).toBeVisible();
       await expect(schedule.getByRole("button", { name: "Save schedule" })).toBeDisabled();
-      await schedule.getByLabel("Enable scheduled backups").focus();
-      await schedule.getByLabel("Enable scheduled backups").press("Space");
+      await schedule.getByRole("button", { name: "Hide schedule details" }).press("Space");
+      await expect(schedule.getByLabel("Interval (hours)")).toBeHidden();
+      await enableSchedule.press("Space");
       await schedule.getByLabel("Interval (hours)").fill("24");
       await schedule.getByLabel("Backups to keep").fill("7");
       await schedule.getByLabel("Backup destination").fill("/private/independent-backups/long-directory-name-for-responsive-verification");
@@ -45,13 +54,23 @@ for (const width of [320, 1440]) {
       } else {
         await expect(schedule.getByLabel("Protected passphrase file")).toHaveCount(0);
       }
-      await expect(schedule.locator('input[type="password"]')).toHaveCount(0);
-      for (const label of ["Enable scheduled backups", "Encrypt scheduled backups"]) {
-        await expect(schedule.getByText(label, { exact: true })).toBeVisible();
-        const bounds = await schedule.getByLabel(label).boundingBox();
-        expect(bounds?.width).toBe(16);
-        expect(bounds?.height).toBe(16);
+      await backupsSummary.click();
+      await expect(schedule).toBeHidden();
+      await expect(backupsSummary).toContainText(/schedule.*(?:off|disabled)/i);
+      expect(writes).toHaveLength(0);
+      await backupsSummary.click();
+      await expect(enableSchedule).toBeChecked();
+      await expect(schedule.getByLabel("Interval (hours)")).toHaveValue("24");
+      await expect(schedule.getByLabel("Backups to keep")).toHaveValue("7");
+      if (encrypted) {
+        await expect(schedule.getByLabel("Protected passphrase file")).toHaveValue("/private/operator-credentials/scheduled-backup.passphrase");
       }
+      await expect(schedule.locator('input[type="password"]')).toHaveCount(0);
+      await expect(enableSchedule).toBeVisible();
+      await expect(schedule.getByText("Encrypt scheduled backups", { exact: true })).toBeVisible();
+      const encryptionBounds = await schedule.getByLabel("Encrypt scheduled backups").boundingBox();
+      expect(encryptionBounds?.width).toBe(16);
+      expect(encryptionBounds?.height).toBe(16);
       await expectNoHorizontalPageOverflow(page);
       await expectNoAccessibilityViolations(page);
       const save = schedule.getByRole("button", { name: "Save schedule" });
@@ -65,7 +84,11 @@ for (const width of [320, 1440]) {
         passphrase_file: encrypted ? "/private/operator-credentials/scheduled-backup.passphrase" : null });
       expect(writes[0]).not.toHaveProperty("passphrase");
       await page.reload();
-      await expect(schedule.getByLabel("Enable scheduled backups")).toBeChecked();
+      await expect(backupsSummary).toContainText(/(?:scheduled|schedule (?:on|enabled))/i);
+      await backupsSummary.click();
+      await expect(enableSchedule).toBeChecked();
+      await expect(schedule.getByLabel("Interval (hours)")).toBeHidden();
+      await manageSchedule.click();
       expect(writes).toHaveLength(1);
       status = { ...status, outcome: "failed", error: encrypted ? "credential_unavailable" : "export_failed",
         last_attempt: 1900000000, last_success: 1899990000, retained_count: 7 };
@@ -77,6 +100,9 @@ for (const width of [320, 1440]) {
       await schedule.screenshot({ path: testInfo.outputPath("scheduled-backups.png") });
       await schedule.getByRole("button", { name: "Disable schedule" }).click();
       await expect(schedule.getByText("Scheduled backups disabled.")).toBeVisible();
+      await backupsSummary.click();
+      await expect(schedule).toBeHidden();
+      await expect(backupsSummary).toContainText(/schedule.*(?:off|disabled)/i);
       expect(status.config?.enabled).toBe(false);
       expect(await page.evaluate(() => JSON.stringify(localStorage) + JSON.stringify(sessionStorage))).not.toContain("operator-credentials");
     });
@@ -101,8 +127,15 @@ for (const width of [320, 1440]) {
         });
       });
       await page.goto("/#/settings/general");
+      await page.locator("summary").filter({ hasText: "Backup and restore" }).click();
       const backup = page.locator(".backup-settings").first();
-      await expect(backup.getByRole("heading", { name: "Backup and restore" })).toBeVisible();
+      const createBackup = backup.getByRole("button", { name: "Create backup", exact: true });
+      await expect(createBackup).toBeVisible();
+      await expect(backup.getByLabel("Encrypt backup")).toBeHidden();
+      await expect(backup.getByRole("button", { name: "Restore backup" })).toHaveCount(0);
+      await createBackup.press("Enter");
+      await expect(backup.getByLabel("Encrypt backup")).toBeVisible();
+      expect(bodies).toEqual([]);
       await expect(backup.getByLabel("Backup contents", { exact: true })).toHaveCount(0);
       await expect(backup.getByLabel("Backup file")).toHaveCount(0);
       await expect(backup.getByRole("button", { name: "Inspect backup" })).toHaveCount(0);
@@ -113,7 +146,7 @@ for (const width of [320, 1440]) {
       } else {
         await expect(backup.getByLabel("Passphrase", { exact: true })).toHaveCount(0);
       }
-      await backup.getByRole("button", { name: "Create backup" }).click();
+      await createBackup.click();
       await expect(backup.getByRole("button", { name: "Download backup" })).toBeVisible();
       await expect(backup.getByText(/Community identity included/)).toBeVisible();
       expect(bodies).toEqual([encrypted ? { action: "export", encrypt: true, passphrase: "test-passphrase" } : { action: "export" }]);

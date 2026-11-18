@@ -109,12 +109,13 @@ describe("JellyfinSetup", () => {
     expect(await screen.findByRole("heading", { name: "Sign in required" })).toBeInTheDocument();
   });
 
-  async function fill(request: ReturnType<typeof vi.fn>, { server = "http://jellyfin.local:8096", username = "Avery", password = "jellyfin password" } = {}) {
+  async function fill(request: ReturnType<typeof vi.fn>, { server = "http://jellyfin.local:8096", username = "Avery", password = "jellyfin password", rememberMe = true } = {}) {
     vi.stubGlobal("fetch", request);
     renderSetup();
     fireEvent.change(await screen.findByLabelText("Jellyfin server URL"), { target: { value: server } });
     fireEvent.change(screen.getByLabelText("Jellyfin username"), { target: { value: username } });
     fireEvent.change(screen.getByLabelText("Jellyfin password"), { target: { value: password } });
+    if (!rememberMe) fireEvent.click(screen.getByLabelText("Remember me"));
     fireEvent.submit(screen.getByRole("button", { name: "Connect and sign in" }).closest("form")!);
   }
 
@@ -126,6 +127,7 @@ describe("JellyfinSetup", () => {
     expect(screen.getByLabelText("Jellyfin server URL")).toHaveFocus();
     expect(screen.getByLabelText("Jellyfin username")).toHaveAttribute("autocomplete", "username");
     expect(screen.getByLabelText("Jellyfin password")).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("Remember me")).toBeChecked();
     expect(screen.getByRole("button", { name: "Restore from backup" })).toBeVisible();
     expect(screen.queryByLabelText(/API key/i)).toBeNull();
   });
@@ -139,18 +141,18 @@ describe("JellyfinSetup", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it("sends the server and credentials, clears the password, and enters the application", async () => {
+  it.each([true, false])("sends the server and credentials with remember_me=%s, clears the password, and enters the application", async (rememberMe) => {
     const request = vi.fn()
       .mockResolvedValueOnce(json(setupRequiredStatus()))
       .mockResolvedValueOnce(json(authenticatedStatus, 201));
-    await fill(request, { server: " http://jellyfin.local:8096 " });
+    await fill(request, { server: " http://jellyfin.local:8096 ", rememberMe });
 
     expect(await screen.findByRole("status")).toHaveTextContent("Jellyfin connected");
     expect(screen.queryByDisplayValue("jellyfin password")).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Protected application" })).toBeInTheDocument();
     expect(request.mock.calls[1][1]).toMatchObject({ credentials: "same-origin", method: "POST" });
     expect(JSON.parse(String((request.mock.calls[1][1] as RequestInit).body))).toEqual({
-      server_url: "http://jellyfin.local:8096", username: "Avery", password: "jellyfin password",
+      server_url: "http://jellyfin.local:8096", username: "Avery", password: "jellyfin password", remember_me: rememberMe,
     });
   });
 
@@ -162,6 +164,7 @@ describe("JellyfinSetup", () => {
     await fill(request);
 
     expect(await screen.findByRole("button", { name: "Connecting…" })).toBeDisabled();
+    expect(screen.getByLabelText("Remember me")).toBeDisabled();
     expect(screen.getByLabelText("CONNECT YOUR JELLYFIN SERVER")).toHaveAttribute("aria-busy", "true");
     resolveSetup?.(json(authenticatedStatus, 201));
   });

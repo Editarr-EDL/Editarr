@@ -1,0 +1,10 @@
+{
+  "fill": { "solid": "srgb:0.01,0.04,0.14,1.0" },
+  "groups": [
+    {
+      "layers": [{ "image-name": "Editarr.png", "name": "Editarr artwork", "glass": false }],
+      "specular": false
+    }
+  ],
+  "supported-platforms": { "squares": "shared" }
+}

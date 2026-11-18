@@ -203,7 +203,15 @@ def _run_lifecycle(args: argparse.Namespace) -> int:
     instance = NativeInstance(paths)
     if args.action == "status":
         status = instance.status()
-        print(json.dumps({"running": status is not None, "instance": status}, sort_keys=True))
+        payload = {"running": status is not None, "instance": status}
+        from scanner.settings.macos_dock import macos_launcher_available, read_show_in_dock
+
+        if macos_launcher_available():
+            try:
+                payload["show_in_dock"] = read_show_in_dock(paths.data_dir)
+            except (OSError, ValueError):
+                pass  # Keep the launcher's current policy if the preference cannot be read.
+        print(json.dumps(payload, sort_keys=True))
         return 0 if status is not None else 1
     if args.action == "open-ui":
         return 0 if instance.open_ui() else 1

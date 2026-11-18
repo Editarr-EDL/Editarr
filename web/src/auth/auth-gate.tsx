@@ -85,7 +85,6 @@ export function safeInternalHash(hash: string): string | null {
     normalized === "settings"
     || normalized === "audit"
     || normalized.startsWith("audit/")
-    || normalized === "archive"
     || normalized.startsWith("settings/")
     || normalized.startsWith("library/")
   ) {

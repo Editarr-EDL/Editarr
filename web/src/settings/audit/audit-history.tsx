@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { AuditEntry, AuditFilters } from "../../api/api-audit";
 import { usePrincipal } from "../../auth/auth-gate";
 import { can } from "../../auth/session";
-import { navigate } from "../../routes";
+import { AUDIT_SETTINGS_ROUTE, navigate } from "../../routes";
 import { usePageTitle } from "../../shared/display";
 import { AuditFilterForm, firstAuditPage } from "./audit-filters";
 import { useAuditHistory } from "./use-audit-history";
@@ -12,7 +12,7 @@ const when = (value: string) => new Date(value).toLocaleString();
 const actor = (entry: AuditEntry) => entry.actor_id === null ? entry.actor_kind : account(entry.actor_id);
 
 export function AuditHistory({ eventId }: { eventId?: string }) {
-  usePageTitle("Audit history");
+  usePageTitle("Settings — Audit History");
   const principal = usePrincipal();
   if (!principal || principal.role === "user" || !can(principal, "audit.read")) return <p role="alert">Audit history is unavailable for this account.</p>;
   return <PermittedAuditHistory eventId={eventId} />;
@@ -22,8 +22,8 @@ function PermittedAuditHistory({ eventId }: { eventId?: string }) {
   const [filters, setFilters] = useState<AuditFilters>(firstAuditPage);
   const [refresh, setRefresh] = useState(0);
   return <div className="content-page audit-page">
-    <header className="page-header"><h1>Audit history</h1><button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Refresh</button></header>
-    {eventId ? <a href="#/audit">Back to audit history</a> : <AuditFilterForm onApply={setFilters} />}
+    <header className="page-header"><div><p className="eyebrow">Settings</p><h1>Audit History</h1></div><button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Refresh</button></header>
+    {eventId ? <a href={`#/${AUDIT_SETTINGS_ROUTE}`}>Back to audit history</a> : <AuditFilterForm onApply={setFilters} />}
     <AuditResults key={`${eventId || "list"}:${JSON.stringify(filters)}:${refresh}`} filters={filters} eventId={eventId} refresh={refresh} onPage={page => setFilters({ ...filters, page })} />
   </div>;
 }
@@ -42,7 +42,7 @@ function AuditResults({ filters, eventId, refresh, onPage }: { filters: AuditFil
       <thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Target</th><th scope="col">Action</th><th scope="col">Outcome</th></tr></thead>
       <tbody>{page.events.map(entry => <tr key={entry.event_id}>
         <td><time dateTime={entry.occurred_at}>{when(entry.occurred_at)}</time></td><td>{actor(entry)}</td><td>{account(entry.target_user_id)}{entry.media_key && <span className="audit-media">Media {entry.media_key}</span>}</td>
-        <td><a href={`#/audit/${encodeURIComponent(entry.event_id)}`}>{entry.action}</a></td><td>{entry.outcome}</td>
+        <td><a href={`#/${AUDIT_SETTINGS_ROUTE}/${encodeURIComponent(entry.event_id)}`}>{entry.action}</a></td><td>{entry.outcome}</td>
       </tr>)}</tbody>
     </table></div>}
     <nav className="button-row audit-pagination" aria-label="Audit pages">
@@ -65,6 +65,6 @@ function AuditDetail({ entry }: { entry: AuditEntry }) {
       {entry.resource && <><dt>Resource ID</dt><dd>{entry.resource}</dd></>}
       {Object.entries(entry.details).map(([name, value]) => <div className="audit-detail-field" key={name}><dt>{name.replace(/_/g, " ")}</dt><dd>{value === null ? "None" : String(value)}</dd></div>)}
     </dl>
-    <button className="btn-secondary" onClick={() => navigate("audit")}>Close event</button>
+    <button className="btn-secondary" onClick={() => navigate(AUDIT_SETTINGS_ROUTE)}>Close event</button>
   </section>;
 }

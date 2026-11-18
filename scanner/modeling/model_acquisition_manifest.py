@@ -74,7 +74,7 @@ class ArtifactFile:
 @dataclass(frozen=True, slots=True)
 class ArtifactLicense:
     spdx: str | None
-    status: Literal["declared", "license-review-required"]
+    status: Literal["declared", "undeclared", "license-review-required"]
     url: str
 
 
@@ -121,7 +121,7 @@ class ArtifactStatus:
     error_detail: str | None
     source_url: str
     license_spdx: str | None
-    license_status: Literal["declared", "license-review-required"]
+    license_status: Literal["declared", "undeclared", "license-review-required"]
 
     def download_state(self) -> ModelDownloadState:
         return ModelDownloadState(
@@ -330,7 +330,7 @@ def load_manifest() -> ModelManifest:
         license_data = item.get("license")
         if not isinstance(license_data, dict):
             raise ValueError(f"Missing license metadata for {artifact_id}")
-        if license_data.get("status") not in {"declared", "license-review-required"}:
+        if license_data.get("status") not in {"declared", "undeclared", "license-review-required"}:
             raise ValueError(f"Invalid license status for {artifact_id}")
         spdx = license_data.get("spdx")
         if spdx is not None and (not isinstance(spdx, str) or not spdx.strip()):
@@ -369,11 +369,6 @@ def load_manifest() -> ModelManifest:
 
 
 _MANIFEST = load_manifest()
-
-
-def artifact_offered_in_macos_release(artifact: ModelArtifact) -> bool:
-    """Exclude uncleared downloads and the binary replaced by the source-built helpers."""
-    return artifact.license.status != "license-review-required"
 
 
 def manifest() -> ModelManifest:

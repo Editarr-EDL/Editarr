@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cancelCommunityEnrollment, completeCommunityEnrollment, disconnectCommunity, startCommunityEnrollment } from "../../api/api-community";
 import type { AccountSummary } from "../../api/api-users";
+import { BACKUP_SETTINGS_ROUTE } from "../../routes";
 import { ModalDialog } from "../../ui/ModalDialog";
 import { useCommunityAccount } from "./community-access";
 import { CommunityProfileEditor } from "./community-profile";
@@ -63,7 +64,7 @@ function CommunitySettingsBody({ target }: { target?: AccountSummary }) {
     </>}
     <div className="community-backup"><h3>Identity backup</h3>
       {connection?.rotationCompleted && <p className="community-notice" role="status">Key rotation activated. Create a fresh identity backup for the current signing key. Backup freshness has not been verified.</p>}
-      <p className="muted-copy">Backup status: not verified. Backups include every account's signing identity. Encryption is optional and off by default.</p><a href="#/settings/general">Backup and restore</a></div>
+      <p className="muted-copy">Backup status: not verified. Backups include every account's signing identity. Encryption is optional and off by default.</p><a href={`#/${BACKUP_SETTINGS_ROUTE}`}>Backup and restore</a></div>
     {mayEnroll && confirming && stateId && <ModalDialog labelledBy="community-confirm-heading" className="confirmation-dialog community-confirmation" onClose={busy ? undefined : () => setConfirming(false)}>
       <h2 id="community-confirm-heading">Connect this installation?</h2>
       <p>Confirm that you authorized the intended Discord account. This registers the existing signing key without replacing another key or enabling automatic sharing.</p>

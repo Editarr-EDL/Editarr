@@ -85,14 +85,15 @@ uv pip install --python /absolute/path/editarr-venv/bin/python \
 <p>The optional Qwen multilingual audio filter analyzes the original transcript, while better-profanity remains the default. Accuracy depends on the language, transcript, model, and hardware; always review suggestions.</p>
 <h3>Models &amp; credits</h3>
 <p>
-<strong>Settings → Model Storage</strong> shows model sources, sizes, and download status. Weights may need an initial download; inference runs on your Editarr host.</p>
+<strong>Settings → Models → Storage</strong> shows model sources, sizes, and download status. Weights may need an initial download; inference runs on your Editarr host.</p>
+<p><strong>Settings → Models → Scan Settings</strong> controls the audio padding added before and after findings in new audio scans.</p>
 <p>Credits detection is an explicit queued scan with a preview and an editable candidate. Accepting it updates your review only when you choose; optional Qwen acquisition requires consent.</p>
 </section>
 <section id="reviews">
 <h2>Review &amp; refine</h2>
-<p>Create a named saved review for a physical media version, include completed scans, and inspect the proposed filters. Different reviews can keep different selections for the same file.</p>
+<p>Start a review for a physical media version, include completed scans, and inspect the proposed filters. Different reviews can keep different selections for the same file.</p>
 <ol>
-<li>Preview the audio or video around a finding, then choose whether to keep its mute or skip action.</li>
+<li>Preview the audio or video around a finding using the draft's current timing, then choose whether to keep its mute or skip action.</li>
 <li>Add manual ranges, assign categories and severity, and adjust your draft’s timestamps and metadata.</li>
 <li>Apply filter defaults if useful, then save before exporting.</li>
 </ol>

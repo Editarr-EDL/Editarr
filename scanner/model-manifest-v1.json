@@ -28,7 +28,7 @@
       "revision": "1e3e249fb8d01c655324bd6841b1deadffd6d04c",
       "required_patterns": ["config.json", "weights.npz"],
       "source_url": "https://huggingface.co/mlx-community/whisper-base-mlx",
-      "license": {"spdx": null, "status": "license-review-required", "url": "https://huggingface.co/mlx-community/whisper-base-mlx"},
+      "license": {"spdx": null, "status": "undeclared", "url": "https://huggingface.co/mlx-community/whisper-base-mlx"},
       "files": [
         {"path": "config.json", "size": 262, "git_blob_sha1": "3860125a7f82a556e43e28eda7147a51c802ba5a"},
         {"path": "weights.npz", "size": 143724204, "sha256": "2f57d5f3ef473054c638961f90716f4ee415e8108de81313eccb2c5fd62eff0b"}
@@ -118,7 +118,7 @@
       "revision": "cb41f3a270d63d454d385fc2e4f571c487c253c5",
       "required_patterns": ["config.json", "preprocessor_config.json", "pytorch_model.bin"],
       "source_url": "https://huggingface.co/CompVis/stable-diffusion-safety-checker",
-      "license": {"spdx": null, "status": "license-review-required", "url": "https://huggingface.co/CompVis/stable-diffusion-safety-checker"},
+      "license": {"spdx": null, "status": "undeclared", "url": "https://huggingface.co/CompVis/stable-diffusion-safety-checker"},
       "files": [
         {"path": "config.json", "size": 4549, "git_blob_sha1": "aa454d222558d7e095fc9343266efd9512ad2f19"},
         {"path": "preprocessor_config.json", "size": 342, "git_blob_sha1": "5294955ff7801083f720b34b55d0f1f51313c5c5"},

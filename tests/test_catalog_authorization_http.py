@@ -12,6 +12,7 @@ import pytest
 
 from scanner import repository
 from scanner.db import ScanRow
+from scanner.models import JellyfinMediaVersion
 from tests.catalog_access_http import LOCAL, serve_catalog
 from tests.media_access_support import (
     EPISODE,
@@ -204,6 +205,29 @@ def test_an_existing_session_observes_scope_and_sync_changes(catalog):
     catalog.evidence.allowed.discard(FAMILY_FILM)
     catalog.sync_casey(all_libraries=True, library_ids=frozenset())
     assert "Synthetic Family Film" not in _names(catalog.get(CASEY, FAMILY_ITEMS).json())
+
+
+def test_reachable_file_metadata_is_available_when_paths_are_redacted(catalog, monkeypatch):
+    original = catalog.jellyfin.item
+
+    def with_versions(item_id):
+        item = original(item_id)
+        if item_id != FAMILY_FILM:
+            return item
+        version = JellyfinMediaVersion(id="v0", path=item.path, audio_track_count=2)
+        return item.model_copy(update={"versions": [version]})
+
+    monkeypatch.setattr(catalog.jellyfin, "item", with_versions)
+    path = f"/api/library-items/{FAMILY_FILM}"
+    owner = catalog.get(OWNER, path).json()
+    member = catalog.get(CASEY, path).json()
+    assert owner["versions"][0]["path"] == owner["path"]
+    assert member["path"] is None
+    assert member["versions"][0]["path"] is None
+    for item in (owner, member):
+        version = item["versions"][0]
+        assert version["file_name"] == "Synthetic Family Film.mkv"
+        assert version["audio_track_count"] == 2
 
 
 def test_audio_tracks_name_media_without_paths(catalog):

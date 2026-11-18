@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -16,7 +17,10 @@ from tests.jellyfin_setup_fake import install, setup_body
 from tests.multi_user_access_support import add_linked_owner
 
 
-def test_setup_status_and_cookie_contract_keep_a_stable_csrf_token(tmp_path, monkeypatch):
+@pytest.mark.parametrize("remember_me", [True, False])
+def test_setup_status_and_cookie_contract_keep_a_stable_csrf_token(
+    tmp_path, monkeypatch, remember_me
+):
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -43,7 +47,7 @@ def test_setup_status_and_cookie_contract_keep_a_stable_csrf_token(tmp_path, mon
 
             setup = client.post(
                 "/api/auth/setup",
-                json=setup_body(remember_me=True, return_to="/queue?tab=active"),
+                json=setup_body(remember_me=remember_me, return_to="/queue?tab=active"),
             )
             assert setup.status_code == 201
             csrf_token = setup.json()["csrf_token"]
@@ -51,7 +55,11 @@ def test_setup_status_and_cookie_contract_keep_a_stable_csrf_token(tmp_path, mon
             assert setup.headers["pragma"] == "no-cache"
             cookie = setup.headers["set-cookie"]
             assert "HttpOnly" in cookie and "SameSite=lax" in cookie and "Path=/" in cookie
-            assert "Max-Age=2592000" in cookie and "Secure" not in cookie
+            assert "Secure" not in cookie
+            if remember_me:
+                assert "Max-Age=2592000" in cookie
+            else:
+                assert "Max-Age" not in cookie and "expires" not in cookie.lower()
 
             first_status = client.get("/api/auth/status")
             second_status = client.get("/api/auth/status")

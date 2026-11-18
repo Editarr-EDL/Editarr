@@ -110,13 +110,14 @@ def _legacy_database(path, revision="0009_readable_api_key", *, administrator=Tr
 # owner, and moves its username to an empty display name, adding a profile row if it
 # had none; tests pin that owner's state on their own (test_remove_passwords_migration).
 # Snapshots ignore usernames and display names, and drop a profile row left empty.
-# The 0032 migration tests check the new manual provenance columns separately.
+# Dedicated migration tests check the new manual provenance and worker timing columns.
 _ARCHIVE_COLUMNS = {
     "arr_settings": {"api_key"},
     "media_items": {"archived_source"},
     "account_settings": {"jellyfin_admission", "registration_mode"},
     "user_provider_identities": {"role_explicit"},
     "user_profiles": {"display_name", "updated_at"},
+    "scans": {"worker_elapsed_seconds", "worker_attempt_started_at"},
     "scan_findings": {"manually_added", "manually_edited"},
     "review_filters": {"manually_added", "manually_edited"},
     "users": {

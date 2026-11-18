@@ -1,14 +1,27 @@
 .backup-schedule {
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border, #d1d5db);
+  display: grid;
+  gap: 10px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.backup-schedule a { color: #91d6c6; text-underline-offset: 3px; }
+.backup-schedule-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.backup-schedule-label { display: grid; gap: 3px; }
+.backup-schedule-label h3 { margin: 0; font-size: 14px; }
+.backup-schedule-controls { margin-inline-start: auto; }
+.backup-schedule p,
+.backup-export-options p,
+.backup-export-result p { margin: 0; }
 
 .backup-schedule-fields {
+  display: grid;
+  gap: 10px;
   border: 0;
   padding: 0;
   margin: 0;
@@ -32,7 +45,6 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0.75rem 0;
 }
 
 .backup-schedule-toggle input {
@@ -43,9 +55,6 @@
   margin: 0;
 }
 .backup-schedule-toggle span { min-width: 0; }
-.backup-schedule-status,
-.backup-schedule-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
-
 @media (max-width: 600px) {
   .backup-schedule-grid,
   .backup-schedule-summary { grid-template-columns: minmax(0, 1fr); }

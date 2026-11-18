@@ -20,6 +20,7 @@ from scanner.security.community_identity import _load
 from scanner.security.community_identity_homes import _OWNER_REFERENCE
 from scanner.security.private_identity_files import DIRECTORY, HOMES
 from scanner.settings.deployment_config import _decode_overrides
+from scanner.settings.model_scan_settings import MODEL_SCAN_SETTINGS_FILENAME, ModelScanSettings
 
 from .account_family import check_accounts
 from .age_transport import run_age, validate_age_header
@@ -257,6 +258,13 @@ def preview_restore(
         files = manifest["files"]
         if not all(map(allowed_member, files)):
             raise BackupError("Unexpected backup inventory")
+        if MODEL_SCAN_SETTINGS_FILENAME in files:
+            try:
+                ModelScanSettings.model_validate_json(
+                    (content / MODEL_SCAN_SETTINGS_FILENAME).read_bytes()
+                )
+            except (OSError, ValueError) as error:
+                raise BackupError("Backup scan settings are invalid") from error
         original_revision = _require_current_schema(content / DATABASE)
         if manifest.get("schema_revision") != original_revision:
             raise BackupError("Backup schema revision does not match its database")

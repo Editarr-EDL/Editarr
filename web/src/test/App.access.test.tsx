@@ -167,12 +167,12 @@ describe("capability-aware application shell", () => {
     expect(await screen.findByRole("heading", { name: "General" })).toBeVisible();
   });
 
-  it("refuses ordinary-user audit deep links without an audit request", async () => {
+  it.each(["audit", "settings/audit"])("refuses ordinary-user %s deep links without an audit request", async (route) => {
     const paths = installUserApi();
-    window.location.hash = "#/audit/00000000-0000-4000-8000-000000000001";
+    window.location.hash = `#/${route}/00000000-0000-4000-8000-000000000001`;
     render(<AuthenticationGate><App /></AuthenticationGate>);
     expect(await screen.findByRole("heading", { name: "Page unavailable" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Audit history" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Audit History" })).not.toBeInTheDocument();
     expect(paths.some(path => path.startsWith("/api/audit"))).toBe(false);
   });
 });

@@ -143,7 +143,8 @@ def test_clean_transcript_is_successful_empty_coverage(monkeypatch):
     assert events == ["started", "complete"]
 
 
-def test_discovery_falls_back_to_segment_timing(monkeypatch):
+@pytest.mark.parametrize("padding", [None, 0, 0.45])
+def test_discovery_falls_back_to_segment_timing(monkeypatch, padding):
     _install_qwen(monkeypatch, lambda _: _response([_match(1, 2, "blasphemy")]))
     findings = qwen_language.categorize_language_findings(
         [],
@@ -156,10 +157,12 @@ def test_discovery_falls_back_to_segment_timing(monkeypatch):
             }
         ],
         video_id="scan-1",
+        audio_padding_seconds=padding,
     )
+    effective_padding = 0.1 if padding is None else padding
     assert findings[0].label == "Dios mío!"
-    assert findings[0].start_seconds == pytest.approx(11.9)
-    assert findings[0].end_seconds == pytest.approx(14.1)
+    assert findings[0].start_seconds == pytest.approx(12 - effective_padding)
+    assert findings[0].end_seconds == pytest.approx(14 + effective_padding)
 
 
 @pytest.mark.parametrize(

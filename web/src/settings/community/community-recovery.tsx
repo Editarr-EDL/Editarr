@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { checkCommunityRecovery, completeCommunityRecovery, fetchCommunityRecovery, retryCommunityRecovery, startCommunityRecovery } from "../../api/api-community";
 import type { CommunityRecoveryStatus, CommunityRequest } from "../../api/api-community";
+import { BACKUP_SETTINGS_ROUTE } from "../../routes";
 import { ModalDialog } from "../../ui/ModalDialog";
 import { useCan } from "../../auth/auth-gate";
 import { communityError, failureMessage, handoffState } from "./community-state";
@@ -75,7 +76,7 @@ export function CommunityIdentityRecovery({ onChanged, userId, mayManageKeys: pe
       {status.recoveryStatus === "not_committed" && <p role="status">The service has not committed this saved recovery. This is a read snapshot, not cancellation of an in-flight request.</p>}
     </>}
     {status.completed && <p className="community-notice" role="status">Identity recovery activated. Create a fresh identity backup for the current signing key. Backup freshness has not been verified.</p>}
-    <p><a href="#/settings/general">Create identity backup</a></p>
+    <p><a href={`#/${BACKUP_SETTINGS_ROUTE}`}>Create identity backup</a></p>
     {mayManageKeys && confirmation && <ModalDialog labelledBy="recovery-confirm-heading" className="confirmation-dialog community-confirmation" onClose={busy ? undefined : () => setConfirmation(null)}>
       <h2 id="recovery-confirm-heading">{confirmation === "start" ? "Authorize identity recovery?" : "Replace this installation's key?"}</h2>
       <p>{confirmation === "start" ? "Prepare a saved replacement and authorize with the original Discord account. No key is replaced until your final confirmation." : "Confirm the original Discord account and this installation. Its affected key and old backups lose community access immediately. Other installations retain access; contributor history stays unchanged. Create a fresh backup after success; encryption remains optional."}</p>

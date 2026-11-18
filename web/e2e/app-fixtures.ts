@@ -1,6 +1,13 @@
 import { CAPABILITIES } from "../src/auth/capabilities";
+import type { AuditEntry } from "../src/api/api-audit";
 import { expect, type Page, type Route } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+
+export const auditEvent: AuditEntry = {
+  event_id: "00000000-0000-4000-8000-000000000001", occurred_at: "2026-08-19T00:00:00Z",
+  category: "security", action: "api_key.issue", outcome: "succeeded", actor_kind: "user",
+  actor_id: 1, credential: "session", target_user_id: 2, media_key: null, resource: null, details: {},
+};
 
 export const libraries = [{ id: "movies", name: "Movies", collection_type: "movies", locations: ["/media/movies"] }];
 export const emptyExport = (format: "edl" | "mcf") => ({
@@ -25,8 +32,8 @@ export const items = [{
   official_rating: "PG-13", index_number: null,
   runtime_ticks: null, duration_seconds: 5700, resolution: "4K", media_format: "MKV · HEVC", media_source_count: 2,
   versions: [
-    { id: "source-1", name: "4K HDR", scene_name: "Example.Movie.2025.2160p.WEB-DL-GROUP", release_group: "GROUP", edition: "Director's Cut", path: "/media/movies/example-4k.mkv", container: "mkv", resolution: "4K", media_format: "MKV · HEVC", duration_seconds: 5700, size_bytes: 10_000_000_000, exports: previousEdl },
-    { id: "source-2", name: "1080p SDR", scene_name: "Example.Movie.2025.1080p.WEB-DL-OTHER", release_group: "OTHER", edition: null, path: "/media/movies/example-1080p.mkv", container: "mkv", resolution: "1080p", media_format: "MKV · H264", duration_seconds: 5700, size_bytes: 5_000_000_000, exports: emptyExports() },
+    { id: "source-1", name: "4K HDR", scene_name: "Example.Movie.2025.2160p.WEB-DL-GROUP", release_group: "GROUP", edition: "Director's Cut", path: "/media/movies/example-4k.mkv", file_name: "example-4k.mkv", audio_track_count: 2, container: "mkv", resolution: "4K", media_format: "MKV · HEVC", duration_seconds: 5700, size_bytes: 10_000_000_000, exports: previousEdl },
+    { id: "source-2", name: "1080p SDR", scene_name: "Example.Movie.2025.1080p.WEB-DL-OTHER", release_group: "OTHER", edition: null, path: "/media/movies/example-1080p.mkv", file_name: "example-1080p.mkv", audio_track_count: 0, container: "mkv", resolution: "1080p", media_format: "MKV · H264", duration_seconds: 5700, size_bytes: 5_000_000_000, exports: emptyExports() },
   ],
   image_tags: { Primary: "poster-tag" }, image_url: "/api/library-items/movie-1/image",
   exports: previousEdl,
@@ -226,14 +233,11 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/settings/jellyfin/test") {
       await json(route, { server_url: "http://jellyfin.test", api_key_configured: true, last_checked_at: null, last_error: null }); return;
     }
-    if (url.pathname === "/api/archive") {
-      await json(route, { total: 1, offset: 0, limit: 20, items: [{
-        id: "archived-1", source: "radarr", title: "Archived Movie With A Deliberately Long Title For Narrow Screens", item_type: "Movie",
-        series: null, season: null, episode: null, path: "/media/archive/an/unusually/long/path/that/must/wrap/archived-movie.mkv",
-        scans: [{ id: "scan-a", scan_number: 4, name: "Archived scan", status: "complete", created_at: "2026-01-01T00:00:00Z" }],
-        reviews: [{ id: "review-a", name: "Archived review", owner: "owner", updated_at: "2026-01-02T00:00:00Z" }],
-        exports: [{ id: 1, format: "edl", scope: "default", exported_at: "2026-01-03T00:00:00Z" }],
-      }] }); return;
+    if (url.pathname === "/api/audit") {
+      await json(route, { events: [auditEvent], total: 1, page: 1, page_size: 25, pages: 1, retained_since: auditEvent.occurred_at, retention_days: 90 }); return;
+    }
+    if (url.pathname === `/api/audit/${auditEvent.event_id}`) {
+      await json(route, auditEvent); return;
     }
     if (url.pathname === "/api/settings/filters/default-mode") {
       if (method === "PUT") defaultFilterMode = route.request().postDataJSON().mode;
@@ -251,6 +255,9 @@ export async function mockApi(page: Page) {
       await json(route, { revision: 0, selection_rules: [], severity_defaults: [] }); return;
     }
     if (url.pathname === "/api/capabilities") { await json(route, { audio_models: [{ id: "whisper", display_name: "Whisper" }], audio_filters: [{ id: "better_profanity", display_name: "better-profanity" }], video_models: [{ id: "nudenet", display_name: "NudeNet" }], qwen_models: [] }); return; }
+    if (url.pathname === "/api/settings/models/scans") {
+      await json(route, { audio_padding_seconds: 0.1 }); return;
+    }
     if (url.pathname === "/api/models") {
       await json(route, { artifacts: [{ artifact_id: "faster-whisper-base", backend_ids: ["whisper"], state: { state: modelState, bytes_downloaded: modelState === "downloading" ? 50 : modelState === "ready" ? 100 : null, bytes_total: 100, error_code: null, error_detail: null }, expected_size: 100, source_url: "https://example.test/model", license_spdx: "MIT", license_status: "declared", removable: true }], model_capabilities: [{ id: "whisper", display_name: "Whisper", stage: "audio", availability: "available", reason: null, device: "cpu", weight_requirement: "on_demand", download: { state: modelState, bytes_downloaded: null, bytes_total: 100, error_code: null, error_detail: null }, enrichment_behavior: "none" }] }); return;
     }

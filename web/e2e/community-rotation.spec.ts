@@ -74,6 +74,7 @@ for (const width of [320, 1440]) {
     await expectNoHorizontalPageOverflow(page); await expectNoAccessibilityViolations(page);
     await page.screenshot({ path: `test-results/css32-completed-${width}.png`, fullPage: true });
     await panel.getByRole("link", { name: "Backup and restore" }).click();
+    await page.getByRole("button", { name: "Create backup", exact: true }).click();
     await expect(page.getByLabel("Encrypt backup")).not.toBeChecked();
   });
 }

@@ -93,10 +93,10 @@ stores its data, logs, and model cache.
    paths, add a path mapping under **Settings > General** and test it.
 3. **Scan.** Open a movie or episode from **Jellyfin Libraries** and choose
    **New Scan**. Pick audio, visual, and/or credits scans. The first scan may
-   download model weights. Manage them under **Settings > Model Storage**.
-4. **Review.** Create a saved review, include the finished scans, and choose
-   which cues to keep. Add manual filters or use **Apply Filter Defaults** to
-   apply your filter preferences.
+   download model weights. Manage them under **Settings > Models > Storage**.
+4. **Review.** Start a review and include the finished scans. Use **Preview**
+   to check filter timing in the draft. Add manual filters or use **Apply Filter
+   Defaults** to apply your preferences, then save the review.
 5. **Export.** Choose **Export**, then **Publish EDL** or **Publish MCF**.
 6. **Watch.** Install the [jellyfin-edl](https://github.com/Editarr-EDL/jellyfin-edl)
    plugin on your Jellyfin server. A compatible player can then request the user's

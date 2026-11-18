@@ -174,6 +174,9 @@ class Scan(BaseModel):
     edited: bool = False
     scan_started_at: datetime | None = None
     scan_duration_seconds: float | None = None
+    scan_duration_as_of: datetime | None = Field(
+        default=None, description="Server timestamp of the duration sample while a scan is running."
+    )
     created_at: datetime
     updated_at: datetime
     mcf_document: "ScanMcfDocument | None" = None

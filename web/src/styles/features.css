@@ -241,24 +241,10 @@
 .catalog-scan-dialog label.field { display: grid; gap: 6px; }
 .catalog-scan-dialog input:not([type="checkbox"]), .catalog-scan-dialog select { box-sizing: border-box; width: 100%; min-width: 0; }
 .catalog-scan-dialog p { overflow-wrap: anywhere; }
-.model-storage { display: grid; gap: 14px; }
-.model-artifact { display: grid; gap: 10px; padding: 14px; border: 1px solid #394454; border-radius: 9px; background: #171c25; }
-.model-artifact-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
-.model-artifact h3, .model-artifact p { margin: 0; }
-.model-artifact-heading p, .model-details dt { color: #9aa6b8; font-size: 12px; }
-.model-state { border-radius: 99px; padding: 3px 8px; color: #dce7f6; background: #394454; font-size: 12px; font-weight: 750; text-transform: capitalize; white-space: nowrap; }
-.model-state-ready { color: #b8f0d5; background: #1d4d3e; }
-.model-state-failed, .model-state-cancelled { color: #ffd0c9; background: #643333; }
-.model-state-downloading { color: #c9ddff; background: #2b4e82; }
-.model-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.model-details div { min-width: 0; }
-.model-details dt, .model-details dd { margin: 0; overflow-wrap: anywhere; }
-.model-details dd { color: #dce3ee; font-size: 13px; }
-.model-details a { color: #b9d4ff; }
-.model-progress { display: flex; align-items: center; gap: 8px; color: #b9c4d5; font-size: 12px; }
-.model-progress progress { width: min(240px, 60vw); accent-color: #8dafef; }
-.diagnostics-panel { align-items: start; }
-.diagnostics-source { width: min(280px, 100%); }
+.diagnostics-options > p { margin: 0; }
+.diagnostics-options .diagnostics-toolbar { align-items: flex-end; }
+.diagnostics-source { flex: 0 1 220px; min-width: 0; }
+.diagnostics-toolbar button { min-height: 37px; }
 .diagnostics-log { box-sizing: border-box; width: 100%; max-height: 420px; margin: 0; overflow: auto; padding: 14px; border: 1px solid #394454; border-radius: 8px; background: #11151c; color: #d7e4f6; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .scan-capability-disclosure { display: grid; gap: 6px; padding: 10px; border: 1px solid #425878; border-radius: 7px; background: #182536; color: #d7e4f6; font-size: 13px; line-height: 1.4; }
 .scan-capability-disclosure p { margin: 0; }

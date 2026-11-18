@@ -25,6 +25,7 @@ test("connects Jellyfin accessibly as the first owner and restores the requested
   const serverUrl = page.getByLabel("Jellyfin server URL");
   await expect(page.getByRole("heading", { name: "CONNECT YOUR JELLYFIN SERVER" })).toBeVisible();
   await expect(serverUrl).toBeFocused();
+  await expect(page.getByRole("checkbox", { name: "Remember me" })).toBeChecked();
   await expect(page.getByRole("button", { name: "Restore from backup" })).toBeVisible();
   await expectNoAccessibilityViolations(page);
 
@@ -287,19 +288,29 @@ test("navigates between Settings subsections", async ({ page }) => {
 test("manages a mocked model download accessibly on a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await page.getByRole("dialog", { name: "Navigation menu" }).getByRole("button", { name: "Model Storage" }).click();
-  await expect(page.getByRole("heading", { name: "Model Storage", level: 1 })).toBeVisible();
+  await page.getByRole("dialog", { name: "Navigation menu" }).getByRole("button", { name: "Models" }).click();
+  await expect(page.getByRole("heading", { name: "Models", level: 1 })).toBeVisible();
+  const audioStage = page.locator("summary").filter({ hasText: /^Audio/ });
+  await expect(audioStage).toBeVisible();
+  await expect(page.getByText("0 B", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download" })).toBeHidden();
+  await audioStage.press("Enter");
+  await expect(page.getByRole("link", { name: "Source" })).toHaveCSS("text-decoration-line", "none");
   await page.getByRole("button", { name: "Download" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "Cancel download" })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "faster-whisper-base download progress" })).toBeVisible();
+  await expect(page.getByText("50 B", { exact: true })).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
   await expectNoAccessibilityViolations(page);
+  await audioStage.press("Space");
+  await expect(audioStage).toContainText("1 downloading");
+  await expect(page.getByRole("progressbar", { name: "faster-whisper-base download progress" })).toBeHidden();
 });
 
 test("keeps General settings accessible and signs out without a reload", async ({ page }) => {
   await page.getByRole("button", { name: "General" }).click();
-  await expect(page.getByRole("heading", { name: "Base path mappings" })).toBeVisible();
+  await expect(page.locator("summary").filter({ hasText: "Base path mappings" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Account menu for / })).toBeVisible();
   await expectNoAccessibilityViolations(page);
 
@@ -330,11 +341,15 @@ test("browses a library in both views and opens item metadata", async ({ page })
   await expect(page.getByText("EDL · Current").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Files" })).toBeVisible();
   await expect(page.getByText("Media sources reported by Jellyfin.")).toHaveCount(0);
-  await expect(page.getByRole("columnheader", { name: "Scene Name" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Release Group" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Edition" })).toBeVisible();
-  await expect(page.getByText("Example.Movie.2025.2160p.WEB-DL-GROUP")).toBeVisible();
-  await expect(page.getByText("Example.Movie.2025.2160p.WEB-DL-GROUP").locator("..").getByText("EDL · Current")).toBeVisible();
+  const files = page.getByRole("region", { name: "Media files" });
+  await expect(files.getByRole("columnheader")).toHaveText([
+    "File name", "Resolution", "Format", "Audio Tracks", "Length", "Size",
+  ]);
+  const mainFile = files.getByRole("row").filter({ hasText: "example-4k.mkv" });
+  await expect(mainFile.getByRole("cell", { name: "2", exact: true })).toBeVisible();
+  await expect(mainFile.getByText("EDL · Current")).toBeVisible();
+  const alternateFile = files.getByRole("row").filter({ hasText: "example-1080p.mkv" });
+  await expect(alternateFile.getByRole("cell", { name: "0", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Manage exports" }).click();
   await expect(page.getByRole("dialog", { name: "Manage exports" })).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Delete EDL" }).click();

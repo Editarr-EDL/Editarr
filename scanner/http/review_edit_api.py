@@ -41,8 +41,10 @@ from scanner.repository import (
 
 from .review_access import review_caller, run_review
 from .review_export_api import PublicationRequest, compatibility_export
+from .review_preview_api import router as draft_preview_router
 
 router = APIRouter()
+router.include_router(draft_preview_router)
 
 
 @router.get(

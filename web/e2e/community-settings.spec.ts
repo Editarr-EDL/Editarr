@@ -123,6 +123,8 @@ for (const width of [320, 1440]) {
     for (const forbidden of ["confirmationSecret", "private_key", "access_token", "discordId"]) expect(stored).not.toContain(forbidden);
     await backup.click();
     await expect(page.getByRole("heading", { name: "Backup and restore" })).toBeVisible();
+    await expect(page.getByLabel("Encrypt backup")).toBeHidden();
+    await page.getByRole("button", { name: "Create backup", exact: true }).click();
     await expect(page.getByLabel("Encrypt backup")).not.toBeChecked();
   });
 

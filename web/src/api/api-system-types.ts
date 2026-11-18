@@ -57,10 +57,8 @@ export interface QuickConnectAttempt {
   code: string;
 }
 
-export interface JellyfinSetupRequest {
+export interface JellyfinSetupRequest extends AuthenticationCredentials {
   server_url: string;
-  username: string;
-  password: string;
 }
 
 /** A password confirmed inside the same request as a sensitive action. */
@@ -107,6 +105,7 @@ export interface DeploymentConfiguration {
   saved: DeploymentSavedOverrides;
   restart_required: boolean;
   restart: RestartCapability;
+  macos_dock_supported?: boolean;
 }
 
 /** Fields omitted from a deployment update retain their explicit saved override. */
@@ -158,10 +157,11 @@ export interface ManagedModelArtifact {
   artifact_id: string;
   backend_ids: string[];
   state: ModelDownloadState;
+  device?: "cpu" | "coreml" | null;
   expected_size: number | null;
   source_url: string;
   license_spdx: string | null;
-  license_status: "declared" | "license-review-required";
+  license_status: "declared" | "undeclared" | "license-review-required";
   removable: boolean;
 }
 

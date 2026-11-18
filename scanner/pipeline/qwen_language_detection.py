@@ -187,8 +187,12 @@ def detect_language_findings(
     policy: str,
     *,
     progress_callback: Callable[[float, str], None] | None = None,
+    audio_padding_seconds: float | None = None,
 ) -> tuple[list[FindingCreate], bool, int]:
     """Supplement detector findings; return failure and completed-batch counts for coverage."""
+    padding = (
+        settings.profanity_pad_seconds if audio_padding_seconds is None else audio_padding_seconds
+    )
     output = list(findings)
     failed, completed = False, 0
     for start in range(0, len(windows), _BATCH_SIZE):
@@ -211,8 +215,8 @@ def detect_language_findings(
             for index, first, last, category, severity in parsed:
                 words = batch[index][first : last + 1]
                 label = _joined_text(words)
-                begin = max(0.0, min(word.start for word in words) - settings.profanity_pad_seconds)
-                end = max(word.end for word in words) + settings.profanity_pad_seconds
+                begin = max(0.0, min(word.start for word in words) - padding)
+                end = max(word.end for word in words) + padding
                 # Overlapping windows can rediscover a phrase. Preserve detector metadata
                 # and Allow/Deny handling for an already flagged occurrence.
                 if any(
