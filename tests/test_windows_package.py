@@ -66,6 +66,22 @@ def test_import_without_nonblocking_open_disables_anchored_export(monkeypatch):
     assert not unsupported.ANCHORED
 
 
+def test_identity_move_staging_without_nofollow_still_creates_exclusively(monkeypatch, tmp_path):
+    from scanner.persistence.repository import export_identity_moves
+
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    destination = tmp_path / "movie.edl"
+    staged = export_identity_moves._staging(destination)
+
+    identity = export_identity_moves._temporary(destination, b"1\n2\n")
+
+    assert staged.read_bytes() == b"1\n2\n"
+    assert identity == str(staged.stat().st_ino)
+    with pytest.raises(FileExistsError):
+        export_identity_moves._temporary(destination, b"other")
+    assert staged.read_bytes() == b"1\n2\n"
+
+
 def test_inno_setup_is_non_elevated_data_preserving_and_lifecycle_aware():
     source = Path("native_build/windows/Editarr.iss").read_text(encoding="utf-8")
 
