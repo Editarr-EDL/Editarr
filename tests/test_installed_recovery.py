@@ -152,7 +152,12 @@ def test_a_failed_removal_is_reported_without_replacing_the_result(
 
     result = json.loads(evidence.read_text())
     assert status == (0 if primary == "passed" else 1)
-    assert result["failures"] == ([] if primary == "passed" else ["readiness timed out"])
+    if primary == "passed":
+        assert result["failures"] == []
+    else:
+        [failure] = result["failures"]
+        assert failure.startswith("RuntimeError in smoke:")
+        assert failure.endswith(": readiness timed out")
     cleanup = result["checks"]["scratch_cleanup"]
     assert cleanup["removed"] is False
     assert cleanup["root"] == str(root)

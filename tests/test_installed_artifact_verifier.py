@@ -60,6 +60,67 @@ def test_windows_shutdown_codes_do_not_access_posix_signal_constants(monkeypatch
     assert verifier._accepted_shutdown_codes() == {0}
 
 
+def test_native_failure_reports_the_failed_step_not_the_forced_exit_log(tmp_path, monkeypatch):
+    verifier = _verifier()
+    log = tmp_path / "Editarr.log"
+    log.write_text("INSECURE AUTH COOKIE CONFIGURATION: development only\n")
+    process = SimpleNamespace(pid=1, returncode=None)
+
+    def stop(owned):
+        owned.returncode = 1  # taskkill /F status on Windows
+
+    def failing_step(*_args, **_kwargs):
+        raise RuntimeError("setup step failed") from OSError("pipe closed")
+
+    monkeypatch.setattr(verifier, "_environment", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(verifier, "_program_snapshot", lambda _runtime: "unchanged")
+    monkeypatch.setattr(verifier, "_start", lambda *_args: (process, log))
+    monkeypatch.setattr(verifier, "_stop", stop)
+    monkeypatch.setattr(verifier, "_wait_ready", failing_step)
+    evidence = verifier.Evidence("windows-x64", "0", "exe", "runtime", "sha")
+
+    with pytest.raises(RuntimeError, match="setup step failed") as raised:
+        verifier._native_smoke(
+            tmp_path / "Editarr.exe", tmp_path, tmp_path, evidence,
+            jellyfin="http://127.0.0.1:1", test_fake_models=False,
+        )
+
+    failure = verifier._describe_failure(raised.value)
+    assert failure.startswith("RuntimeError in failing_step:")
+    assert "<- caused by OSError: pipe closed" in failure
+    assert failure.endswith("runtime log tail: INSECURE AUTH COOKIE CONFIGURATION: "
+                            "development only\n")
+
+
+def test_verifier_login_retries_superseded_startup_read(monkeypatch):
+    verifier = _verifier()
+    responses = iter([
+        (503, {}, b'{"code": "jellyfin_unavailable"}'),
+        (200, {}, b'{"csrf_token": "fixture-token"}'),
+    ])
+    monkeypatch.setattr(verifier, "_request", lambda *_args, **_kwargs: next(responses))
+    monkeypatch.setattr(verifier, "_POLL_WAKE", SimpleNamespace(wait=lambda _: None))
+
+    assert verifier._login("http://localhost:3348")[1] == "fixture-token"
+
+
+@pytest.mark.parametrize("code", ["jellyfin_unavailable", "different_error"])
+def test_verifier_login_still_fails_on_persistent_or_unrelated_503(monkeypatch, code):
+    verifier = _verifier()
+    calls = []
+    clock = iter([0.0, 0.0, 16.0])
+    monkeypatch.setattr(verifier, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+
+    def request(*_args, **_kwargs):
+        calls.append(code)
+        return 503, {}, json.dumps({"code": code}).encode()
+
+    monkeypatch.setattr(verifier, "_request", request)
+    with pytest.raises(RuntimeError, match=f"HTTP 503; code='{code}'; body="):
+        verifier._login("http://localhost:3348")
+    assert calls == [code]
+
+
 def test_failed_verification_keeps_bounded_json_evidence(tmp_path, monkeypatch):
     verifier = _verifier()
     output = tmp_path / "failure.json"
