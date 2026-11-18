@@ -1,0 +1,2 @@
+# scikit-build 0.19.1 is the first release that recognizes the Visual Studio 2026 MSVC toolchain.
+scikit-build==0.19.1

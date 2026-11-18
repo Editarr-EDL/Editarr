@@ -49,6 +49,7 @@ tar.exe -xzf (Join-Path $Sources 'opencv_python_headless-5.0.0.93.tar.gz') -C $M
 $opencv = Join-Path $Media 'opencv_python_headless-5.0.0.93'
 git -C $opencv apply --no-index (Join-Path $Sources 'opencv-optional-typing.patch')
 git -C $opencv apply --no-index (Join-Path $PSScriptRoot 'opencv-no-windows-ffmpeg.patch')
+git -C $opencv apply --no-index (Join-Path $PSScriptRoot 'opencv-ninja-generator.patch')
 $numpyHeaders = (uv run --no-sync python -c 'import numpy; print(numpy.get_include())').Replace('\', '/')
 $env:ENABLE_HEADLESS = '1'
 $env:CMAKE_BUILD_PARALLEL_LEVEL = $env:EDITARR_BUILD_JOBS
@@ -60,7 +61,11 @@ $env:CMAKE_ARGS = @(
   '-DWITH_ITT=OFF', '-DBUILD_TESTS=OFF', '-DBUILD_PERF_TESTS=OFF', '-DBUILD_EXAMPLES=OFF'
   '-DCMAKE_ASM_COMPILER='
 ) -join ' '
-# OpenCV's packaging sets the VS generator platform on Windows. Use the
-# matching Visual Studio generator and SDK already selected by the runner.
-$env:CMAKE_GENERATOR = 'Visual Studio 17 2022'
-uv build --wheel --managed-python --python $pythonVersion --out-dir $wheels $opencv
+# Build with Ninja in the MSVC developer environment selected by the job, so
+# the wheel does not depend on a particular Visual Studio generator year. The
+# generator patch drops OpenCV's Visual Studio-only platform and CI generator
+# arguments when a generator is preselected.
+$env:CMAKE_GENERATOR = 'Ninja'
+Remove-Item -LiteralPath Env:CI_BUILD -ErrorAction SilentlyContinue
+Get-Command cl.exe, cmake.exe, ninja.exe | Format-Table -AutoSize Name, Version, Source
+uv build --wheel --managed-python --python $pythonVersion --build-constraints (Join-Path $PSScriptRoot 'opencv-build-constraints.txt') --out-dir $wheels $opencv

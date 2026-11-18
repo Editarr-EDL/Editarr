@@ -15,6 +15,9 @@ The release workflow builds an unsigned alpha installer using `--unsigned-alpha`
 It requires `--notices` and installs those notices alongside the app. The workflow uses
 `build_media.sh` under MSYS2 UCRT64 and `build_media_wheels.ps1` under MSVC to
 build FFmpeg, ffprobe, PyAV, and OpenCV from the sources accompanying each release.
+OpenCV is built with CMake's Ninja generator in the job's active MSVC environment, using
+`opencv-ninja-generator.patch` and the scikit-build pin in `opencv-build-constraints.txt`,
+so no Visual Studio generator year is assumed.
 
 For the standalone evidence workflow, pass `--unsigned-development`. That mode uses the literal metadata
 `Unsigned development build - no publisher identity`, names the artifact

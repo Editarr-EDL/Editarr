@@ -154,6 +154,8 @@ jobs:
             "${env:RELEASE_REVISION}:uv.lock"
             'HEAD:native_build/windows/build_media.sh'
             'HEAD:native_build/windows/build_media_wheels.ps1'
+            'HEAD:native_build/windows/opencv-build-constraints.txt'
+            'HEAD:native_build/windows/opencv-ninja-generator.patch'
             'HEAD:native_build/windows/opencv-no-windows-ffmpeg.patch'
             'HEAD:native_build/windows/verify_media_cache.ps1'
             'HEAD:scripts/prepare_alpha_distribution.py'
