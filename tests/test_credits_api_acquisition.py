@@ -1,3 +1,4 @@
+from threading import current_thread
 from types import SimpleNamespace
 
 from sqlalchemy import create_engine, event
@@ -199,6 +200,65 @@ def test_unexpected_qwen_acquisition_error_returns_scan_to_consent(monkeypatch, 
     assert recovered.status == "awaiting_model_consent"
     assert repository.get_scan_queue_item_by_scan_id(db, scan_id) is not None
     assert not api._model_tasks()
+    db.close()
+
+
+def test_unexpected_acquisition_error_lets_a_racing_consent_start_a_replacement(
+    monkeypatch, tmp_path
+):
+    from scanner.http import credits_acquisition
+
+    observed = []
+    real_recovery = credits_acquisition.recover_interrupted_credits_model_acquisitions
+
+    def recover_then_probe_consent(db, scan_id):
+        recovered = real_recovery(db, scan_id)
+        lock = api._model_task_lock()
+        if not lock.acquire(blocking=False):
+            observed.append("waits")
+        else:
+            try:
+                existing = api._model_tasks().get(f"credits:{scan_id}")
+                alive = existing is not None and existing.is_alive()
+                observed.append("skips" if alive else "starts")
+            finally:
+                lock.release()
+        return recovered
+
+    monkeypatch.setattr(
+        credits_acquisition,
+        "recover_interrupted_credits_model_acquisitions",
+        recover_then_probe_consent,
+    )
+    real_run = api._run_credits_model_acquisition
+
+    def run_as_registered_task(gate, qwen_model):
+        api._model_tasks()[f"credits:{gate.scan_id}"] = current_thread()
+        real_run(gate, qwen_model)
+
+    monkeypatch.setattr(api, "_run_credits_model_acquisition", run_as_registered_task)
+    db, scan_id = _run_failing_acquisition(monkeypatch, tmp_path, RuntimeError("boom"))
+
+    assert observed == ["waits"]
+    assert f"credits:{scan_id}" not in api._model_tasks()
+    assert repository.get_scan(db, scan_id).status == "awaiting_model_consent"
+    db.close()
+
+
+def test_acquisition_cleanup_keeps_a_newer_registration(monkeypatch, tmp_path):
+    replacement = object()
+    real_run = api._run_credits_model_acquisition
+
+    def run_then_get_replaced(gate, qwen_model):
+        api._model_tasks()[f"credits:{gate.scan_id}"] = replacement
+        real_run(gate, qwen_model)
+
+    monkeypatch.setattr(api, "_run_credits_model_acquisition", run_then_get_replaced)
+    db, scan_id = _run_failing_acquisition(
+        monkeypatch, tmp_path, AcquisitionError("download_failed", "failed")
+    )
+
+    assert api._model_tasks().pop(f"credits:{scan_id}") is replacement
     db.close()
 
 

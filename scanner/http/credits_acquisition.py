@@ -1,6 +1,7 @@
 """Acquire an optional credits model for its durable initiating account."""
 
 import logging
+from threading import current_thread
 from time import monotonic
 
 from scanner import api as root
@@ -96,7 +97,18 @@ def run_credits_model_acquisition(gate: JobGate, qwen_model: str) -> None:
         except Exception:
             db.rollback()
             logger.exception("Optional Qwen acquisition stopped unexpectedly for scan %s", scan_id)
-            recover_interrupted_credits_model_acquisitions(db, scan_id)
+            # Publish the retryable state and retire this thread together, so a consent
+            # retry is either refused or finds no live task and starts a replacement.
+            with root._model_task_lock():
+                recover_interrupted_credits_model_acquisitions(db, scan_id)
+                _retire_current_task(scan_id)
         finally:
             with root._model_task_lock():
-                root._model_tasks().pop(f"credits:{scan_id}", None)
+                _retire_current_task(scan_id)
+
+
+def _retire_current_task(scan_id: str) -> None:
+    """Drop this thread's registration without removing a replacement started later."""
+    key = f"credits:{scan_id}"
+    if root._model_tasks().get(key) is current_thread():
+        root._model_tasks().pop(key, None)
