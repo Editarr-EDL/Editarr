@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
@@ -24,6 +23,7 @@ from .archive import (
     IDENTITY_FILES,
     INCOMING_MEMBERS,
     BackupError,
+    _digest,
 )
 from .inventory import EXTERNAL_FILES
 from .move_report import move_disagreements
@@ -39,14 +39,6 @@ RECOVERY = "restore-recovery"
 MARKER = b"editarr-restore-generation-v1\n"
 # The empty installation keeps its own base URL and port (ruling wave14-mu40-deployment-binding).
 DEPLOYMENT = "deployment.json"
-
-
-def _digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _copy(source: Path, destination: Path) -> None:

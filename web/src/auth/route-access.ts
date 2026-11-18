@@ -1,5 +1,5 @@
 import type { Route } from "../routes";
-import type { SettingsSection } from "../settings/settings-view";
+import type { SettingsSection } from "../settings/settings-sections";
 import type { Capability } from "./capabilities";
 import { can, type Principal } from "./session";
 

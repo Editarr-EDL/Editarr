@@ -18,8 +18,8 @@ from scanner.models import (
 from scanner.persistence.rows.db_policies import ExportScope
 
 from .repository_paths import resolve_local_path
-from .repository_rows import _scan_from_row, _utc
-from .review_repairs import repair_summary
+from .repository_rows import _community_provenance, _utc
+from .review_repairs import repair_summary, summarize_repairs
 
 # Legacy adjacent sidecars remain separate from caller-scoped canonical discovery.
 _LEGACY = MediaItemExportRow.scope == ExportScope.LEGACY
@@ -36,23 +36,37 @@ def _review_target(
     )
 
 
+def target_export_rows(
+    db: Session, media_item_id: str, media_source_id: str
+) -> list[MediaItemExportRow]:
+    """Load the legacy sidecar export rows shared by every review of one target."""
+    return (
+        db.query(MediaItemExportRow)
+        .filter(
+            MediaItemExportRow.media_item_id == media_item_id,
+            MediaItemExportRow.media_source_id == media_source_id,
+            _LEGACY,
+        )
+        .all()
+    )
+
+
 def _review_summary(
     db: Session,
     row: SavedReviewRow,
     *,
     source: str | None = None,
     item_id: str | None = None,
+    export_rows: list[MediaItemExportRow] | None = None,
+    repair_records: list | None = None,
 ) -> SavedReviewSummary:
-    """Return a saved review summary with the current export state."""
-    export_rows = (
-        db.query(MediaItemExportRow)
-        .filter(
-            MediaItemExportRow.media_item_id == row.media_item_id,
-            MediaItemExportRow.media_source_id == row.media_source_id,
-            _LEGACY,
-        )
-        .all()
-    )
+    """Return a saved review summary with the current export state.
+
+    List callers may pass the target's ``export_rows`` and the review's
+    ``repair_records`` preloaded; otherwise both are queried.
+    """
+    if export_rows is None:
+        export_rows = target_export_rows(db, row.media_item_id, row.media_source_id)
     exports_by_format = {export.format: export for export in export_rows}
     summaries = {
         export_format: _export_summary(exports_by_format.get(export_format), export_format, row)
@@ -69,7 +83,11 @@ def _review_summary(
         mcf_content_revision=row.mcf_content_revision,
         created_at=_utc(row.created_at),
         updated_at=_utc(row.updated_at),
-        repair=repair_summary(db, row.id),
+        repair=(
+            repair_summary(db, row.id)
+            if repair_records is None
+            else summarize_repairs(repair_records)
+        ),
         exports=ExportStatus(exports=summaries, legacy_exports=summaries),
     )
 
@@ -106,7 +124,7 @@ def _export_summary(
                     role=link.role,
                     name=link.scan.name,
                     origin=link.scan.origin,
-                    community_provenance=_scan_from_row(link.scan).community_provenance,
+                    community_provenance=_community_provenance(link.scan),
                 )
                 for link in export.scans
             ]

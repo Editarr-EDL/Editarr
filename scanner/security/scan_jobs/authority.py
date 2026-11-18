@@ -181,14 +181,17 @@ class JobGate:
         """Coalesce read-only polls briefly; stored changes invalidate the cached decision."""
 
         with self._mutex, self.factory() as db:
-            state, evidence = self._prepare(db)
-            if self._verdict is None:
+            for _attempt in range(MAX_EVIDENCE_ATTEMPTS):
+                state, evidence = self._prepare(db)
+                if self._verdict is not None:
+                    return self._allowed(self._verdict, download=download)
                 self._verdict = self._require(db, evidence)
-                if load_state(db, self.scan_id, self.clock()) != state:
-                    self._evidence = None
-                    self._verdict = None
-                    raise JobRefusedError(JobRefused(JobRefusal.ACCOUNT_UNAVAILABLE))
-            return self._allowed(self._verdict, download=download)
+                if load_state(db, self.scan_id, self.clock()) == state:
+                    return self._allowed(self._verdict, download=download)
+                self._evidence = None
+                self._verdict = None
+                db.rollback()
+            raise JobRefusedError(JobRefused(JobRefusal.ACCOUNT_UNAVAILABLE))
 
     def run(self, db: Session, operation: Callable, *args, download: bool = False, **kwargs):
         """Authorize and execute one write using the same locked database session."""

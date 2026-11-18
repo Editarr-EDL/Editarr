@@ -2,9 +2,9 @@
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
+from scanner.runtime.durability import atomic_write_bytes
 from scanner.runtime.runtime_paths import ensure_user_private_directory
 
 _FILENAME = "macos-show-in-dock"
@@ -29,12 +29,6 @@ def read_show_in_dock(data_dir: Path) -> bool:
 def write_show_in_dock(data_dir: Path, enabled: bool) -> None:
     """Replace the preference atomically so the launcher can read it during a save."""
     directory = ensure_user_private_directory(data_dir)
-    descriptor, temporary = tempfile.mkstemp(prefix=".macos-dock-", dir=directory)
-    try:
-        with os.fdopen(descriptor, "wb") as output:
-            output.write(b"1\n" if enabled else b"0\n")
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary, directory / _FILENAME)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
+    atomic_write_bytes(
+        directory / _FILENAME, b"1\n" if enabled else b"0\n", prefix=".macos-dock-"
+    )

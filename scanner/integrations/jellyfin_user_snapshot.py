@@ -3,8 +3,8 @@
 Parsed from the Jellyfin 12.0.0 `PublicSystemInfo`, `UserDto`, `UserPolicy`, and
 `BaseItemDto` shapes recorded in tests/fixtures/multi-user/jellyfin-users-v1.
 A user's identity is the server ID plus the user GUID. The name is display data
-and never identifies anyone. Jellyfin has no email or timezone, so a snapshot
-carries neither and cannot overwrite those Editarr preferences.
+and never identifies anyone. A snapshot carries no profile preferences, so it
+cannot overwrite the Editarr display language.
 """
 
 from __future__ import annotations

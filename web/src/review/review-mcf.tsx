@@ -78,6 +78,11 @@ export function McfClassificationFields({
   </div>;
 }
 
+/** Show MCF registry loading progress, or the load failure instead of waiting indefinitely. */
+export function McfRegistryStatus({ error }: { error: string | null }) {
+  return error ? <p className="form-error" role="alert">{error}</p> : <p className="loading-state">Loading MCF categories…</p>;
+}
+
 export function McfFilterSummary({ filter, registry }: { filter: ReviewFilter; registry: McfRegistry | null }) {
   if (!filter.category || !filter.subcategory) return <span className="mcf-needs-classification">Needs classification</span>;
   return <span className="mcf-filter-summary">

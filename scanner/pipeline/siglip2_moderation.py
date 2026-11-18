@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 from threading import Lock
 
@@ -10,6 +9,7 @@ from scanner.model_acquisition import get_acquisition_service
 from scanner.settings.capabilities import capability_for
 from scanner.settings.config import settings
 
+from .dependencies import require_dependency
 from .inference_devices import CPU_PROVIDER, TorchInference
 
 _ENCODER_REPO_ID = "google/siglip2-base-patch16-256"
@@ -26,13 +26,7 @@ def _model_root() -> Path:
 
 
 def _require_dependency(import_name: str, install_hint: str):
-    try:
-        return importlib.import_module(import_name)
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "SigLIP2 Moderation Heads require optional dependency "
-            f"'{install_hint}'. Install the stack dependencies first."
-        ) from exc
+    return require_dependency(import_name, install_hint, "SigLIP2 Moderation Heads require")
 
 
 def _select_torch_device(torch):

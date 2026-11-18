@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -47,6 +48,28 @@ def direct_request_origin(scheme: str, authority: str) -> PublicOrigin:
     if address.is_unspecified or address.is_multicast:
         raise OriginParseError("direct access requires a usable IP")
     return origin
+
+
+def is_local_bootstrap_host(host: str) -> bool:
+    """Whether an implicit-local request host cannot be an attacker's rebound DNS name.
+
+    Accepts IP literals, ``localhost``, ``*.localhost``, and this machine's hostname with
+    or without ``.local``. ``host`` is a canonical ``PublicOrigin.host``.
+    """
+
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        pass
+    host = host.casefold()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    machine = socket.gethostname().casefold().rstrip(".")
+    if not machine:
+        return False
+    names = {machine, machine.split(".")[0]}
+    return host in names | {f"{name}.local" for name in names}
 
 
 def parse_origin_header(value: str) -> PublicOrigin:

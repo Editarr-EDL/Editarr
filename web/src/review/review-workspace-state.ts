@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  applyFilterDefaults as applyFilterDefaultsRequest,
-  fetchMcfRegistry,
-} from "../api/api-service";
+import { applyFilterDefaults as applyFilterDefaultsRequest } from "../api/api-service";
 import { fetchScanFindings } from "../api/api-scans";
 import {
   fetchSavedReview,
@@ -33,6 +30,7 @@ import {
   reviewDraftFilters, applyReviewFilterResult,
 } from "./review-draft";
 import { validateDisplayName } from "../shared/name-validation";
+import { loadMcfRegistry } from "../shared/mcf-registry";
 import type { ImportResult } from "./review-types";
 import { exportStatusForReview } from "./export-status";
 import { useVersionPublications } from "./export-publications";
@@ -122,7 +120,7 @@ export function useSavedReviewWorkspace({
   };
 
   useEffect(() => {
-    void fetchMcfRegistry().then(setMcfRegistry).catch((reason) => {
+    void loadMcfRegistry().then(setMcfRegistry).catch((reason) => {
       setError(reason instanceof Error ? reason.message : "Unable to load MCF categories.");
     });
   }, []);

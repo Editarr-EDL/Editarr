@@ -18,7 +18,6 @@ _PACKAGES = {
     "nudenet",
     "onnxruntime",
     "numpy",
-    "pandas",
     "torch",
     "transformers",
     "huggingface_hub",

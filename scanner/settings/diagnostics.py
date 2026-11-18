@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from scanner.runtime.durability import atomic_write_bytes, sync_directory
 from scanner.runtime.maintenance import DatabaseMaintenance
 from scanner.runtime.runtime_logging import redact_diagnostic
 from scanner.runtime.runtime_paths import ensure_user_private_directory
@@ -70,38 +70,22 @@ def _write_diagnostics_preferences(data_dir: Path, preferences: DiagnosticsPrefe
     directory = ensure_user_private_directory(Path(data_dir))
     destination = directory / _PREFERENCES_FILENAME
     encoded = json.dumps({"debug_enabled": preferences.debug_enabled}, separators=(",", ":"))
-    temporary_path: Path | None = None
     try:
-        descriptor, name = tempfile.mkstemp(prefix=".diagnostics-", suffix=".tmp", dir=directory)
-        temporary_path = Path(name)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        temporary_path.chmod(0o600)
-        os.replace(temporary_path, destination)
-        temporary_path = None
+        atomic_write_bytes(
+            destination,
+            encoded.encode("utf-8"),
+            prefix=".diagnostics-",
+            suffix=".tmp",
+            mode=0o600,
+        )
         try:
-            directory_fd = os.open(directory, os.O_RDONLY)
+            sync_directory(directory)
         except OSError:
-            return
-        try:
-            try:
-                os.fsync(directory_fd)
-            except OSError:
-                # The replacement succeeded. Some supported filesystems do not
-                # allow syncing a directory, so do not report a false save failure.
-                pass
-        finally:
-            os.close(directory_fd)
+            # The replacement succeeded. Some supported filesystems do not
+            # allow syncing a directory, so do not report a false save failure.
+            pass
     except OSError as exc:
         raise DiagnosticsError("Unable to save diagnostics settings") from exc
-    finally:
-        if temporary_path is not None:
-            try:
-                temporary_path.unlink()
-            except OSError:
-                pass
 
 
 def read_log_tail(log_dir: Path, channel: str, *, limit: int) -> tuple[list[str], bool]:

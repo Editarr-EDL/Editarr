@@ -11535,28 +11535,6 @@
           "overrides": {
             "$ref": "#/components/schemas/OverrideIndicators"
           },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "timezone": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timezone"
-          },
           "language": {
             "anyOf": [
               {
@@ -11625,8 +11603,6 @@
           "created_at",
           "avatar",
           "overrides",
-          "email",
-          "timezone",
           "language",
           "read_only_fields",
           "available_languages",
@@ -11778,7 +11754,7 @@
           "overrides"
         ],
         "title": "AccountSummary",
-        "description": "The approved Users-list columns. Email and preferences appear only in a detail read."
+        "description": "The approved Users-list columns. Preferences appear only in a detail read."
       },
       "ActorKind": {
         "type": "string",
@@ -18533,28 +18509,6 @@
               }
             ],
             "title": "Display Name"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "timezone": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timezone"
           },
           "language": {
             "anyOf": [

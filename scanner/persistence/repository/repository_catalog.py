@@ -25,10 +25,12 @@ from scanner.models import (
 )
 from scanner.pipeline.cache import compute_video_md5
 
+from .community_import_targets import scan_target_approvals_by_scan
 from .repository_rows import (
     _scan_finding_from_row,
     _scan_from_row,
     _scan_queue_from_row,
+    scan_list_loading,
 )
 
 
@@ -195,10 +197,12 @@ def list_scan_history(db: Session) -> list[Scan]:
     """Return persisted scans in history order with their finding counts."""
     rows = (
         db.query(ScanRow)
+        .options(*scan_list_loading())
         .filter(ScanRow.status.in_(("complete", "error", "failed", "cancelled")))
         .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
         .all()
     )
+    approvals = scan_target_approvals_by_scan(db, rows)
     finding_counts = (
         dict(
             db.query(ScanFindingRow.scan_id, func.count(ScanFindingRow.id))
@@ -209,7 +213,14 @@ def list_scan_history(db: Session) -> list[Scan]:
         if rows
         else {}
     )
-    return [_scan_from_row(row, finding_count=finding_counts.get(row.id, 0)) for row in rows]
+    return [
+        _scan_from_row(
+            row,
+            finding_count=finding_counts.get(row.id, 0),
+            community_approvals=approvals[row.id],
+        )
+        for row in rows
+    ]
 
 
 def list_scans_for_library_item(
@@ -224,6 +235,7 @@ def list_scans_for_library_item(
         return []
     rows = (
         db.query(ScanRow)
+        .options(*scan_list_loading())
         .outerjoin(ScanMediaItemAssociationRow)
         .filter(
             or_(
@@ -235,7 +247,8 @@ def list_scans_for_library_item(
         .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
         .all()
     )
-    return [_scan_from_row(row) for row in rows]
+    approvals = scan_target_approvals_by_scan(db, rows)
+    return [_scan_from_row(row, community_approvals=approvals[row.id]) for row in rows]
 
 
 def associate_scans_with_media_item(

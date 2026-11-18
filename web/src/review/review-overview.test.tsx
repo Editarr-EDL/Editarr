@@ -90,3 +90,18 @@ it("renders server-decided selection and severity locks without disabling permit
   expect(screen.getByLabelText("Filter required label")).toBeEnabled();
   expect(screen.getByRole("region", { name: "Video review filters table" })).toHaveAttribute("tabindex", "0");
 });
+
+it("shows a registry load failure in the filter editor instead of loading forever", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "Registry offline" }), { status: 500, headers: { "Content-Type": "application/json" } })));
+  const filter: SavedReview["filters"][number] = {
+    id: "editing", source_scan_id: "scan-1", source_finding_id: 1,
+    source: "visual", category: "violence", subcategory: "violence", severity: "high",
+    mcf_channel: "video", mcf_comment: null, label: "Fight", details: "Fight", group_key: "fight",
+    start_seconds: 1, end_seconds: 2, confidence: null, edit_action: "skip", selected: true,
+  };
+  render(<SavedReviewOverview filters={[filter]} memberships={[]} scans={[]} busy={false} focusFilterId="editing"
+    onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+    onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
+  expect(await screen.findByRole("alert")).toBeVisible();
+  expect(screen.queryByText("Loading MCF categories…")).toBeNull();
+});

@@ -21,6 +21,7 @@ from tests.owner_schema_support import (
     undo_explicit_filter_modes_migration,
     undo_manual_filter_tracking_migration,
     undo_remove_passwords_migration,
+    undo_scan_read_indexes_migration,
 )
 from tests.test_jellyfin_accounts_http import (
     PASSWORDS,
@@ -133,6 +134,7 @@ def test_a_name_a_password_account_held_before_0030_comes_with_the_next_sync(app
     assert _usernames(app)[casey] is None
     with app.accounts.engine.begin() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
+        undo_scan_read_indexes_migration(connection)
         undo_manual_filter_tracking_migration(connection)
         undo_explicit_filter_modes_migration(connection)
         undo_remove_passwords_migration(connection)

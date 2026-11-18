@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BackupSettings } from "./backup-settings";
@@ -85,5 +85,21 @@ describe("backup settings", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel job" }));
     expect(await screen.findByText("Backup cancelled.")).toBeVisible();
     expect(backups.cancelBackup).toHaveBeenCalledWith("test-job");
+  });
+
+  it("ignores a status response that arrives after the job is cancelled", async () => {
+    let finishStatus!: (value: unknown) => void;
+    vi.mocked(backups.startBackupExport).mockResolvedValue(job("working") as never);
+    vi.mocked(backups.backupStatus).mockReturnValue(new Promise((resolve) => { finishStatus = resolve; }) as never);
+    vi.mocked(backups.cancelBackup).mockResolvedValue(job("cancelled") as never);
+    render(<BackupSettings initiallyOpen />);
+    openBackupOptions();
+    fireEvent.click(screen.getByRole("button", { name: "Create backup" }));
+    await waitFor(() => expect(backups.backupStatus).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel job" }));
+    expect(await screen.findByText("Backup cancelled.")).toBeVisible();
+    await act(async () => { finishStatus(job("working")); });
+    expect(screen.getByText("Backup cancelled.")).toBeVisible();
+    expect(screen.queryByText("Processing backup…")).toBeNull();
   });
 });

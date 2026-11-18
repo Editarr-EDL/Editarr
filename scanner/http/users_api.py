@@ -5,7 +5,7 @@ target checks the own capability, another account the `.other` capability and
 target-account protection, so an admin manages ordinary users and only the
 owner manages admins. Ordinary users read and edit only their own profile and
 never list the directory. A linked account's display name and avatar come from
-Jellyfin and cannot be edited here; its email, timezone, and language can.
+Jellyfin and cannot be edited here; its language can.
 """
 
 from __future__ import annotations
@@ -38,8 +38,6 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 _EDIT = ActionPair(C.PROFILE_EDIT_OWN, C.ACCOUNTS_PROFILE_EDIT_OTHER)
 _VALIDATORS = {
     "display_name": account_profiles.display_name,
-    "email": account_profiles.email,
-    "timezone": account_profiles.timezone,
     "language": account_profiles.language,
 }
 

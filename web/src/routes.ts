@@ -1,6 +1,6 @@
 import { readUserValue } from "./shared/user-storage";
 import type { FilterTab } from "./settings/filters/filters-page";
-import type { SettingsSection } from "./settings/settings-view";
+import type { SettingsSection } from "./settings/settings-sections";
 
 export type Route =
   | { kind: "settings"; section: SettingsSection; deleteAccountId?: number; filterTab?: FilterTab; eventId?: string; openBackups?: boolean }

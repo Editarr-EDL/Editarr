@@ -6,6 +6,9 @@ from time import monotonic
 from scanner import api as root
 from scanner.model_acquisition import AcquisitionCancelled, AcquisitionError
 from scanner.modeling.model_acquisition_authority import scoped_job_acquisition
+from scanner.persistence.repository.repository_queue import (
+    recover_interrupted_credits_model_acquisitions,
+)
 from scanner.persistence.repository.scan_jobs import fail_refused_scan_job
 from scanner.repository import (
     get_scan,
@@ -90,6 +93,10 @@ def run_credits_model_acquisition(gate: JobGate, qwen_model: str) -> None:
             queue = get_scan_queue_item_by_scan_id(db, scan_id)
             if queue is not None:
                 remove_scan_queue_item(db, queue.queue_id)
+        except Exception:
+            db.rollback()
+            logger.exception("Optional Qwen acquisition stopped unexpectedly for scan %s", scan_id)
+            recover_interrupted_credits_model_acquisitions(db, scan_id)
         finally:
             with root._model_task_lock():
                 root._model_tasks().pop(f"credits:{scan_id}", None)

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import { fetchFilterDefaultsSettings, fetchMcfRegistry } from "../../api/api-service";
+import { fetchFilterDefaultsSettings } from "../../api/api-service";
+import { loadMcfRegistry } from "../../shared/mcf-registry";
 import { choosePersonalFilterMode, personalFilterUpdate, readPersonalFilters, savePersonalFilters } from "../../api/api-personal-filters";
 import type { FilterMode, FilterPreferences } from "../../api/api-user-access";
 import type { FilterDefaultsSettings, McfRegistry } from "../../api/api-mcf-types";
@@ -41,7 +42,7 @@ export function MyFilters() {
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = true;
-    void Promise.all([readPersonalFilters(controller.signal), fetchMcfRegistry()]).then(([next, categories]) => {
+    void Promise.all([readPersonalFilters(controller.signal), loadMcfRegistry()]).then(([next, categories]) => {
       if (!controller.signal.aborted && current()) { accept(next); setRegistry(categories); }
     }).catch(reason => { if (!controller.signal.aborted && current()) setError(reason instanceof Error ? reason.message : "Unable to read your filters."); });
     void readServer();

@@ -165,17 +165,26 @@ export default {
     if ((env.APP_ENV !== 'local' && !(env.APP_ENV === 'self-hosted' && env.SELF_HOSTED_ENABLED === true)) || !env.CATALOG_DB) return;
     const now = Date.now();
     const observer = observeOAuthDatabase(env.CATALOG_DB);
-    try {
-      await pruneDiscordOAuth(observer.db, now, RETENTION_BATCH_SIZE);
-      await pruneRecoveryAuthorizations(observer.db, now, RETENTION_BATCH_SIZE);
-      await pruneExpiredAuthenticationState(observer.db, Math.floor(now / 1000), RETENTION_BATCH_SIZE);
-      await pruneOAuthUsage(observer.db, now, RETENTION_BATCH_SIZE);
-      await pruneBotMembership(observer.db, Math.floor(now / 1000), RETENTION_BATCH_SIZE);
-      await pruneProfileNames(observer.db, now, RETENTION_BATCH_SIZE);
-    } finally {
-      const written = observer.rowsWritten();
-      if (written === null) throw new Error('usage_unavailable');
-      await recordOAuthUsage(env.CATALOG_DB, 'd1_writes', written, now);
+    const db = observer.db, seconds = Math.floor(now / 1000);
+    // Each prune runs even if an earlier one fails; failures are rethrown after usage is recorded.
+    const errors: unknown[] = [];
+    for (const prune of [
+      () => pruneDiscordOAuth(db, now, RETENTION_BATCH_SIZE),
+      () => pruneRecoveryAuthorizations(db, now, RETENTION_BATCH_SIZE),
+      () => pruneExpiredAuthenticationState(db, seconds, RETENTION_BATCH_SIZE),
+      () => pruneOAuthUsage(db, now, RETENTION_BATCH_SIZE),
+      () => pruneBotMembership(db, seconds, RETENTION_BATCH_SIZE),
+      () => pruneProfileNames(db, now, RETENTION_BATCH_SIZE),
+    ]) {
+      try { await prune(); } catch (error) { errors.push(error); }
     }
+    const written = observer.rowsWritten();
+    if (written === null) errors.push(new Error('usage_unavailable'));
+    else {
+      try { await recordOAuthUsage(env.CATALOG_DB, 'd1_writes', written, now); }
+      catch (error) { errors.push(error); }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'retention_prune_failed');
   },
 };

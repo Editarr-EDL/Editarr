@@ -1,9 +1,10 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { backupDownloadUrl, backupStatus, cancelBackup, checkBackupDownload, startBackupExport } from "../api/api-backups";
 import type { BackupJob } from "../api/api-backups";
 import { BackupScheduleSettings } from "./backup-schedule-settings";
 import { GeneralSettingsSection } from "./general-settings-section";
 import { useCan } from "../auth/auth-gate";
+import { useSerialPoll } from "../shared/use-serial-poll";
 
 /** Create, download, and cancel full backups. Restore is offered only during first-run setup. */
 export function BackupSettings({ initiallyOpen }: { initiallyOpen?: boolean }) {
@@ -21,16 +22,16 @@ export function BackupSettings({ initiallyOpen }: { initiallyOpen?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [scheduleSummary, setScheduleSummary] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!job || !mayViewStatus || job.state !== "working") return;
-    const timer = window.setInterval(() => {
-      void backupStatus(job.id).then((next) => {
-        setJob(next);
-        if (next.state === "failed") setError(next.error || "Backup failed.");
-      }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Unable to check backup status."));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [job?.id, job?.state, mayViewStatus]);
+  useSerialPoll({
+    enabled: mayViewStatus && job?.state === "working",
+    key: job?.id,
+    request: () => backupStatus(job!.id),
+    onResult: (next) => {
+      setJob(next);
+      if (next.state === "failed") setError(next.error || "Backup failed.");
+    },
+    onError: (reason) => setError(reason instanceof Error ? reason.message : "Unable to check backup status."),
+  });
 
   async function exportArchive() {
     setError(null);

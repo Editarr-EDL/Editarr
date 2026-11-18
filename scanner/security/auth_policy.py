@@ -31,6 +31,7 @@ from .auth_origin import (
     OriginParseError,
     PublicOrigin,
     direct_request_origin,
+    is_local_bootstrap_host,
     normalize_header_value,
     parse_origin_header,
     parse_referer_header,
@@ -218,11 +219,16 @@ class AuthPolicyMiddleware(BaseHTTPMiddleware):
         if session is not None and _session_precedes_cutoff(session, snapshot):
             session = None
         session_denial = admission_error(session.status) if session is not None else None
+        # Without a configured Base URL the origin follows Host, so first-run setup and
+        # setup-restore refuse DNS names that could be rebound to this machine.
+        rebindable_host = snapshot.base_url_source == "local_default" and not (
+            is_local_bootstrap_host(public_origin.host)
+        )
 
         # These bootstrap endpoints own their state-specific 409/423 responses, but
         # source checks must happen before body parsing or credential verification.
         if path in {AUTH_SETUP_PATH, AUTH_JELLYFIN_LOGIN_PATH, *RETIRED_SIGN_IN_PATHS}:
-            if not _source_origin_is_valid(
+            if (path == AUTH_SETUP_PATH and rebindable_host) or not _source_origin_is_valid(
                 headers, public_origin, unsafe=True, allow_headless=True
             ):
                 return policy_response(403, "origin_failed", "Request origin was rejected")
@@ -255,7 +261,7 @@ class AuthPolicyMiddleware(BaseHTTPMiddleware):
                 return policy_response(
                     409, "setup_already_complete", "Administrator setup is complete"
                 )
-            if not _source_origin_is_valid(
+            if rebindable_host or not _source_origin_is_valid(
                 headers, public_origin, unsafe=True, allow_headless=False
             ):
                 return policy_response(403, "origin_failed", "Request origin was rejected")

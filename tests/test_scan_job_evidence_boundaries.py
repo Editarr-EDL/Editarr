@@ -136,6 +136,42 @@ def test_worker_retries_evidence_after_ordering_changes(
     assert writes == [2]
 
 
+def test_worker_poll_retries_evidence_after_unrelated_ordering_change(
+    linked, clock, monkeypatch, tmp_path
+):
+    calls = []
+
+    class RacingAdapter(ScriptedAdapter):
+        def item_access(self, identity, item_ids):
+            calls.append("read")
+            if len(calls) == 1:
+                with linked.factory() as db:
+                    reads.begin_read(db, clock)
+            answer = super().item_access(identity, item_ids)
+            return replace(answer, decisions={item: ItemAccess.ALLOWED for item in item_ids})
+
+    gate = linked_gate(linked, clock, monkeypatch, tmp_path, RacingAdapter)
+    assert gate.require() is not None
+    assert calls == ["read", "read"]
+
+
+def test_worker_poll_evidence_retry_is_bounded(linked, clock, monkeypatch, tmp_path):
+    calls = []
+
+    class UnstableAdapter(ScriptedAdapter):
+        def item_access(self, identity, item_ids):
+            calls.append("read")
+            with linked.factory() as db:
+                reads.begin_read(db, clock)
+            answer = super().item_access(identity, item_ids)
+            return replace(answer, decisions={item: ItemAccess.ALLOWED for item in item_ids})
+
+    gate = linked_gate(linked, clock, monkeypatch, tmp_path, UnstableAdapter)
+    with pytest.raises(authority.JobRefusedError):
+        gate.require()
+    assert len(calls) == authority.MAX_EVIDENCE_ATTEMPTS
+
+
 @pytest.mark.parametrize("change", ["disabled", "capability", "policy", "clock_fence"])
 def test_evidence_collected_before_revocation_cannot_authorize_a_write(
     linked, clock, monkeypatch, tmp_path, change

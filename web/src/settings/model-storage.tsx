@@ -9,6 +9,7 @@ import type { ManagedModelArtifact, ModelCapability, ModelStorageStatus } from "
 import { formatBytes } from "../shared/display";
 import { useCan } from "../auth/auth-gate";
 import { ModelDownloads } from "./model-downloads";
+import { useSerialPoll } from "../shared/use-serial-poll";
 
 const unavailabilityMessages: Record<string, string> = {
   unsupported_platform: "This backend does not support the server’s operating system.",
@@ -68,16 +69,17 @@ function ModelInventory() {
   const [storage, setStorage] = useState<ModelStorageStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    try { setStorage(await fetchModelStorage()); setMessage(null); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Unable to load model storage."); }
+  const accept = useCallback((next: ModelStorageStatus) => { setStorage(next); setMessage(null); }, []);
+  const fail = useCallback((error: unknown) => {
+    setMessage(error instanceof Error ? error.message : "Unable to load model storage.");
   }, []);
+  const load = useCallback(async () => {
+    try { accept(await fetchModelStorage()); }
+    catch (error) { fail(error); }
+  }, [accept, fail]);
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    if (!storage?.artifacts.some((artifact) => artifact.state.state === "downloading")) return;
-    const timer = window.setInterval(() => void load(), 1000);
-    return () => window.clearInterval(timer);
-  }, [load, storage]);
+  const downloading = storage?.artifacts.some((artifact) => artifact.state.state === "downloading") ?? false;
+  useSerialPoll({ enabled: downloading, request: fetchModelStorage, onResult: accept, onError: fail });
   const act = async (key: string, action: () => Promise<{ status: ModelStorageStatus | null }>) => {
     setWorking(key); setMessage(null);
     try { setStorage((await action()).status); }

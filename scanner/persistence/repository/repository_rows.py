@@ -3,7 +3,9 @@
 import json
 from datetime import timezone
 
-from scanner.db import ScanFindingRow, ScanQueueRow, ScanRow
+from sqlalchemy.orm import defer, selectinload
+
+from scanner.db import CommunityImportRow, ScanFindingRow, ScanQueueRow, ScanRow
 from scanner.models import (
     CreditsDetection,
     EditAction,
@@ -19,8 +21,42 @@ from .scan_timing import as_utc as _utc
 from .scan_timing import scan_timing
 
 
-def _scan_from_row(row: ScanRow, *, finding_count: int = 0) -> Scan:
-    """Convert a scan database row and supplied finding count to the API model."""
+def _community_provenance(row: ScanRow) -> dict | None:
+    """Decode the community import provenance recorded for a scan, if any."""
+    imported = row.community_import
+    return (
+        json.loads(imported.provenance_json)
+        if imported is not None and imported.provenance_json
+        else None
+    )
+
+
+def scan_list_loading():
+    """Eager-load options for every relationship `_scan_from_row` reads.
+
+    Community import blobs stay deferred; pair with `scan_target_approvals_by_scan`.
+    """
+    imported = selectinload(ScanRow.community_import).options(
+        defer(CommunityImportRow.artifact_bytes),
+        defer(CommunityImportRow.manifest_bytes),
+        defer(CommunityImportRow.signature_bytes),
+    )
+    return (
+        selectinload(ScanRow.media_item),
+        selectinload(ScanRow.stage_coverage),
+        selectinload(ScanRow.mcf_document),
+        selectinload(ScanRow.credits_detection),
+        imported,
+    )
+
+
+def _scan_from_row(
+    row: ScanRow, *, finding_count: int = 0, community_approvals: list | None = None
+) -> Scan:
+    """Convert a scan database row and supplied finding count to the API model.
+
+    ``community_approvals`` accepts batch-loaded approvals; otherwise they are queried.
+    """
     from .community_import_targets import scan_target_approvals
 
     item = row.media_item
@@ -135,12 +171,10 @@ def _scan_from_row(row: ScanRow, *, finding_count: int = 0) -> Scan:
             if row.credits_detection is not None
             else None
         ),
-        community_provenance=(
-            json.loads(row.community_import.provenance_json)
-            if row.community_import is not None and row.community_import.provenance_json
-            else None
+        community_provenance=_community_provenance(row),
+        community_approvals=(
+            scan_target_approvals(row) if community_approvals is None else community_approvals
         ),
-        community_approvals=scan_target_approvals(row),
     )
 
 

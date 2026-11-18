@@ -298,6 +298,56 @@ def test_direct_proxy_login_cookie_uses_browser_transport(policy_app, scheme, se
     assert "SameSite=lax" in cookie
 
 
+@pytest.mark.parametrize(
+    "host,allowed",
+    [
+        ("127.0.0.1", True),
+        ("10.0.0.64", True),
+        ("[::1]", True),
+        ("localhost", True),
+        ("editarr.localhost", True),
+        ("rebind.attacker.example", False),
+    ],
+)
+def test_implicit_local_setup_refuses_rebindable_dns_hosts(policy_app, host, allowed):
+    client, _, _ = policy_app
+    client.app.state.deployment_snapshot = replace(
+        _deployment_snapshot("http://localhost:3348", cookie_secure=False),
+        base_url_source="local_default",
+    )
+    reached = []
+
+    @client.app.post("/api/auth/setup")
+    def setup_probe():
+        reached.append(True)
+        return {"ok": True}
+
+    authority = f"{host}:3348"
+    response = client.post(
+        "http://127.0.0.1:3348/api/auth/setup",
+        headers={
+            "Host": authority,
+            "Origin": f"http://{authority}",
+            "Sec-Fetch-Site": "same-origin",
+        },
+    )
+    if allowed:
+        assert response.status_code == 200, response.text
+    else:
+        assert response.status_code == 403
+        assert response.json()["code"] == "origin_failed"
+    assert reached == ([True] if allowed else [])
+
+
+def test_local_bootstrap_host_accepts_machine_name(monkeypatch):
+    from scanner.security import auth_origin
+
+    monkeypatch.setattr(auth_origin.socket, "gethostname", lambda: "Studio.lan")
+    assert auth_origin.is_local_bootstrap_host("studio.local")
+    assert auth_origin.is_local_bootstrap_host("studio.lan")
+    assert not auth_origin.is_local_bootstrap_host("studio.example")
+
+
 @pytest.mark.parametrize("authority", ["0.0.0.0:8000", "224.0.0.1:8000"])
 def test_direct_access_rejects_wildcards_and_multicast(policy_app, authority):
     client, calls, issued = policy_app

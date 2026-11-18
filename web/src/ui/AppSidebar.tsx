@@ -4,7 +4,7 @@ import { AccountMenu } from "../auth/account-menu";
 import { maySeeSettings } from "../auth/route-access";
 import { can, type Principal } from "../auth/session";
 import { libraryLastRoute, type Route } from "../routes";
-import { settingsSectionTitle } from "../settings/settings-view";
+import { settingsSectionTitle } from "../settings/settings-sections";
 import { applicationAssetUrl } from "../shared/runtime-urls";
 
 const compactSidebar = "(max-width: 760px)";

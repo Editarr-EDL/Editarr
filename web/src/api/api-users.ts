@@ -19,8 +19,6 @@ export interface AccountSummary {
 
 export interface ProfileValues {
   display_name: string | null;
-  email: string | null;
-  timezone: string | null;
   language: string | null;
 }
 

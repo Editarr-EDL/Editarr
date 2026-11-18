@@ -27,7 +27,7 @@ function JellyfinImport({ onClose, onChanged }: { onClose: () => void; onChanged
   const [all, setAll] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    void listJellyfinAccounts(controller.signal).then((value) => { if (!controller.signal.aborted) setUsers(value.users); })
+    void listJellyfinAccounts(controller.signal).then((value) => { if (!controller.signal.aborted) { setUsers(value.users); setError(""); } })
       .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Unable to list Jellyfin users."); });
     return () => controller.abort();
   }, [reload]);

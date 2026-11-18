@@ -36,7 +36,7 @@ export function LinkPreviewView({ preview }: { preview: LinkPreview }) {
       <div><dt>Export ID</dt><dd>{exportsMove ? <><span className="link-id">{preview.export_id.current}</span> becomes <span className="link-id">{preview.export_id.after}</span></> : "Unchanged"}</dd></div>
       <div><dt>Role</dt><dd>{preview.role.after}. Kept regardless of Jellyfin.</dd></div>
       <div><dt>Media access</dt><dd>{MEDIA[preview.media.current]} becomes {libraries(preview)}.</dd></div>
-      <div><dt>Name and avatar</dt><dd>Name becomes {preview.profile.name.after}{preview.profile.avatar === "jellyfin" ? "; avatar comes from Jellyfin" : "; the local avatar is removed because Jellyfin has none"}. Both become read-only. Email and timezone stay editable.</dd></div>
+      <div><dt>Name and avatar</dt><dd>Name becomes {preview.profile.name.after}{preview.profile.avatar === "jellyfin" ? "; avatar comes from Jellyfin" : "; the local avatar is removed because Jellyfin has none"}. Both become read-only.</dd></div>
       <div><dt>Status</dt><dd>{status(preview)}</dd></div>
     </dl>
     <section aria-label="Personal exports">

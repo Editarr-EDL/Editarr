@@ -33,8 +33,25 @@ def repair_records(db, review_id):
     )
 
 
+def repair_records_by_review(db, review_ids):
+    """Batch `repair_records` for many reviews in one query."""
+    records = {review_id: [] for review_id in review_ids}
+    if records:
+        for record in db.scalars(
+            select(ReviewScanRepairRow)
+            .where(ReviewScanRepairRow.review_id.in_(list(records)))
+            .order_by(ReviewScanRepairRow.missing_scan_id)
+        ):
+            records[record.review_id].append(record)
+    return records
+
+
 def repair_summary(db, review_id):
-    records = repair_records(db, review_id)
+    return summarize_repairs(repair_records(db, review_id))
+
+
+def summarize_repairs(records):
+    """Summarize one review's repair records; ``None`` when it needs no repair."""
     if not records:
         return None
     preserved = [preserved_rows(record) for record in records]

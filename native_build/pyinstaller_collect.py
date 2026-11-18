@@ -38,7 +38,6 @@ BASE_PACKAGES: Final = (
     "nudenet",
     "numpy",
     "onnxruntime",
-    "pandas",
     "PIL",
     "profanity_check",
     "safetensors",

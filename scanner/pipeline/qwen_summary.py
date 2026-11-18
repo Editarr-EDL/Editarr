@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import platform
 import re
 from dataclasses import dataclass
@@ -21,6 +20,8 @@ from scanner.settings.capabilities import (
     SUPPORTED_QWEN_MODELS,
     require_available,
 )
+
+from .dependencies import require_dependency
 
 QWEN_MODELS = {
     DEFAULT_QWEN_MODEL: (
@@ -125,13 +126,7 @@ def subcategorization_prompt(
 
 
 def _require_dependency(import_name: str, install_hint: str):
-    try:
-        return importlib.import_module(import_name)
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "Qwen3-VL video summaries require optional dependency "
-            f"'{install_hint}'. Install the stack dependencies first."
-        ) from exc
+    return require_dependency(import_name, install_hint, "Qwen3-VL video summaries require")
 
 
 def _load_model(qwen_model: str = DEFAULT_QWEN_MODEL):

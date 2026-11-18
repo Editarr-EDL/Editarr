@@ -220,7 +220,6 @@ def model_capabilities(
             "detector",
             (
                 "numpy",
-                "pandas",
                 "onnxruntime",
                 "torch",
                 "transformers",

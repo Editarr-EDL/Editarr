@@ -151,6 +151,13 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
         scan.scan_id
         for scan in api.api_list_library_item_scans("movie-1", db, caller=owner_caller(db))
     ] == [2, 1]
+    finished = db.get(ScanRow, first.id)
+    finished.status = "complete"
+    db.commit()
+    assert repository.cancel_scan_queue_item(db, first.queue_id) == (first.id, False)
+    db.expire_all()
+    assert db.get(ScanRow, first.id).status == "complete"
+    assert api.api_list_scan_queue(owner_caller(db)) == []
 
 
 @pytest.mark.parametrize("audio_filter", ["better_profanity", "qwen"])

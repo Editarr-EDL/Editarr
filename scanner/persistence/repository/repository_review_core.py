@@ -44,6 +44,7 @@ from .community_import_targets import (
 )
 from .repository_exports import (
     _review_summary,
+    target_export_rows,
 )
 from .repository_rows import (
     _scan_from_row,
@@ -51,6 +52,7 @@ from .repository_rows import (
 )
 from .review_policy import prepare_review_policy
 from .review_policy_display import locked_severities
+from .review_repairs import repair_records_by_review
 
 
 def _review_filter(row: ReviewFilterRow) -> ReviewFilter:
@@ -294,12 +296,12 @@ def _snapshot_findings(
             .order_by(ScanFindingRow.start_seconds, ScanFindingRow.id)
             .all()
         )
+        association = (
+            verified_target(db, membership.scan, media_item_id, media_source_id)
+            if media_item_id and findings
+            else None
+        )
         for finding in findings:
-            association = (
-                verified_target(db, membership.scan, media_item_id, media_source_id)
-                if media_item_id
-                else None
-            )
             snapshots.append(
                 ReviewFilterRow(
                     id=str(uuid.uuid4()),
@@ -356,7 +358,21 @@ def list_saved_reviews(
             else SavedReviewRow.updated_at.desc()
         )
         rows = query.order_by(primary_order, SavedReviewRow.id.asc()).all()
-    return [_review_summary(db, row, source=target_source, item_id=target_item_id) for row in rows]
+    if not rows:
+        return []
+    export_rows = target_export_rows(db, media_item_id, media_source_id or "")
+    repairs = repair_records_by_review(db, [row.id for row in rows])
+    return [
+        _review_summary(
+            db,
+            row,
+            source=target_source,
+            item_id=target_item_id,
+            export_rows=export_rows,
+            repair_records=repairs[row.id],
+        )
+        for row in rows
+    ]
 
 
 def get_saved_review(

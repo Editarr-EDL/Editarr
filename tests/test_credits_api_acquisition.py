@@ -125,7 +125,7 @@ def test_qwen_acquisition_progress_resumes_queue(monkeypatch, tmp_path):
     db.close()
 
 
-def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_path):
+def _run_failing_acquisition(monkeypatch, tmp_path, error):
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -155,7 +155,7 @@ def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_pat
             return artifact
 
         def acquire(self, _artifact_id, *, progress, cancelled):
-            raise AcquisitionError("download_failed", f"failed at {tmp_path}")
+            raise error
 
     monkeypatch.setattr(api, "get_acquisition_service", lambda: Service())
     monkeypatch.setattr(api, "get_session_factory", lambda: factory)
@@ -177,10 +177,26 @@ def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_pat
     api._run_credits_model_acquisition(
         JobGate(api.get_session_factory(), started.scan.id), "qwen3-vl-4b-instruct-4bit"
     )
+    return db, started.scan.id
 
-    failed = repository.get_scan(db, started.scan.id)
+
+def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_path):
+    error = AcquisitionError("download_failed", f"failed at {tmp_path}")
+    db, scan_id = _run_failing_acquisition(monkeypatch, tmp_path, error)
+
+    failed = repository.get_scan(db, scan_id)
     assert failed.status == "failed"
     assert failed.error_message == "Optional model acquisition failed"
     assert str(tmp_path) not in failed.error_message
-    assert repository.get_scan_queue_item_by_scan_id(db, started.scan.id) is None
+    assert repository.get_scan_queue_item_by_scan_id(db, scan_id) is None
+    db.close()
+
+
+def test_unexpected_qwen_acquisition_error_returns_scan_to_consent(monkeypatch, tmp_path):
+    db, scan_id = _run_failing_acquisition(monkeypatch, tmp_path, RuntimeError("boom"))
+
+    recovered = repository.get_scan(db, scan_id)
+    assert recovered.status == "awaiting_model_consent"
+    assert repository.get_scan_queue_item_by_scan_id(db, scan_id) is not None
+    assert not api._model_tasks()
     db.close()

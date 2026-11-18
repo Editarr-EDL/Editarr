@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import tempfile
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -19,6 +18,7 @@ from threading import RLock
 from typing import Literal, Mapping, cast
 from urllib.parse import urlsplit
 
+from scanner.runtime.durability import atomic_write_bytes
 from scanner.runtime.maintenance import DatabaseMaintenance
 from scanner.runtime.runtime_paths import ensure_user_private_directory
 from scanner.security.auth_origin import OriginParseError, PublicOrigin, parse_public_origin
@@ -303,32 +303,19 @@ class DeploymentStore:
     def _write_unlocked(self, overrides: DeploymentOverrides) -> None:
         """Atomically replace the deployment configuration while the lock is held."""
         payload = _encode_overrides(overrides)
-        temporary_path: Path | None = None
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         try:
-            descriptor, temporary_name = tempfile.mkstemp(
-                prefix=".deployment-", suffix=".tmp", dir=self._data_dir
+            atomic_write_bytes(
+                self._path, encoded.encode("utf-8"), prefix=".deployment-", suffix=".tmp"
             )
-            temporary_path = Path(temporary_name)
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary_path, self._path)
             try:
                 self._path.chmod(0o600)
             except OSError:
                 pass
-            temporary_path = None
         except OSError as error:
             raise DeploymentConfigurationUnavailable(
                 f"Unable to write deployment configuration: {error}"
             ) from error
-        finally:
-            if temporary_path is not None:
-                try:
-                    temporary_path.unlink()
-                except FileNotFoundError:
-                    pass
 
     class _Lock:
         def __init__(self, store: "DeploymentStore", *, create_directory: bool) -> None:

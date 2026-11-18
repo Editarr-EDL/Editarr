@@ -306,7 +306,7 @@ def test_avatar_is_read_through_the_server(adapter):
     assert adapter.avatar(identity("Avery"), None) is None
 
 
-def test_snapshot_has_no_email_or_timezone_to_overwrite_editarr_preferences():
+def test_snapshot_ignores_jellyfin_email_and_timezone():
     template = FIXTURE["userDtoTemplate"]
     dto = user_dto("Blake")
     extended = {

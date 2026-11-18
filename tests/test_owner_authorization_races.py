@@ -120,18 +120,16 @@ def test_a_pending_profile_edit_cannot_change_the_new_owner(
 
     monkeypatch.setattr(users_api, "profile_values", pause)
     with pending(
-        lambda: users_app.send(
-            "PATCH", f"/api/users/{successor}", actor, {"email": "former@example.test"}
-        ),
+        lambda: users_app.send("PATCH", f"/api/users/{successor}", actor, {"language": "en"}),
         entered,
         release,
     ) as result:
         users_app.ok("POST", f"/api/users/{successor}/ownership", OWNER, fresh(OWNER))
     with users_app.accounts.factory() as database:
-        email = database.scalar(
-            select(UserProfileRow.email).where(UserProfileRow.user_id == successor)
+        language = database.scalar(
+            select(UserProfileRow.language).where(UserProfileRow.user_id == successor)
         )
-    assert email is None
+    assert language is None
     assert code(result["response"]) == (403, "protected_account")
 
 
@@ -213,7 +211,7 @@ def test_pending_avatar_changes_cannot_modify_a_promoted_owner(users_app, monkey
 
 def test_pending_profile_fields_cannot_modify_a_promoted_owner(users_app, monkeypatch):
     path = f"/api/users/{USER}"
-    before = users_app.ok("GET", path, USER)["email"]
+    before = users_app.ok("GET", path, USER)["language"]
     entered, release = threading.Event(), threading.Event()
     actual = users_api.profile_values
 
@@ -225,10 +223,10 @@ def test_pending_profile_fields_cannot_modify_a_promoted_owner(users_app, monkey
 
     monkeypatch.setattr(users_api, "profile_values", pause)
     with pending(
-        lambda: users_app.send("PATCH", path, ADMIN, {"email": "unauthorized@example.test"}),
+        lambda: users_app.send("PATCH", path, ADMIN, {"language": "en"}),
         entered,
         release,
     ) as result:
         users_app.ok("POST", f"/api/users/{USER}/ownership", OWNER, fresh(OWNER))
     assert code(result["response"]) == (403, "protected_account")
-    assert users_app.ok("GET", path, USER)["email"] == before
+    assert users_app.ok("GET", path, USER)["language"] == before

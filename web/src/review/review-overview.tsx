@@ -1,10 +1,9 @@
 import { Fragment, useEffect, useState } from "react";
-import { fetchMcfRegistry } from "../api/api-service";
-import type { McfRegistry } from "../api/api-mcf-types";
+import { useMcfRegistry } from "../shared/mcf-registry";
 import type { Scan } from "../api/api-scan-types";
 import type { SavedReview } from "../api/api-review-types";
 import { formatTime, scanLabel, scanOriginLabel } from "../shared/display";
-import { McfClassificationFields } from "./review-mcf";
+import { McfClassificationFields, McfRegistryStatus } from "./review-mcf";
 import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, channelText, type SavedReviewSort, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
 
 /** Edit one review filter's classification and timing.
@@ -29,14 +28,13 @@ function ReviewFilterEditor({
   cuesEditable: boolean;
   metadataEditable: boolean;
 }) {
-  const [registry, setRegistry] = useState<McfRegistry | null>(null);
-  useEffect(() => { void fetchMcfRegistry().then(setRegistry); }, []);
+  const { registry, error: registryError } = useMcfRegistry();
   return <fieldset className="saved-review-filter">
     <legend>{filter.source === "audio" ? "Audio" : "Video"} filter</legend>
     <label><input type="checkbox" checked={filter.selected} disabled={required || !filtersEditable} onChange={(event) => onChange({ selected: event.target.checked })} /> Selected{required ? " - required by instance policy" : ""}</label>
     <fieldset className="review-fieldset" disabled={!metadataEditable}>
     {!filter.category && <p className="mcf-needs-classification">Needs classification</p>}
-    {registry ? <McfClassificationFields controlId={`Filter ${filter.id}`} registry={registry} value={filter} onChange={onChange} allowClear severityLocked={severityLocked} /> : <p className="loading-state">Loading MCF categories…</p>}
+    {registry ? <McfClassificationFields controlId={`Filter ${filter.id}`} registry={registry} value={filter} onChange={onChange} allowClear severityLocked={severityLocked} /> : <McfRegistryStatus error={registryError} />}
     {filter.source === "audio" && !metadataEditable ? <>
       <div className="field" aria-label="Audio filter label"><span>Label</span><CensoredAudioWord word={filter.label || ""} context={filter.details} /></div>
       <div className="field" aria-label="Audio filter description"><span>Description</span><CensoredAudioWord word={filter.details || ""} /></div>
@@ -95,7 +93,7 @@ export function SavedReviewOverview({
   cuesEditable?: boolean;
   metadataEditable?: boolean;
 }) {
-  const [registry, setRegistry] = useState<McfRegistry | null>(null);
+  const { registry } = useMcfRegistry();
   const [sort] = useState<SavedReviewSort>("alphabetical");
   const [tableSorts, setTableSorts] = useState<Record<"visual" | "audio", { key: ReviewTableSortKey; direction: ReviewTableSortDirection }>>({
     visual: { key: "time", direction: "asc" },
@@ -105,7 +103,6 @@ export function SavedReviewOverview({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showNoObjectionableContent, setShowNoObjectionableContent] = useState(false);
   const [editingFilterId, setEditingFilterId] = useState<string | null>(null);
-  useEffect(() => { void fetchMcfRegistry().then(setRegistry); }, []);
   const scanById = new Map(scans.map((scan) => [scan.id, scan]));
   const videoResults = sortSavedReviewResults(mergeSavedReviewFilters(filters.filter((filter) => filter.source === "visual"), scanById), sort);
   const audioResults = sortSavedReviewResults(mergeSavedReviewFilters(filters.filter((filter) => filter.source === "audio"), scanById), sort);
