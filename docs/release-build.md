@@ -1,10 +1,11 @@
 # Building Editarr releases
 
-## Automatic macOS releases
+## Automatic releases
 
-Every new first-parent commit on `main` gets an Apple Silicon release. A push
-with several new main commits builds each revision. A PR merge counts as one
-main commit, and its release notes list the commits that the merge introduced.
+Every new first-parent commit on `main` builds for Apple Silicon macOS,
+Windows x64, and Linux x86_64. A push with several new main commits builds
+each revision. A PR merge counts as one main commit, and its release notes
+list the commits that the merge introduced.
 Versions start at `v0.1.4` and increase by one patch per commit after the
 `v0.1.3` anchor. The Git history makes the version stable across retries.
 
@@ -12,20 +13,24 @@ The workflow builds a clean, generated release commit whose parent is the
 verified main revision. Its only changes set the Python, web, and lockfile
 versions. The release tag points to that generated commit.
 
-The macOS runner builds the DMG and verifies a disposable installed copy,
-including recovery. It produces the DMG, license notices, matching third-party
-source archive, and SHA-256 checksums. The publishing job uploads those four
-files to a draft, checks GitHub's reported file sizes and digests, and publishes
-the release for download. Re-run a failed workflow to retry its commit using
-the same version. A verified older release can publish without replacing the
-latest download.
+The macOS runner verifies a disposable installed copy from the DMG, including
+recovery. The Windows runner builds an unsigned per-user installer, and the
+Linux runner builds an AppImage. The release notes label the Windows and Linux
+builds alpha and entirely untested in real-world use.
 
-Use **Run workflow** on the Editarr release workflow for a build-and-verify run
-of a selected ref. The files and verifier report appear in the
-workflow run's artifacts. The workflow uses the source and notice archives
-from Editarr v0.1.2 as checksum-pinned macOS build inputs. Update those inputs
-and the media recipe when changing the corresponding pinned toolchain or
-source dependencies.
+Once all three platforms for a version pass, the publishing job uploads the
+installers, per-platform license notices and matching third-party source
+archives, and one SHA-256 checksum file to a draft. It checks GitHub's reported
+file sizes and digests before making the release public. Re-run a failed
+workflow to retry its commit using the same version. A verified older release
+can publish without replacing the latest download.
+
+Use **Run workflow** on the Editarr release workflow to verify a selected ref.
+The workflow run's artifacts contain the installers and verification reports.
+A manual run leaves release tags and releases untouched. Builds use the
+source and notice archives from Editarr v0.1.2 as checksum-pinned inputs.
+Update those inputs and the platform recipes when changing the corresponding
+pinned toolchain or source dependencies.
 
 ## Developer wheel
 

@@ -86,6 +86,32 @@ def test_video_preview_fast_seeks_to_one_exact_filter_range(monkeypatch):
     assert command[command.index("-movflags") + 1] == "+faststart"
 
 
+@pytest.mark.parametrize("fails", [False, True])
+def test_video_preview_leaves_no_open_output_for_ffmpeg_and_cleans_up(monkeypatch, fails):
+    outputs: list[Path] = []
+    monkeypatch.setattr(mute_preview, "resolve_ffmpeg", lambda: "ffmpeg")
+    monkeypatch.setattr(mute_preview, "playable_video_stream_index", lambda _path: None)
+
+    def render(args, **_kwargs):
+        output = Path(args[-1])
+        outputs.append(output)
+        # Windows refuses ffmpeg's open while Python still holds the file.
+        assert not output.exists()
+        output.write_bytes(b"MP4")
+        if fails:
+            raise subprocess.CalledProcessError(1, "ffmpeg", stderr=b"broken")
+        return SimpleNamespace(stdout=b"")
+
+    monkeypatch.setattr(mute_preview.subprocess, "run", render)
+
+    if fails:
+        with pytest.raises(ValueError, match="broken"):
+            mute_preview.render_video_preview("example.mkv", 1, 2)
+    else:
+        assert mute_preview.render_video_preview("example.mkv", 1, 2) == b"MP4"
+    assert not outputs[0].parent.exists()
+
+
 def test_mute_preview_surfaces_ffmpeg_errors(monkeypatch):
     monkeypatch.setitem(
         sys.modules,

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import struct
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+from native_build.windows import package_identity
 
 
 def _packager():
@@ -41,13 +44,42 @@ def test_windows_product_contract_is_stable_and_per_user():
     assert packager.TARGET == "windows-x64"
     assert packager.APP_GUID == "{B1956A76-50E9-49E4-9A12-03683D04AB64}"
     assert packager.APP_ID == "{{B1956A76-50E9-49E4-9A12-03683D04AB64}"
-    assert packager.DEVELOPMENT_PUBLISHER == (
+    assert package_identity.DEVELOPMENT_PUBLISHER == (
         "Unsigned development build - no publisher identity"
     )
     assert packager.INSTALL_LOCATION == r"%LOCALAPPDATA%\Programs\Editarr"
     assert packager.DATA_LOCATION == r"%LOCALAPPDATA%\Editarr\Data"
     assert packager.CACHE_LOCATION == r"%LOCALAPPDATA%\Editarr\Cache"
     assert packager.LOG_LOCATION == r"%LOCALAPPDATA%\Editarr\Logs"
+
+
+def test_import_without_nonblocking_open_disables_anchored_export(monkeypatch):
+    from scanner.persistence.repository import export_committed
+
+    monkeypatch.delattr(os, "O_NONBLOCK", raising=False)
+    spec = importlib.util.spec_from_file_location(
+        f"{export_committed.__package__}._unsupported_export_writer", export_committed.__file__
+    )
+    assert spec is not None and spec.loader is not None
+    unsupported = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(unsupported)
+    assert not unsupported.ANCHORED
+
+
+def test_identity_move_staging_without_nofollow_still_creates_exclusively(monkeypatch, tmp_path):
+    from scanner.persistence.repository import export_identity_moves
+
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    destination = tmp_path / "movie.edl"
+    staged = export_identity_moves._staging(destination)
+
+    identity = export_identity_moves._temporary(destination, b"1\n2\n")
+
+    assert staged.read_bytes() == b"1\n2\n"
+    assert identity == str(staged.stat().st_ino)
+    with pytest.raises(FileExistsError):
+        export_identity_moves._temporary(destination, b"other")
+    assert staged.read_bytes() == b"1\n2\n"
 
 
 def test_inno_setup_is_non_elevated_data_preserving_and_lifecycle_aware():
@@ -122,15 +154,16 @@ def test_packager_allows_ctranslate2_cuda_but_rejects_other_gpu_stacks(tmp_path)
 def test_unsigned_development_identity_is_explicit_and_cannot_borrow_production_options():
     packager = _packager()
     arguments = SimpleNamespace(
+        unsigned_alpha=False,
         unsigned_development=True,
         publisher=None,
         certificate=None,
         timestamp_url=None,
     )
 
-    identity = packager._resolve_identity(arguments, "0.1.0")
+    identity = package_identity.resolve_identity(arguments, "0.1.0")
 
-    assert identity.publisher == packager.DEVELOPMENT_PUBLISHER
+    assert identity.publisher == package_identity.DEVELOPMENT_PUBLISHER
     assert identity.development_only is True
     assert identity.signed is False
     assert identity.artifact_base == "Editarr-Setup-0.1.0-unsigned-development"
@@ -138,34 +171,58 @@ def test_unsigned_development_identity_is_explicit_and_cannot_borrow_production_
 
     arguments.publisher = "Unapproved Publisher"
     with pytest.raises(packager.PackageError, match="cannot be combined"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
 
 def test_production_identity_fails_closed_without_complete_signing_authority(tmp_path):
     packager = _packager()
     arguments = SimpleNamespace(
+        unsigned_alpha=False,
         unsigned_development=False,
         publisher=None,
         certificate=None,
         timestamp_url=None,
     )
     with pytest.raises(packager.PackageError, match="approved Windows Publisher"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
     arguments.publisher = "Approved Publisher"
     with pytest.raises(packager.PackageError, match="requires --certificate"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
     arguments.certificate = tmp_path / "identity.p12"
     arguments.timestamp_url = "http://timestamp.test"
     with pytest.raises(packager.PackageError, match="must use HTTPS"):
-        packager._resolve_identity(arguments, "0.1.0")
+        package_identity.resolve_identity(arguments, "0.1.0")
 
     arguments.timestamp_url = "https://timestamp.test"
-    identity = packager._resolve_identity(arguments, "0.1.0")
+    identity = package_identity.resolve_identity(arguments, "0.1.0")
     assert identity.signed is True
     assert identity.development_only is False
     assert identity.publisher == "Approved Publisher"
+
+
+def test_unsigned_alpha_identity_is_labeled_and_cannot_borrow_signing_options():
+    packager = _packager()
+    arguments = SimpleNamespace(
+        unsigned_alpha=True,
+        unsigned_development=False,
+        publisher=None,
+        certificate=None,
+        timestamp_url=None,
+    )
+
+    identity = package_identity.resolve_identity(arguments, "0.1.5")
+
+    assert identity.publisher == package_identity.ALPHA_PUBLISHER
+    assert identity.development_only is False
+    assert identity.signed is False
+    assert identity.artifact_base == "Editarr-v0.1.5-Windows-x64-Setup"
+    assert "Unsigned Alpha" in identity.display_name
+
+    arguments.publisher = "Publisher"
+    with pytest.raises(packager.PackageError, match="cannot be combined"):
+        package_identity.resolve_identity(arguments, "0.1.5")
 
 
 def test_launcher_exposes_required_tray_actions_without_network_or_service_control():
@@ -266,3 +323,21 @@ def test_packaging_values_reject_newlines_and_signing_password_is_not_displayed(
     assert sign_display is not None
     assert "private-test-password" not in sign_display
     assert "[REDACTED]" in sign_display
+
+
+def test_packaging_refuses_staged_paths_inno_setup_cannot_open(tmp_path):
+    packager = _packager()
+    stage = tmp_path / "stage"
+    (stage / "Runtime").mkdir(parents=True)
+    packager._require_inno_path_lengths(stage)
+
+    deep = stage / "Runtime"
+    while len(str(deep)) <= packager._MAX_PATH:
+        deep /= "d" * 100
+    deep.mkdir(parents=True)
+    with pytest.raises(packager.PackageError, match="Use a shorter --work-dir"):
+        packager._require_inno_path_lengths(stage)
+
+    assert "--work-dir $packageWork" in Path(
+        "native_build/windows/package_and_verify.ps1"
+    ).read_text(encoding="utf-8")

@@ -1,0 +1,26 @@
+--- a/setup.py
++++ b/setup.py
+@@ -156,8 +156,13 @@
+         else ["-G", "Unix Makefiles"]
+     )
+ 
++    # A preselected non-Visual Studio generator uses the active compiler
++    # environment and does not accept a generator platform.
++    preselected_generator = os.environ.get("CMAKE_GENERATOR", "")
++    uses_vs_generator = not preselected_generator or preselected_generator.startswith("Visual Studio")
++
+     cmake_args = (
+-        (ci_cmake_generator if is_CI_build else [])
++        (ci_cmake_generator if is_CI_build and not preselected_generator else [])
+         + [
+             # skbuild inserts PYTHON_* vars. That doesn't satisfy opencv build scripts in case of Py3
+             "-DPYTHON3_EXECUTABLE=%s" % sys.executable,
+@@ -193,7 +198,7 @@
+              "-DCMAKE_SYSTEM_PROCESSOR=ARM64"]
+             if platform.machine() == "ARM64" and sys.platform == "win32"
+             # If it is not defined 'linker flags: /machine:X86' on Windows x64
+-            else ["-DCMAKE_GENERATOR_PLATFORM=x64"] if is64 and sys.platform == "win32"
++            else ["-DCMAKE_GENERATOR_PLATFORM=x64"] if is64 and sys.platform == "win32" and uses_vs_generator
+             else []
+           )
+         + (

@@ -33,13 +33,13 @@ APP_ID = "org.editarr.Editarr"
 BASELINE_DISTRIBUTION = "Rocky Linux 8"
 BASELINE_GLIBC = (2, 28)
 DEFAULT_SOURCE_DATE_EPOCH = 315532800
-# These immutable digests identify the upstream continuous artifacts used for the
-# NATIVE-14 spike.  A changed upstream asset fails closed instead of silently changing
-# the package toolchain.
+# Require exact upstream release assets and record the corresponding source commits.
+APPIMAGETOOL_RELEASE = "1.9.1"
 APPIMAGETOOL_COMMIT = "8c8c91f762b412a19f4e8d2c4b35afb98f2d7c81"
-APPIMAGETOOL_SHA256 = "a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0"
-APPIMAGE_RUNTIME_COMMIT = "75849dc"
-APPIMAGE_RUNTIME_SHA256 = "1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf"
+APPIMAGETOOL_SHA256 = "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+APPIMAGE_RUNTIME_RELEASE = "20251108"
+APPIMAGE_RUNTIME_COMMIT = "dd6cebedcbddde9c82f89b011e8e1d40b6e43868"
+APPIMAGE_RUNTIME_SHA256 = "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
 _VERSION = re.compile(r"^[0-9]+(?:\.[0-9]+){1,3}$")
 _GLIBC_SYMBOL = re.compile(r"\bGLIBC_(\d+)\.(\d+)\b")
 _NATIVE_SUFFIX = re.compile(r"(?i)(?:\.so(?:\.[0-9]+)*|\.dylib|\.dll|\.pyd)$")
@@ -144,7 +144,8 @@ def _require_pinned_file(path: Path, *, label: str, expected_sha256: str) -> Pat
 
 def _require_elf_x86_64(path: Path) -> None:
     try:
-        header = path.read_bytes()[:20]
+        with path.open("rb") as source:
+            header = source.read(20)
         if len(header) < 20 or header[:4] != b"\x7fELF":
             raise PackageError(f"not an ELF executable: {path}")
         if header[4:6] != b"\x02\x01":
@@ -265,7 +266,14 @@ def _normalize_tree(root: Path, epoch: int) -> None:
     os.utime(root, (epoch, epoch), follow_symlinks=False)
 
 
-def _assemble_appdir(runtime: Path, appdir: Path, *, version: str, epoch: int) -> None:
+def _assemble_appdir(
+    runtime: Path,
+    appdir: Path,
+    *,
+    version: str,
+    epoch: int,
+    notices: Path | None = None,
+) -> None:
     embedded = appdir / "usr" / "lib" / "editarr"
     shutil.copytree(runtime, embedded, symlinks=True)
     applications = appdir / "usr" / "share" / "applications"
@@ -275,6 +283,8 @@ def _assemble_appdir(runtime: Path, appdir: Path, *, version: str, epoch: int) -
     for directory in (applications, metainfo, icons, binary_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
+    if notices is not None:
+        shutil.copytree(notices, appdir / "usr" / "share" / "doc" / "editarr" / "licenses")
     shutil.copy2(APPRUN_SOURCE, appdir / "AppRun")
     release_date = datetime.fromtimestamp(epoch, UTC).date().isoformat()
     desktop = applications / f"{APP_ID}.desktop"
@@ -294,7 +304,7 @@ def _assemble_appdir(runtime: Path, appdir: Path, *, version: str, epoch: int) -
         f"usr/share/applications/{APP_ID}.desktop"
     )
     (appdir / "editarr.png").symlink_to(
-        "usr/share/icons/hicolor/32x32/apps/editarr.png"
+        (icons / "editarr.png").relative_to(appdir)
     )
     (appdir / ".DirIcon").symlink_to("editarr.png")
     _normalize_tree(appdir, epoch)
@@ -337,7 +347,9 @@ def package_linux(args: argparse.Namespace) -> int:
         raise PackageError("SOURCE_DATE_EPOCH must be a non-negative integer")
     try:
         staged_appdir = build_root / "Editarr.AppDir"
-        _assemble_appdir(runtime, staged_appdir, version=version, epoch=epoch)
+        _assemble_appdir(
+            runtime, staged_appdir, version=version, epoch=epoch, notices=args.notices
+        )
         desktop = staged_appdir / "usr" / "share" / "applications" / f"{APP_ID}.desktop"
         appstream = staged_appdir / "usr" / "share" / "metainfo" / f"{APP_ID}.metainfo.xml"
         _run(["desktop-file-validate", str(desktop)])
@@ -427,6 +439,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--runtime", type=Path, required=True, help="Linux PyInstaller onedir")
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()))
+    parser.add_argument("--notices", type=Path, help="License notices to bundle in the AppImage")
     parser.add_argument("--appimagetool", type=Path, required=True)
     parser.add_argument("--appimage-runtime", type=Path, required=True)
     return parser.parse_args()

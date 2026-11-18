@@ -220,3 +220,36 @@ def test_owner_crash_recovers_stale_state_without_changing_data(specimen):
     assert not DatabaseMaintenance(data_dir).pending_path.exists()
     with DatabaseMaintenance(data_dir).exclusive():
         pass
+
+
+def test_windows_connection_leases_are_shared_and_maintenance_is_exclusive(monkeypatch):
+    from scanner.runtime import maintenance
+
+    holders: dict[int, int] = {}
+
+    class Kernel32:
+        """Win32 byte-range semantics: shared locks coexist, exclusive locks do not."""
+
+        def LockFileEx(self, handle, flags, _reserved, _low, _high, _region):  # noqa: N802
+            exclusive = bool(flags & maintenance._LOCKFILE_EXCLUSIVE_LOCK)
+            assert flags & maintenance._LOCKFILE_FAIL_IMMEDIATELY
+            if (exclusive and holders) or -1 in holders.values():
+                return 0
+            holders[handle] = -1 if exclusive else 1
+            return 1
+
+        def UnlockFileEx(self, handle, *_args):  # noqa: N802
+            return int(holders.pop(handle, None) is not None)
+
+    monkeypatch.setattr(maintenance, "_kernel32", Kernel32)
+    monkeypatch.setattr(maintenance, "_windows_handle", lambda fd: fd)
+    monkeypatch.setattr(maintenance.os, "name", "nt")
+
+    # Two pooled connections (e.g. middleware and route sessions) hold leases at once.
+    assert maintenance._lock(11, exclusive=False, blocking=False)
+    assert maintenance._lock(12, exclusive=False, blocking=False)
+    assert not maintenance._lock(13, exclusive=True, blocking=False)
+    maintenance._unlock(11)
+    maintenance._unlock(12)
+    assert maintenance._lock(13, exclusive=True, blocking=False)
+    assert not maintenance._lock(11, exclusive=False, blocking=False)

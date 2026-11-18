@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import threading
 import time
@@ -17,18 +18,66 @@ class MaintenanceUnavailable(RuntimeError):
     """Database access is paused or exclusive maintenance cannot start."""
 
 
+_LOCKFILE_FAIL_IMMEDIATELY = 0x1
+_LOCKFILE_EXCLUSIVE_LOCK = 0x2
+
+
+class _Overlapped(ctypes.Structure):
+    """Win32 ``OVERLAPPED`` addressing byte 0, the only byte each lock file guards."""
+
+    _fields_ = [
+        ("internal", ctypes.c_size_t),
+        ("internal_high", ctypes.c_size_t),
+        ("offset", ctypes.c_uint32),
+        ("offset_high", ctypes.c_uint32),
+        ("event", ctypes.c_void_p),
+    ]
+
+
+def _kernel32():
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    signature = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32]
+    kernel32.LockFileEx.argtypes = [*signature, ctypes.c_uint32, ctypes.POINTER(_Overlapped)]
+    kernel32.LockFileEx.restype = ctypes.c_int
+    kernel32.UnlockFileEx.argtypes = [*signature, ctypes.POINTER(_Overlapped)]
+    kernel32.UnlockFileEx.restype = ctypes.c_int
+    return kernel32
+
+
+def _windows_handle(fd: int) -> int:
+    import msvcrt
+
+    return msvcrt.get_osfhandle(fd)
+
+
+def _windows_error(operation: str) -> OSError:
+    return OSError(getattr(ctypes, "get_last_error", lambda: 0)(), f"{operation} failed")
+
+
+def _windows_lock(fd: int, *, exclusive: bool, blocking: bool) -> None:
+    """Lock byte 0 with ``LockFileEx``.
+
+    ``msvcrt.locking`` has no shared mode (``LK_RLCK`` is exclusive), so it would let
+    only one database connection in the whole data directory be checked out.
+    """
+    flags = (_LOCKFILE_EXCLUSIVE_LOCK if exclusive else 0) | (
+        0 if blocking else _LOCKFILE_FAIL_IMMEDIATELY
+    )
+    region = _Overlapped()
+    if not _kernel32().LockFileEx(_windows_handle(fd), flags, 0, 1, 0, ctypes.byref(region)):
+        raise _windows_error("LockFileEx")
+
+
+def _windows_unlock(fd: int) -> None:
+    region = _Overlapped()
+    if not _kernel32().UnlockFileEx(_windows_handle(fd), 0, 1, 0, ctypes.byref(region)):
+        raise _windows_error("UnlockFileEx")
+
+
 def _lock(fd: int, *, exclusive: bool, blocking: bool) -> bool:
     try:
         if os.name == "nt":
-            import msvcrt
-
-            os.lseek(fd, 0, os.SEEK_SET)
-            mode = (
-                (msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK)
-                if exclusive
-                else (msvcrt.LK_RLCK if blocking else msvcrt.LK_NBRLCK)
-            )
-            msvcrt.locking(fd, mode, 1)
+            _windows_lock(fd, exclusive=exclusive, blocking=blocking)
         else:
             import fcntl
 
@@ -44,10 +93,7 @@ def _lock(fd: int, *, exclusive: bool, blocking: bool) -> bool:
 
 def _unlock(fd: int) -> None:
     if os.name == "nt":
-        import msvcrt
-
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        _windows_unlock(fd)
     else:
         import fcntl
 

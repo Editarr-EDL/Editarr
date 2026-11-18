@@ -60,6 +60,7 @@ Name: "autostart"; Description: "Launch Editarr when I sign in"; GroupDescriptio
 Source: "{#StageRoot}\Editarr.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageRoot}\Editarr.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageRoot}\Runtime\*"; DestDir: "{app}\Runtime"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageRoot}\Licenses\*"; DestDir: "{app}\Licenses"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\Editarr"; Filename: "{app}\Editarr.exe"; WorkingDir: "{app}"

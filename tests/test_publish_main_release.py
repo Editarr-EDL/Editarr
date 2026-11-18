@@ -12,11 +12,15 @@ from scripts.prepare_main_release import git
 
 PUBLISH = Path(__file__).parents[1] / "scripts/publish_main_release.sh"
 TAG = "v0.1.4"
-ASSETS = (
+MAC_ASSETS = (
     f"Editarr-{TAG}-macOS-arm64.dmg",
     f"Editarr-{TAG}-macOS-Notices.tar.gz",
     f"Editarr-{TAG}-macOS-Third-Party-Source.tar.gz",
 )
+ALPHA_ASSETS = {
+    "windows": ("Windows", "windows-x64", f"Editarr-{TAG}-Windows-x64-Setup.exe"),
+    "linux": ("Linux", "linux-x86_64", f"Editarr-{TAG}-Linux-x86_64.AppImage"),
+}
 GITHUB_STUB = r"""
 import hashlib
 import json
@@ -84,15 +88,16 @@ def publisher(tmp_path, monkeypatch):
     revision = git(repo, "rev-parse", "HEAD")
 
     distribution = tmp_path / "distribution"
-    assets = distribution / "assets"
+    macos = distribution / f"editarr-{TAG}-macos"
+    assets = macos / "assets"
     assets.mkdir(parents=True)
     sums = []
-    for name in ASSETS:
+    for name in MAC_ASSETS:
         content = name.encode()
         (assets / name).write_bytes(content)
         sums.append(f"{hashlib.sha256(content).hexdigest()}  {name}\n")
     (assets / "SHA256SUMS.txt").write_text("".join(sums))
-    (distribution / "installed-verification.json").write_text(
+    (macos / "installed-verification.json").write_text(
         json.dumps(
             {
                 "version": TAG[1:],
@@ -103,6 +108,22 @@ def publisher(tmp_path, monkeypatch):
             }
         )
     )
+    for platform, (label, target, installer) in ALPHA_ASSETS.items():
+        artifacts = distribution / f"editarr-{TAG}-{platform}"
+        artifacts.mkdir()
+        digests = {}
+        for name in (
+            installer,
+            f"Editarr-{TAG}-{label}-Notices.tar.gz",
+            f"Editarr-{TAG}-{label}-Third-Party-Source.tar.gz",
+        ):
+            content = name.encode()
+            (artifacts / name).write_bytes(content)
+            digests[name] = hashlib.sha256(content).hexdigest()
+        (artifacts / "artifact-verification.json").write_text(
+            json.dumps({"version": TAG[1:], "source_revision": revision, "target": target,
+                        "sha256": digests})
+        )
     notes = tmp_path / "notes.md"
     notes.write_text("Generated release notes")
 
@@ -119,25 +140,31 @@ def publisher(tmp_path, monkeypatch):
     monkeypatch.setenv("GITHUB_REPOSITORY", "Editarr-EDL/Editarr")
     monkeypatch.setenv("PATH", str(bin_dir), prepend=":")
 
-    def publish():
+    def publish(*args):
         return subprocess.run(
-            ["bash", str(PUBLISH), TAG[1:], revision, str(distribution), str(notes)],
+            ["bash", str(PUBLISH), TAG[1:], revision, str(distribution), str(notes), *args],
             cwd=repo,
             capture_output=True,
             text=True,
             check=False,
         )
 
-    return publish, repo, revision, state
+    return publish, repo, revision, state, distribution
 
 
-def test_publish_verifies_all_four_assets_and_is_safe_to_retry(publisher):
-    publish, repo, revision, state = publisher
+def test_publish_verifies_all_platforms_and_is_safe_to_retry(publisher):
+    publish, repo, revision, state, distribution = publisher
     result = publish()
     assert result.returncode == 0, result.stderr
     draft = json.loads(state.read_text())
     assert draft["isDraft"] is False
-    assert len(draft["assets"]) == 4
+    assert len(draft["assets"]) == 10
+    sums = dict(line.split("  ")[::-1] for line in
+                (distribution / "SHA256SUMS.txt").read_text().splitlines())
+    assert sums == {
+        asset["name"]: asset["digest"].removeprefix("sha256:")
+        for asset in draft["assets"] if asset["name"] != "SHA256SUMS.txt"
+    }
     assert git(repo, "ls-remote", "origin", f"refs/tags/{TAG}").split()[0] == revision
     assert "--latest=true" in state.with_suffix(".log").read_text()
 
@@ -149,7 +176,7 @@ def test_publish_verifies_all_four_assets_and_is_safe_to_retry(publisher):
 
 
 def test_wrong_github_digest_leaves_the_release_as_a_draft(publisher, monkeypatch):
-    publish, _, _, state = publisher
+    publish, _, _, state, _ = publisher
     monkeypatch.setenv("GITHUB_TEST_BAD_DIGEST", "1")
     assert publish().returncode != 0
     assert json.loads(state.read_text())["isDraft"] is True
@@ -158,3 +185,28 @@ def test_wrong_github_digest_leaves_the_release_as_a_draft(publisher, monkeypatc
     result = publish()
     assert result.returncode == 0, result.stderr
     assert "--latest=false" in state.with_suffix(".log").read_text()
+
+
+def test_preview_verifies_assets_without_publishing(publisher):
+    publish, repo, _, state, distribution = publisher
+    result = publish("--verify-only")
+    assert result.returncode == 0, result.stderr
+    assert (distribution / "SHA256SUMS.txt").is_file()
+    assert git(repo, "ls-remote", "--tags", "origin") == ""
+    assert not state.with_suffix(".log").exists()
+
+
+@pytest.mark.parametrize(("platform", "damage"), [("windows", "digest"), ("linux", "provenance")])
+def test_alpha_asset_must_match_the_verified_build(publisher, platform, damage):
+    publish, repo, _, state, distribution = publisher
+    artifacts = distribution / f"editarr-{TAG}-{platform}"
+    if damage == "digest":
+        (artifacts / ALPHA_ASSETS[platform][2]).write_bytes(b"unexpected file")
+    else:
+        proof = artifacts / "artifact-verification.json"
+        metadata = json.loads(proof.read_text())
+        metadata["source_revision"] = "0" * 40
+        proof.write_text(json.dumps(metadata))
+    assert publish().returncode != 0
+    assert git(repo, "ls-remote", "--tags", "origin") == ""
+    assert not state.with_suffix(".log").exists()

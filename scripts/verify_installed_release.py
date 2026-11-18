@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -150,6 +151,48 @@ def _arguments() -> argparse.Namespace:
 
 def _redact(value: str) -> str:
     return _PRIVATE_ARGUMENT.sub(r"\1=[REDACTED]", _SECRET.sub("[REDACTED]", value))
+
+
+def _describe_failure(error: BaseException) -> str:
+    """Name each exception in a failure chain with its raising function and notes.
+
+    Evidence must identify the failed step, not only repeat a message that may be
+    an arbitrary application log excerpt. ``main`` redacts and bounds the result.
+    """
+    parts: list[str] = []
+    notes: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen and len(parts) < 4:
+        seen.add(id(current))
+        frames = traceback.extract_tb(current.__traceback__)
+        where = f" in {frames[-1].name}:{frames[-1].lineno}" if frames else ""
+        parts.append(f"{type(current).__name__}{where}: {current}")
+        notes.extend(str(note) for note in getattr(current, "__notes__", ()))
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
+    return "\n".join([" <- caused by ".join(parts), *notes])
+
+
+def _response_summary(status: int, body: bytes) -> str:
+    """Describe an unexpected HTTP answer by status, API error code, and body excerpt."""
+    try:
+        payload = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    code = payload.get("code") if isinstance(payload, dict) else None
+    excerpt = body[: _MAX_TEXT // 8].decode(errors="replace")
+    return f"HTTP {status}; code={code!r}; body={excerpt!r}"
+
+
+def _log_tail_note(log: Path) -> str:
+    """Return a short, redacted runtime log excerpt to attach to a failed check."""
+    try:
+        tail = log.read_text(errors="replace")[-_MAX_TEXT // 4 :]
+    except OSError as error:
+        return f"runtime log unavailable: {type(error).__name__}"
+    return "runtime log tail: " + _redact(tail)
 
 
 def _executable(runtime: Path, target: str) -> Path:
@@ -658,6 +701,8 @@ def _process_rows() -> list[tuple[int, int, str]]:
     """Return the host process table without putting private argv values in evidence."""
     if _is_windows():
         command = (
+            "$ErrorActionPreference = 'Stop'; "
+            "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
             "Get-CimInstance Win32_Process | ForEach-Object { "
             "[PSCustomObject]@{ProcessId=$_.ProcessId;ParentProcessId=$_.ParentProcessId;"
             "CommandLine=$_.CommandLine} } | ConvertTo-Json -Compress"
@@ -665,7 +710,7 @@ def _process_rows() -> list[tuple[int, int, str]]:
         result = subprocess.run(
             ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=True,
             timeout=15,
         )
@@ -1120,7 +1165,8 @@ def _worker_smoke(
 def _login(origin: str) -> tuple[Any, str]:
     """Sign the Jellyfin owner in again after a deployment-scope transition.
 
-    Connection failures are retried until the restart deadline; any HTTP answer is final.
+    A startup account sync can supersede the login's Jellyfin read. Retry its
+    temporary refusal and connection failures up to the restart deadline.
     """
     deadline = time.monotonic() + _RESTART_TIMEOUT_SECONDS
     while True:
@@ -1130,18 +1176,27 @@ def _login(origin: str) -> tuple[Any, str]:
                 origin + "/api/auth/jellyfin/login",
                 opener=opener,
                 data={"username": ADMIN, "password": ADMIN_PASSWORD},
+                timeout=max(0.01, deadline - time.monotonic()),
             )
-            break
+            try:
+                payload = json.loads(body)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                payload = None
+            if not isinstance(payload, dict):
+                payload = {}
+            if status != 503 or payload.get("code") != "jellyfin_unavailable":
+                break
+            if time.monotonic() >= deadline:
+                break
         except (URLError, ConnectionError, TimeoutError) as error:
             if time.monotonic() >= deadline:
                 raise RuntimeError(f"sign-in after restart could not connect: {error}") from error
         _POLL_WAKE.wait(_POLL_INTERVAL_SECONDS)
-    payload = json.loads(body)
     csrf = payload.get("csrf_token")
     if status != 200 or not isinstance(csrf, str) or not csrf:
         raise RuntimeError(
             "restart transition did not allow a fresh authenticated session "
-            f"(HTTP {status})"
+            f"({_response_summary(status, body)})"
         )
     return opener, csrf
 
@@ -1181,7 +1236,9 @@ def _request_restart(
     payload = json.loads(body)
     target_generation = payload.get("target_generation")
     if status != 202 or not isinstance(target_generation, int):
-        raise RuntimeError("restart request was not accepted by the packaged controller")
+        raise RuntimeError(
+            f"restart request was not accepted by the packaged controller (HTTP {status})"
+        )
     return payload
 
 
@@ -1347,6 +1404,7 @@ def _native_smoke(
         environment["EDITARR_TEST_FAKE_MODELS"] = "1"
     before = _program_snapshot(runtime)
     process, log = _start(executable, None, root, environment)
+    failure: BaseException | None = None
     try:
         # The default deployment snapshot's canonical public origin is localhost;
         # use that exact host so setup also proves Origin validation rather than
@@ -1379,10 +1437,16 @@ def _native_smoke(
                 "remember_me": False,
             },
         )
-        setup = json.loads(setup_body)
-        csrf = setup.get("csrf_token")
+        try:
+            setup = json.loads(setup_body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            setup = None
+        csrf = setup.get("csrf_token") if isinstance(setup, dict) else None
         if setup_status != 201 or not isinstance(csrf, str) or not csrf:
-            raise RuntimeError("setup did not create an authenticated CSRF session")
+            raise RuntimeError(
+                "setup did not create an authenticated CSRF session "
+                f"({_response_summary(setup_status, setup_body)})"
+            )
         if test_fake_models:
             # Capture the live controller/http child and, while the fake scan is
             # active, assert each observed process is from the copied runtime.
@@ -1476,13 +1540,19 @@ def _native_smoke(
             }
         finally:
             _stop(fresh)
+    except BaseException as error:
+        failure = error
+        raise
     finally:
         _stop(process)
         evidence.checks["runtime_immutable"] = before == _program_snapshot(runtime)
-        if not evidence.checks["runtime_immutable"]:
-            raise RuntimeError("read-only copied program directory changed during verification")
-        if process.returncode not in _accepted_shutdown_codes():
-            raise RuntimeError(_redact(log.read_text(errors="replace")[-_MAX_TEXT:]))
+        if failure is not None:
+            failure.add_note(_log_tail_note(log))
+    if not evidence.checks["runtime_immutable"]:
+        raise RuntimeError("read-only copied program directory changed during verification")
+    if process.returncode not in _accepted_shutdown_codes():
+        detail = _redact(log.read_text(errors="replace")[-_MAX_TEXT:])
+        raise RuntimeError(f"runtime exited with status {process.returncode}: {detail}")
 
 
 def _legacy_smoke(editarr: Path, dependencies: Path | None, root: Path, evidence: Evidence) -> None:
@@ -1593,7 +1663,7 @@ def main() -> int:
                 "unresolved",
                 "unresolved",
             )
-        evidence.failures.append(_redact(str(error))[:_MAX_TEXT])
+        evidence.failures.append(_redact(_describe_failure(error))[:_MAX_TEXT])
         status = 1
     evidence.checks["scratch_cleanup"] = _clean_scratch(root, keep=args.keep_root)
     encoded = json.dumps(evidence.output(), sort_keys=True, indent=2)

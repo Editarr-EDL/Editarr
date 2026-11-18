@@ -88,7 +88,9 @@ def render_video_preview(media_path: str | Path, start_seconds: float, end_secon
     # A normal fast-start MP4 carries an accurate duration and index. In
     # contrast, fragmented MP4 written to stdout can render as a one-second,
     # blank clip in Safari even when ffmpeg decoded the complete range.
-    with tempfile.NamedTemporaryFile(suffix=".mp4") as output_file:
+    # ffmpeg opens the output itself, so no handle may stay open on Windows.
+    with tempfile.TemporaryDirectory(prefix="editarr-preview-") as directory:
+        output_path = Path(directory) / "preview.mp4"
         command = [
             resolve_ffmpeg(),
             "-v",
@@ -126,11 +128,11 @@ def render_video_preview(media_path: str | Path, start_seconds: float, end_secon
             "+faststart",
             "-f",
             "mp4",
-            output_file.name,
+            str(output_path),
         ]
         try:
             subprocess.run(command, check=True, capture_output=True)
         except subprocess.CalledProcessError as exc:
             message = exc.stderr.decode("utf-8", errors="replace").strip()
             raise ValueError(f"Unable to render video preview: {message or exc}") from exc
-        return Path(output_file.name).read_bytes()
+        return output_path.read_bytes()

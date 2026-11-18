@@ -10,7 +10,7 @@ from scanner.pipeline.processes import (
     ScanCancelledError,
     run_ffmpeg_with_optional_macos_hwaccel,
 )
-from scanner.runtime.distribution import is_macos_release
+from scanner.runtime.distribution import has_source_built_media
 from scanner.runtime.runtime_support import resolve_ffmpeg
 from scanner.settings.config import settings
 
@@ -42,7 +42,11 @@ def detect_scenes(
 
     logger.info("Detecting scenes (threshold=%.1f)...", threshold)
     # The release's OpenCV is built without video codecs; PyAV shares our FFmpeg.
-    video = open_video(video_path, backend="pyav") if is_macos_release() else open_video(video_path)
+    video = (
+        open_video(video_path, backend="pyav")
+        if has_source_built_media()
+        else open_video(video_path)
+    )
     detected_duration = duration_seconds
     if detected_duration is None and video.duration is not None:
         detected_duration = video.duration.get_seconds()

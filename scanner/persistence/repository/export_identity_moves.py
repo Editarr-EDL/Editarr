@@ -177,7 +177,14 @@ def _temporary(destination: Path, content: bytes) -> str:
     removes any earlier attempt's file first.
     """
     path = _staging(destination)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    # O_EXCL alone refuses a pre-existing link where O_NOFOLLOW is unavailable (Windows).
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
     descriptor = os.open(path, flags, 0o600)
     try:
         with os.fdopen(descriptor, "wb") as stream:

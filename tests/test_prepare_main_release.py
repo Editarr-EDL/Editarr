@@ -73,6 +73,8 @@ def test_merging_a_topic_creates_one_release_with_notes_for_its_changes(reposito
     assert f"/commit/{topic}" in notes
     assert "Main change" not in notes
     assert "codesign --verify" in notes
+    assert "Windows x64 installer and Linux x86_64 AppImage are alpha builds" in notes
+    assert "entirely untested in real-world use" in notes
 
 
 def test_release_commit_preserves_main_and_locked_dependencies(repository, tmp_path):

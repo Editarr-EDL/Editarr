@@ -4,16 +4,21 @@
   <name>Editarr</name>
   <summary>Scan media and review objectionable-content findings</summary>
   <metadata_license>CC0-1.0</metadata_license>
+  <developer id="org.editarr">
+    <name>Editarr</name>
+  </developer>
   <description>
     <p>
       Editarr is a self-contained, browser-based media scanning application.
       Model weights are downloaded on demand into the user's cache.
     </p>
   </description>
+  <url type="homepage">https://github.com/Editarr-EDL/Editarr</url>
   <launchable type="desktop-id">org.editarr.Editarr.desktop</launchable>
   <provides>
     <binary>Editarr</binary>
   </provides>
+  <content_rating type="oars-1.1"/>
   <releases>
     <release version="@VERSION@" date="@RELEASE_DATE@"/>
   </releases>

@@ -11,6 +11,7 @@ import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import unquote
+from xml.etree import ElementTree
 
 import pytest
 from packaging.markers import Marker
@@ -198,7 +199,10 @@ def test_appdir_layout_uses_immutable_runtime_metadata_and_large_icon(tmp_path):
     runtime = _runtime(tmp_path, package)
     appdir = tmp_path / "Editarr.AppDir"
 
-    package._assemble_appdir(runtime, appdir, version="0.1.0", epoch=315532800)
+    notices = tmp_path / "notices"
+    notices.mkdir()
+    (notices / "LICENSE.txt").write_text("License text", encoding="utf-8")
+    package._assemble_appdir(runtime, appdir, version="0.1.0", epoch=315532800, notices=notices)
 
     assert os.readlink(appdir / "usr" / "bin" / "Editarr") == "../lib/editarr/Editarr"
     assert os.readlink(appdir / f"{package.APP_ID}.desktop") == (
@@ -210,9 +214,15 @@ def test_appdir_layout_uses_immutable_runtime_metadata_and_large_icon(tmp_path):
     assert "Exec=Editarr" in desktop.read_text(encoding="utf-8")
     assert "X-AppImage-Version=0.1.0" in desktop.read_text(encoding="utf-8")
     metainfo = appdir / "usr" / "share" / "metainfo" / f"{package.APP_ID}.metainfo.xml"
-    assert 'release version="0.1.0" date="1980-01-01"' in metainfo.read_text(
-        encoding="utf-8"
+    metainfo_root = ElementTree.parse(metainfo).getroot()
+    release = metainfo_root.find("releases/release")
+    assert release is not None
+    assert release.attrib == {"version": "0.1.0", "date": "1980-01-01"}
+    assert metainfo_root.findtext("url[@type='homepage']") == (
+        "https://github.com/Editarr-EDL/Editarr"
     )
+    assert metainfo_root.find("content_rating[@type='oars-1.1']") is not None
+    assert metainfo_root.findtext("developer[@id='org.editarr']/name") == "Editarr"
     icon = (
         appdir
         / "usr"
@@ -224,6 +234,10 @@ def test_appdir_layout_uses_immutable_runtime_metadata_and_large_icon(tmp_path):
         / "editarr.png"
     )
     assert icon.read_bytes() == package.ICON_SOURCE.read_bytes()
+    license_file = appdir / "usr" / "share" / "doc" / "editarr" / "licenses" / "LICENSE.txt"
+    assert license_file.read_text(encoding="utf-8") == "License text"
+    assert (appdir / "editarr.png").resolve(strict=True) == icon
+    assert (appdir / ".DirIcon").resolve(strict=True) == icon
 
 
 @pytest.mark.parametrize("fail_build", [False, True])
@@ -238,6 +252,7 @@ def test_package_records_staged_outputs_only_after_success(tmp_path, monkeypatch
         runtime=runtime,
         out_dir=tmp_path / "out",
         work_dir=tmp_path / "work",
+        notices=None,
         appimagetool=appimagetool,
         appimage_runtime=appimage_runtime,
     )
@@ -286,16 +301,25 @@ def test_linux_workflow_pins_baseline_and_covers_fuse_headless_and_graphical_pat
         encoding="utf-8"
     )
 
+    baseline = Path("native_build/linux/build_package_ci.sh").read_text(encoding="utf-8")
+    newer = Path("native_build/linux/verify_package_ci.sh").read_text(encoding="utf-8")
+
     assert "rockylinux/rockylinux@sha256:" in workflow
-    assert 'test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"' in workflow
-    assert "--target linux-x86_64" in workflow
-    assert "native14-baseline-raw-verifier.json" in workflow
-    assert "native14-baseline-appdir-verifier.json" in workflow
-    assert "native14-ubuntu-appdir-verifier.json" in workflow
-    assert "--appimage-extract-and-run paths" in workflow
-    assert '"$appimage" paths' in workflow
-    assert "env -u DISPLAY -u WAYLAND_DISPLAY -u BROWSER" in workflow
-    assert "Xvfb :99" in workflow
-    assert "lifecycle quit" in workflow
-    assert "test -c /dev/fuse" in workflow
+    # Rocky 8 installs runuser in /usr/sbin, and the baseline drops privileges with it.
+    assert "runuser -u nobody" in baseline
+    assert "/usr/local/bin:/usr/bin:/usr/sbin:/bin" in workflow
+    assert 'test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"' in baseline
+    assert "--target linux-x86_64 --source-media-release" in baseline
+    assert "native14-baseline-raw-verifier.json" in baseline
+    assert "native14-baseline-appdir-verifier.json" in baseline
+    assert "--appimage-extract-and-run paths" in baseline
+    assert "native14-ubuntu-appdir-verifier.json" in newer
+    assert '"$appimage" paths' in newer
+    assert "env -u DISPLAY -u WAYLAND_DISPLAY -u BROWSER" in newer
+    assert "Xvfb :99" in newer
+    assert "lifecycle quit" in newer
+    assert "http://localhost:$port/" in newer
+    assert "test -c /dev/fuse" in newer
     assert "actions/upload-artifact@v7" in workflow
+    assert "workflow_call:" in workflow
+    assert "name: editarr-v${{ inputs.version }}-linux" in workflow

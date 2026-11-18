@@ -71,12 +71,13 @@ WRITE_FAILED = "write_failed"
 ANCHORED = (
     hasattr(os, "O_NOFOLLOW")
     and hasattr(os, "O_DIRECTORY")
+    and hasattr(os, "O_NONBLOCK")
     and {os.open, os.stat, os.unlink, os.link} <= os.supports_dir_fd
     and os.listdir in os.supports_fd
 )
 _DIRECTORY = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 _NEW_FILE = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-_EXISTING_FILE = os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0)
+_EXISTING_FILE = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
 _NO_HARD_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EMLINK})
 _TEMPORARY = re.compile(r"\.editarr-write-export-[0-9a-f]{32}\.tmp")
 

@@ -27,13 +27,38 @@ def _load_build_release():
     "workflow", sorted(Path(".github/workflows").glob("native*.yml")), ids=lambda path: path.stem
 )
 def test_native_workflow_python_inputs_exist(workflow):
-    inputs = re.findall(
-        r"\b(?:native_build|scanner|scripts|tests)/[\w./-]+\.py\b",
-        workflow.read_text(encoding="utf-8"),
-    )
+    workflow_text = workflow.read_text(encoding="utf-8")
+    commands = [workflow_text]
+    for shell_script in re.findall(r"\bnative_build/[\w./-]+\.sh\b", workflow_text):
+        commands.append(Path(shell_script).read_text(encoding="utf-8"))
+    commands_text = "\n".join(commands)
+    inputs = re.findall(r"\b(?:native_build|scanner|scripts|tests)/[\w./-]+\.py\b", commands_text)
+    modules = re.findall(r"\bpython(?:3)? -m ((?:scripts|native_build)\.[\w.]+)\b", commands_text)
+    inputs.extend(module.replace(".", "/") + ".py" for module in modules)
     assert inputs
     for source in inputs:
         assert Path(source).is_file(), f"{workflow}: {source}"
+
+
+@pytest.mark.parametrize(
+    ("platform", "marker"),
+    [
+        ("darwin", "macos-release.marker"),
+        ("linux", "source-media-release.marker"),
+        ("win32", "source-media-release.marker"),
+    ],
+)
+def test_source_built_media_requires_frozen_marker(monkeypatch, tmp_path, platform, marker):
+    from scanner.runtime import distribution
+
+    monkeypatch.setattr(distribution.sys, "platform", platform)
+    monkeypatch.setattr(distribution.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(distribution.sys, "frozen", True, raising=False)
+    assert not distribution.has_source_built_media()
+    (tmp_path / marker).touch()
+    assert distribution.has_source_built_media()
+    monkeypatch.setattr(distribution.sys, "frozen", False)
+    assert not distribution.has_source_built_media()
 
 
 def test_target_policy_includes_mlx_only_for_macos_arm64():
@@ -257,6 +282,8 @@ def test_native_build_preserves_preexisting_frontend_staging(tmp_path, monkeypat
     args = SimpleNamespace(
         target=None,
         macos_release=False,
+        source_media_release=False,
+        ffmpeg_helper=None,
         ffprobe_helper=None,
         out_dir=tmp_path / "output",
         work_dir=tmp_path / "work",

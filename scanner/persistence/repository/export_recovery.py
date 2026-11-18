@@ -92,21 +92,23 @@ def ensure_export_directory(directory: Path, *, media_directory: Path) -> None:
 
 
 def _temporary(destination: Path, content: bytes, suffix: str) -> Path:
-    with tempfile.NamedTemporaryFile(
+    stream = tempfile.NamedTemporaryFile(
         mode="wb",
         dir=destination.parent,
         prefix=f".{destination.name}.",
         suffix=suffix,
         delete=False,
-    ) as stream:
-        path = Path(stream.name)
-        try:
+    )
+    path = Path(stream.name)
+    try:
+        with stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-        except BaseException:
-            path.unlink(missing_ok=True)
-            raise
+    except BaseException:
+        # The handle is closed first because Windows cannot unlink an open file.
+        path.unlink(missing_ok=True)
+        raise
     return path
 
 

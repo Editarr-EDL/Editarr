@@ -14,13 +14,12 @@ import subprocess
 import sys
 import tempfile
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
 from native_build.artifact_size import SIZE_ACCOUNTING, write_sized_inventory
 from native_build.artifact_size import tree_size as _tree_size
+from native_build.windows.package_identity import PackageError, resolve_identity
 
 ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER_SOURCE = ROOT / "native_build" / "windows" / "EditarrLauncher.cpp"
@@ -29,27 +28,11 @@ ICON_SOURCE = ROOT / "web" / "public" / "favicon.ico"
 TARGET = "windows-x64"
 APP_GUID = "{B1956A76-50E9-49E4-9A12-03683D04AB64}"
 APP_ID = "{" + APP_GUID
-DEVELOPMENT_PUBLISHER = "Unsigned development build - no publisher identity"
 INSTALL_LOCATION = r"%LOCALAPPDATA%\Programs\Editarr"
 DATA_LOCATION = r"%LOCALAPPDATA%\Editarr\Data"
 CACHE_LOCATION = r"%LOCALAPPDATA%\Editarr\Cache"
 LOG_LOCATION = r"%LOCALAPPDATA%\Editarr\Logs"
 _VERSION = re.compile(r"^[0-9]+(?:\.[0-9]+){1,3}$")
-_PUBLISHER = re.compile(r"^[\w .,&'()\-]{1,128}$", re.UNICODE)
-
-
-class PackageError(RuntimeError):
-    """A Windows package input or tool result is unsafe or incomplete."""
-
-
-@dataclass(frozen=True, slots=True)
-class PackageIdentity:
-    publisher: str
-    signed: bool
-    development_only: bool
-    artifact_base: str
-    display_name: str
-    description: str
 
 
 def _run(
@@ -169,6 +152,24 @@ def _reject_links(root: Path) -> None:
     links = [path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_symlink()]
     if links:
         raise PackageError("Windows runtime may not contain links: " + ", ".join(links[:8]))
+
+
+_MAX_PATH = 259
+"""Longest Win32 path Inno Setup 6 can open; it is not long-path aware."""
+
+
+def _require_inno_path_lengths(stage: Path) -> None:
+    """Fail clearly before compiling if Inno Setup could not open a staged file.
+
+    ISCC otherwise aborts after minutes of compression with only "The system cannot
+    find the path specified". Use a short ``--work-dir`` when this fails.
+    """
+    longest = max((str(path) for path in stage.rglob("*")), key=len, default=str(stage))
+    if len(longest) > _MAX_PATH:
+        raise PackageError(
+            f"staged path has {len(longest)} characters; Inno Setup accepts at most "
+            f"{_MAX_PATH}. Use a shorter --work-dir: {longest}"
+        )
 
 
 _ACCELERATOR_NAME = re.compile(r"mlx|cuda|cudnn|cublas|cudart|nvrtc|nvjitlink|nvidia", re.I)
@@ -312,44 +313,11 @@ def _iscc_define(name: str, value: str) -> str:
     return f"/D{name}={value}"
 
 
-def _resolve_identity(args: argparse.Namespace, version: str) -> PackageIdentity:
-    if args.unsigned_development:
-        if args.publisher or args.certificate or args.timestamp_url:
-            raise PackageError(
-                "--unsigned-development cannot be combined with production identity/signing options"
-            )
-        return PackageIdentity(
-            publisher=DEVELOPMENT_PUBLISHER,
-            signed=False,
-            development_only=True,
-            artifact_base=f"Editarr-Setup-{version}-unsigned-development",
-            display_name="Editarr (Unsigned Development Build)",
-            description="Editarr per-user installer - unsigned development build",
-        )
-
-    if _PUBLISHER.fullmatch(args.publisher or "") is None:
-        raise PackageError("an approved Windows Publisher display name is required")
-    if not args.certificate or not args.timestamp_url:
-        raise PackageError(
-            "production packaging requires --certificate and an HTTPS --timestamp-url"
-        )
-    if urlsplit(args.timestamp_url).scheme.lower() != "https":
-        raise PackageError("--timestamp-url must use HTTPS")
-    return PackageIdentity(
-        publisher=args.publisher,
-        signed=True,
-        development_only=False,
-        artifact_base=f"Editarr-Setup-{version}",
-        display_name="Editarr",
-        description="Editarr per-user installer",
-    )
-
-
 def package_windows(args: argparse.Namespace) -> int:
     _require_windows_x64()
     _require_commands("cl.exe", "rc.exe", "ISCC.exe")
     version = _project_version()
-    identity = _resolve_identity(args, version)
+    identity = resolve_identity(args, version)
     if identity.signed:
         _require_commands("signtool.exe")
         assert args.certificate
@@ -360,6 +328,13 @@ def package_windows(args: argparse.Namespace) -> int:
     inventory = _read_runtime_inventory(runtime)
     _reject_links(runtime)
     _audit_runtime_payload(runtime)
+    notices = args.notices
+    if args.unsigned_alpha and notices is None:
+        raise PackageError("--unsigned-alpha requires --notices")
+    if notices is not None:
+        if notices.is_symlink() or not (notices / "THIRD-PARTY-NOTICES.md").is_file():
+            raise PackageError("--notices must name a directory with THIRD-PARTY-NOTICES.md")
+        _reject_links(notices)
     output = args.out_dir.resolve()
     installer = output / f"{identity.artifact_base}.exe"
     evidence_path = output / "editarr-windows-package.json"
@@ -375,6 +350,8 @@ def package_windows(args: argparse.Namespace) -> int:
         staged_runtime = stage / "Runtime"
         shutil.copytree(runtime, staged_runtime)
         shutil.copy2(ICON_SOURCE, stage / "Editarr.ico")
+        if notices is not None:
+            shutil.copytree(notices, stage / "Licenses")
         launcher = _build_launcher(
             stage, build_root, version=version, publisher=identity.publisher
         )
@@ -389,6 +366,7 @@ def package_windows(args: argparse.Namespace) -> int:
             _sign(launcher, certificate=args.certificate, timestamp_url=args.timestamp_url)
             _refresh_runtime_size(staged_runtime, inventory)
 
+        _require_inno_path_lengths(stage)
         _run(
             [
                 "ISCC.exe",
@@ -420,7 +398,7 @@ def package_windows(args: argparse.Namespace) -> int:
             "source_revision": inventory.get("source_revision"),
             "app_id": APP_GUID,
             "publisher_metadata": identity.publisher,
-            "publisher_identity_approved": not identity.development_only,
+            "publisher_identity_approved": identity.signed,
             "install_location": INSTALL_LOCATION,
             "data_location": DATA_LOCATION,
             "cache_location": CACHE_LOCATION,
@@ -459,10 +437,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()))
     parser.add_argument("--certificate", type=Path, help="Authorized Authenticode PKCS#12 file")
     parser.add_argument("--timestamp-url", help="Authorized RFC 3161 timestamp service")
-    parser.add_argument(
+    parser.add_argument("--notices", type=Path, help="License notices to install with Editarr")
+    unsigned = parser.add_mutually_exclusive_group()
+    unsigned.add_argument(
         "--unsigned-development",
         action="store_true",
         help="Build visibly labeled unsigned development output with no publisher identity",
+    )
+    unsigned.add_argument(
+        "--unsigned-alpha",
+        action="store_true",
+        help="Build the unsigned alpha release installer with no publisher identity",
     )
     return parser.parse_args()
 
