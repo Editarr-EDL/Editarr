@@ -158,6 +158,11 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
     db.expire_all()
     assert db.get(ScanRow, first.id).status == "complete"
     assert api.api_list_scan_queue(owner_caller(db)) == []
+    # A worker re-marking its own error after cancellation settled it keeps it terminal.
+    repository.update_scan_status(db, first.id, "error", "decoder failed")
+    repository.mark_scan_orphaned(db, first.id, "Orphaned scan — worker stopped; ready to resume")
+    db.expire_all()
+    assert db.get(ScanRow, first.id).status == "error"
 
 
 @pytest.mark.parametrize("audio_filter", ["better_profanity", "qwen"])

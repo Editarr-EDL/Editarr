@@ -232,6 +232,13 @@ def mark_scan_orphaned(
         if not row or row.status not in {"scanning", "cancelling", "error", "orphaned"}:
             db.rollback()
             return
+        # A worker re-marks its own committed `error` as resumable, but a cancellation
+        # that settled that error already removed the queue entry; keep it terminal.
+        if row.status == "error" and (
+            db.query(ScanQueueRow.id).filter(ScanQueueRow.scan_id == scan_id).first() is None
+        ):
+            db.rollback()
+            return
         now = datetime.now(timezone.utc)
         stop_scan_attempt(row, None if use_last_heartbeat else now)
         row.status = "orphaned"
@@ -304,27 +311,31 @@ def recover_cancelled_scan_queue_items(db: Session) -> int:
 def recover_interrupted_credits_model_acquisitions(db: Session, scan_id: str | None = None) -> int:
     """Return process-local acquisitions to an explicit, retryable consent state.
 
-    ``scan_id`` limits recovery to one acquisition that failed unexpectedly.
+    ``scan_id`` limits recovery to one acquisition that failed unexpectedly. The write
+    lock keeps a concurrent cancellation from being overwritten.
     """
-    query = (
-        db.query(ScanRow)
-        .join(ScanQueueRow)
-        .filter(
-            ScanRow.scan_mode == ScanMode.CREDITS_DETECTION,
-            ScanRow.status == "acquiring_model",
+    with write_lock(db):
+        query = (
+            db.query(ScanRow)
+            .join(ScanQueueRow)
+            .filter(
+                ScanRow.scan_mode == ScanMode.CREDITS_DETECTION,
+                ScanRow.status == "acquiring_model",
+            )
         )
-    )
-    if scan_id is not None:
-        query = query.filter(ScanRow.id == scan_id)
-    rows = query.all()
-    for row in rows:
-        row.status = "awaiting_model_consent"
-        row.progress_stage = "awaiting_model_consent"
-        row.progress_message = "Model acquisition was interrupted; confirm to retry"
-        row.updated_at = datetime.now(timezone.utc)
-    if rows:
-        db.commit()
-    return len(rows)
+        if scan_id is not None:
+            query = query.filter(ScanRow.id == scan_id)
+        rows = query.all()
+        for row in rows:
+            row.status = "awaiting_model_consent"
+            row.progress_stage = "awaiting_model_consent"
+            row.progress_message = "Model acquisition was interrupted; confirm to retry"
+            row.updated_at = datetime.now(timezone.utc)
+        if rows:
+            db.commit()
+        else:
+            db.rollback()
+        return len(rows)
 
 
 def recover_terminal_scan_queue_items(db: Session) -> int:
