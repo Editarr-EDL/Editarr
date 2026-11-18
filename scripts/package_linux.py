@@ -144,7 +144,8 @@ def _require_pinned_file(path: Path, *, label: str, expected_sha256: str) -> Pat
 
 def _require_elf_x86_64(path: Path) -> None:
     try:
-        header = path.read_bytes()[:20]
+        with path.open("rb") as source:
+            header = source.read(20)
         if len(header) < 20 or header[:4] != b"\x7fELF":
             raise PackageError(f"not an ELF executable: {path}")
         if header[4:6] != b"\x02\x01":

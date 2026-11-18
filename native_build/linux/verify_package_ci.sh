@@ -76,7 +76,7 @@ cleanup() {
 }
 trap cleanup EXIT
 for attempt in $(seq 1 90); do
-  if grep -Fq "Editarr is ready at http://127.0.0.1:$port/" \
+  if grep -Fq "Editarr is ready at http://localhost:$port/" \
     "$headless_xdg/state/editarr/controller.log" 2>/dev/null; then
     break
   fi
@@ -85,7 +85,7 @@ for attempt in $(seq 1 90); do
   fi
   sleep 1
 done
-grep -F "Editarr is ready at http://127.0.0.1:$port/" \
+grep -F "Editarr is ready at http://localhost:$port/" \
   "$headless_xdg/state/editarr/controller.log"
 env "${headless_environment[@]}" "$launch" lifecycle quit
 wait "$headless_pid"
@@ -127,7 +127,7 @@ for attempt in $(seq 1 90); do
   fi
   sleep 1
 done
-grep -Fx "http://127.0.0.1:$port/" "$browser_log"
+grep -Fx "http://localhost:$port/" "$browser_log"
 env "${graphical_environment[@]}" "$launch" --port "$port"
 env "${graphical_environment[@]}" "$launch" lifecycle quit
 wait "$graphical_pid"

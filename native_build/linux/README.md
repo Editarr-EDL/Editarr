@@ -1,18 +1,12 @@
 # Linux AppImage package
 
-Build the raw runtime on native Linux x86_64 against glibc 2.28, then package it with
-the pinned AppImage tooling listed below. The baseline build runs in
+The workflow builds the raw runtime on Linux x86_64 against glibc 2.28, then packages
+it with the pinned AppImage tooling listed below. The baseline build runs in
 Rocky Linux 8.10 image
 `rockylinux/rockylinux@sha256:e8a49c5403b687db05d4d67333fa45808fbe74f36e683cec7abb1f7d0f2338c6`:
 
-```console
-uv run python scripts/build_release.py --target linux-x86_64 \
-  --out-dir "$RUNTIME_OUTPUT" --work-dir "$BUILD_TEMP" \
-  --ffprobe-helper /usr/bin/ffprobe
-uv run python scripts/package_linux.py --runtime "$RUNTIME_OUTPUT/Editarr" \
-  --out-dir "$PACKAGE_OUTPUT" --work-dir "$BUILD_TEMP" \
-  --appimagetool "$APPIMAGETOOL" --appimage-runtime "$APPIMAGE_RUNTIME"
-```
+See `build_package_ci.sh` for the baseline recipe, including toolchain setup,
+source-built media, runtime verification, and AppImage assembly.
 
 The supported baseline is glibc 2.28 on x86_64 (represented by maintained Rocky
 Linux 8). Current locked Python 3.11 Linux wheels for CTranslate2, ONNX Runtime, PyAV,
@@ -31,10 +25,17 @@ and `file` for appimagetool's architecture inspection.
 
 The pinned upstream inputs are:
 
-- `appimagetool` commit `8c8c91f762b412a19f4e8d2c4b35afb98f2d7c81`, SHA-256
-  `a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0`;
-- AppImage type-2 runtime commit `75849dc`, SHA-256
-  `1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf`.
+- `appimagetool` 1.9.1, commit `8c8c91f762b412a19f4e8d2c4b35afb98f2d7c81`, SHA-256
+  `ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0`
+- AppImage type-2 runtime 20251108, commit `dd6cebedcbddde9c82f89b011e8e1d40b6e43868`, SHA-256
+  `2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d`
+
+The public release job builds FFmpeg, ffprobe, PyAV, and OpenCV from pinned
+source inputs. It freezes the requested release revision, checks for the correct
+version and source commit, verifies the runtime and AppDir, and exercises the
+AppImage on the Rocky baseline and the Ubuntu runner. It bundles the license
+notices and retains the versioned AppImage, notices, and source archive for
+publication by the release workflow.
 
 The package gate allows only CTranslate2-owned CUDA runtime libraries. It rejects MLX,
 NVIDIA Python/Torch stacks, and GPU drivers such as `libcuda.so.1`; NVIDIA drivers always
@@ -44,13 +45,11 @@ It creates `Editarr-<version>-x86_64.AppImage`, a matching SHA-256 file, a packa
 inventory, and a disposable review AppDir. The AppImage installs no systemd unit and
 never writes `/etc` or `/var`; durable and cache data stay in the documented XDG roots.
 
-The Linux package workflow builds and runs the raw runtime and AppDir on
-the baseline, then checks the same package payload on Ubuntu 24.04. It separately covers
-normal FUSE execution, `--appimage-extract-and-run`, explicit extraction plus `AppRun`,
-headless URL logging, graphical browser launch under Xvfb, second launch, Quit, arbitrary
-CWD, and isolated XDG overrides. The fake-model marker in that workflow is lifecycle-only;
-it cannot satisfy the required real CPU/CUDA model evidence. The workflow separately
-runs real scans with that adapter disabled through the AppImage as an ordinary user:
+The workflow checks FUSE where the runner provides it, `--appimage-extract-and-run`,
+explicit extraction plus `AppRun`, headless URL logging, graphical browser launch
+under Xvfb, second launch, Quit, arbitrary CWD, and isolated XDG overrides. The
+manual evidence workflow includes a test-only marker for the deterministic
+lifecycle fixtures, then runs real scans with that adapter disabled:
 
 ```console
 python -m scripts.verify_linux_models \
@@ -63,5 +62,6 @@ Use `--mode fuse` on a host with FUSE. The harness uses isolated state and gener
 colour/tone media to exercise Whisper, all three audio filter loaders, and each advertised
 detector with its default configuration. It restarts with the managed downloader's HTTP
 proxies blocked and HF offline mode enabled, then uses different media content to force
-fresh inference with the cached weights. These checks cover execution and offline reuse with default settings on CPU. The workflow retains a successful development
-AppImage privately in CI for seven days; it is a marked test build, not a release.
+fresh inference with the cached weights. These checks cover execution and offline
+reuse with default settings on CPU. GitHub Actions retains successful development
+AppImages for seven days as marked test builds. Release AppImages omit the marker.

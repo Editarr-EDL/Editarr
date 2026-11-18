@@ -45,8 +45,20 @@ jobs:
           cache: false
 
       - name: Prepare version and pinned source inputs
+        id: release-inputs
         shell: bash
         run: |
+          cache_hash=$(
+            {
+              printf '%s\n' "$ROCKY_IMAGE"
+              git rev-parse "$REVISION:uv.lock" "$REVISION:scripts/prepare_alpha_distribution.py" \
+                "$REVISION:native_build/linux/build_media.sh" \
+                "$REVISION:native_build/linux/prepare_appimage_sources.sh" \
+                "$REVISION:native_build/linux/build_package_ci.sh" \
+                "$REVISION:native_build/linux/media_cache.sh"
+            } | sha256sum | cut -d ' ' -f1
+          )
+          printf 'cache-hash=%s\n' "$cache_hash" >> "$GITHUB_OUTPUT"
           if [[ -n "$VERSION" ]]; then
             python3 -m scripts.prepare_main_release prepare "$GITHUB_WORKSPACE" "$REVISION" "$VERSION"
           fi
@@ -54,6 +66,17 @@ jobs:
           mkdir "$task_root"
           python3 -m scripts.prepare_alpha_distribution prepare linux-x86_64 "$task_root/bootstrap"
           bash native_build/linux/prepare_appimage_sources.sh "$task_root/bootstrap"
+
+      - name: Restore built media
+        id: media-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ${{ runner.temp }}/editarr-native14/media/prefix
+            ${{ runner.temp }}/editarr-native14/media/wheels
+            ${{ runner.temp }}/editarr-native14/media/helpers
+            ${{ runner.temp }}/editarr-native14/media/SHA256SUMS.txt
+          key: editarr-linux-media-${{ runner.arch }}-${{ steps.release-inputs.outputs.cache-hash }}
 
       - name: Build and verify on the glibc 2.28 baseline
         shell: bash
@@ -73,9 +96,28 @@ jobs:
               bash native_build/linux/build_package_ci.sh /native14
 
       - name: Return build outputs to the runner user
+        id: build-outputs
         if: always()
         shell: bash
-        run: sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/editarr-native14"
+        run: |
+          task_root="$RUNNER_TEMP/editarr-native14"
+          if [[ -d "$task_root" ]]; then
+            sudo chown -R "$(id -u):$(id -g)" "$task_root"
+            if bash native_build/linux/media_cache.sh verify "$task_root/media"; then
+              echo 'verified-media=true' >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Save verified media
+        if: ${{ !cancelled() && steps.media-cache.outputs.cache-hit != 'true' && steps.build-outputs.outputs.verified-media == 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ${{ runner.temp }}/editarr-native14/media/prefix
+            ${{ runner.temp }}/editarr-native14/media/wheels
+            ${{ runner.temp }}/editarr-native14/media/helpers
+            ${{ runner.temp }}/editarr-native14/media/SHA256SUMS.txt
+          key: ${{ steps.media-cache.outputs.cache-primary-key }}
 
       - name: Verify AppImage on newer Ubuntu with FUSE and extraction fallback
         shell: bash

@@ -36,12 +36,18 @@ if [[ -z ${VERSION:-} ]]; then
 fi
 
 export EDITARR_BUILD_PYTHON="$UV_PROJECT_ENVIRONMENT/bin/python" UV_NO_SYNC=1
-bash native_build/linux/build_media.sh "$output/bootstrap/sources" "$output/media"
 media="$output/media"
-uv pip uninstall opencv-python opencv-python-headless
-uv pip install --no-deps --reinstall "$media"/wheels/*.whl
+if ! bash native_build/linux/media_cache.sh verify "$media"; then
+    rm -rf "$media"
+    bash native_build/linux/build_media.sh "$output/bootstrap/sources" "$media"
+fi
+uv pip uninstall --python "$EDITARR_BUILD_PYTHON" opencv-python opencv-python-headless
+uv pip install --python "$EDITARR_BUILD_PYTHON" --no-deps --reinstall "$media"/wheels/*.whl
 export LD_LIBRARY_PATH="$media/prefix/lib"
 uv run python -c 'import av; from cv2.dnn import blobFromImage'
+"$media/helpers/ffmpeg" -version
+"$media/helpers/ffprobe" -version
+bash native_build/linux/media_cache.sh record "$media"
 
 read -r appimagetool_release appimage_runtime_release < <(uv run python -c \
     'from scripts.package_linux import APPIMAGETOOL_RELEASE, APPIMAGE_RUNTIME_RELEASE; print(APPIMAGETOOL_RELEASE, APPIMAGE_RUNTIME_RELEASE)')

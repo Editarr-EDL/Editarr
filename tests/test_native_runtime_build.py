@@ -40,6 +40,27 @@ def test_native_workflow_python_inputs_exist(workflow):
         assert Path(source).is_file(), f"{workflow}: {source}"
 
 
+@pytest.mark.parametrize(
+    ("platform", "marker"),
+    [
+        ("darwin", "macos-release.marker"),
+        ("linux", "source-media-release.marker"),
+        ("win32", "source-media-release.marker"),
+    ],
+)
+def test_source_built_media_requires_frozen_marker(monkeypatch, tmp_path, platform, marker):
+    from scanner.runtime import distribution
+
+    monkeypatch.setattr(distribution.sys, "platform", platform)
+    monkeypatch.setattr(distribution.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(distribution.sys, "frozen", True, raising=False)
+    assert not distribution.has_source_built_media()
+    (tmp_path / marker).touch()
+    assert distribution.has_source_built_media()
+    monkeypatch.setattr(distribution.sys, "frozen", False)
+    assert not distribution.has_source_built_media()
+
+
 def test_target_policy_includes_mlx_only_for_macos_arm64():
     macos = pyinstaller_collect.required_packages("macos-arm64")
     windows = pyinstaller_collect.required_packages("windows-x64")

@@ -308,6 +308,7 @@ def test_linux_workflow_pins_baseline_and_covers_fuse_headless_and_graphical_pat
     assert "env -u DISPLAY -u WAYLAND_DISPLAY -u BROWSER" in newer
     assert "Xvfb :99" in newer
     assert "lifecycle quit" in newer
+    assert "http://localhost:$port/" in newer
     assert "test -c /dev/fuse" in newer
     assert "actions/upload-artifact@v7" in workflow
     assert "workflow_call:" in workflow
