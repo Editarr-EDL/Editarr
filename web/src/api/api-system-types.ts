@@ -57,10 +57,8 @@ export interface QuickConnectAttempt {
   code: string;
 }
 
-export interface JellyfinSetupRequest {
+export interface JellyfinSetupRequest extends AuthenticationCredentials {
   server_url: string;
-  username: string;
-  password: string;
 }
 
 /** A password confirmed inside the same request as a sensitive action. */

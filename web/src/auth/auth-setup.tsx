@@ -5,6 +5,7 @@ import { ApiError } from "../api/api-transport";
 import { applicationAssetUrl } from "../shared/runtime-urls";
 import { SetupRestore } from "../settings/backup-restore";
 import { useAuthenticationGate } from "./auth-gate";
+import { RememberMe } from "./remember-me";
 import { RetryAfterNotice, useRetryAfter } from "./retry-after";
 
 type FieldName = "serverUrl" | "username";
@@ -39,6 +40,7 @@ export function JellyfinSetup() {
   const [serverUrl, setServerUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submissionState, setSubmissionState] = useState<"idle" | "pending" | "success">("idle");
@@ -70,7 +72,9 @@ export function JellyfinSetup() {
 
     setSubmissionState("pending");
     try {
-      const status = await setupWithJellyfin({ server_url: serverUrl.trim(), username, password });
+      const status = await setupWithJellyfin({
+        server_url: serverUrl.trim(), username, password, remember_me: rememberMe,
+      });
       setPassword("");
       setSubmissionState("success");
       // Let assistive technology announce the completion before the protected shell mounts.
@@ -124,6 +128,7 @@ export function JellyfinSetup() {
           <label htmlFor="setup-password">Jellyfin password</label>
           <input id="setup-password" name="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={disabled} />
         </div>
+        <RememberMe checked={rememberMe} disabled={disabled} onChange={setRememberMe} />
         {formError && <p ref={formErrorRef} tabIndex={-1} className="auth-form-error" role="alert" aria-live="assertive">{formError}<RetryAfterNotice retry={retry} /></p>}
         <button className="auth-submit btn-primary" type="submit" disabled={disabled || retry.remaining > 0}>{submissionState === "pending" ? "Connecting…" : "Connect and sign in"}</button>
       </form>}

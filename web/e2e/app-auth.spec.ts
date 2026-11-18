@@ -25,6 +25,7 @@ test("connects Jellyfin accessibly as the first owner and restores the requested
   const serverUrl = page.getByLabel("Jellyfin server URL");
   await expect(page.getByRole("heading", { name: "CONNECT YOUR JELLYFIN SERVER" })).toBeVisible();
   await expect(serverUrl).toBeFocused();
+  await expect(page.getByRole("checkbox", { name: "Remember me" })).toBeChecked();
   await expect(page.getByRole("button", { name: "Restore from backup" })).toBeVisible();
   await expectNoAccessibilityViolations(page);
 
