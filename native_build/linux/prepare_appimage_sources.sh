@@ -10,7 +10,15 @@ mkdir -p "$sources" "$notices"
 download() {
     local url=$1 filename=$2 digest=$3
     curl --fail --location --retry 3 --silent --show-error --output "$sources/$filename" "$url"
-    (cd "$sources" && printf '%s  %s\n' "$digest" "$filename" | sha256sum -c -)
+    local actual
+    actual=$(sha256sum "$sources/$filename")
+    actual=${actual%% *}
+    if [[ "$actual" != "$digest" ]]; then
+        printf 'SHA-256 mismatch for %s from %s: expected %s, received %s\n' \
+            "$filename" "$url" "$digest" "$actual" >&2
+        return 1
+    fi
+    printf '%s: OK\n' "$filename"
 }
 
 runtime_commit=dd6cebedcbddde9c82f89b011e8e1d40b6e43868
@@ -25,7 +33,7 @@ download https://musl.libc.org/releases/musl-1.2.5.tar.gz \
     musl-1.2.5.tar.gz a9a118bbe84d8764da0ea0d28b3ab3fae8477fc7e4085d90102b8596fc7c75e4
 download https://codeload.github.com/facebook/zstd/tar.gz/refs/tags/v1.5.6 \
     zstd-1.5.6.tar.gz 30f35f71c1203369dc979ecde0400ffea93c27391bfd2ac5a9715d2173d92ff7
-download https://zlib.net/fossils/zlib-1.3.1.tar.gz \
+download https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz \
     zlib-1.3.1.tar.gz 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 download https://codeload.github.com/microsoft/mimalloc/tar.gz/refs/tags/v2.1.7 \
     mimalloc-2.1.7.tar.gz 0eed39319f139afde8515010ff59baf24de9e47ea316a315398e8027d198202d

@@ -55,7 +55,9 @@ mkdir ffmpeg-shared ffmpeg-helpers "$output/helpers"
     mv ffmpeg ffprobe "$output/helpers/"
 )
 
-uv build --wheel --python "$EDITARR_BUILD_PYTHON" --out-dir "$output/wheels" "$sources/av-18.1.0.tar.gz"
+CPPFLAGS="-I$prefix/include" CFLAGS="-I$prefix/include" LDFLAGS="-L$prefix/lib" \
+    uv build --wheel --python "$EDITARR_BUILD_PYTHON" \
+        --out-dir "$output/wheels" "$sources/av-18.1.0.tar.gz"
 
 opencv="$output/src/opencv_python_headless-5.0.0.93"
 patch -d "$opencv" -p1 < "$sources/opencv-optional-typing.patch"
