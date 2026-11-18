@@ -175,6 +175,17 @@ def _describe_failure(error: BaseException) -> str:
     return "\n".join([" <- caused by ".join(parts), *notes])
 
 
+def _response_summary(status: int, body: bytes) -> str:
+    """Describe an unexpected HTTP answer by status, API error code, and body excerpt."""
+    try:
+        payload = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    code = payload.get("code") if isinstance(payload, dict) else None
+    excerpt = body[: _MAX_TEXT // 8].decode(errors="replace")
+    return f"HTTP {status}; code={code!r}; body={excerpt!r}"
+
+
 def _log_tail_note(log: Path) -> str:
     """Return a short, redacted runtime log excerpt to attach to a failed check."""
     try:
@@ -1185,8 +1196,7 @@ def _login(origin: str) -> tuple[Any, str]:
     if status != 200 or not isinstance(csrf, str) or not csrf:
         raise RuntimeError(
             "restart transition did not allow a fresh authenticated session "
-            f"(HTTP {status}; code={payload.get('code')!r}; "
-            f"body={body[:_MAX_TEXT // 8].decode(errors='replace')!r})"
+            f"({_response_summary(status, body)})"
         )
     return opener, csrf
 
@@ -1427,11 +1437,15 @@ def _native_smoke(
                 "remember_me": False,
             },
         )
-        setup = json.loads(setup_body)
-        csrf = setup.get("csrf_token")
+        try:
+            setup = json.loads(setup_body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            setup = None
+        csrf = setup.get("csrf_token") if isinstance(setup, dict) else None
         if setup_status != 201 or not isinstance(csrf, str) or not csrf:
             raise RuntimeError(
-                f"setup did not create an authenticated CSRF session (HTTP {setup_status})"
+                "setup did not create an authenticated CSRF session "
+                f"({_response_summary(setup_status, setup_body)})"
             )
         if test_fake_models:
             # Capture the live controller/http child and, while the fake scan is
