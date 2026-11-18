@@ -33,13 +33,13 @@ APP_ID = "org.editarr.Editarr"
 BASELINE_DISTRIBUTION = "Rocky Linux 8"
 BASELINE_GLIBC = (2, 28)
 DEFAULT_SOURCE_DATE_EPOCH = 315532800
-# These immutable digests identify the upstream continuous artifacts used for the
-# NATIVE-14 spike.  A changed upstream asset fails closed instead of silently changing
-# the package toolchain.
+# Require exact upstream release assets and record the corresponding source commits.
+APPIMAGETOOL_RELEASE = "1.9.1"
 APPIMAGETOOL_COMMIT = "8c8c91f762b412a19f4e8d2c4b35afb98f2d7c81"
-APPIMAGETOOL_SHA256 = "a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0"
-APPIMAGE_RUNTIME_COMMIT = "75849dc"
-APPIMAGE_RUNTIME_SHA256 = "1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf"
+APPIMAGETOOL_SHA256 = "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+APPIMAGE_RUNTIME_RELEASE = "20251108"
+APPIMAGE_RUNTIME_COMMIT = "dd6cebedcbddde9c82f89b011e8e1d40b6e43868"
+APPIMAGE_RUNTIME_SHA256 = "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
 _VERSION = re.compile(r"^[0-9]+(?:\.[0-9]+){1,3}$")
 _GLIBC_SYMBOL = re.compile(r"\bGLIBC_(\d+)\.(\d+)\b")
 _NATIVE_SUFFIX = re.compile(r"(?i)(?:\.so(?:\.[0-9]+)*|\.dylib|\.dll|\.pyd)$")
@@ -294,7 +294,7 @@ def _assemble_appdir(runtime: Path, appdir: Path, *, version: str, epoch: int) -
         f"usr/share/applications/{APP_ID}.desktop"
     )
     (appdir / "editarr.png").symlink_to(
-        "usr/share/icons/hicolor/32x32/apps/editarr.png"
+        (icons / "editarr.png").relative_to(appdir)
     )
     (appdir / ".DirIcon").symlink_to("editarr.png")
     _normalize_tree(appdir, epoch)

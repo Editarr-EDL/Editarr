@@ -30,6 +30,7 @@ TARGET = "windows-x64"
 APP_GUID = "{B1956A76-50E9-49E4-9A12-03683D04AB64}"
 APP_ID = "{" + APP_GUID
 DEVELOPMENT_PUBLISHER = "Unsigned development build - no publisher identity"
+ALPHA_PUBLISHER = "Unsigned alpha build - no publisher identity"
 INSTALL_LOCATION = r"%LOCALAPPDATA%\Programs\Editarr"
 DATA_LOCATION = r"%LOCALAPPDATA%\Editarr\Data"
 CACHE_LOCATION = r"%LOCALAPPDATA%\Editarr\Cache"
@@ -313,6 +314,20 @@ def _iscc_define(name: str, value: str) -> str:
 
 
 def _resolve_identity(args: argparse.Namespace, version: str) -> PackageIdentity:
+    if args.unsigned_alpha:
+        if args.publisher or args.certificate or args.timestamp_url:
+            raise PackageError(
+                "--unsigned-alpha cannot be combined with production identity/signing options"
+            )
+        return PackageIdentity(
+            publisher=ALPHA_PUBLISHER,
+            signed=False,
+            development_only=False,
+            artifact_base=f"Editarr-v{version}-Windows-x64-Setup",
+            display_name="Editarr (Unsigned Alpha)",
+            description="Editarr per-user installer - unsigned alpha release",
+        )
+
     if args.unsigned_development:
         if args.publisher or args.certificate or args.timestamp_url:
             raise PackageError(
@@ -360,6 +375,13 @@ def package_windows(args: argparse.Namespace) -> int:
     inventory = _read_runtime_inventory(runtime)
     _reject_links(runtime)
     _audit_runtime_payload(runtime)
+    notices = args.notices
+    if args.unsigned_alpha and notices is None:
+        raise PackageError("--unsigned-alpha requires --notices")
+    if notices is not None:
+        if notices.is_symlink() or not (notices / "THIRD-PARTY-NOTICES.md").is_file():
+            raise PackageError("--notices must name a directory with THIRD-PARTY-NOTICES.md")
+        _reject_links(notices)
     output = args.out_dir.resolve()
     installer = output / f"{identity.artifact_base}.exe"
     evidence_path = output / "editarr-windows-package.json"
@@ -375,6 +397,8 @@ def package_windows(args: argparse.Namespace) -> int:
         staged_runtime = stage / "Runtime"
         shutil.copytree(runtime, staged_runtime)
         shutil.copy2(ICON_SOURCE, stage / "Editarr.ico")
+        if notices is not None:
+            shutil.copytree(notices, stage / "Licenses")
         launcher = _build_launcher(
             stage, build_root, version=version, publisher=identity.publisher
         )
@@ -420,7 +444,7 @@ def package_windows(args: argparse.Namespace) -> int:
             "source_revision": inventory.get("source_revision"),
             "app_id": APP_GUID,
             "publisher_metadata": identity.publisher,
-            "publisher_identity_approved": not identity.development_only,
+            "publisher_identity_approved": identity.signed,
             "install_location": INSTALL_LOCATION,
             "data_location": DATA_LOCATION,
             "cache_location": CACHE_LOCATION,
@@ -459,10 +483,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()))
     parser.add_argument("--certificate", type=Path, help="Authorized Authenticode PKCS#12 file")
     parser.add_argument("--timestamp-url", help="Authorized RFC 3161 timestamp service")
-    parser.add_argument(
+    parser.add_argument("--notices", type=Path, help="License notices to install with Editarr")
+    unsigned = parser.add_mutually_exclusive_group()
+    unsigned.add_argument(
         "--unsigned-development",
         action="store_true",
         help="Build visibly labeled unsigned development output with no publisher identity",
+    )
+    unsigned.add_argument(
+        "--unsigned-alpha",
+        action="store_true",
+        help="Build the unsigned alpha release installer with no publisher identity",
     )
     return parser.parse_args()
 

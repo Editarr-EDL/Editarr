@@ -1,341 +1,111 @@
-name: NATIVE-14 Linux x86_64 package evidence
+name: Linux x86_64 AppImage
 
 on:
   push:
     branches:
       - codex/native14-linux-package
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
 
 permissions:
   contents: read
-
-concurrency:
-  group: native14-linux-package-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   package:
     name: Rocky 8 baseline build and Ubuntu package checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 150
     env:
       ROCKY_IMAGE: rockylinux/rockylinux@sha256:e8a49c5403b687db05d4d67333fa45808fbe74f36e683cec7abb1f7d0f2338c6
+      VERSION: ${{ inputs.version }}
+      REVISION: ${{ inputs.revision || github.sha }}
     steps:
       - name: Check out source without credentials
         uses: actions/checkout@v6
         with:
+          fetch-depth: 0
+          ref: ${{ env.REVISION }}
           persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.1"
+          cache: false
+
+      - name: Prepare version and pinned source inputs
+        shell: bash
+        run: |
+          if [[ -n "$VERSION" ]]; then
+            python3 -m scripts.prepare_main_release prepare "$GITHUB_WORKSPACE" "$REVISION" "$VERSION"
+          fi
+          task_root="$RUNNER_TEMP/editarr-native14"
+          mkdir "$task_root"
+          python3 -m scripts.prepare_alpha_distribution prepare linux-x86_64 "$task_root/bootstrap"
 
       - name: Build and verify on the glibc 2.28 baseline
         shell: bash
         run: |
-          set -euo pipefail
           task_root="$RUNNER_TEMP/editarr-native14"
-          mkdir -p "$task_root"
+          node_root=$(dirname "$(dirname "$(command -v node)")")
+          go_root=$(go env GOROOT)
           docker run --rm --init --platform linux/amd64 \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -v "$task_root:/native14" \
+            -v "$node_root:/tools/node:ro" \
+            -v "$go_root:/tools/go:ro" \
+            -e VERSION \
             -w /workspace \
             "$ROCKY_IMAGE" \
-            bash -lc '
-              set -euo pipefail
-              test "$(uname -m)" = x86_64
-              test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"
-              dnf install -y \
-                python3.11 python3.11-pip git curl xz binutils \
-                desktop-file-utils libappstream-glib util-linux procps-ng file
-              dnf install -y \
-                https://download1.rpmfusion.org/free/el/rpmfusion-free-release-8.noarch.rpm
-              crb enable
-              dnf install -y ffmpeg
-              dnf module enable -y nodejs:22
-              dnf install -y nodejs npm
-              npm install --global pnpm@11.22.0
-              python3.11 -m pip install --disable-pip-version-check uv==0.12.5
+            env PATH=/tools/node/bin:/tools/go/bin:/usr/local/bin:/usr/bin:/bin \
+              bash native_build/linux/build_package_ci.sh /native14
 
-              mkdir -p \
-                /native14/home /native14/tmp /native14/cache /native14/config \
-                /native14/state /native14/runtime /native14/uv-cache /native14/venv
-              chmod 700 /native14/runtime
-              export HOME=/native14/home
-              export TMPDIR=/native14/tmp
-              export XDG_CACHE_HOME=/native14/cache
-              export XDG_CONFIG_HOME=/native14/config
-              export XDG_STATE_HOME=/native14/state
-              export XDG_RUNTIME_DIR=/native14/runtime
-              export UV_CACHE_DIR=/native14/uv-cache
-              export UV_PROJECT_ENVIRONMENT=/native14/venv
-              export SOURCE_DATE_EPOCH=315532800
-              git config --global --add safe.directory /workspace
-
-              python3.11 --version
-              uv --version
-              node --version
-              pnpm --version
-              ffprobe -version
-              appstream-util --version || true
-              uv sync --locked --extra dev
-              uv run ruff check \
-                native_build scanner/settings/capabilities.py scanner/cli.py scanner/models.py \
-                scanner/pipeline/audio.py scripts/build_release.py scripts/package_linux.py \
-                scripts/verify_installed_release.py scripts/verify_linux_models.py \
-                tests/test_linux_model_verifier.py tests/test_audio_progress.py \
-                tests/test_cli_admin.py tests/test_cli_server.py tests/test_installed_artifact_verifier.py \
-                tests/test_linux_package.py tests/test_model_capabilities.py \
-                tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py
-              uv run pytest -q -n 0 \
-                tests/test_audio_progress.py tests/test_cli_admin.py tests/test_cli_server.py \
-                tests/test_installed_artifact_verifier.py tests/test_linux_package.py \
-                tests/test_linux_model_verifier.py \
-                tests/test_model_capabilities.py tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py \
-                --junitxml /native14/native14-linux-junit.xml
-
-              curl --fail --location --output /native14/appimagetool \
-                https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-              curl --fail --location --output /native14/runtime-x86_64 \
-                https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
-              printf "%s  %s\n" \
-                a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0 \
-                /native14/appimagetool | sha256sum --check --strict
-              printf "%s  %s\n" \
-                1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf \
-                /native14/runtime-x86_64 | sha256sum --check --strict
-              chmod 755 /native14/appimagetool /native14/runtime-x86_64
-
-              uv run python scripts/build_release.py \
-                --target linux-x86_64 \
-                --out-dir "/native14/raw output" \
-                --work-dir /native14/tmp \
-                --ffprobe-helper /usr/bin/ffprobe \
-                --test-fake-models
-              uv run python scripts/verify_installed_release.py \
-                --runtime "/native14/raw output/Editarr" \
-                --target linux-x86_64 \
-                --test-fake-models \
-                --json-out /native14/native14-baseline-raw-verifier.json
-              uv run python scripts/package_linux.py \
-                --runtime "/native14/raw output/Editarr" \
-                --out-dir "/native14/package output" \
-                --work-dir /native14/tmp \
-                --appimagetool /native14/appimagetool \
-                --appimage-runtime /native14/runtime-x86_64
-              uv run python scripts/verify_installed_release.py \
-                --runtime "/native14/package output/Editarr.AppDir/usr/lib/editarr" \
-                --target linux-x86_64 \
-                --test-fake-models \
-                --json-out /native14/native14-baseline-appdir-verifier.json
-
-              baseline_xdg=/native14/baseline-xdg
-              mkdir -p "$baseline_xdg"/{home,data,config,state,cache,runtime,tmp}
-              chmod 700 "$baseline_xdg/runtime"
-              appimage=$(find "/native14/package output" -maxdepth 1 -type f \
-                -name "Editarr-*-x86_64.AppImage" -print -quit)
-              test -n "$appimage"
-              cd /native14/tmp
-              env \
-                HOME="$baseline_xdg/home" \
-                TMPDIR="$baseline_xdg/tmp" \
-                XDG_DATA_HOME="$baseline_xdg/data" \
-                XDG_CONFIG_HOME="$baseline_xdg/config" \
-                XDG_STATE_HOME="$baseline_xdg/state" \
-                XDG_CACHE_HOME="$baseline_xdg/cache" \
-                XDG_RUNTIME_DIR="$baseline_xdg/runtime" \
-                "$appimage" --appimage-extract-and-run paths \
-                > /native14/native14-baseline-extract-paths.txt
-              grep -F "$baseline_xdg/data/editarr" \
-                /native14/native14-baseline-extract-paths.txt
-              cd /workspace
-              touch /native14/native14-baseline-real-models.json
-              chown nobody /native14/native14-baseline-real-models.json
-              runuser -u nobody -- env TMPDIR=/tmp \
-                /native14/venv/bin/python -m scripts.verify_linux_models \
-                --runtime "/native14/package output/Editarr.AppDir/usr/lib/editarr" \
-                --appimage "$appimage" --mode extract \
-                --json-out /native14/native14-baseline-real-models.json
-              git -C /workspace diff --check
-              chmod -R a+rX /native14
-            '
+      - name: Return build outputs to the runner user
+        if: always()
+        shell: bash
+        run: sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/editarr-native14"
 
       - name: Verify AppImage on newer Ubuntu with FUSE and extraction fallback
         shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --yes appstream desktop-file-utils fuse3 libfuse2t64 xvfb
-          task_root="$RUNNER_TEMP/editarr-native14"
-          package_root="$task_root/package output"
-          appimage=$(find "$package_root" -maxdepth 1 -type f \
-            -name 'Editarr-*-x86_64.AppImage' -print -quit)
-          test -n "$appimage"
-          test "$(uname -m)" = x86_64
-          test -c /dev/fuse
-          cd "$task_root/tmp"
-
-          (cd "$GITHUB_WORKSPACE" && python3 -m scripts.verify_installed_release \
-            --runtime "$package_root/Editarr.AppDir/usr/lib/editarr" \
-            --target linux-x86_64 \
-            --test-fake-models \
-            --json-out "$task_root/native14-ubuntu-appdir-verifier.json")
-
-          newer_xdg="$task_root/ubuntu-xdg"
-          mkdir -p "$newer_xdg"/{home,data,config,state,cache,runtime,tmp}
-          chmod 700 "$newer_xdg/runtime"
-          common_environment=(
-            "HOME=$newer_xdg/home"
-            "TMPDIR=$newer_xdg/tmp"
-            "XDG_DATA_HOME=$newer_xdg/data"
-            "XDG_CONFIG_HOME=$newer_xdg/config"
-            "XDG_STATE_HOME=$newer_xdg/state"
-            "XDG_CACHE_HOME=$newer_xdg/cache"
-            "XDG_RUNTIME_DIR=$newer_xdg/runtime"
-          )
-          env "${common_environment[@]}" "$appimage" paths \
-            > "$task_root/native14-ubuntu-fuse-paths.txt"
-          grep -F "$newer_xdg/data/editarr" "$task_root/native14-ubuntu-fuse-paths.txt"
-
-          extract_root="$task_root/extracted fallback"
-          mkdir "$extract_root"
-          cd "$extract_root"
-          "$appimage" --appimage-extract >/dev/null
-          env "${common_environment[@]}" ./squashfs-root/AppRun paths \
-            > "$task_root/native14-ubuntu-extracted-paths.txt"
-          grep -F "$newer_xdg/cache/editarr" \
-            "$task_root/native14-ubuntu-extracted-paths.txt"
-
-          headless_xdg="$task_root/headless-xdg"
-          mkdir -p "$headless_xdg"/{home,data,config,state,cache,runtime,tmp}
-          chmod 700 "$headless_xdg/runtime"
-          headless_environment=(
-            "HOME=$headless_xdg/home"
-            "TMPDIR=$headless_xdg/tmp"
-            "XDG_DATA_HOME=$headless_xdg/data"
-            "XDG_CONFIG_HOME=$headless_xdg/config"
-            "XDG_STATE_HOME=$headless_xdg/state"
-            "XDG_CACHE_HOME=$headless_xdg/cache"
-            "XDG_RUNTIME_DIR=$headless_xdg/runtime"
-            "EDITARR_AUTH_COOKIE_SECURE=false"
-          )
-          port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
-          env -u DISPLAY -u WAYLAND_DISPLAY -u BROWSER \
-            "${headless_environment[@]}" "$appimage" --port "$port" &
-          headless_pid=$!
-          cleanup() {
-            env "${headless_environment[@]}" "$appimage" lifecycle quit >/dev/null 2>&1 || true
-            kill "$headless_pid" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          for attempt in $(seq 1 90); do
-            if grep -Fq "Editarr is ready at http://127.0.0.1:$port/" \
-              "$headless_xdg/state/editarr/controller.log" 2>/dev/null; then
-              break
-            fi
-            if ! kill -0 "$headless_pid" 2>/dev/null; then
-              exit 1
-            fi
-            sleep 1
-          done
-          grep -F "Editarr is ready at http://127.0.0.1:$port/" \
-            "$headless_xdg/state/editarr/controller.log"
-          env "${headless_environment[@]}" "$appimage" lifecycle quit
-          wait "$headless_pid"
-          trap - EXIT
-
-          graphical_xdg="$task_root/graphical-xdg"
-          mkdir -p "$graphical_xdg"/{home,data,config,state,cache,runtime,tmp}
-          chmod 700 "$graphical_xdg/runtime"
-          browser_log="$task_root/native14-browser-url.txt"
-          browser_stub="$task_root/browser-stub"
-          printf '#!/bin/sh\nprintf "%%s\\n" "$1" > "%s"\n' "$browser_log" > "$browser_stub"
-          chmod 755 "$browser_stub"
-          graphical_environment=(
-            "HOME=$graphical_xdg/home"
-            "TMPDIR=$graphical_xdg/tmp"
-            "XDG_DATA_HOME=$graphical_xdg/data"
-            "XDG_CONFIG_HOME=$graphical_xdg/config"
-            "XDG_STATE_HOME=$graphical_xdg/state"
-            "XDG_CACHE_HOME=$graphical_xdg/cache"
-            "XDG_RUNTIME_DIR=$graphical_xdg/runtime"
-            "EDITARR_AUTH_COOKIE_SECURE=false"
-            "DISPLAY=:99"
-            "BROWSER=$browser_stub"
-          )
-          Xvfb :99 -screen 0 1280x720x24 >"$task_root/xvfb.log" 2>&1 &
-          xvfb_pid=$!
-          port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
-          env "${graphical_environment[@]}" "$appimage" --port "$port" &
-          graphical_pid=$!
-          cleanup() {
-            env "${graphical_environment[@]}" "$appimage" lifecycle quit >/dev/null 2>&1 || true
-            kill "$graphical_pid" "$xvfb_pid" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          for attempt in $(seq 1 90); do
-            test -s "$browser_log" && break
-            if ! kill -0 "$graphical_pid" 2>/dev/null; then
-              exit 1
-            fi
-            sleep 1
-          done
-          grep -Fx "http://127.0.0.1:$port/" "$browser_log"
-          env "${graphical_environment[@]}" "$appimage" --port "$port"
-          env "${graphical_environment[@]}" "$appimage" lifecycle quit
-          wait "$graphical_pid"
-          kill "$xvfb_pid" >/dev/null 2>&1 || true
-          wait "$xvfb_pid" 2>/dev/null || true
-          trap - EXIT
-
-          desktop-file-validate \
-            "$package_root/Editarr.AppDir/usr/share/applications/org.editarr.Editarr.desktop"
-          appstreamcli validate --no-net \
-            "$package_root/Editarr.AppDir/usr/share/metainfo/org.editarr.Editarr.metainfo.xml"
-          (cd "$package_root" && sha256sum --check "$appimage.sha256")
-          (cd "$GITHUB_WORKSPACE" && python3 -m scripts.verify_linux_models \
-            --runtime "$package_root/Editarr.AppDir/usr/lib/editarr" \
-            --appimage "$appimage" --mode fuse \
-            --json-out "$task_root/native14-ubuntu-real-models.json")
-          git -C "$GITHUB_WORKSPACE" diff --check
-
-      - name: Record host and artifact evidence
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          task_root="$RUNNER_TEMP/editarr-native14"
-          {
-            uname -a
-            ldd --version
-            docker image inspect "$ROCKY_IMAGE" \
-              --format 'baseline-image={{index .RepoDigests 0}}'
-            if test -d "$task_root/package output"; then
-              find "$task_root/package output" -maxdepth 1 -type f \
-                -name 'Editarr-*-x86_64.AppImage' -exec sha256sum {} \;
-            fi
-          } > "$task_root/native14-host-artifact.txt"
+        run: bash native_build/linux/verify_package_ci.sh "$RUNNER_TEMP/editarr-native14"
 
       - name: Upload bounded evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: native14-linux-x86-64-evidence-${{ github.run_id }}
+          name: linux-x86-64-evidence-${{ inputs.version || github.run_id }}
           path: |
+            ${{ runner.temp }}/editarr-native14/native14-*.json
+            ${{ runner.temp }}/editarr-native14/native14-*.txt
             ${{ runner.temp }}/editarr-native14/native14-linux-junit.xml
-            ${{ runner.temp }}/editarr-native14/native14-baseline-raw-verifier.json
-            ${{ runner.temp }}/editarr-native14/native14-baseline-appdir-verifier.json
-            ${{ runner.temp }}/editarr-native14/native14-ubuntu-appdir-verifier.json
-            ${{ runner.temp }}/editarr-native14/native14-baseline-real-models.json
-            ${{ runner.temp }}/editarr-native14/native14-ubuntu-real-models.json
-            ${{ runner.temp }}/editarr-native14/native14-baseline-extract-paths.txt
-            ${{ runner.temp }}/editarr-native14/native14-ubuntu-fuse-paths.txt
-            ${{ runner.temp }}/editarr-native14/native14-ubuntu-extracted-paths.txt
-            ${{ runner.temp }}/editarr-native14/native14-browser-url.txt
-            ${{ runner.temp }}/editarr-native14/native14-host-artifact.txt
             ${{ runner.temp }}/editarr-native14/package output/editarr-linux-package.json
             ${{ runner.temp }}/editarr-native14/package output/*.sha256
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Upload verified release AppImage and source archives
+        if: inputs.version != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: editarr-v${{ inputs.version }}-linux
+          path: ${{ runner.temp }}/editarr-native14/release-assets/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Retain the development AppImage for acceptance reproduction
-        if: success()
+        if: inputs.version == ''
         uses: actions/upload-artifact@v7
         with:
           name: native14-development-appimage-${{ github.run_id }}

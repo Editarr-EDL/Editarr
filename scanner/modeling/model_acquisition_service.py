@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from scanner.models import ModelDownloadState
-from scanner.runtime.distribution import is_macos_release
+from scanner.runtime.distribution import has_source_built_media
 from scanner.runtime.runtime_paths import ensure_user_private_directory
 
 from .model_acquisition_authority import (
@@ -296,8 +296,8 @@ class ModelAcquisitionService:
             return True
 
     def list_artifacts(self) -> tuple[ArtifactStatus, ...]:
-        # The macOS release ships its own FFmpeg helpers in place of this package binary.
-        replaced_binary = "ffmpeg-package-binary" if is_macos_release() else None
+        # Source-built media releases ship FFmpeg instead of the package binary.
+        replaced_binary = "ffmpeg-package-binary" if has_source_built_media() else None
         return tuple(
             self.status(artifact.id)
             for artifact in self.manifest.artifacts

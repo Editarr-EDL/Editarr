@@ -59,6 +59,9 @@ datas = [
 if os.environ.get("EDITARR_PYINSTALLER_TEST_FAKE_MODELS") == "1":
     marker = ROOT / "native_build" / "native-test-fake-models.marker"
     datas.append((str(marker), "."))
+if os.environ.get("EDITARR_PYINSTALLER_SOURCE_MEDIA_RELEASE") == "1":
+    marker = ROOT / "native_build" / "source-media-release.marker"
+    datas.append((str(marker), "."))
 if os.environ.get("EDITARR_PYINSTALLER_MACOS_RELEASE") == "1":
     marker = ROOT / "native_build" / "macos" / "macos-release.marker"
     datas.append((str(marker), "."))

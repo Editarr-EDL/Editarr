@@ -369,7 +369,9 @@ def build_native(args: argparse.Namespace) -> int:
     if args.macos_release and (target != "macos-arm64" or args.test_fake_models):
         raise RuntimeError("--macos-release requires a real macOS arm64 runtime")
     ffmpeg = (
-        _target_helper(args.ffmpeg_helper, "ffmpeg") if args.macos_release else _imageio_ffmpeg()
+        _target_helper(args.ffmpeg_helper, "ffmpeg")
+        if args.macos_release or args.source_media_release or args.ffmpeg_helper
+        else _imageio_ffmpeg()
     )
     ffprobe = _ffprobe_helper(args.ffprobe_helper)
     output = args.out_dir.resolve()
@@ -401,6 +403,8 @@ def build_native(args: argparse.Namespace) -> int:
         # artifact. Runtime code still requires both this marker and the matching
         # environment value before it can take the fake-adapter branch.
         environment["EDITARR_PYINSTALLER_TEST_FAKE_MODELS"] = "1"
+    if args.source_media_release:
+        environment["EDITARR_PYINSTALLER_SOURCE_MEDIA_RELEASE"] = "1"
     if args.macos_release:
         environment["EDITARR_PYINSTALLER_MACOS_RELEASE"] = "1"
     try:
@@ -483,7 +487,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()))
     parser.add_argument("--target", choices=("macos-arm64", "windows-x64", "linux-x86_64"))
     parser.add_argument("--ffprobe-helper", help="Regular target-native ffprobe helper to bundle")
-    parser.add_argument("--ffmpeg-helper", help="Source-built FFmpeg for the macOS release")
+    parser.add_argument("--ffmpeg-helper", help="Relocatable, target-native FFmpeg executable")
+    parser.add_argument(
+        "--source-media-release", action="store_true", help="Use source-built FFmpeg and PyAV"
+    )
     parser.add_argument("--macos-release", action="store_true", help="Use macOS release inputs")
     parser.add_argument(
         "--test-fake-models",

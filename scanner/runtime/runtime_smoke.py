@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .distribution import is_macos_release
+from .distribution import has_source_built_media
 from .runtime_support import resolve_ffmpeg, resolve_ffprobe
 
 _BASE_IMPORTS = (
@@ -104,7 +104,7 @@ def run_runtime_smoke() -> int:
     if ffprobe is None:
         raise RuntimeError("Bundled ffprobe is unavailable")
     _run_helper(ffprobe, "ffprobe")
-    if is_macos_release():
+    if has_source_built_media():
         _smoke_release_media(ffmpeg)
     print("Editarr frozen runtime smoke passed")
     return 0

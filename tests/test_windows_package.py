@@ -122,6 +122,7 @@ def test_packager_allows_ctranslate2_cuda_but_rejects_other_gpu_stacks(tmp_path)
 def test_unsigned_development_identity_is_explicit_and_cannot_borrow_production_options():
     packager = _packager()
     arguments = SimpleNamespace(
+        unsigned_alpha=False,
         unsigned_development=True,
         publisher=None,
         certificate=None,
@@ -144,6 +145,7 @@ def test_unsigned_development_identity_is_explicit_and_cannot_borrow_production_
 def test_production_identity_fails_closed_without_complete_signing_authority(tmp_path):
     packager = _packager()
     arguments = SimpleNamespace(
+        unsigned_alpha=False,
         unsigned_development=False,
         publisher=None,
         certificate=None,
@@ -166,6 +168,29 @@ def test_production_identity_fails_closed_without_complete_signing_authority(tmp
     assert identity.signed is True
     assert identity.development_only is False
     assert identity.publisher == "Approved Publisher"
+
+
+def test_unsigned_alpha_identity_is_labeled_and_cannot_borrow_signing_options():
+    packager = _packager()
+    arguments = SimpleNamespace(
+        unsigned_alpha=True,
+        unsigned_development=False,
+        publisher=None,
+        certificate=None,
+        timestamp_url=None,
+    )
+
+    identity = packager._resolve_identity(arguments, "0.1.5")
+
+    assert identity.publisher == packager.ALPHA_PUBLISHER
+    assert identity.development_only is False
+    assert identity.signed is False
+    assert identity.artifact_base == "Editarr-v0.1.5-Windows-x64-Setup"
+    assert "Unsigned Alpha" in identity.display_name
+
+    arguments.publisher = "Publisher"
+    with pytest.raises(packager.PackageError, match="cannot be combined"):
+        packager._resolve_identity(arguments, "0.1.5")
 
 
 def test_launcher_exposes_required_tray_actions_without_network_or_service_control():

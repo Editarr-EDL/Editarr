@@ -185,8 +185,8 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
     assert artifact_ids_for_backend("qwen") == artifact_ids_for_backend("qwen3_vl")
 
 
-def test_macos_release_offers_models_with_undeclared_licenses(tmp_path, monkeypatch):
-    monkeypatch.setattr(model_acquisition_service, "is_macos_release", lambda: True)
+def test_source_media_release_offers_models_with_undeclared_licenses(tmp_path, monkeypatch):
+    monkeypatch.setattr(model_acquisition_service, "has_source_built_media", lambda: True)
     service = ModelAcquisitionService(tmp_path / "models")
     listed = {entry.artifact_id: entry for entry in service.list_artifacts()}
     assert "ffmpeg-package-binary" not in listed

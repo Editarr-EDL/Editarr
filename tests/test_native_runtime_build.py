@@ -257,6 +257,8 @@ def test_native_build_preserves_preexisting_frontend_staging(tmp_path, monkeypat
     args = SimpleNamespace(
         target=None,
         macos_release=False,
+        source_media_release=False,
+        ffmpeg_helper=None,
         ffprobe_helper=None,
         out_dir=tmp_path / "output",
         work_dir=tmp_path / "work",

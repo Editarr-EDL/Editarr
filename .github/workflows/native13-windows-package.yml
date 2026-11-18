@@ -1,33 +1,47 @@
-name: NATIVE-13 Windows x64 package evidence
+name: Windows x64 installer
 
 on:
-  push:
-    branches:
-      - codex/native13-windows-package
+  workflow_call:
+    inputs:
+      revision:
+        description: Source revision selected by the release planner
+        required: true
+        type: string
+      version:
+        description: Version selected by the release planner
+        required: true
+        type: string
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: native13-windows-package-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   package:
     name: Windows x64 runtime and installer
     runs-on: windows-2025
     timeout-minutes: 180
+    env:
+      RELEASE_REVISION: ${{ inputs.revision }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      EDITARR_BUILD_JOBS: '4'
     steps:
       - name: Check out source without credentials
         uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install Python 3.11
         uses: actions/setup-python@v6
         with:
           python-version: '3.11.9'
+
+      - name: Install pinned Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: native_build/backup_age/go.sum
 
       - name: Install Node and locked pnpm
         uses: actions/setup-node@v6
@@ -46,17 +60,105 @@ jobs:
           python -m pip install --disable-pip-version-check uv==0.12.5
           if ($LASTEXITCODE -ne 0) { throw "uv installation failed with exit code $LASTEXITCODE" }
 
-      - name: Install pinned target-native FFprobe toolchain
+      - name: Prepare source checkout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $source = $env:GITHUB_WORKSPACE
+          if ($env:RELEASE_VERSION) {
+            git config core.autocrlf false
+            git config core.longpaths true
+            $source = Join-Path $env:RUNNER_TEMP 'release-source'
+            git worktree add --detach $source $env:RELEASE_REVISION
+            python -m scripts.prepare_main_release prepare $source $env:RELEASE_REVISION $env:RELEASE_VERSION
+          }
+          "EDITARR_WINDOWS_SOURCE=$source" >> $env:GITHUB_ENV
+
+      - name: Prepare pinned media source and managed Python
+        if: inputs.version != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location -LiteralPath $env:EDITARR_WINDOWS_SOURCE
+          $bootstrap = Join-Path $env:RUNNER_TEMP 'windows-bootstrap'
+          $media = Join-Path $env:RUNNER_TEMP 'windows-media'
+          python -m scripts.prepare_alpha_distribution prepare windows-x64 $bootstrap
+          uv sync --locked --managed-python --python 3.11.16 --extra dev
+          "EDITARR_WINDOWS_BOOTSTRAP=$bootstrap" >> $env:GITHUB_ENV
+          "EDITARR_WINDOWS_MEDIA=$media" >> $env:GITHUB_ENV
+
+      - name: Install MSYS2 media build tools
+        if: inputs.version != ''
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-nasm
+            mingw-w64-ucrt-x86_64-pkgconf
+
+      - name: Compile FFmpeg and its encoders from release sources
+        if: inputs.version != ''
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          source_path=$(cygpath -u "$EDITARR_WINDOWS_SOURCE")
+          bash "$source_path/native_build/windows/build_media.sh" "$EDITARR_WINDOWS_BOOTSTRAP/sources" "$EDITARR_WINDOWS_MEDIA"
+
+      - name: Install pinned FFprobe for manual evidence builds
+        if: inputs.version == ''
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           choco install ffmpeg --version=9.0.1 --yes --no-progress --limit-output
           if ($LASTEXITCODE -ne 0) { throw "FFmpeg installation failed with exit code $LASTEXITCODE" }
 
+      - name: Enter the native MSVC environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $installation = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $installation) { throw 'MSVC x64 tools are unavailable' }
+          $devShell = Join-Path $installation 'Common7\Tools\Launch-VsDevShell.ps1'
+          & $devShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $iscc)) { throw 'Inno Setup 6 is unavailable' }
+          $toolPath = Split-Path -Parent $iscc
+          "PATH=$env:PATH;$toolPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "INCLUDE=$env:INCLUDE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LIB=$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LIBPATH=$env:LIBPATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VSCMD_ARG_TGT_ARCH=amd64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Get-Command cl.exe
+          Get-Command rc.exe
+          Get-Item -LiteralPath $iscc
+
+      - name: Build PyAV and OpenCV from release sources
+        if: inputs.version != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location -LiteralPath $env:EDITARR_WINDOWS_SOURCE
+          & (Join-Path $env:EDITARR_WINDOWS_SOURCE 'native_build\windows\build_media_wheels.ps1') -Sources (Join-Path $env:EDITARR_WINDOWS_BOOTSTRAP 'sources') -Media $env:EDITARR_WINDOWS_MEDIA
+          $wheels = @(Get-ChildItem -LiteralPath (Join-Path $env:EDITARR_WINDOWS_MEDIA 'wheels') -Filter '*.whl' -File)
+          if ($wheels.Count -ne 2) { throw 'Expected exactly one wheel per source-built media package' }
+          uv pip uninstall opencv-python opencv-python-headless
+          uv pip install --no-deps --reinstall $wheels.FullName
+          uv run --no-sync python -c "import av; from cv2.dnn import blobFromImage; print(av.library_versions)"
+          uv run --no-sync python -m scripts.prepare_alpha_distribution collect-notices $env:EDITARR_WINDOWS_BOOTSTRAP
+          'UV_NO_SYNC=1' >> $env:GITHUB_ENV
+
       - name: Build and verify the native runtime
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          Set-Location -LiteralPath $env:EDITARR_WINDOWS_SOURCE
           function Invoke-Native13 {
             param(
               [Parameter(Mandatory = $true)][string]$Description,
@@ -101,7 +203,9 @@ jobs:
           Invoke-Native13 'python --version' { python --version }
           Invoke-Native13 'uv --version' { uv --version }
           Invoke-Native13 'pnpm --version' { pnpm --version }
-          Invoke-Native13 'uv sync' { uv sync --locked --extra dev }
+          if (-not $env:RELEASE_VERSION) {
+            Invoke-Native13 'uv sync' { uv sync --locked --python 3.11.9 --extra dev }
+          }
           Invoke-Native13 'ruff' {
             uv run ruff check native_build scanner/settings/capabilities.py scanner/models.py scanner/pipeline/audio.py scripts/build_release.py scripts/package_windows.py scripts/verify_installed_release.py tests/test_model_capabilities.py tests/test_audio_progress.py tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py tests/test_installed_artifact_verifier.py tests/test_windows_package.py
           }
@@ -109,7 +213,13 @@ jobs:
             uv run pytest -q -n 0 tests/test_model_capabilities.py tests/test_audio_progress.py tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py tests/test_installed_artifact_verifier.py tests/test_windows_package.py --junitxml "$env:RUNNER_TEMP\native13-windows-junit.xml"
           }
 
-          $ffprobeRoot = Join-Path $env:ChocolateyInstall 'lib\ffmpeg\tools'
+          $mediaOptions = @()
+          if ($env:RELEASE_VERSION) {
+            $ffprobeRoot = Join-Path $env:EDITARR_WINDOWS_MEDIA 'standalone\bin'
+            $mediaOptions = @('--source-media-release', '--ffmpeg-helper', (Join-Path $ffprobeRoot 'ffmpeg.exe'))
+          } else {
+            $ffprobeRoot = Join-Path $env:ChocolateyInstall 'lib\ffmpeg\tools'
+          }
           $ffprobeCandidates = @(Get-ChildItem -LiteralPath $ffprobeRoot -Filter 'ffprobe.exe' -File -Recurse)
           if ($ffprobeCandidates.Count -ne 1) {
             throw "Expected one real target-native ffprobe.exe below $ffprobeRoot, found $($ffprobeCandidates.Count)"
@@ -118,10 +228,13 @@ jobs:
           $ffprobeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ffprobe.FullName).Hash.ToLowerInvariant()
           Invoke-Native13 'target-native ffprobe version' { & $ffprobe.FullName -version }
           Invoke-Native13 'native PyInstaller build' {
-            uv run python scripts/build_release.py --target windows-x64 --out-dir $runtimeOutput --work-dir $taskTempDir --ffprobe-helper $ffprobe.FullName
+            uv run python -m scripts.build_release --target windows-x64 --out-dir $runtimeOutput --work-dir $taskTempDir --ffprobe-helper $ffprobe.FullName @mediaOptions
           }
 
           $runtime = $env:EDITARR_NATIVE13_RUNTIME
+          if (Test-Path -LiteralPath (Join-Path $runtime '_internal\native-test-fake-models.marker')) {
+            throw 'A distributable runtime must not include the fake model marker'
+          }
           $forbidden = Get-ChildItem -LiteralPath $runtime -Recurse -Force | Where-Object {
             $relative = [IO.Path]::GetRelativePath($runtime, $_.FullName)
             $mlxPackage = -not $_.PSIsContainer -and $relative -match '(?i)^_internal[\\/]mlx([_-][^\\/]*)?([\\/]|$)'
@@ -137,11 +250,20 @@ jobs:
             throw "Forbidden runtime payload detected: $names"
           }
           Invoke-Native13 'raw NATIVE-11 verifier' {
-            uv run python scripts/verify_installed_release.py --runtime $runtime --target windows-x64 --json-out $evidenceOutput
+            uv run python -m scripts.verify_installed_release --runtime $runtime --target windows-x64 --json-out $evidenceOutput
           }
           Invoke-Native13 'git diff --check' { git diff --check }
 
           $inventory = Get-Content -LiteralPath (Join-Path $runtime 'editarr-runtime-inventory.json') -Raw | ConvertFrom-Json
+          if ($env:RELEASE_VERSION) {
+            $releaseCommit = git rev-parse HEAD
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot determine the prepared release commit' }
+            if ($inventory.version -ne $env:RELEASE_VERSION -or
+                $inventory.source_revision -ne $releaseCommit -or
+                $inventory.source_dirty -ne $false -or $inventory.target -ne 'windows-x64') {
+              throw 'Windows runtime inventory does not match the prepared release'
+            }
+          }
           $entrypoint = Get-Item -LiteralPath (Join-Path $runtime 'Editarr.exe')
           $entrypointHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $entrypoint.FullName).Hash.ToLowerInvariant()
           Write-Host "NATIVE13_RUNTIME_TARGET=$($inventory.target)"
@@ -155,119 +277,27 @@ jobs:
           "EDITARR_NATIVE13_TASK_ROOT=$taskRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "EDITARR_NATIVE13_RUNTIME=$runtime" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Enter the native MSVC environment
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          $installation = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          if (-not $installation) { throw 'MSVC x64 tools are unavailable' }
-          $devShell = Join-Path $installation 'Common7\Tools\Launch-VsDevShell.ps1'
-          & $devShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
-          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path -LiteralPath $iscc)) { throw 'Inno Setup 6 is unavailable' }
-          $toolPath = Split-Path -Parent $iscc
-          "PATH=$env:PATH;$toolPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "INCLUDE=$env:INCLUDE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "LIB=$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "LIBPATH=$env:LIBPATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VSCMD_ARG_TGT_ARCH=amd64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Get-Command cl.exe
-          Get-Command rc.exe
-          Get-Item -LiteralPath $iscc
-
       - name: Package and exercise the unsigned per-user installer
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          function Invoke-Native13 {
-            param(
-              [Parameter(Mandatory = $true)][string]$Description,
-              [Parameter(Mandatory = $true)][scriptblock]$Command
-            )
-            & $Command
-            if ($LASTEXITCODE -ne 0) {
-              throw "$Description failed with exit code $LASTEXITCODE"
-            }
-          }
+          & (Join-Path $env:EDITARR_WINDOWS_SOURCE "native_build\windows\package_and_verify.ps1")
 
-          $packageOutput = Join-Path $env:EDITARR_NATIVE13_TASK_ROOT 'package output'
-          $installRoot = Join-Path $env:EDITARR_NATIVE13_TASK_ROOT 'installed Editarr ✓'
-          $installedEvidence = Join-Path $env:RUNNER_TEMP 'native13-installed-verifier.json'
-          $installLog = Join-Path $env:RUNNER_TEMP 'native13-inno-install.log'
-          $uninstallLog = Join-Path $env:RUNNER_TEMP 'native13-inno-uninstall.log'
-          Invoke-Native13 'package unsigned installer' {
-            uv run python scripts/package_windows.py --runtime $env:EDITARR_NATIVE13_RUNTIME --out-dir $packageOutput --work-dir $env:TEMP --unsigned-development
-          }
-          $installer = Get-ChildItem -LiteralPath $packageOutput -Filter 'Editarr-Setup-*-unsigned-development.exe' -File
-          if ($installer.Count -ne 1) { throw 'Expected exactly one generated Inno Setup installer' }
-          Invoke-Native13 'per-user install' {
-            & $installer.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$installRoot" /TASKS=autostart "/LOG=$installLog"
-          }
-          if (-not (Test-Path -LiteralPath (Join-Path $installRoot 'Editarr.exe'))) {
-            throw 'Installed tray launcher is missing'
-          }
-          if (-not (Test-Path -LiteralPath (Join-Path $installRoot 'Runtime\Editarr.exe'))) {
-            throw 'Installed frozen runtime is missing'
-          }
-          $runValue = Get-ItemPropertyValue -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Editarr
-          if ($runValue -ne ('"' + (Join-Path $installRoot 'Editarr.exe') + '" --background')) {
-            throw "Unexpected launch-at-login command: $runValue"
-          }
-
-          $sentinelRoot = Join-Path $env:LOCALAPPDATA 'Editarr\Data'
-          New-Item -ItemType Directory -Force $sentinelRoot | Out-Null
-          $sentinel = Join-Path $sentinelRoot 'native13-preserve.txt'
-          Set-Content -LiteralPath $sentinel -Value 'preserve' -NoNewline
-          $launcher = Join-Path $installRoot 'Editarr.exe'
-          Invoke-Native13 'launcher start' { & $launcher --start }
-          $ready = $false
-          for ($attempt = 0; $attempt -lt 60; $attempt++) {
-            & $launcher --status
-            if ($LASTEXITCODE -eq 0) { $ready = $true; break }
-            Start-Sleep -Seconds 1
-          }
-          if (-not $ready) { throw 'Installed runtime did not reach launcher status Running' }
-          Invoke-Native13 'second launcher start' { & $launcher --start }
-          Invoke-Native13 'diagnostic command' { & (Join-Path $installRoot 'Runtime\Editarr.exe') --foreground --help }
-          Invoke-Native13 'launcher stop' { & $launcher --stop }
-
-          Invoke-Native13 'installed NATIVE-11 verifier' {
-            uv run python scripts/verify_installed_release.py --runtime (Join-Path $installRoot 'Runtime') --target windows-x64 --json-out $installedEvidence
-          }
-
-          Invoke-Native13 'same-version upgrade' {
-            & $installer.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$installRoot" /TASKS=autostart "/LOG=$installLog"
-          }
-          if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Upgrade removed durable data' }
-
-          $uninstaller = Join-Path $installRoot 'unins000.exe'
-          Invoke-Native13 'ordinary uninstall' {
-            & $uninstaller /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/LOG=$uninstallLog"
-          }
-          if (Test-Path -LiteralPath $sentinel) {
-            Write-Host 'NATIVE13_DURABLE_DATA_PRESERVED=true'
-          } else {
-            throw 'Ordinary uninstall removed durable data'
-          }
-          if (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Editarr -ErrorAction SilentlyContinue) {
-            throw 'Uninstall left the Editarr launch-at-login value behind'
-          }
-          $packageEvidence = Get-Content -LiteralPath (Join-Path $packageOutput 'editarr-windows-package.json') -Raw | ConvertFrom-Json
-          Write-Host "NATIVE13_INSTALLER_SHA256=$($packageEvidence.installer_sha256)"
-          Write-Host "NATIVE13_INSTALLER_SIZE_BYTES=$($packageEvidence.installer_size_bytes)"
-          Write-Host "NATIVE13_INSTALLER_SIGNED=$($packageEvidence.signed)"
-          Write-Host "NATIVE13_INSTALLER_DEVELOPMENT_ONLY=$($packageEvidence.development_only)"
-          if ($packageEvidence.signed -or -not $packageEvidence.development_only) {
-            throw 'Unsigned development installer evidence was not labeled correctly'
-          }
-          Invoke-Native13 'git diff --check after installer lifecycle' { git diff --check }
+      - name: Upload Windows release installer
+        if: inputs.version != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: editarr-v${{ inputs.version }}-windows
+          path: ${{ runner.temp }}\windows-release-assets\
+          if-no-files-found: error
+          overwrite: true
+          compression-level: 0
+          retention-days: 3
 
       - name: Upload bounded evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: native13-windows-x64-evidence-${{ github.run_id }}
+          name: native13-windows-x64-evidence-${{ inputs.version || github.run_id }}
           path: |
             ${{ runner.temp }}\native13-windows-junit.xml
             ${{ runner.temp }}\native13-raw-verifier.json
@@ -275,4 +305,5 @@ jobs:
             ${{ runner.temp }}\native13-inno-install.log
             ${{ runner.temp }}\native13-inno-uninstall.log
           if-no-files-found: warn
+          overwrite: true
           retention-days: 14

@@ -13,3 +13,13 @@ def is_macos_release() -> bool:
         and isinstance(root, str)
         and (Path(root) / "macos-release.marker").is_file()
     )
+
+
+def has_source_built_media() -> bool:
+    """Return whether the runtime ships the project-built FFmpeg and PyAV."""
+    root = getattr(sys, "_MEIPASS", None)
+    return is_macos_release() or (
+        getattr(sys, "frozen", False)
+        and isinstance(root, str)
+        and (Path(root) / "source-media-release.marker").is_file()
+    )

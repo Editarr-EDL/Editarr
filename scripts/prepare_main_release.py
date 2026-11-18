@@ -87,7 +87,7 @@ def prepare_release(root: Path, revision: str, version: str) -> str:
     if release_plan(root, revision, None) != [{"revision": revision, "version": version}]:
         raise ValueError("The requested version does not match the main-branch commit height")
     for path, content in version_files(root, version).items():
-        path.write_text(content, encoding="utf-8")
+        path.write_text(content, encoding="utf-8", newline="\n")
     if validate_release_versions(root) != version:
         raise ValueError("Release version validation failed")
     git(root, "diff", "--check")
@@ -121,6 +121,12 @@ def release_notes(root: Path, revision: str, repository: str) -> str:
         )
     return "\n".join(
         [
+            "## Windows and Linux alpha builds",
+            "",
+            "**The Windows x64 installer and Linux x86_64 AppImage are alpha builds "
+            "and entirely untested in real-world use.** The Windows installer is unsigned. "
+            "On Linux, make the AppImage executable with `chmod +x` before launching it.",
+            "",
             *lines,
             "",
             "## macOS installation",

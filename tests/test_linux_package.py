@@ -224,6 +224,8 @@ def test_appdir_layout_uses_immutable_runtime_metadata_and_large_icon(tmp_path):
         / "editarr.png"
     )
     assert icon.read_bytes() == package.ICON_SOURCE.read_bytes()
+    assert (appdir / "editarr.png").resolve(strict=True) == icon
+    assert (appdir / ".DirIcon").resolve(strict=True) == icon
 
 
 @pytest.mark.parametrize("fail_build", [False, True])
@@ -286,16 +288,21 @@ def test_linux_workflow_pins_baseline_and_covers_fuse_headless_and_graphical_pat
         encoding="utf-8"
     )
 
+    baseline = Path("native_build/linux/build_package_ci.sh").read_text(encoding="utf-8")
+    newer = Path("native_build/linux/verify_package_ci.sh").read_text(encoding="utf-8")
+
     assert "rockylinux/rockylinux@sha256:" in workflow
-    assert 'test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"' in workflow
-    assert "--target linux-x86_64" in workflow
-    assert "native14-baseline-raw-verifier.json" in workflow
-    assert "native14-baseline-appdir-verifier.json" in workflow
-    assert "native14-ubuntu-appdir-verifier.json" in workflow
-    assert "--appimage-extract-and-run paths" in workflow
-    assert '"$appimage" paths' in workflow
-    assert "env -u DISPLAY -u WAYLAND_DISPLAY -u BROWSER" in workflow
-    assert "Xvfb :99" in workflow
-    assert "lifecycle quit" in workflow
-    assert "test -c /dev/fuse" in workflow
+    assert 'test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"' in baseline
+    assert "--target linux-x86_64 --source-media-release" in baseline
+    assert "native14-baseline-raw-verifier.json" in baseline
+    assert "native14-baseline-appdir-verifier.json" in baseline
+    assert "--appimage-extract-and-run paths" in baseline
+    assert "native14-ubuntu-appdir-verifier.json" in newer
+    assert '"$appimage" paths' in newer
+    assert "env -u DISPLAY -u WAYLAND_DISPLAY -u BROWSER" in newer
+    assert "Xvfb :99" in newer
+    assert "lifecycle quit" in newer
+    assert "test -c /dev/fuse" in newer
     assert "actions/upload-artifact@v7" in workflow
+    assert "workflow_call:" in workflow
+    assert "name: editarr-v${{ inputs.version }}-linux" in workflow
