@@ -11,6 +11,7 @@ import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import unquote
+from xml.etree import ElementTree
 
 import pytest
 from packaging.markers import Marker
@@ -213,9 +214,15 @@ def test_appdir_layout_uses_immutable_runtime_metadata_and_large_icon(tmp_path):
     assert "Exec=Editarr" in desktop.read_text(encoding="utf-8")
     assert "X-AppImage-Version=0.1.0" in desktop.read_text(encoding="utf-8")
     metainfo = appdir / "usr" / "share" / "metainfo" / f"{package.APP_ID}.metainfo.xml"
-    assert 'release version="0.1.0" date="1980-01-01"' in metainfo.read_text(
-        encoding="utf-8"
+    metainfo_root = ElementTree.parse(metainfo).getroot()
+    release = metainfo_root.find("releases/release")
+    assert release is not None
+    assert release.attrib == {"version": "0.1.0", "date": "1980-01-01"}
+    assert metainfo_root.findtext("url[@type='homepage']") == (
+        "https://github.com/Editarr-EDL/Editarr"
     )
+    assert metainfo_root.find("content_rating[@type='oars-1.1']") is not None
+    assert metainfo_root.findtext("developer[@id='org.editarr']/name") == "Editarr"
     icon = (
         appdir
         / "usr"
@@ -298,6 +305,9 @@ def test_linux_workflow_pins_baseline_and_covers_fuse_headless_and_graphical_pat
     newer = Path("native_build/linux/verify_package_ci.sh").read_text(encoding="utf-8")
 
     assert "rockylinux/rockylinux@sha256:" in workflow
+    # Rocky 8 installs runuser in /usr/sbin, and the baseline drops privileges with it.
+    assert "runuser -u nobody" in baseline
+    assert "/usr/local/bin:/usr/bin:/usr/sbin:/bin" in workflow
     assert 'test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"' in baseline
     assert "--target linux-x86_64 --source-media-release" in baseline
     assert "native14-baseline-raw-verifier.json" in baseline

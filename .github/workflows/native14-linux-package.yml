@@ -92,7 +92,7 @@ jobs:
             -e VERSION \
             -w /workspace \
             "$ROCKY_IMAGE" \
-            env PATH=/tools/node/bin:/tools/go/bin:/usr/local/bin:/usr/bin:/bin \
+            env PATH=/tools/node/bin:/tools/go/bin:/usr/local/bin:/usr/bin:/usr/sbin:/bin \
               bash native_build/linux/build_package_ci.sh /native14
 
       - name: Return build outputs to the runner user
