@@ -1,0 +1,127 @@
+name: Editarr release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has-releases: ${{ steps.plan.outputs.has-releases }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Assign versions to new main commits
+        id: plan
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          matrix=$(python3 -m scripts.prepare_main_release plan "$GITHUB_SHA" --before "$BEFORE")
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+          printf 'has-releases=%s\n' "$(jq -r '.include | length > 0' <<< "$matrix")" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build macOS v${{ matrix.version }}
+    needs: plan
+    if: needs.plan.outputs.has-releases == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: macos-26
+    timeout-minutes: 180
+    env:
+      REVISION: ${{ matrix.revision }}
+      VERSION: ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: native_build/backup_age/go.sum
+      - name: Install release toolchain
+        id: toolchain
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.22.0 --activate
+          python3 -m venv "$RUNNER_TEMP/release-tools"
+          "$RUNNER_TEMP/release-tools/bin/pip" install uv==0.12.5
+          echo "$RUNNER_TEMP/release-tools/bin" >> "$GITHUB_PATH"
+          printf 'xcode=%s\n' "$(xcodebuild -version | tr '\n' ' ' | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+          media_inputs=$(git rev-parse "$REVISION:uv.lock" "$REVISION:native_build/macos/build_media.sh")
+          printf 'media=%s\n' "$(printf '%s' "$media_inputs" | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ${{ runner.temp }}/editarr-release-media/prefix
+            ${{ runner.temp }}/editarr-release-media/wheels
+          key: editarr-media-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ steps.toolchain.outputs.media }}-${{ hashFiles('scripts/build_macos_distribution.sh') }}
+      - name: Build and verify the versioned installer
+        env:
+          EDITARR_MACOS_MEDIA_DIR: ${{ runner.temp }}/editarr-release-media
+          EDITARR_BUILD_JOBS: '3'
+        run: |
+          worktree="$RUNNER_TEMP/release-source"
+          git worktree add --detach "$worktree" "$REVISION"
+          uv run --no-project --managed-python --python 3.11.16 \
+            python -m scripts.prepare_main_release prepare "$worktree" "$REVISION" "$VERSION"
+          cd "$worktree"
+          bash "$GITHUB_WORKSPACE/scripts/build_macos_distribution.sh" "$RUNNER_TEMP/distribution"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: editarr-v${{ matrix.version }}-macos
+          path: |
+            ${{ runner.temp }}/distribution/assets/
+            ${{ runner.temp }}/distribution/installed-verification.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  publish:
+    name: Publish v${{ matrix.version }}
+    needs: [plan, build]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.has-releases == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    concurrency:
+      group: editarr-publish
+      queue: max
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      REVISION: ${{ matrix.revision }}
+      VERSION: ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: editarr-v${{ matrix.version }}-macos
+          path: ${{ runner.temp }}/distribution
+      - name: Upload and publish the verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          worktree="$RUNNER_TEMP/release-source"
+          git worktree add --detach "$worktree" "$REVISION"
+          commit=$(python3 -m scripts.prepare_main_release prepare "$worktree" "$REVISION" "$VERSION")
+          notes="$RUNNER_TEMP/release-notes.md"
+          python3 -m scripts.prepare_main_release notes "$REVISION" "$GITHUB_REPOSITORY" > "$notes"
+          bash scripts/publish_main_release.sh "$VERSION" "$commit" "$RUNNER_TEMP/distribution" "$notes"
