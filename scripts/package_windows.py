@@ -154,6 +154,24 @@ def _reject_links(root: Path) -> None:
         raise PackageError("Windows runtime may not contain links: " + ", ".join(links[:8]))
 
 
+_MAX_PATH = 259
+"""Longest Win32 path Inno Setup 6 can open; it is not long-path aware."""
+
+
+def _require_inno_path_lengths(stage: Path) -> None:
+    """Fail clearly before compiling if Inno Setup could not open a staged file.
+
+    ISCC otherwise aborts after minutes of compression with only "The system cannot
+    find the path specified". Use a short ``--work-dir`` when this fails.
+    """
+    longest = max((str(path) for path in stage.rglob("*")), key=len, default=str(stage))
+    if len(longest) > _MAX_PATH:
+        raise PackageError(
+            f"staged path has {len(longest)} characters; Inno Setup accepts at most "
+            f"{_MAX_PATH}. Use a shorter --work-dir: {longest}"
+        )
+
+
 _ACCELERATOR_NAME = re.compile(r"mlx|cuda|cudnn|cublas|cudart|nvrtc|nvjitlink|nvidia", re.I)
 _NATIVE_BINARY = re.compile(r"\.(?:dll|pyd|so|dylib)$", re.I)
 _MLX_PACKAGE = re.compile(r"^_internal/mlx(?:[_-][^/]*)?(?:/|$)", re.I)
@@ -348,6 +366,7 @@ def package_windows(args: argparse.Namespace) -> int:
             _sign(launcher, certificate=args.certificate, timestamp_url=args.timestamp_url)
             _refresh_runtime_size(staged_runtime, inventory)
 
+        _require_inno_path_lengths(stage)
         _run(
             [
                 "ISCC.exe",

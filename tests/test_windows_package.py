@@ -307,3 +307,21 @@ def test_packaging_values_reject_newlines_and_signing_password_is_not_displayed(
     assert sign_display is not None
     assert "private-test-password" not in sign_display
     assert "[REDACTED]" in sign_display
+
+
+def test_packaging_refuses_staged_paths_inno_setup_cannot_open(tmp_path):
+    packager = _packager()
+    stage = tmp_path / "stage"
+    (stage / "Runtime").mkdir(parents=True)
+    packager._require_inno_path_lengths(stage)
+
+    deep = stage / "Runtime"
+    while len(str(deep)) <= packager._MAX_PATH:
+        deep /= "d" * 100
+    deep.mkdir(parents=True)
+    with pytest.raises(packager.PackageError, match="Use a shorter --work-dir"):
+        packager._require_inno_path_lengths(stage)
+
+    assert "--work-dir $packageWork" in Path(
+        "native_build/windows/package_and_verify.ps1"
+    ).read_text(encoding="utf-8")

@@ -38,7 +38,10 @@ function Invoke-CheckedGui {
 
 $packageOutput = Join-Path $env:EDITARR_NATIVE13_TASK_ROOT 'package output'
 $env:LOCALAPPDATA = Join-Path $env:EDITARR_NATIVE13_TASK_ROOT 'localappdata'
-$installRoot = Join-Path $env:EDITARR_NATIVE13_TASK_ROOT 'installed Editarr ✓'
+# Inno Setup is not long-path aware. Keep the stage and install roots short so
+# the deepest runtime path (third-party license trees) stays within MAX_PATH.
+$installRoot = Join-Path $env:RUNNER_TEMP 'Editarr ✓'
+$packageWork = Join-Path $env:RUNNER_TEMP 'p'
 $installedEvidence = Join-Path $env:RUNNER_TEMP 'native13-installed-verifier.json'
 $installLog = Join-Path $env:RUNNER_TEMP 'native13-inno-install.log'
 $uninstallLog = Join-Path $env:RUNNER_TEMP 'native13-inno-uninstall.log'
@@ -49,7 +52,7 @@ if ($release) {
   $packageArguments = @('--unsigned-alpha', '--notices', $notices)
 }
 Invoke-Native13 'package unsigned installer' {
-  uv run python -m scripts.package_windows --runtime $env:EDITARR_NATIVE13_RUNTIME --out-dir $packageOutput --work-dir $env:TEMP @packageArguments
+  uv run python -m scripts.package_windows --runtime $env:EDITARR_NATIVE13_RUNTIME --out-dir $packageOutput --work-dir $packageWork @packageArguments
 }
 $installers = @(Get-ChildItem -LiteralPath $packageOutput -Filter '*Setup*.exe' -File)
 if ($installers.Count -ne 1) { throw 'Expected exactly one generated Inno Setup installer' }
