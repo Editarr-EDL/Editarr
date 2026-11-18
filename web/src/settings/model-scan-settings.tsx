@@ -2,6 +2,12 @@ import { useEffect, useState, type FormEvent } from "react";
 import { fetchModelScanSettings, saveModelScanSettings } from "../api/api-model-scan-settings";
 import { useCan } from "../auth/auth-gate";
 
+// Shift the decimal exponent so values such as 1.001 seconds display as 1001 ms.
+function shiftDecimal(value: number, places: number): number {
+  const [coefficient, exponent = "0"] = String(value).split("e");
+  return Number(`${coefficient}e${Number(exponent) + places}`);
+}
+
 export function ModelScanSettings() {
   const mayView = useCan("models.inventory.view");
   return mayView ? <ScanSettingsCard /> : null;
@@ -9,20 +15,26 @@ export function ModelScanSettings() {
 
 function ScanSettingsCard() {
   const mayEdit = useCan("deployment.edit");
-  const [saved, setSaved] = useState<number | null>(null);
+  const [savedMilliseconds, setSavedMilliseconds] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const value = draft.trim() === "" ? NaN : Number(draft);
-  const canSave = mayEdit && saved !== null && Number.isFinite(value) && value >= 0 && value !== saved && !saving;
+  const milliseconds = draft.trim() === "" ? NaN : Number(draft);
+  const canSave = mayEdit && savedMilliseconds !== null && Number.isFinite(milliseconds) &&
+    milliseconds >= 0 && milliseconds !== savedMilliseconds && !saving;
+
+  function loadPadding(seconds: number) {
+    const milliseconds = shiftDecimal(seconds, 3);
+    setSavedMilliseconds(milliseconds);
+    setDraft(String(milliseconds));
+  }
 
   useEffect(() => {
     const controller = new AbortController();
     void fetchModelScanSettings(controller.signal).then((settings) => {
       if (controller.signal.aborted) return;
-      setSaved(settings.audio_padding_seconds);
-      setDraft(String(settings.audio_padding_seconds));
+      loadPadding(settings.audio_padding_seconds);
     }).catch((reason) => {
       if (!controller.signal.aborted) {
         setError(reason instanceof Error ? reason.message : "Unable to load scan settings.");
@@ -38,9 +50,8 @@ function ScanSettingsCard() {
     setError(null);
     setMessage(null);
     try {
-      const settings = await saveModelScanSettings(value);
-      setSaved(settings.audio_padding_seconds);
-      setDraft(String(settings.audio_padding_seconds));
+      const settings = await saveModelScanSettings(shiftDecimal(milliseconds, -3));
+      loadPadding(settings.audio_padding_seconds);
       setMessage("Scan settings saved.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save scan settings.");
@@ -51,11 +62,11 @@ function ScanSettingsCard() {
 
   return <section className="settings-card" aria-labelledby="model-scan-settings-heading">
     <div className="section-heading"><h2 id="model-scan-settings-heading">Scan Settings</h2></div>
-    {saved === null
+    {savedMilliseconds === null
       ? (!error && <p role="status">Loading scan settings…</p>)
       : <form className="model-scan-settings-form" onSubmit={(event) => void save(event)}>
         <label className="field">
-          <span>Audio padding (seconds)</span>
+          <span>Audio padding (milliseconds)</span>
           <input
             type="number"
             min={0}
