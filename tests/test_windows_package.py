@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import struct
 import sys
 from pathlib import Path
@@ -50,6 +51,19 @@ def test_windows_product_contract_is_stable_and_per_user():
     assert packager.DATA_LOCATION == r"%LOCALAPPDATA%\Editarr\Data"
     assert packager.CACHE_LOCATION == r"%LOCALAPPDATA%\Editarr\Cache"
     assert packager.LOG_LOCATION == r"%LOCALAPPDATA%\Editarr\Logs"
+
+
+def test_import_without_nonblocking_open_disables_anchored_export(monkeypatch):
+    from scanner.persistence.repository import export_committed
+
+    monkeypatch.delattr(os, "O_NONBLOCK", raising=False)
+    spec = importlib.util.spec_from_file_location(
+        f"{export_committed.__package__}._unsupported_export_writer", export_committed.__file__
+    )
+    assert spec is not None and spec.loader is not None
+    unsupported = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(unsupported)
+    assert not unsupported.ANCHORED
 
 
 def test_inno_setup_is_non_elevated_data_preserving_and_lifecycle_aware():
