@@ -396,6 +396,7 @@ def artifact_ids_for_backend(
             "siglip2-base-patch16-256",
             "siglip2-moderation-head-violence",
         ),
+        "shieldstral": ("shieldstral-3b-int8",),
         "qwen3_vl": ("qwen3-vl-8b-instruct-4bit",),
         "qwen": ("qwen3-vl-8b-instruct-4bit",),
         "nudenet": (),

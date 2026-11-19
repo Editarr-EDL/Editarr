@@ -246,6 +246,30 @@
       ]
     },
     {
+      "id": "shieldstral-3b-int8",
+      "backend_ids": ["shieldstral"],
+      "backend_version": "1.0-3b-int8",
+      "distribution": "huggingface",
+      "repository": "sahilchachra/Shieldstral-1.0-3B-INT8",
+      "revision": "accac83025f1164a388e0d704840809a4d46bffd",
+      "required_patterns": ["*.json", "*.jinja", "*.safetensors"],
+      "source_url": "https://huggingface.co/sahilchachra/Shieldstral-1.0-3B-INT8",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/sahilchachra/Shieldstral-1.0-3B-INT8/blob/accac83025f1164a388e0d704840809a4d46bffd/README.md"},
+      "files": [
+        {"path": "chat_template.jinja", "size": 1572, "git_blob_sha1": "fd0e62631780a9c51e5377cdf6b660b575c20509"},
+        {"path": "config.json", "size": 2313, "git_blob_sha1": "38ce9b247f7acb1e9ba4537a32c41e449af4403e"},
+        {"path": "generation_config.json", "size": 126, "git_blob_sha1": "ce01f715d02f6946500f5662bcb83f73af5cb742"},
+        {"path": "model-00001-of-00004.safetensors", "size": 1199996959, "sha256": "76d9bca55915c62ec4bcc3583f29d354f098d461a6bbba75f85320623e053a83"},
+        {"path": "model-00002-of-00004.safetensors", "size": 1190803205, "sha256": "c713ecb0b9db9b38b44eaddfd7444a9bd78b60a877cee2c1a2deaa973edca51b"},
+        {"path": "model-00003-of-00004.safetensors", "size": 1190999432, "sha256": "35e3c460d33fb031140a09fe26c5e0669c1dacd1260f33213731c057f39fe767"},
+        {"path": "model-00004-of-00004.safetensors", "size": 901948987, "sha256": "133377187c7a571f6a926a417f4055bedad702669502976fbb1d9a4d4ea6c5bb"},
+        {"path": "model.safetensors.index.json", "size": 83502, "git_blob_sha1": "4cd0e4aabe240bb0bd7ad0400b3e35a1b0e829b2"},
+        {"path": "processor_config.json", "size": 660, "git_blob_sha1": "e5723f69baa5ea651867735b2317ab7775a6a175"},
+        {"path": "tokenizer.json", "size": 17077322, "sha256": "9172cf28b79a17502736f971b560faeced38ee527540cea6882a1f40cce320c0"},
+        {"path": "tokenizer_config.json", "size": 261, "git_blob_sha1": "02d0b0044f3ccdca5e634c0bc0d879562f6a02ea"}
+      ]
+    },
+    {
       "id": "nudenet-package-model",
       "backend_ids": ["nudenet"],
       "backend_version": "nudenet>=3.4.2/320n.onnx",

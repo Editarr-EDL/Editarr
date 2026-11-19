@@ -27,6 +27,7 @@ _BASE_IMPORTS = (
     "scanner.pipeline.image_safety_gate",
     "scanner.pipeline.qwen_summary",
     "scanner.pipeline.siglip2_moderation",
+    "scanner.pipeline.shieldstral",
 )
 _MACOS_IMPORTS = ("mlx", "mlx_vlm", "mlx_whisper")
 

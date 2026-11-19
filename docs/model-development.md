@@ -65,8 +65,9 @@ NudeNet has two deterministic mappings whose output semantics exactly match MCF 
 
 `FEMALE_BREAST_EXPOSED` remains `nudity/nudity`: breast exposure alone does not establish the
 broader MCF `toplessness` concept. `ANUS_EXPOSED` also remains general because the registry has
-no exact anus-specific token. Image Safety Gate and SigLIP2 heads expose only broad NSFW or
-violence scores and therefore retain their general family fallbacks.
+no exact anus-specific token. Image Safety Gate, SigLIP2 heads, and Shieldstral policies
+expose only broad nudity, sex, or violence scores and therefore retain their general family
+fallbacks.
 
 ## Video-model evaluation
 
@@ -144,3 +145,62 @@ budget.
 
 The complete scanner/model configuration is defined in
 [`scanner/settings/config.py`](../scanner/settings/config.py).
+
+### Shieldstral
+
+Shieldstral (macOS Apple silicon only) answers yes/no policy questions about each frame.
+Its prompts, routing, and labels are in
+[`scanner/pipeline/shieldstral_policies.py`](../scanner/pipeline/shieldstral_policies.py).
+Every prompt uses the model card's fixed system prompt and the instruct
+`You moderate still frames from movies for a family content filter. Apply a strict
+standard.` The evaluated configuration is:
+
+| Step | Query | Threshold setting (default) | Emits |
+| --- | --- | --- | --- |
+| Sexual screen | `Does this image show sexual activity or sexually suggestive content?` | `EDITARR_SHIELDSTRAL_SEXUAL_THRESHOLD` (0.40) | routed families below |
+| Violence screen | `Does this image contain violence or blood?` | `EDITARR_SHIELDSTRAL_VIOLENCE_THRESHOLD` (0.40) | `shieldstral_violence` (violence) |
+| Nudity route | `Does this image contain nudity?` | `EDITARR_SHIELDSTRAL_NUDITY_ROUTE_THRESHOLD` (0.25) | `shieldstral_nudity` (nudity) |
+| Sex-act route | `Does this image show sexual intercourse or intimate sexual contact?` | `EDITARR_SHIELDSTRAL_SEX_ROUTE_THRESHOLD` (0.5, provisional) | `shieldstral_sexual` (sex) |
+
+Routes are asked only when the sexual screen fires. Both may fire; when neither does,
+the frame is reported as `shieldstral_sexual` (suggestive). Every sexual detection uses
+the sexual screen score as its confidence; route scores only choose families. All
+detections keep their general MCF family fallback, so Qwen can refine the subcategory.
+
+The nudity route uses 0.25 because the question is under-confident on backlit,
+sheer-fabric, distant, or partly hidden nudity; on the routing corpus it routed 78/83
+nude frames (26/26 shots) to nudity. The sex-act route is **provisional**: neither
+evaluation trailer contains real sexual activity, so its recall is unmeasured. Broader
+wordings such as `Does this image show people engaged in sexual activity?` fired on
+72–76% of plain artistic nude frames, while the chosen wording fired on 5/88 (posed
+nudes resembling sexual positions). Check it on footage with actual sex scenes before
+relying on it; a missed nude sex scene is reported as nudity only.
+
+On a hand-labeled 320-frame trailer and replay corpus, the two screens together caught
+27/27 positive scenes at 288 px (frame recall 0.89, precision 0.78). Frames taller than
+`EDITARR_SHIELDSTRAL_MAX_IMAGE_HEIGHT` (default 288) are downscaled with an even width;
+288 px showed no measurable loss against 512 px, while 256 px was worse.
+
+Each frame's image is encoded once and reused by every question. The KV cache of the
+system + instruct prefix shared by all prompts is computed once per process, each
+question pre-fills only its remaining tokens, and the answer logits are computed in
+float32 from the final hidden state. Both screens take about 0.66 s per frame at 288 px
+on an M4 Pro; routing adds two questions (about 0.5 s) only on sexual-positive frames. Peak MLX
+memory is about 5.3 GB at 288 px. The scan worker can keep Shieldstral and the Qwen3-VL
+summary model (about 6 GB for 8B) loaded together, so 24 GB of unified memory is
+recommended.
+
+A fine scene pass scores one frame per `EDITARR_SHIELDSTRAL_FINE_SAMPLE_INTERVAL_SECONDS`
+(default 0.5), plus the first and last frames. When two consecutive samples emit
+different labels, including a change of routed family, the gap is bisected until the
+change is located to adjacent frames. Other frames reuse the nearest scored result in
+the same uniform run, so an event shorter than the interval that falls between two
+matching samples can be missed.
+
+In the fine pass, a sexual-positive frame where neither route fires has an unknown
+family rather than a confirmed suggestive one. Within each contiguous run of
+sexual-positive frames, such frames are reported as nudity when any frame in the run
+routed to nudity, so a nude shot whose nudity score dips under 0.25 does not also
+produce a sex finding for Qwen to reconcile. Frames that fired the sex-act route keep
+the sex family, and runs without a nudity-routed frame keep the suggestive sex
+fallback. A coarse sample is a single frame and always uses the fallback.

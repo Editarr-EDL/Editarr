@@ -20,10 +20,18 @@ upstream sources, and license metadata.
 | SigLIP2 NSFW and violence heads | `khasinski/siglip2-moderation-heads@b88fe03369e3dc6aa9887cd3b4cd3e9b7cf76ee5` | 789,337 / 789,349 | Apache-2.0 declared |
 | Qwen3-VL 4B Instruct 4-bit | `mlx-community/Qwen3-VL-4B-Instruct-4bit@2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b` | 3,109,729,929 | Apache-2.0 declared |
 | Qwen3-VL 8B Instruct 4-bit | `mlx-community/Qwen3-VL-8B-Instruct-4bit@defcdea7cc7a4b0858fea563cbbce171d328e457` | 5,776,630,909 | Apache-2.0 declared |
+| Shieldstral 1.0 3B INT8 (MLX) | `sahilchachra/Shieldstral-1.0-3B-INT8@accac83025f1164a388e0d704840809a4d46bffd` | 4,500,914,339 | Apache-2.0 declared |
 
 The pinned MLX Whisper and CompVis safety-checker repositories have undeclared
 licenses. Editarr downloads both artifacts on demand from their upstream
 repositories when the corresponding backend is available.
+
+Shieldstral uses a community MLX INT8 conversion of Mistral's Apache-2.0
+`mistralai/Shieldstral-1.0-3B`. Editarr pins only the files `mlx_vlm.load` and the
+processor read, including `chat_template.jinja`; the repository's `tekken.json` and
+README are not downloaded. It needs about 5.3 GB of memory at the default 288 px
+frame height; see [model-development.md](model-development.md#shieldstral) for the
+evaluated prompts and thresholds.
 
 ## Package-supplied resources and helper binaries
 

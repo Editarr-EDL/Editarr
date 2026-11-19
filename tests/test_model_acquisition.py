@@ -143,6 +143,7 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
         "siglip2-moderation-head-violence",
         "qwen3-vl-4b-instruct-4bit",
         "qwen3-vl-8b-instruct-4bit",
+        "shieldstral-3b-int8",
     } == {item.id for item in downloaded}
     assert all(item.revision and len(item.revision) == 40 for item in downloaded)
     assert all(item.files and item.expected_size > 0 for item in downloaded)
@@ -183,6 +184,18 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
         "image-safety-classifier-s",
     )
     assert artifact_ids_for_backend("qwen") == artifact_ids_for_backend("qwen3_vl")
+    shieldstral = declared.artifact("shieldstral-3b-int8")
+    assert artifact_ids_for_backend("shieldstral") == ("shieldstral-3b-int8",)
+    assert shieldstral.backend_ids == ("shieldstral",)
+    assert shieldstral.license.spdx == "Apache-2.0"
+    shieldstral_files = {item.path: item for item in shieldstral.files}
+    assert "chat_template.jinja" in shieldstral_files
+    assert "tekken.json" not in shieldstral_files
+    assert all(
+        shieldstral_files[path].sha256
+        for path in shieldstral_files
+        if path.endswith(".safetensors")
+    )
 
 
 def test_source_media_release_offers_models_with_undeclared_licenses(tmp_path, monkeypatch):
