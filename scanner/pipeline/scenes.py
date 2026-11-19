@@ -1,8 +1,10 @@
 """Scene detection via PySceneDetect for speed-up mode."""
 
 import logging
+import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from fractions import Fraction
 from pathlib import Path
 
 from scanner.pipeline.frames import extracted_frame_scale_filter
@@ -19,6 +21,14 @@ logger = logging.getLogger(__name__)
 # Absorbs floating-point and container timestamp rounding (e.g. Matroska's 1 ms
 # ticks) so a frame exactly on a sample time is not skipped for the next one.
 _SAMPLE_TIME_TOLERANCE_SECONDS = 0.001
+
+
+# FFmpeg also echoes input paths and metadata (e.g. titles) to stderr, so showinfo
+# messages are matched only at the start of a line. The ``[Parsed_showinfo_N @ …]``
+# prefix is optional because interleaved output can split it from its message.
+_SHOWINFO_PREFIX = r"^(?:\[Parsed_showinfo_\d+ @ [^\]]+\] )?"
+_SHOWINFO_TIME_BASE = re.compile(_SHOWINFO_PREFIX + r"config in time_base: (\d+)/(\d+)")
+_SHOWINFO_FRAME = re.compile(_SHOWINFO_PREFIX + r"n:\s*\d+\s+pts:\s*(-?\d+)\s+pts_time:")
 
 
 @dataclass
@@ -138,6 +148,31 @@ def interval_sample_filter(interval_seconds: float, offset_seconds: float) -> st
     return f"select=gte(t\\,{first_sample!r}+selected_n*{interval_seconds!r})"
 
 
+@dataclass
+class _ShowinfoTimes:
+    """Collect presentation times FFmpeg's ``showinfo`` filter logs per output frame.
+
+    Times are relative to the input seek point, in output order, computed from
+    exact ``pts`` values and the input time base (rather than the six-significant-
+    digit ``pts_time``). Only the first time base counts, and frame lines are
+    accepted only after it, so echoed input headers cannot inject samples.
+    """
+
+    seconds: list[float] = field(default_factory=list)
+    time_base: Fraction | None = None
+
+    def reset(self) -> None:
+        self.seconds.clear()
+        self.time_base = None
+
+    def parse(self, line: str) -> None:
+        if self.time_base is None:
+            if (match := _SHOWINFO_TIME_BASE.match(line)) and int(match[2]):
+                self.time_base = Fraction(int(match[1]), int(match[2]))
+        elif match := _SHOWINFO_FRAME.match(line):
+            self.seconds.append(float(int(match[1]) * self.time_base))
+
+
 def sample_scene_frames(
     video_path: str,
     scene: Scene,
@@ -152,9 +187,11 @@ def sample_scene_frames(
     Returns ``(path, timestamp)`` pairs inside ``[scene.start, scene.end)``. With
     ``interval_seconds`` the k-th frame is the first at or after
     ``scene.start + offset + k * interval_seconds`` (see
-    :func:`interval_sample_offset`) and is stamped with that time. Otherwise every
-    source frame is extracted and stamped every ``timestamp_interval_seconds``
-    (normally the source frame interval).
+    :func:`interval_sample_offset`) and is stamped with its own presentation
+    time, so sources too sparse for the interval, or with gaps, cannot shift
+    timestamps. Otherwise every source frame is extracted at the constant output
+    rate and stamped every ``timestamp_interval_seconds`` (normally the source
+    frame interval).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg = resolve_ffmpeg()
@@ -166,13 +203,21 @@ def sample_scene_frames(
     pattern = str(output_dir / f"scene_{scene.index:04d}_%06d.jpg")
     filters = [extracted_frame_scale_filter()]
     frame_rate_options: list[str] = []
-    sample_offset = 0.0
+    sample_times = _ShowinfoTimes()
     if interval_seconds is not None:
         sample_offset = interval_sample_offset(interval_seconds, duration)
-        filters.insert(0, interval_sample_filter(interval_seconds, sample_offset))
+        filters[:0] = [interval_sample_filter(interval_seconds, sample_offset), "showinfo"]
         frame_rate_options = ["-fps_mode", "vfr"]
+    frame_glob = f"scene_{scene.index:04d}_*.jpg"
+
+    def before_attempt() -> None:
+        # A failed hardware attempt may leave frames and logged times behind.
+        sample_times.reset()
+        for stale_frame in output_dir.glob(frame_glob):
+            stale_frame.unlink(missing_ok=True)
 
     def on_ffmpeg_output(line: str) -> None:
+        sample_times.parse(line)
         if not progress_callback or not line.startswith("out_time_us="):
             return
         try:
@@ -211,9 +256,10 @@ def sample_scene_frames(
         command,
         should_cancel=should_cancel,
         output_callback=on_ffmpeg_output,
+        before_attempt=before_attempt,
     )
 
-    frames = sorted(output_dir.glob(f"scene_{scene.index:04d}_*.jpg"))
+    frames = sorted(output_dir.glob(frame_glob))
     if not frames:
         # A scene spanning about one source frame can have no frame at or after
         # its midpoint. Seeking to the start is the robust fallback: it returns
@@ -245,17 +291,39 @@ def sample_scene_frames(
             return [(fallback_path, scene.start_seconds)]
     if not frames:
         return []
-    results: list[tuple[Path, float]] = []
     if interval_seconds is not None:
-        first_timestamp = scene.start_seconds + sample_offset
-        timestamp_interval_seconds = interval_seconds
-    else:
-        first_timestamp = scene.start_seconds
-        if timestamp_interval_seconds is None:
-            timestamp_interval_seconds = duration / len(frames)
+        return _stamp_interval_samples(scene, frames, sample_times.seconds)
+    results: list[tuple[Path, float]] = []
+    if timestamp_interval_seconds is None:
+        timestamp_interval_seconds = duration / len(frames)
     for i, frame_path in enumerate(frames):
-        timestamp = first_timestamp + (i * timestamp_interval_seconds)
+        timestamp = scene.start_seconds + (i * timestamp_interval_seconds)
         if timestamp < scene.end_seconds:
             results.append((frame_path, timestamp))
 
+    return results
+
+
+def _stamp_interval_samples(
+    scene: Scene, frames: list[Path], relative_seconds: list[float]
+) -> list[tuple[Path, float]]:
+    """Pair extracted interval samples, in output order, with their logged times.
+
+    ``-t`` can stop the encoder after ``showinfo`` logs a frame, so extra times
+    are ignored; a frame without a logged time is an error rather than a guess.
+    Samples outside the scene or not after the previous one are dropped.
+    """
+    if len(frames) > len(relative_seconds):
+        raise RuntimeError(
+            f"FFmpeg reported {len(relative_seconds)} timestamps for "
+            f"{len(frames)} sampled frames of scene {scene.index}"
+        )
+    results: list[tuple[Path, float]] = []
+    for frame_path, offset in zip(frames, relative_seconds, strict=False):
+        timestamp = scene.start_seconds + offset
+        if not scene.start_seconds <= timestamp < scene.end_seconds:
+            continue
+        if results and timestamp <= results[-1][1]:
+            continue
+        results.append((frame_path, timestamp))
     return results

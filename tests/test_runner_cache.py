@@ -121,6 +121,43 @@ def test_isolated_worker_reports_child_cancellation():
         _collect_isolated_findings(process, queue, Event(), None, None, kind="audio")
 
 
+class _Refused(RuntimeError):
+    pass
+
+
+def _refuse(*_args):
+    raise _Refused
+
+
+@pytest.mark.parametrize(
+    ("should_cancel", "progress_callback"),
+    [(_refuse, None), (lambda: False, _refuse)],
+    ids=["authority-recheck", "progress-relay"],
+)
+def test_isolated_worker_is_stopped_when_relaying_raises(
+    monkeypatch, should_cancel, progress_callback
+):
+    alive = [True]
+    process = SimpleNamespace(join=lambda timeout: None, is_alive=lambda: alive[0])
+    queue = SimpleNamespace(get=lambda timeout: {"progress": (0.5, "Visual scan")})
+    terminated = []
+
+    def terminate(proc):
+        terminated.append(proc)
+        alive[0] = False
+
+    monkeypatch.setattr(runner, "_terminate_worker", terminate)
+    cancel_event = Event()
+
+    with pytest.raises(_Refused):
+        _collect_isolated_findings(
+            process, queue, cancel_event, progress_callback, should_cancel, kind="visual"
+        )
+
+    assert cancel_event.is_set()
+    assert terminated == [process]
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

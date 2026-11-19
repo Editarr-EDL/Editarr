@@ -78,7 +78,10 @@ def run_command(
         # Dedicated scan workers each own a process group. Keep FFmpeg in that
         # group so deleting an orphaned worker also stops its active command.
         start_new_session=False,
-        text=True,
+        # Paths and metadata in FFmpeg logs need not match the locale encoding;
+        # a decode error would otherwise stop the reader and drop later lines.
+        encoding="utf-8",
+        errors="replace",
     )
     output: Queue[str] = Queue()
     stderr_tail: deque[str] = deque(maxlen=200)
@@ -127,13 +130,18 @@ def run_ffmpeg_with_optional_macos_hwaccel(
     *,
     should_cancel: Callable[[], bool] | None = None,
     output_callback: Callable[[str], None] | None = None,
+    before_attempt: Callable[[], None] | None = None,
 ) -> None:
     """Run FFmpeg with VideoToolbox on macOS, retrying unsupported inputs on the CPU.
 
     The command must include its input marker (``-i``) for hardware decoding.
-    Cancellation and output callbacks are forwarded to each attempt.
+    Cancellation and output callbacks are forwarded to each attempt, and
+    ``before_attempt`` runs before each one so callers can discard state (such
+    as parsed output or partial files) left by a failed hardware attempt.
     """
     if sys.platform != "darwin" or "-i" not in command:
+        if before_attempt:
+            before_attempt()
         run_command(command, should_cancel=should_cancel, output_callback=output_callback)
         return
 
@@ -145,10 +153,14 @@ def run_ffmpeg_with_optional_macos_hwaccel(
         *command[input_index:],
     ]
     try:
+        if before_attempt:
+            before_attempt()
         run_command(
             hardware_command,
             should_cancel=should_cancel,
             output_callback=output_callback,
         )
     except subprocess.CalledProcessError:
+        if before_attempt:
+            before_attempt()
         run_command(command, should_cancel=should_cancel, output_callback=output_callback)

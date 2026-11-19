@@ -240,41 +240,52 @@ def _collect_isolated_findings(
     kind: str,
     provenance_callback: Callable[[str], None] | None = None,
 ) -> list[FindingCreate]:
-    """Relay child progress and return findings, honoring either cancellation source."""
+    """Relay child progress and return findings, honoring either cancellation source.
+
+    Any exception raised while relaying (such as an authority refusal from
+    ``should_cancel`` or ``progress_callback``) stops the child before propagating.
+    """
     from scanner.pipeline import runner as root
 
     result: dict[str, object] | None = None
     deadline: float | None = None
     cancellation_deadline: float | None = None
-    while result is None:
-        if should_cancel and should_cancel():
-            cancel_event.set()
-            if cancellation_deadline is None:
-                cancellation_deadline = time.monotonic() + _CANCELLATION_GRACE_SECONDS
-        if cancellation_deadline is not None and time.monotonic() >= cancellation_deadline:
-            root._terminate_worker(proc)
-            raise ScanCancelledError("Scan cancelled")
-        try:
-            message = queue.get(timeout=0.2)
-        except Empty:
-            if proc.is_alive():
+    try:
+        while result is None:
+            if should_cancel and should_cancel():
+                cancel_event.set()
+                if cancellation_deadline is None:
+                    cancellation_deadline = time.monotonic() + _CANCELLATION_GRACE_SECONDS
+            if cancellation_deadline is not None and time.monotonic() >= cancellation_deadline:
+                root._terminate_worker(proc)
+                raise ScanCancelledError("Scan cancelled")
+            try:
+                message = queue.get(timeout=0.2)
+            except Empty:
+                if proc.is_alive():
+                    continue
+                if deadline is None:
+                    # The queue feeder may still be flushing after its child exits.
+                    deadline = time.monotonic() + 2.0
+                elif time.monotonic() >= deadline:
+                    break
                 continue
-            if deadline is None:
-                # The queue feeder may still be flushing after its child exits.
-                deadline = time.monotonic() + 2.0
-            elif time.monotonic() >= deadline:
-                break
-            continue
 
-        if "progress" in message:
-            progress = message["progress"]
-            if progress_callback and isinstance(progress, tuple) and len(progress) == 2:
-                progress_callback(float(progress[0]), str(progress[1]))
-        elif "enrichment" in message:
-            if provenance_callback:
-                provenance_callback(str(message["enrichment"]))
-        elif "findings" in message or "error" in message or "cancelled" in message:
-            result = message
+            if "progress" in message:
+                progress = message["progress"]
+                if progress_callback and isinstance(progress, tuple) and len(progress) == 2:
+                    progress_callback(float(progress[0]), str(progress[1]))
+            elif "enrichment" in message:
+                if provenance_callback:
+                    provenance_callback(str(message["enrichment"]))
+            elif "findings" in message or "error" in message or "cancelled" in message:
+                result = message
+    except BaseException:
+        # A refused authority recheck or failed callback must not orphan the child.
+        cancel_event.set()
+        if proc.is_alive():
+            root._terminate_worker(proc)
+        raise
 
     proc.join(timeout=2)
     if cancellation_deadline is not None:

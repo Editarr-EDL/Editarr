@@ -210,22 +210,37 @@ def fine_stride(frame_interval_seconds: float) -> int:
     return max(1, round(settings.shieldstral_fine_sample_interval_seconds / frame_interval_seconds))
 
 
+def _report_resolved(
+    results: Iterable[FrameResult], on_resolved: Callable[[int], None]
+) -> Iterator[FrameResult]:
+    """Call ``on_resolved`` with the running count as each frame's result is known."""
+    for resolved, result in enumerate(results, start=1):
+        on_resolved(resolved)
+        yield result
+
+
 def scan_frames(
-    frames: list[tuple[Path, float]], frame_interval_seconds: float
+    frames: list[tuple[Path, float]],
+    frame_interval_seconds: float,
+    on_resolved: Callable[[int], None] | None = None,
 ) -> Iterator[list[VisualDetection]]:
     """Yield one detection list per frame, scoring a strided subset with refined edges.
 
     Boundaries are refined whenever the emitted label set changes, including a change
     of routed family inside a sexual run. Unscored frames reuse the nearest scored
     result within the same uniform run, stamped with their own timestamp. Unknown-family
-    sexual frames are then resolved by :func:`smooth_sexual_runs`.
+    sexual frames are then resolved by :func:`smooth_sexual_runs`, which delays output
+    until a sexual run ends; ``on_resolved`` receives the number of frames resolved so
+    far before that delay, so callers can report progress or stop during a long run.
     """
-    results = sample_and_hold(
+    results: Iterable[FrameResult] = sample_and_hold(
         len(frames),
         fine_stride(frame_interval_seconds),
         lambda index: score_frame(frames[index][0]),
         FrameResult.key,
     )
+    if on_resolved is not None:
+        results = _report_resolved(results, on_resolved)
     for (_frame_path, timestamp), result in zip(
         frames, smooth_sexual_runs(results), strict=True
     ):
