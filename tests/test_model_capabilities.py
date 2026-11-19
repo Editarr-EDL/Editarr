@@ -27,6 +27,12 @@ _PACKAGES = {
     "mlx_vlm",
     "mlx",
 }
+_MAC_ONLY_DETECTORS = {"shieldstral"}
+_PORTABLE_DETECTORS = tuple(
+    backend
+    for backend in capabilities.SUPPORTED_VIDEO_MODELS
+    if backend not in _MAC_ONLY_DETECTORS
+)
 
 
 def _environment(
@@ -61,7 +67,7 @@ def test_target_matrix_declares_only_supported_backends(system, machine, target)
     declared = {item.id: item for item in capabilities.model_capabilities(environment)}
 
     assert environment.target_id == target
-    detectors = [declared[backend] for backend in capabilities.SUPPORTED_VIDEO_MODELS]
+    detectors = [declared[backend] for backend in _PORTABLE_DETECTORS]
     assert all(detector.availability == "available" for detector in detectors)
     assert declared["whisper"].availability == "available"
     assert all(
@@ -79,9 +85,13 @@ def test_target_matrix_declares_only_supported_backends(system, machine, target)
         assert declared["qwen3_vl"].availability == "available"
         assert declared["qwen3_vl"].device == "mlx"
         assert declared["qwen3_vl"].enrichment_behavior == "qwen_summary"
+        assert declared["shieldstral"].availability == "available"
+        assert declared["shieldstral"].device == "mlx"
     else:
         assert declared["mlx_whisper"].availability == "unavailable"
         assert declared["mlx_whisper"].reason == "unsupported_platform"
+        assert declared["shieldstral"].availability == "unavailable"
+        assert declared["shieldstral"].reason == "unsupported_platform"
         assert declared["qwen3_vl"].availability == "unavailable"
         assert declared["qwen3_vl"].reason == "deferred_gap"
         assert declared["qwen3_vl"].enrichment_behavior == "detector_findings_only"
@@ -102,6 +112,14 @@ def test_wrong_target_is_never_advertised(system, machine, reason):
 
     assert all(item.availability == "unavailable" for item in declared)
     assert {item.reason for item in declared} == {reason}
+
+
+@pytest.mark.parametrize("missing", ["mlx_vlm", "mlx", "huggingface_hub", "PIL", "numpy"])
+def test_shieldstral_requires_its_mlx_runtime_dependencies(missing):
+    environment = _environment("Darwin", "arm64", packages=_PACKAGES - {missing})
+    declared = capabilities.capability_for("shieldstral", environment=environment)
+
+    assert (declared.availability, declared.reason) == ("unavailable", "missing_package")
 
 
 def test_missing_package_and_provider_are_truthful_without_importing_model_modules():
@@ -208,7 +226,7 @@ def test_windows_and_linux_advertise_only_verified_ctranslate2_cuda():
         assert declared["whisper"].device == "cuda"
         assert all(
             declared[backend].device == "cpu"
-            for backend in capabilities.SUPPORTED_VIDEO_MODELS
+            for backend in _PORTABLE_DETECTORS
         )
 
 

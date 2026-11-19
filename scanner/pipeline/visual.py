@@ -71,6 +71,7 @@ SUPPORTED_VIDEO_MODELS = {
     "image_safety_gate",
     "siglip2_moderation_nsfw",
     "siglip2_moderation_violence",
+    "shieldstral",
 }
 _VIDEO_MODEL_ALIASES = {
     "image-safety-gate": "image_safety_gate",
@@ -78,6 +79,7 @@ _VIDEO_MODEL_ALIASES = {
     "comfyui_image_safety_gate": "image_safety_gate",
     "siglip2-moderation-nsfw": "siglip2_moderation_nsfw",
     "siglip2-moderation-violence": "siglip2_moderation_violence",
+    "shieldstral-1.0-3b": "shieldstral",
 }
 
 
@@ -369,6 +371,10 @@ def scan_frame(
     selected_model = normalize_video_model(video_model)
     if selected_model == "image_safety_gate":
         return _scan_frame_image_safety_gate(frame_path, timestamp)
+    if selected_model == "shieldstral":
+        from scanner.pipeline import shieldstral
+
+        return shieldstral.scan_frame(frame_path, timestamp)
     if selected_model.startswith("siglip2_moderation_"):
         return _scan_frame_siglip2_moderation(
             frame_path,
@@ -403,6 +409,10 @@ def scan_frames(
         detection_lists = _scan_frames_siglip2_moderation(
             frames, selected_model.removeprefix("siglip2_moderation_")
         )
+    elif selected_model == "shieldstral":
+        from scanner.pipeline import shieldstral
+
+        detection_lists = shieldstral.scan_frames(frames, interval)
     else:
         detection_lists = (
             scan_frame(frame_path, timestamp, video_model=selected_model)

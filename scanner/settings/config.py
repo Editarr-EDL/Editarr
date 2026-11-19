@@ -134,6 +134,21 @@ class Settings(BaseSettings):
     siglip2_moderation_nsfw_threshold: float = 0.5
     siglip2_moderation_violence_threshold: float = 0.5
 
+    # Shieldstral (optional macOS MLX video model). Prompts and routing are in
+    # scanner/pipeline/shieldstral_policies.py. Screens flag a frame at P(yes) >= threshold.
+    shieldstral_sexual_threshold: float = Field(default=0.4, ge=0, le=1)
+    shieldstral_violence_threshold: float = Field(default=0.4, ge=0, le=1)
+    # Routing for sexual-positive frames only chooses families. The sex-act route is
+    # provisional: the evaluation corpus contained no real sex-act footage.
+    shieldstral_nudity_route_threshold: float = Field(default=0.25, ge=0, le=1)
+    shieldstral_sex_route_threshold: float = Field(default=0.5, ge=0, le=1)
+    # Frames taller than this are downscaled, keeping aspect ratio, before scoring.
+    shieldstral_max_image_height: int = Field(default=288, gt=0)
+    # Fine passes score one frame per interval and bisect changes between samples.
+    shieldstral_fine_sample_interval_seconds: float = Field(
+        default=0.5, gt=0, allow_inf_nan=False
+    )
+
     model_config = {"env_prefix": "EDITARR_"}
 
     @model_validator(mode="after")

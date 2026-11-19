@@ -44,6 +44,7 @@ SUPPORTED_VIDEO_MODELS = (
     "image_safety_gate",
     "siglip2_moderation_nsfw",
     "siglip2_moderation_violence",
+    "shieldstral",
 )
 SUPPORTED_QWEN_MODELS = (DEFAULT_QWEN_MODEL, "qwen3-vl-4b-instruct-4bit")
 
@@ -58,6 +59,7 @@ DISPLAY_NAMES = {
     "image_safety_gate": "Image Safety Gate",
     "siglip2_moderation_nsfw": "SigLIP2 Moderation — NSFW",
     "siglip2_moderation_violence": "SigLIP2 Moderation — Violence",
+    "shieldstral": "Shieldstral",
     "qwen3_vl": "Qwen3-VL enrichment",
 }
 QWEN_MODEL_DISPLAY_NAMES = {
@@ -244,6 +246,19 @@ def model_capabilities(
             ("numpy", "onnxruntime", "torch", "transformers", "huggingface_hub", "PIL"),
             device=environment.torch_device,
             provider="CPUExecutionProvider",
+        ),
+        standard(
+            "shieldstral",
+            "detector",
+            ("mlx_vlm", "mlx", "huggingface_hub", "PIL", "numpy"),
+            device="mlx",
+        )
+        if environment.target_id == "macos-arm64"
+        else _capability(
+            "shieldstral",
+            "detector",
+            available=False,
+            reason=target_failure or "unsupported_platform",
         ),
     ]
 
