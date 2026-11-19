@@ -46,6 +46,7 @@ from scanner.settings.capabilities import qwen_enrichment_capability as qwen_enr
 from scanner.settings.config import settings
 
 from .inference_devices import CPU_PROVIDER, create_coreml_session
+from .processes import ScanCancelledError
 
 if TYPE_CHECKING:
     from nudenet import NudeDetector
@@ -391,8 +392,12 @@ def scan_frames(
     frame_interval_seconds: float | None = None,
     video_duration_seconds: float | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[FindingCreate]:
     """Run the safety model over a batch of frames and return its findings.
+
+    ``progress_callback(done, total)`` and ``should_cancel`` run once per frame
+    as soon as its result is known, even if the backend emits it later.
 
     Qwen is deliberately not called here.  A scene's complete set of safety
     findings is needed before representative frames can be selected for a
@@ -403,6 +408,14 @@ def scan_frames(
     selected_model = normalize_video_model(video_model)
 
     total = len(frames)
+
+    def frame_done(done: int) -> None:
+        if should_cancel and should_cancel():
+            raise ScanCancelledError("Scan cancelled")
+        if progress_callback:
+            progress_callback(done, total)
+
+    report_on_yield = True
     if selected_model == "nudenet":
         detection_lists = _scan_frames_nudenet(frames)
     elif selected_model.startswith("siglip2_moderation_"):
@@ -412,7 +425,9 @@ def scan_frames(
     elif selected_model == "shieldstral":
         from scanner.pipeline import shieldstral
 
-        detection_lists = shieldstral.scan_frames(frames, interval)
+        # Shieldstral delays sexual runs for smoothing, so report on resolution.
+        detection_lists = shieldstral.scan_frames(frames, interval, on_resolved=frame_done)
+        report_on_yield = False
     else:
         detection_lists = (
             scan_frame(frame_path, timestamp, video_model=selected_model)
@@ -428,7 +443,7 @@ def scan_frames(
                 video_duration_seconds=video_duration_seconds,
             )
         )
-        if progress_callback:
-            progress_callback(index, total)
+        if report_on_yield:
+            frame_done(index)
 
     return findings

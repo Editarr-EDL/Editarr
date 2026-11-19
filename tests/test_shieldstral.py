@@ -5,6 +5,7 @@ from PIL import Image
 
 from scanner.models import McfCategoryFamily, Severity
 from scanner.pipeline import shieldstral, visual
+from scanner.pipeline.processes import ScanCancelledError
 from scanner.pipeline.shieldstral import FrameResult, evaluate_frame, smooth_sexual_runs
 from scanner.pipeline.shieldstral_policies import (
     NUDITY_LABEL,
@@ -129,6 +130,88 @@ def test_fine_scan_refines_routed_family_changes(monkeypatch, tmp_path):
     assert by_label[SEXUAL_LABEL] == [timestamp for _path, timestamp in frames[32:40]]
     assert len(calls) < len(frames) / 2
     assert progress == [(index, 48) for index in range(1, 49)]
+
+
+def _sexual_run_frames(monkeypatch, tmp_path, count, *, nudity_at=None):
+    """Score an all-sexual-positive clip of unknown family, optionally one nudity frame."""
+    frames = [(tmp_path / f"frame_{index:04d}.jpg", index / 24) for index in range(count)]
+    index_of = {path: index for index, (path, _timestamp) in enumerate(frames)}
+    scored: list[int] = []
+
+    def score_frame(path):
+        scored.append(index_of[path])
+        return _N if index_of[path] == nudity_at else _F
+
+    monkeypatch.setattr(shieldstral, "score_frame", score_frame)
+    monkeypatch.setattr(settings, "shieldstral_fine_sample_interval_seconds", 0.5)
+    return frames, scored
+
+
+def test_fine_scan_reports_progress_while_a_sexual_run_is_buffered(monkeypatch, tmp_path):
+    frames, _scored = _sexual_run_frames(monkeypatch, tmp_path, 96, nudity_at=95)
+    progress: list[tuple[int, int, int]] = []
+    emitted: list[int] = []
+
+    def on_resolved(done):
+        progress.append((done, len(emitted)))
+
+    for detections in shieldstral.scan_frames(frames, 1 / 24, on_resolved=on_resolved):
+        emitted.append(len(detections))
+
+    # The whole clip is one run, so nothing is emitted until its last frame resolves.
+    assert progress == [(done, 0) for done in range(1, 97)]
+    # The final nudity frame still resolves the run's unknown-family frames.
+    findings = visual.scan_frames(
+        frames, "video-1", video_model="shieldstral", frame_interval_seconds=1 / 24
+    )
+    assert {finding.label for finding in findings} == {NUDITY_LABEL}
+    assert len(findings) == 96
+
+
+def test_fine_scan_progress_can_stop_scoring_mid_run(monkeypatch, tmp_path):
+    frames, scored = _sexual_run_frames(monkeypatch, tmp_path, 96)
+    progress: list[tuple[int, int]] = []
+
+    class Refused(RuntimeError):
+        pass
+
+    def progress_callback(done, total):
+        progress.append((done, total))
+        if done == 24:
+            raise Refused
+
+    with pytest.raises(Refused):
+        visual.scan_frames(
+            frames,
+            "video-1",
+            video_model="shieldstral",
+            frame_interval_seconds=1 / 24,
+            progress_callback=progress_callback,
+        )
+
+    assert progress == [(done, 96) for done in range(1, 25)]
+    assert max(scored) < 48
+
+
+def test_fine_scan_honors_cancellation_mid_run(monkeypatch, tmp_path):
+    frames, scored = _sexual_run_frames(monkeypatch, tmp_path, 96)
+    checks: list[int] = []
+
+    def should_cancel():
+        checks.append(len(scored))
+        return len(checks) > 30
+
+    with pytest.raises(ScanCancelledError):
+        visual.scan_frames(
+            frames,
+            "video-1",
+            video_model="shieldstral",
+            frame_interval_seconds=1 / 24,
+            should_cancel=should_cancel,
+        )
+
+    assert len(checks) == 31
+    assert max(scored) < 48
 
 
 @pytest.mark.parametrize(

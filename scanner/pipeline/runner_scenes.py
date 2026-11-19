@@ -201,6 +201,7 @@ def _scan_visual_by_scene(
                 if progress_callback and fine_frames
                 else None
             ),
+            should_cancel=should_cancel,
         )
         scene_findings = root.summarize_flagged_segments(
             scene_findings,

@@ -1,4 +1,5 @@
 import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -43,6 +44,19 @@ def test_run_command_relays_output_and_returns_success(monkeypatch):
 
     assert result.returncode == 0
     assert output == ["frame 1", "frame 2"]
+
+
+def test_run_command_keeps_reading_stderr_after_undecodable_bytes():
+    script = (
+        "import sys; "
+        "sys.stderr.buffer.write(b'Input #0, from /media/caf\\xe9.mkv\\n'); "
+        "sys.stderr.buffer.write(b'after\\n')"
+    )
+    output: list[str] = []
+
+    processes.run_command([sys.executable, "-c", script], output_callback=output.append)
+
+    assert output == ["Input #0, from /media/caf\ufffd.mkv", "after"]
 
 
 def test_run_command_terminates_on_cooperative_cancellation(monkeypatch):
