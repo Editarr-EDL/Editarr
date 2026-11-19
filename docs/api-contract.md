@@ -68,7 +68,7 @@ replacement to show it.
 `/api/users` lists the directory for admins and the owner (`offset`, `limit` up to
 100, `search`), and `/api/users/{user_id}` reads and edits one profile: an account's own, or another
 account within the caller's management scope. Profiles carry an optional display
-name, email, timezone, display language (English only until translations ship), an
+name, display language (English only until translations ship), an
 uploaded avatar re-encoded as PNG, and creation and last sign-in times. Linked
 accounts keep their Jellyfin name and avatar. Status, session revocation, roles,
 overrides, role defaults, and local media access have their own routes, and

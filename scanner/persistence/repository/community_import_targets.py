@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from sqlalchemy import func
 from sqlalchemy.orm import object_session
 
 from scanner.db import CommunityImportRow, CommunityImportTargetRow, MediaItemRow
@@ -79,26 +80,57 @@ def approved_target_channels(association, scan):
     return sorted(channels)
 
 
+def _approvals_by_import(db, scans_by_import):
+    """Load target approvals for verified imports keyed by import id, in one query."""
+    approvals = {import_id: [] for import_id in scans_by_import}
+    if not approvals:
+        return approvals
+    rows = (
+        db.query(CommunityImportTargetRow, MediaItemRow)
+        .join(MediaItemRow, MediaItemRow.id == CommunityImportTargetRow.media_item_id)
+        .filter(CommunityImportTargetRow.import_id.in_(list(approvals)))
+        .all()
+    )
+    for association, media in rows:
+        approvals[association.import_id].append(
+            {
+                "source": "jellyfin",
+                "target_item_id": media.jellyfin_id,
+                "media_source_id": association.media_source_id or None,
+                "channels": approved_target_channels(
+                    association, scans_by_import[association.import_id]
+                ),
+            }
+        )
+    return approvals
+
+
 def scan_target_approvals(scan):
     """Expose local target/channel approvals, without physical paths or target evidence."""
     db = object_session(scan)
     if db is None or scan.community_import is None or not scan.community_import.artifact_bytes:
         return []
-    rows = (
-        db.query(CommunityImportTargetRow, MediaItemRow)
-        .join(MediaItemRow, MediaItemRow.id == CommunityImportTargetRow.media_item_id)
-        .filter(CommunityImportTargetRow.import_id == scan.community_import.id)
+    return _approvals_by_import(db, {scan.community_import.id: scan})[scan.community_import.id]
+
+
+def scan_target_approvals_by_scan(db, scans):
+    """Batch `scan_target_approvals` for many scans without reading artifact blobs."""
+    if not scans:
+        return {}
+    by_id = {scan.id: scan for scan in scans}
+    imports = (
+        db.query(CommunityImportRow.id, CommunityImportRow.scan_id)
+        .filter(
+            CommunityImportRow.scan_id.in_(list(by_id)),
+            func.length(CommunityImportRow.artifact_bytes) > 0,
+        )
         .all()
     )
-    return [
-        {
-            "source": "jellyfin",
-            "target_item_id": media.jellyfin_id,
-            "media_source_id": association.media_source_id or None,
-            "channels": approved_target_channels(association, scan),
-        }
-        for association, media in rows
-    ]
+    approvals = _approvals_by_import(
+        db, {import_id: by_id[scan_id] for import_id, scan_id in imports}
+    )
+    by_scan = {scan_id: approvals[import_id] for import_id, scan_id in imports}
+    return {scan_id: by_scan.get(scan_id, []) for scan_id in by_id}
 
 
 def verified_both_channel(scan, finding):

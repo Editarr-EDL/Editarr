@@ -197,7 +197,9 @@ def test_native_log_rotation_redacts_credentials_and_creates_private_files(monke
     monkeypatch.setattr("scanner.runtime.runtime_logging._LOG_BYTES", 80)
     files = configure_runtime_logging(paths.log_dir)
     logger = logging.getLogger("native-lifecycle-redaction")
-    logger.warning("startup token=visible csrf-key: visible password visible " + "x" * 120)
+    # Python never rotates an empty file (gh-116263), so the second record triggers rotation.
+    for _ in range(2):
+        logger.warning("startup token=visible csrf-key: visible password visible " + "x" * 120)
     for handler in logging.getLogger().handlers:
         handler.flush()
     content = files["application"].read_text(encoding="utf-8")

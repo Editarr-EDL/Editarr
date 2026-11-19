@@ -12,7 +12,6 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "numpy>=1.26.0",
-    "pandas>=2.2.0",
     "nudenet>=3.4.2",
     "onnxruntime>=1.19.0",
     "torch>=2.3.0 ; sys_platform != 'linux'",
@@ -88,6 +87,9 @@ exclude = [
 required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
+# scenedetect and mlx-vlm request the GUI OpenCV build; the headless build already
+# provides the same `cv2` module, so never install both into one package directory.
+override-dependencies = ["opencv-python ; sys_platform == 'never'"]
 
 [tool.uv.sources]
 torch = [

@@ -206,7 +206,14 @@ def _scan_queue_worker() -> None:
                 continue
             if root.SCAN_QUEUE_STOP_EVENT.is_set():
                 break
-            root._launch_scan_worker(next_item.id)
+            try:
+                root._launch_scan_worker(next_item.id)
+            except Exception:
+                # Launch recovery itself can fail (for example during maintenance);
+                # keep the scheduler alive so the queue is retried.
+                root.logger.exception("Scan queue scheduler could not launch %s", next_item.id)
+                if root.SCAN_QUEUE_STOP_EVENT.wait(1):
+                    break
     finally:
         with root.SCAN_QUEUE_WORKER_LOCK:
             root.SCAN_QUEUE_WORKER_RUNNING = False

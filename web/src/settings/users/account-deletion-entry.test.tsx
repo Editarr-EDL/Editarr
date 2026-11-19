@@ -221,7 +221,7 @@ describe("Account deletion entry points", () => {
     [5, "Lee is an admin. Only the owner can delete an admin account."],
     [2, "You can't delete your own account."],
   ])("refuses the deep link to protected account %i without a preview", async (id, message) => {
-    vi.mocked(users.readAccount).mockResolvedValue({ ...accounts.find(account => account.id === id)!, read_only_fields: [], available_languages: [], link_cleanup: null, successor_refusal: null, email: null, timezone: null, language: null });
+    vi.mocked(users.readAccount).mockResolvedValue({ ...accounts.find(account => account.id === id)!, read_only_fields: [], available_languages: [], link_cleanup: null, successor_refusal: null, language: null });
     render(<UsersView deleteAccountId={id} />);
     expect(await screen.findByText(message)).toBeVisible();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -231,7 +231,7 @@ describe("Account deletion entry points", () => {
   it("opens the deletion dialog from the deep link for an ordinary account, and reports an unknown one", async () => {
     vi.mocked(users.readAccount).mockImplementation(async id => {
       if (id !== 3) throw new ApiError("Not found", 404, "not_found");
-      return { ...accounts[2], read_only_fields: [], available_languages: [], link_cleanup: null, successor_refusal: null, email: null, timezone: null, language: null };
+      return { ...accounts[2], read_only_fields: [], available_languages: [], link_cleanup: null, successor_refusal: null, language: null };
     });
     const { unmount } = render(<UsersView deleteAccountId={3} />);
     expect(await screen.findByRole("dialog", { name: "Delete Pat" })).toBeVisible();

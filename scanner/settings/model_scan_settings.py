@@ -1,13 +1,10 @@
 """Durable scan settings shared by the Models page and scan workers."""
 
-import os
-import tempfile
-from contextlib import suppress
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from scanner.runtime.durability import sync_directory
+from scanner.runtime.durability import atomic_write_bytes, sync_directory
 from scanner.runtime.maintenance import DatabaseMaintenance, MaintenanceUnavailable
 from scanner.runtime.runtime_paths import ensure_user_private_directory
 
@@ -40,18 +37,14 @@ def load_model_scan_settings(data_dir: Path, *, default_audio_padding: float) ->
 
 def save_model_scan_settings(data_dir: Path, settings: ModelScanSettings) -> None:
     """Atomically replace the preference while excluding backup and restore."""
-    temporary: Path | None = None
     try:
         with DatabaseMaintenance(data_dir).worker_lease():
             directory = ensure_user_private_directory(data_dir)
-            descriptor, name = tempfile.mkstemp(prefix=".model-scan-settings-", dir=directory)
-            temporary = Path(name)
-            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                stream.write(settings.model_dump_json())
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, directory / MODEL_SCAN_SETTINGS_FILENAME)
-            temporary = None
+            atomic_write_bytes(
+                directory / MODEL_SCAN_SETTINGS_FILENAME,
+                settings.model_dump_json().encode("utf-8"),
+                prefix=".model-scan-settings-",
+            )
             try:
                 sync_directory(directory)
             except OSError:
@@ -59,7 +52,3 @@ def save_model_scan_settings(data_dir: Path, settings: ModelScanSettings) -> Non
                 pass
     except (OSError, MaintenanceUnavailable) as error:
         raise ModelScanSettingsError("Unable to save scan settings") from error
-    finally:
-        if temporary is not None:
-            with suppress(OSError):
-                temporary.unlink(missing_ok=True)

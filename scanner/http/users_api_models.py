@@ -34,7 +34,7 @@ class OverrideIndicators(BaseModel):
 
 
 class AccountSummary(BaseModel):
-    """The approved Users-list columns. Email and preferences appear only in a detail read."""
+    """The approved Users-list columns. Preferences appear only in a detail read."""
 
     id: int
     username: str | None
@@ -63,8 +63,6 @@ class AccountPage(BaseModel):
 
 
 class AccountDetail(AccountSummary):
-    email: str | None
-    timezone: str | None
     language: str | None
     read_only_fields: list[Literal["username", "display_name", "avatar"]] = Field(
         description="Fields synced from Jellyfin for a linked account"
@@ -95,8 +93,6 @@ class AccountDetail(AccountSummary):
         linked = record.source is AccountSource.JELLYFIN
         return cls(
             **_summary(record),
-            email=record.email,
-            timezone=record.timezone,
             language=record.language,
             read_only_fields=list(JELLYFIN_PROFILE_FIELDS) if linked else [],
             available_languages=list(SUPPORTED_LANGUAGES),
@@ -129,8 +125,6 @@ class ProfileFields(_Strict):
     """Optional profile values. In a change, a listed `null` clears the field."""
 
     display_name: str | None = None
-    email: str | None = None
-    timezone: str | None = None
     language: str | None = None
 
 

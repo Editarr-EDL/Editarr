@@ -15,7 +15,13 @@ from scripts.release_assets import validate_release_versions
 BASE_TAG = "v0.1.3"
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
-VERSION_FILES = ("pyproject.toml", "scanner/__init__.py", "web/package.json", "uv.lock")
+VERSION_FILES = (
+    "pyproject.toml",
+    "scanner/__init__.py",
+    "web/package.json",
+    "uv.lock",
+    "website/public/docs/openapi.json",
+)
 
 
 def git(root: Path, *args: str, env: dict[str, str] | None = None) -> str:
@@ -58,12 +64,14 @@ def version_files(root: Path, version: str) -> dict[Path, str]:
         rf'^__version__ = "{previous}"$',
         rf'^([ \t]*"version": )"{previous}"(,?)$',
         rf'(^\[\[package\]\]\nname = "editarr"\n)version = "{previous}"$',
+        rf'^([ \t]*"version": )"{previous}"$',
     )
     replacements = (
         f'version = "{version}"',
         f'__version__ = "{version}"',
         rf'\g<1>"{version}"\g<2>',
         rf'\g<1>version = "{version}"',
+        rf'\g<1>"{version}"',
     )
     paths = [root / name for name in VERSION_FILES]
     result = {
@@ -71,6 +79,7 @@ def version_files(root: Path, version: str) -> dict[Path, str]:
         for path, pattern, replacement in zip(paths, patterns, replacements, strict=True)
     }
     json.loads(result[root / "web/package.json"])
+    json.loads(result[root / "website/public/docs/openapi.json"])
     tomllib.loads(result[root / "uv.lock"])
     return result
 

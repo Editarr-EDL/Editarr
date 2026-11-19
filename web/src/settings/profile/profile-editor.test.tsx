@@ -8,17 +8,16 @@ const account: api.AccountDetail = {
   id: 4, username: null, display_name: "Pat", source: "local", role: "user", status: "active", disable_cause: null,
   last_login_at: null, created_at: "2026-10-24T12:00:00Z", avatar: null,
   overrides: { permissions: false, media_access: false, filter_policy: false },
-  email: null, timezone: null, language: "en", read_only_fields: [], available_languages: ["en"], link_cleanup: null, successor_refusal: null,
+  language: "en", read_only_fields: [], available_languages: ["en"], link_cleanup: null, successor_refusal: null,
 };
 afterEach(cleanup);
 beforeEach(() => vi.clearAllMocks());
 
 it("saves the local display name and uploads the selected image", async () => {
   const onSaved = vi.fn();
-  const existing = { ...account, email: "pat@example.test", timezone: "Europe/London" };
-  vi.mocked(api.editAccount).mockResolvedValue({ ...existing, display_name: "Pat Smith" });
+  vi.mocked(api.editAccount).mockResolvedValue({ ...account, display_name: "Pat Smith" });
   vi.mocked(api.uploadAccountAvatar).mockResolvedValue({ ...account, avatar: "digest" });
-  render(<ProfileEditor account={existing} editable onSaved={onSaved} />);
+  render(<ProfileEditor account={account} editable onSaved={onSaved} />);
   expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Timezone")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Display language")).not.toBeInTheDocument();

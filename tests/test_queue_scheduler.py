@@ -54,6 +54,33 @@ def test_scan_queue_worker_waits_for_work_instead_of_exiting(monkeypatch):
     assert launches == ["scan-1"]
 
 
+def test_scan_queue_worker_survives_a_failed_launch_recovery(monkeypatch):
+    class InstantStop(Event):
+        def wait(self, timeout=None):
+            return self.is_set()
+
+    stop_event = InstantStop()
+    item = SimpleNamespace(id="scan-1")
+    launches: list[str] = []
+    monkeypatch.setattr(api, "SCAN_QUEUE_STOP_EVENT", stop_event)
+    monkeypatch.setattr(api, "get_session_factory", lambda: DummyDb)
+    monkeypatch.setattr(api, "get_active_scan_queue_item", lambda _db: None)
+    monkeypatch.setattr(api, "get_next_scan_queue", lambda _db: item)
+
+    def flaky_launch(scan_id):
+        launches.append(scan_id)
+        if len(launches) == 1:
+            raise RuntimeError("recovery unavailable")
+        stop_event.set()
+        return True
+
+    monkeypatch.setattr(api, "_launch_scan_worker", flaky_launch)
+    api._scan_queue_worker()
+
+    assert launches == ["scan-1", "scan-1"]
+    assert api.SCAN_QUEUE_WORKER_THREAD is None
+
+
 def test_starting_an_active_scheduler_wakes_it_for_new_work(monkeypatch):
     stop_event = Event()
     wake_event = Event()

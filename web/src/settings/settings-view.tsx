@@ -28,17 +28,9 @@ import { usePageTitle } from "../shared/display";
 import { ModalDialog } from "../ui/ModalDialog";
 import { useCan, usePrincipal } from "../auth/auth-gate";
 import { maySeeSettings } from "../auth/route-access";
+import { settingsSectionTitle, type SettingsSection } from "./settings-sections";
 
-export type SettingsSection = "connections" | "filters" | "models" | "general" | "users" | "profile" | "audit";
-export function settingsSectionTitle(section: SettingsSection): string {
-  if (section === "users") return "Users";
-  if (section === "profile") return "My Profile";
-  if (section === "filters") return "Filters";
-  if (section === "models") return "Models";
-  if (section === "general") return "General";
-  if (section === "audit") return "Audit History";
-  return "Connections";
-}
+export type { SettingsSection } from "./settings-sections";
 
 /** Render the selected settings section and manage connection and path mapping edits. */
 export function SettingsView({ section, filterTab, openBackups, settings, onSaved }: {

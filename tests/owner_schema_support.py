@@ -7,6 +7,14 @@ from alembic.operations import Operations
 from tests.community_schema_fixture import SYNTHETIC_PASSWORD_HASH
 
 
+def undo_scan_read_indexes_migration(connection) -> None:
+    """Drop the 0034 read indexes and 0033 timing columns from an older-database fixture."""
+    connection.exec_driver_sql("DROP INDEX ix_scan_findings_scan_start")
+    connection.exec_driver_sql("DROP INDEX ix_scan_media_item_associations_media_item_id")
+    for column in ("worker_elapsed_seconds", "worker_attempt_started_at"):
+        connection.exec_driver_sql(f"ALTER TABLE scans DROP COLUMN {column}")
+
+
 def undo_manual_filter_tracking_migration(connection) -> None:
     """Remove tracking columns from a fixture representing a pre-tracking database."""
     for table in ("scan_findings", "review_filters"):

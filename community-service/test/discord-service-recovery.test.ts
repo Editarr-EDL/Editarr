@@ -88,6 +88,22 @@ describe('OAuth accounting failure and cleanup recovery', () => {
     expect((await discordService(edge(`${origin}/v1/discord/start`), bindings(), now)).status).toBe(400);
   });
 
+  it('runs later scheduled prunes and records usage after an earlier prune fails', async () => {
+    const queries: string[] = [];
+    const failing = new Proxy(db, { get(target, property) {
+      if (property === 'prepare') return (query: string) => {
+        queries.push(query);
+        if (queries.length === 1) throw new Error('first_prune_failed');
+        return target.prepare(query);
+      };
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    await expect(service.scheduled({}, bindings(failing))).rejects.toThrow('first_prune_failed');
+    expect(queries.length).toBeGreaterThan(5);
+    expect(queries.some(query => query.includes('INSERT INTO oauth_usage_counters'))).toBe(true);
+  });
+
   it('performs bounded scheduled cleanup, measures its writes and preserves live state', async () => {
     const at = Date.now();
     const expired = await start(at - 700_000);

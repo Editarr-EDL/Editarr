@@ -58,7 +58,7 @@ describe("Account link dialog", () => {
     expect(impact).toHaveTextContent("Statusdisabled (no Jellyfin link) becomes active. Its existing API key works again.");
     expect(impact).toHaveTextContent("local-3 becomes jf-casey");
     expect(impact).toHaveTextContent("Old files are removed only after every new file is in place");
-    expect(impact).toHaveTextContent("Name becomes Casey; avatar comes from Jellyfin. Both become read-only. Email and timezone stay editable.");
+    expect(impact).toHaveTextContent("Name becomes Casey; avatar comes from Jellyfin. Both become read-only.");
     expect(within(impact).getByText("EDL for media movie-1").parentElement).toHaveTextContent("File moves to the new export ID");
     await confirm(dialog);
     expect(server.bodies[1]).toEqual({ route: "link", body: { reauthentication: { password: OWNER_PASSWORD }, proof: "proof-token", confirmation: "a".repeat(64) } });

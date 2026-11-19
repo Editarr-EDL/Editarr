@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -15,9 +17,7 @@ import type {
   JellyfinSettings,
 } from "./api/api-media-types";
 import { usePageTitle } from "./shared/display";
-import { SettingsView, settingsSectionTitle } from "./settings/settings-view";
-import { UsersView } from "./settings/users/users-view";
-import { ProfileView } from "./settings/profile/profile-view";
+import { settingsSectionTitle } from "./settings/settings-sections";
 import { ScansFloatingPanel } from "./scans/scans-floating-panel";
 import { LibraryViewPage, MediaDetailPage, SeriesSeasonsPage, SeasonEpisodesPage } from "./catalog/library-pages";
 import { AppSidebar } from "./ui/AppSidebar";
@@ -27,8 +27,12 @@ import { writeUserValue } from "./shared/user-storage";
 import { usePrincipal } from "./auth/auth-gate";
 import { homeRoute, mayOpen } from "./auth/route-access";
 import { can } from "./auth/session";
-import { AuditHistory } from "./settings/audit/audit-history";
 import { CatalogItemBoundary } from "./catalog/catalog-item-boundary";
+
+const SettingsView = lazy(() => import("./settings/settings-view").then((module) => ({ default: module.SettingsView })));
+const UsersView = lazy(() => import("./settings/users/users-view").then((module) => ({ default: module.UsersView })));
+const ProfileView = lazy(() => import("./settings/profile/profile-view").then((module) => ({ default: module.ProfileView })));
+const AuditHistory = lazy(() => import("./settings/audit/audit-history").then((module) => ({ default: module.AuditHistory })));
 
 /** Own the hash route, navigation shell, and shared source caches for the signed-in account. */
 function App() {
@@ -149,13 +153,15 @@ function App() {
     <main className="app-main">
       {!allowed && <EmptyPage title="Page unavailable" body="Your account cannot open this page. Choose another page from the navigation." />}
       {allowed && <>
-      {route.kind === "settings" && route.section === "audit" && <AuditHistory eventId={route.eventId} />}
-      {route.kind === "settings" && route.section === "users" && <UsersView deleteAccountId={route.deleteAccountId} />}
-      {route.kind === "settings" && route.section === "profile" && <ProfileView />}
-      {route.kind === "settings" && route.section !== "users" && route.section !== "profile" && route.section !== "audit" && <SettingsView section={route.section} filterTab={route.filterTab} openBackups={route.openBackups} settings={settings} onSaved={async () => { libraryPageCacheRef.current.clear(); await refreshNavigation(); }} />}
+      {route.kind === "settings" && <Suspense fallback={<p className="loading-state">Loading…</p>}>
+        {route.section === "audit" && <AuditHistory eventId={route.eventId} />}
+        {route.section === "users" && <UsersView deleteAccountId={route.deleteAccountId} />}
+        {route.section === "profile" && <ProfileView />}
+        {route.section !== "users" && route.section !== "profile" && route.section !== "audit" && <SettingsView section={route.section} filterTab={route.filterTab} openBackups={route.openBackups} settings={settings} onSaved={async () => { libraryPageCacheRef.current.clear(); await refreshNavigation(); }} />}
+      </Suspense>}
       {route.kind === "library" && activeLibrary && route.itemId && <CatalogItemBoundary key={`jellyfin:${route.itemId}`} source="jellyfin" itemId={route.itemId} onUnavailable={clearUnavailableMedia}><MediaDetailPage library={activeLibrary} itemId={route.itemId} seriesId={route.seriesId} seasonId={route.seasonId} onNavigate={guardedNavigate} onDirtyChange={setReviewDirty} /></CatalogItemBoundary>}
-      {route.kind === "library" && activeLibrary && route.seriesId && route.seasonId && !route.itemId && <SeasonEpisodesPage library={activeLibrary} seriesId={route.seriesId} seasonId={route.seasonId} />}
-      {route.kind === "library" && activeLibrary && route.seriesId && !route.seasonId && !route.itemId && <SeriesSeasonsPage library={activeLibrary} seriesId={route.seriesId} />}
+      {route.kind === "library" && activeLibrary && route.seriesId && route.seasonId && !route.itemId && <SeasonEpisodesPage key={route.seasonId} library={activeLibrary} seriesId={route.seriesId} seasonId={route.seasonId} />}
+      {route.kind === "library" && activeLibrary && route.seriesId && !route.seasonId && !route.itemId && <SeriesSeasonsPage key={route.seriesId} library={activeLibrary} seriesId={route.seriesId} />}
       {route.kind === "library" && activeLibrary && !route.itemId && !route.seriesId && <LibraryViewPage key={activeLibrary.id} library={activeLibrary} cache={libraryPageCacheRef.current} />}
       {route.kind === "library" && !activeLibrary && <EmptyPage title="Library unavailable" body="Reconnect Jellyfin or choose a library from the sidebar." />}
       </>}

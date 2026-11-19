@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
-ICON_SOURCE = _ROOT / "web" / "public" / "editarr-app-icon.png"
+ICON_SOURCE = _ROOT / "assets" / "editarr-app-icon-source.png"
 ICON_COMPOSITION = Path(__file__).with_name("macos") / "icon.json"
 ICON_NAME = "Editarr"
 

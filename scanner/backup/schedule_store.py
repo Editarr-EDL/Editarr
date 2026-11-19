@@ -11,10 +11,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from scanner.runtime.durability import atomic_write_bytes
 from scanner.runtime.runtime_paths import ensure_user_private_directory
 
 from .archive import BackupError
-from .snapshots import _sync_directory
 
 STATE_FILE = "backup-schedule.json"
 SETTINGS_SCHEDULE_NOW_FULL = "settings_schedule_now_full"
@@ -99,17 +99,13 @@ def read_state(data_dir: Path) -> ScheduleState:
 
 def write_state(data_dir: Path, state: ScheduleState) -> None:
     directory = ensure_user_private_directory(data_dir)
-    descriptor, name = tempfile.mkstemp(prefix=".backup-schedule-", dir=directory)
-    temporary = Path(name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump(state.model_dump(), stream, separators=(",", ":"), allow_nan=False)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, directory / STATE_FILE)
-        _sync_directory(directory)
-    finally:
-        temporary.unlink(missing_ok=True)
+    encoded = json.dumps(state.model_dump(), separators=(",", ":"), allow_nan=False)
+    atomic_write_bytes(
+        directory / STATE_FILE,
+        encoded.encode("utf-8"),
+        prefix=".backup-schedule-",
+        sync_dir=True,
+    )
 
 
 def destination_identity(

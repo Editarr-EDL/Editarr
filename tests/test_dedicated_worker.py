@@ -484,3 +484,54 @@ def test_worker_proves_identity_before_pipeline_import_and_preserves_import_fail
         queue_item.queue_id
     )
     check_db.close()
+
+
+def test_heartbeat_survives_a_transient_database_error(monkeypatch):
+    calls = []
+
+    class StopAfterRetry:
+        def wait(self, _timeout):
+            return len(calls) >= 2
+
+    def heartbeat(_db, _scan_id, _token):
+        calls.append("beat")
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+        return True
+
+    monkeypatch.setattr(
+        worker, "get_session_factory", lambda: lambda: SimpleNamespace(close=lambda: None)
+    )
+    monkeypatch.setattr(worker, "heartbeat_scan_worker", heartbeat)
+    worker._heartbeat_loop("scan-1", "token", StopAfterRetry())
+
+    assert calls == ["beat", "beat"]
+
+
+def test_runner_leaves_scan_status_to_the_worker_on_full_quit(monkeypatch, tmp_path):
+    from scanner.pipeline import runner
+    from scanner.runtime.worker_quit import FullApplicationQuitRequested
+
+    source = tmp_path / "movie.mkv"
+    source.write_bytes(b"video")
+    statuses = []
+
+    def quit_during_audio(*_args, **_kwargs):
+        raise FullApplicationQuitRequested
+
+    monkeypatch.setattr(runner, "require_available", lambda _name: None)
+    monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
+    monkeypatch.setattr(runner, "compute_video_md5", lambda _path: "hash")
+    monkeypatch.setattr(runner, "run_audio_stages", quit_during_audio)
+    with pytest.raises(FullApplicationQuitRequested):
+        runner.run_scan(
+            db=object(),
+            video_path=str(source),
+            video_id="scan",
+            video_duration_seconds=2.0,
+            scan_video=False,
+            status_updater=lambda _db, _scan, status: statuses.append(status),
+            findings_writer=lambda *_args: None,
+        )
+
+    assert statuses == ["scanning"]

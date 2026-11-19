@@ -26,6 +26,10 @@ def repository(tmp_path):
         "pyproject.toml": '[project]\nname = "editarr"\nversion = "0.1.3"\n',
         "scanner/__init__.py": '__version__ = "0.1.3"\n',
         "web/package.json": '{\n  "version": "0.1.3",\n  "name": "editarr-web"\n}\n',
+        "website/public/docs/openapi.json": (
+            '{\n  "openapi": "3.1.0",\n  "info": {\n    "title": "Editarr",\n'
+            '    "version": "0.1.3"\n  },\n  "paths": {}\n}\n'
+        ),
         "uv.lock": (
             "version = 1\n"
             '[[package]]\nname = "dependency"\nversion = "0.1.3"\n'
@@ -92,8 +96,11 @@ def test_release_commit_preserves_main_and_locked_dependencies(repository, tmp_p
             "scanner/__init__.py",
             "uv.lock",
             "web/package.json",
+            "website/public/docs/openapi.json",
         ]
         assert json.loads((checkout / "web/package.json").read_text())["version"] == "0.1.4"
+        openapi = json.loads((checkout / "website/public/docs/openapi.json").read_text())
+        assert openapi["info"]["version"] == "0.1.4"
         lock = tomllib.loads((checkout / "uv.lock").read_text())["package"]
         assert lock[0]["version"] == "0.1.3"
         assert lock[1]["version"] == "0.1.4"

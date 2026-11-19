@@ -405,3 +405,24 @@ def test_clip_loader_extracts_nested_safety_checker_vision_weights():
         "vision_model.vision_model.embeddings.class_embedding": weight,
         "vision_model.vision_model.embeddings.position_ids": object(),
     }) == {"embeddings.class_embedding": weight}
+
+
+def test_wd_rating_indices_use_data_row_positions_for_rating_tags(tmp_path):
+    tags = tmp_path / "selected_tags.csv"
+    tags.write_text(
+        "tag_id,name,category,count\n"
+        '1,"general",9,10\n'
+        '2,"smile, open mouth",0,5\n'
+        "3,sensitive,9.0,4\n"
+        "4,not_rating,,3\n"
+        "5,questionable,9,2\n"
+        '6,"explicit",9,1\n',
+        encoding="utf-8-sig",
+    )
+
+    assert image_safety_gate._wd_rating_indices(tags) == {
+        "general": 0,
+        "sensitive": 2,
+        "questionable": 4,
+        "explicit": 5,
+    }

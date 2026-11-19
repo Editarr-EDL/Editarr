@@ -25,7 +25,7 @@ FILTERS = "/api/settings/filters/users/{user_id}"
 PROOF = fresh(USER)
 REQUESTS = {
     ("GET", USERS): {},
-    ("PATCH", USERS): {"json": {"email": "probe@example.test"}},
+    ("PATCH", USERS): {"json": {"language": "en"}},
     ("GET", USERS + "/avatar"): {},
     ("PUT", USERS + "/avatar"): {"content": png(), "headers": {"Content-Type": "image/png"}},
     ("DELETE", USERS + "/avatar"): {},

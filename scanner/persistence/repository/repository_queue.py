@@ -232,6 +232,13 @@ def mark_scan_orphaned(
         if not row or row.status not in {"scanning", "cancelling", "error", "orphaned"}:
             db.rollback()
             return
+        # A worker re-marks its own committed `error` as resumable, but a cancellation
+        # that settled that error already removed the queue entry; keep it terminal.
+        if row.status == "error" and (
+            db.query(ScanQueueRow.id).filter(ScanQueueRow.scan_id == scan_id).first() is None
+        ):
+            db.rollback()
+            return
         now = datetime.now(timezone.utc)
         stop_scan_attempt(row, None if use_last_heartbeat else now)
         row.status = "orphaned"
@@ -263,21 +270,29 @@ def reorder_scan_queue(db: Session, queue_ids: list[int], movable: set[int] | No
 
 
 def cancel_scan_queue_item(db: Session, queue_id: int) -> tuple[str, bool] | None:
-    """Cancel a queued scan or mark a running scan for cooperative cancellation."""
-    row = db.get(ScanQueueRow, queue_id)
-    if not row:
-        return None
-    scan = row.scan
-    if scan.status in {"acquiring_model", "scanning", "orphaned", "cancelling"}:
-        scan.status = "cancelling"
-        scan.updated_at = datetime.now(timezone.utc)
+    """Cancel a queued scan or mark a running scan for cooperative cancellation.
+
+    A finished scan keeps its terminal status; only its stale queue entry is removed.
+    """
+    with write_lock(db):
+        row = db.get(ScanQueueRow, queue_id)
+        if not row:
+            db.rollback()
+            return None
+        scan = row.scan
+        now = datetime.now(timezone.utc)
+        if scan.status in {"acquiring_model", "scanning", "orphaned", "cancelling"}:
+            scan.status = "cancelling"
+            scan.updated_at = now
+            db.commit()
+            return scan.id, True
+        if scan.status not in {"complete", "error", "failed", "cancelled"}:
+            scan.status = "cancelled"
+            scan.updated_at = now
+        scan_id = scan.id
+        db.delete(row)
         db.commit()
-        return scan.id, True
-    scan.status = "cancelled"
-    scan.updated_at = datetime.now(timezone.utc)
-    db.delete(row)
-    db.commit()
-    return scan.id, False
+        return scan_id, False
 
 
 def recover_cancelled_scan_queue_items(db: Session) -> int:
@@ -293,25 +308,34 @@ def recover_cancelled_scan_queue_items(db: Session) -> int:
     return len(rows)
 
 
-def recover_interrupted_credits_model_acquisitions(db: Session) -> int:
-    """Return process-local acquisitions to an explicit, retryable consent state."""
-    rows = (
-        db.query(ScanRow)
-        .join(ScanQueueRow)
-        .filter(
-            ScanRow.scan_mode == ScanMode.CREDITS_DETECTION,
-            ScanRow.status == "acquiring_model",
+def recover_interrupted_credits_model_acquisitions(db: Session, scan_id: str | None = None) -> int:
+    """Return process-local acquisitions to an explicit, retryable consent state.
+
+    ``scan_id`` limits recovery to one acquisition that failed unexpectedly. The write
+    lock keeps a concurrent cancellation from being overwritten.
+    """
+    with write_lock(db):
+        query = (
+            db.query(ScanRow)
+            .join(ScanQueueRow)
+            .filter(
+                ScanRow.scan_mode == ScanMode.CREDITS_DETECTION,
+                ScanRow.status == "acquiring_model",
+            )
         )
-        .all()
-    )
-    for row in rows:
-        row.status = "awaiting_model_consent"
-        row.progress_stage = "awaiting_model_consent"
-        row.progress_message = "Model acquisition was interrupted; confirm to retry"
-        row.updated_at = datetime.now(timezone.utc)
-    if rows:
-        db.commit()
-    return len(rows)
+        if scan_id is not None:
+            query = query.filter(ScanRow.id == scan_id)
+        rows = query.all()
+        for row in rows:
+            row.status = "awaiting_model_consent"
+            row.progress_stage = "awaiting_model_consent"
+            row.progress_message = "Model acquisition was interrupted; confirm to retry"
+            row.updated_at = datetime.now(timezone.utc)
+        if rows:
+            db.commit()
+        else:
+            db.rollback()
+        return len(rows)
 
 
 def recover_terminal_scan_queue_items(db: Session) -> int:

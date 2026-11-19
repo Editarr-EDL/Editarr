@@ -100,28 +100,37 @@ def test_ordinary_users_cannot_list_or_read_others(users_app, key):
 
 def test_users_read_and_edit_their_own_permitted_fields(users_app):
     own = users_app.ok("GET", f"/api/users/{USER}", USER)
-    assert (own["id"], own["email"], own["available_languages"]) == (USER, None, ["en"])
+    assert (own["id"], own["language"], own["available_languages"]) == (USER, None, ["en"])
     changed = users_app.ok(
         "PATCH",
         f"/api/users/{USER}",
         USER,
-        {"display_name": "  Ann\u0301  ", "email": "ann@example.test", "timezone": "Europe/Paris"},
+        {"display_name": "  Ann\u0301  ", "language": "en"},
     )
-    assert (changed["display_name"], changed["email"], changed["timezone"]) == (
+    assert (changed["display_name"], changed["language"]) == (
         "Ann\u0301".replace("n\u0301", "\u0144"),
-        "ann@example.test",
-        "Europe/Paris",
-    )
-    cleared = users_app.ok("PATCH", f"/api/users/{USER}", USER, {"email": None, "language": "en"})
-    assert (cleared["email"], cleared["language"], cleared["timezone"]) == (
-        None,
         "en",
-        "Europe/Paris",
     )
+    cleared = users_app.ok("PATCH", f"/api/users/{USER}", USER, {"language": None})
+    assert (cleared["display_name"], cleared["language"]) == (changed["display_name"], None)
+    key = users_app.send("PATCH", f"/api/users/{USER}", USER, {"language": "en"}, key=True)
+    assert key.status_code == 200 and key.json()["language"] == "en"
+
+
+def test_profiles_have_no_timezone(users_app):
+    assert "timezone" not in users_app.ok("GET", f"/api/users/{USER}", USER)
+    response = users_app.send("PATCH", f"/api/users/{USER}", USER, {"timezone": "Europe/Paris"})
+    assert response.status_code == 422
     stored = users_app.scalar(select(UserProfileRow.timezone).where(UserProfileRow.user_id == USER))
-    assert stored == "Europe/Paris"
-    key = users_app.send("PATCH", f"/api/users/{USER}", USER, {"timezone": "UTC"}, key=True)
-    assert key.status_code == 200 and key.json()["timezone"] == "UTC"
+    assert stored is None
+
+
+def test_profiles_have_no_email(users_app):
+    assert "email" not in users_app.ok("GET", f"/api/users/{USER}", USER)
+    response = users_app.send("PATCH", f"/api/users/{USER}", USER, {"email": "a@example.test"})
+    assert response.status_code == 422
+    stored = users_app.scalar(select(UserProfileRow.email).where(UserProfileRow.user_id == USER))
+    assert stored is None
 
 
 @pytest.mark.parametrize(
@@ -130,8 +139,6 @@ def test_users_read_and_edit_their_own_permitted_fields(users_app):
         ({"display_name": ""}, "invalid_display_name"),
         ({"display_name": "x" * 101}, "invalid_display_name"),
         ({"display_name": "bell\u0007"}, "invalid_display_name"),
-        ({"email": "not-an-address"}, "invalid_email"),
-        ({"timezone": "Mars/Olympus"}, "invalid_timezone"),
         ({"language": "fr"}, "unsupported_language"),
     ],
 )
@@ -201,6 +208,6 @@ def test_linked_accounts_keep_jellyfin_name_but_edit_preferences(users_app):
         "PATCH",
         f"/api/users/{PEER_USER}",
         PEER_USER,
-        {"email": "me@example.test", "timezone": "UTC"},
+        {"language": "en"},
     )
-    assert (kept["email"], kept["timezone"]) == ("me@example.test", "UTC")
+    assert kept["language"] == "en"

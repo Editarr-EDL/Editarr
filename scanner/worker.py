@@ -71,6 +71,7 @@ from scanner.runtime.process_control import (  # noqa: E402
     WorkerControlServer,
     assign_current_worker_job,
 )
+from scanner.runtime.worker_quit import FullApplicationQuitRequested  # noqa: E402
 from scanner.security.scan_jobs.authority import (  # noqa: E402
     REFUSAL_MESSAGES,
     JobGate,
@@ -93,10 +94,6 @@ def run_credits_scan(*args, **kwargs):
     from scanner.credits.credits_scan import run_credits_scan as run_pipeline
 
     return run_pipeline(*args, **kwargs)
-
-
-class FullApplicationQuitRequested(Exception):
-    """A controller-owned Quit stopped this worker without cancelling its scan."""
 
 
 @contextmanager
@@ -141,6 +138,8 @@ def _heartbeat_loop(scan_id: str, worker_token: str, stop_event: Event) -> None:
                 db.close()
         except MaintenanceUnavailable:
             return
+        except Exception:
+            logger.exception("Scan worker heartbeat failed for %s; retrying", scan_id)
 
 
 def run_scan_worker(scan_id: str, worker_token: str) -> int:

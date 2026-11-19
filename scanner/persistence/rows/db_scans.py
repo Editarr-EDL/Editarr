@@ -155,7 +155,10 @@ class ScanMediaItemAssociationRow(Base):
     """An explicit user-approved reuse of a scan for another media item."""
 
     __tablename__ = "scan_media_item_associations"
-    __table_args__ = (UniqueConstraint("scan_id", "media_item_id"),)
+    __table_args__ = (
+        UniqueConstraint("scan_id", "media_item_id"),
+        Index("ix_scan_media_item_associations_media_item_id", "media_item_id"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     scan_id = Column(String, ForeignKey("scans.id"), nullable=False)
@@ -360,6 +363,7 @@ class ScanFindingRow(Base):
     __tablename__ = "scan_findings"
     __table_args__ = (
         UniqueConstraint("id", "scan_id", name="uq_scan_findings_id_scan"),
+        Index("ix_scan_findings_scan_start", "scan_id", "start_seconds", "id"),
         _mcf_pair_constraint("ck_scan_findings_classification_pair"),
         CheckConstraint(
             "mcf_channel IS NULL OR mcf_channel IN ('both', 'video', 'audio')",

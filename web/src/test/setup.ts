@@ -1,4 +1,8 @@
 import "@testing-library/jest-dom/vitest";
+import { afterEach } from "vitest";
+
+// Imported lazily so each test file's API mocks apply to the registry loader.
+afterEach(async () => { (await import("../shared/mcf-registry")).forgetMcfRegistry(); });
 
 const localValues = new Map<string, string>();
 const testLocalStorage: Storage = {

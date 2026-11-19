@@ -58,6 +58,7 @@ from scanner.runtime.runtime_workspaces import (
     create_scan_workspace,
     remove_scan_workspace,
 )
+from scanner.runtime.worker_quit import FullApplicationQuitRequested
 from scanner.settings.capabilities import (
     DEFAULT_QWEN_MODEL,
     SUPPORTED_QWEN_MODELS,
@@ -459,6 +460,9 @@ def run_scan(
 
     except ScanCancelledError:
         cancelled = True
+        raise
+    except FullApplicationQuitRequested:
+        # A Quit pauses the scan for a later resume; the worker settles its status.
         raise
     except Exception:
         status_updater(db, video_id, "error")

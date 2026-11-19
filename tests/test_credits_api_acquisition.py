@@ -1,6 +1,7 @@
+from threading import current_thread
 from types import SimpleNamespace
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -125,7 +126,7 @@ def test_qwen_acquisition_progress_resumes_queue(monkeypatch, tmp_path):
     db.close()
 
 
-def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_path):
+def _run_failing_acquisition(monkeypatch, tmp_path, error):
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -155,7 +156,7 @@ def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_pat
             return artifact
 
         def acquire(self, _artifact_id, *, progress, cancelled):
-            raise AcquisitionError("download_failed", f"failed at {tmp_path}")
+            raise error
 
     monkeypatch.setattr(api, "get_acquisition_service", lambda: Service())
     monkeypatch.setattr(api, "get_session_factory", lambda: factory)
@@ -177,10 +178,154 @@ def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_pat
     api._run_credits_model_acquisition(
         JobGate(api.get_session_factory(), started.scan.id), "qwen3-vl-4b-instruct-4bit"
     )
+    return db, started.scan.id
 
-    failed = repository.get_scan(db, started.scan.id)
+
+def test_qwen_acquisition_failure_is_terminal_and_path_safe(monkeypatch, tmp_path):
+    error = AcquisitionError("download_failed", f"failed at {tmp_path}")
+    db, scan_id = _run_failing_acquisition(monkeypatch, tmp_path, error)
+
+    failed = repository.get_scan(db, scan_id)
     assert failed.status == "failed"
     assert failed.error_message == "Optional model acquisition failed"
     assert str(tmp_path) not in failed.error_message
-    assert repository.get_scan_queue_item_by_scan_id(db, started.scan.id) is None
+    assert repository.get_scan_queue_item_by_scan_id(db, scan_id) is None
+    db.close()
+
+
+def test_unexpected_qwen_acquisition_error_returns_scan_to_consent(monkeypatch, tmp_path):
+    db, scan_id = _run_failing_acquisition(monkeypatch, tmp_path, RuntimeError("boom"))
+
+    recovered = repository.get_scan(db, scan_id)
+    assert recovered.status == "awaiting_model_consent"
+    assert repository.get_scan_queue_item_by_scan_id(db, scan_id) is not None
+    assert not api._model_tasks()
+    db.close()
+
+
+def test_unexpected_acquisition_error_lets_a_racing_consent_start_a_replacement(
+    monkeypatch, tmp_path
+):
+    from scanner.http import credits_acquisition
+
+    observed = []
+    real_recovery = credits_acquisition.recover_interrupted_credits_model_acquisitions
+
+    def recover_then_probe_consent(db, scan_id):
+        recovered = real_recovery(db, scan_id)
+        lock = api._model_task_lock()
+        if not lock.acquire(blocking=False):
+            observed.append("waits")
+        else:
+            try:
+                existing = api._model_tasks().get(f"credits:{scan_id}")
+                alive = existing is not None and existing.is_alive()
+                observed.append("skips" if alive else "starts")
+            finally:
+                lock.release()
+        return recovered
+
+    monkeypatch.setattr(
+        credits_acquisition,
+        "recover_interrupted_credits_model_acquisitions",
+        recover_then_probe_consent,
+    )
+    real_run = api._run_credits_model_acquisition
+
+    def run_as_registered_task(gate, qwen_model):
+        api._model_tasks()[f"credits:{gate.scan_id}"] = current_thread()
+        real_run(gate, qwen_model)
+
+    monkeypatch.setattr(api, "_run_credits_model_acquisition", run_as_registered_task)
+    db, scan_id = _run_failing_acquisition(monkeypatch, tmp_path, RuntimeError("boom"))
+
+    assert observed == ["waits"]
+    assert f"credits:{scan_id}" not in api._model_tasks()
+    assert repository.get_scan(db, scan_id).status == "awaiting_model_consent"
+    db.close()
+
+
+def test_acquisition_cleanup_keeps_a_newer_registration(monkeypatch, tmp_path):
+    replacement = object()
+    real_run = api._run_credits_model_acquisition
+
+    def run_then_get_replaced(gate, qwen_model):
+        api._model_tasks()[f"credits:{gate.scan_id}"] = replacement
+        real_run(gate, qwen_model)
+
+    monkeypatch.setattr(api, "_run_credits_model_acquisition", run_then_get_replaced)
+    db, scan_id = _run_failing_acquisition(
+        monkeypatch, tmp_path, AcquisitionError("download_failed", "failed")
+    )
+
+    assert api._model_tasks().pop(f"credits:{scan_id}") is replacement
+    db.close()
+
+
+def test_acquisition_recovery_never_overwrites_a_racing_cancellation(monkeypatch, tmp_path):
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    db = factory()
+    video_path = tmp_path / "movie.mkv"
+    video_path.write_bytes(b"generated-test-video")
+    monkeypatch.setattr(api, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(repository, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
+    monkeypatch.setattr(
+        api,
+        "qwen_enrichment_capability",
+        lambda: SimpleNamespace(availability="available", device="mlx"),
+    )
+    ready = SimpleNamespace(
+        artifact_id="qwen3-vl-4b-instruct-4bit",
+        state="ready",
+        bytes_total=1,
+        license_spdx="Apache-2.0",
+        license_status="declared",
+    )
+    monkeypatch.setattr(
+        api, "get_acquisition_service", lambda: SimpleNamespace(status=lambda _id: ready)
+    )
+    started = api.api_start_credits_detection(
+        CreditsDetectionStartRequest(
+            target=jellyfin_target(monkeypatch, db, video_path),
+            qwen_model="qwen3-vl-4b-instruct-4bit",
+        ),
+        owner_caller(db),
+    )
+    scan_id = started.scan.id
+    repository.update_credits_detection_configuration(
+        db,
+        scan_id,
+        started.scan.credits_detection.configuration,
+        status="acquiring_model",
+        progress_message="Acquiring optional Qwen model",
+    )
+    queue_id = repository.get_scan_queue_item_by_scan_id(db, scan_id).queue_id
+    other = factory()
+    state = {"busy": False, "cancelled": False}
+
+    def cancel_before_recovery_decides(_conn, _cursor, statement, *_args):
+        if statement != "BEGIN IMMEDIATE" or state["busy"] or state["cancelled"]:
+            return
+        state["busy"] = True
+        try:
+            assert repository.cancel_scan_queue_item(other, queue_id) == (scan_id, True)
+            state["cancelled"] = True
+        finally:
+            state["busy"] = False
+
+    event.listen(engine, "before_cursor_execute", cancel_before_recovery_decides)
+    try:
+        assert repository.recover_interrupted_credits_model_acquisitions(db, scan_id) == 0
+    finally:
+        event.remove(engine, "before_cursor_execute", cancel_before_recovery_decides)
+
+    assert state["cancelled"]
+    db.expire_all()
+    assert repository.get_scan(db, scan_id).status == "cancelling"
+    other.close()
     db.close()

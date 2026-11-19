@@ -38,12 +38,12 @@ from scanner.security.account_permissions import applied_override
 from .account_avatars import Avatar
 from .auth_repository_sessions import revoke_user_sessions
 
-PROFILE_FIELDS = ("display_name", "email", "timezone", "language")
+PROFILE_FIELDS = ("display_name", "language")
 """Optional profile values, each validated by `account_profiles` before storage."""
 
 JELLYFIN_PROFILE_FIELDS = ("username", "display_name", "avatar")
 """What Jellyfin provides for a linked account, refreshed at each sign-in and sync and never
-edited in Editarr. Email, timezone, and language stay editable."""
+edited in Editarr. Language stays editable."""
 
 
 class UsernameRefresh(StrEnum):
@@ -65,8 +65,6 @@ class AccountRecord:
     user_id: int
     username: str | None
     display_name: str | None
-    email: str | None
-    timezone: str | None
     language: str | None
     source: AccountSource
     role: Role
@@ -117,8 +115,6 @@ def _record(row) -> AccountRecord:
         user_id=user.id,
         username=user.username,
         display_name=value("display_name"),
-        email=value("email"),
-        timezone=value("timezone"),
         language=value("language"),
         source=AccountSource.JELLYFIN if row.linked is not None else AccountSource.LOCAL,
         role=Role(user.role),

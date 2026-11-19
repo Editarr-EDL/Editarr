@@ -1,15 +1,11 @@
-import {
-  useEffect,
-  useState,
-} from "react";
-import { fetchMcfRegistry } from "../api/api-service";
+import { useState } from "react";
+import { useMcfRegistry } from "../shared/mcf-registry";
 import { retimeSavedReview, reviewPolicyToken } from "../api/api-reviews";
 import { useReviewLifetime } from "./review-access";
 import type { PreviewFilter } from "./review-preview";
 import type {
   ExportFormat,
   ExportStatus,
-  McfRegistry,
 } from "../api/api-mcf-types";
 import type {
   NewManualReviewFilter,
@@ -31,6 +27,7 @@ import {
   classificationIsValid,
   formatMcfTimestamp,
   parseMcfTimestamp,
+  McfRegistryStatus,
 } from "./review-mcf";
 
 /** Collect a manually authored filter for the current review draft.
@@ -52,7 +49,7 @@ export function ManualReviewFilterDialog({
   preview?: { filterId: string; url: string } | null;
   previewError?: string | null;
 }) {
-  const [registry, setRegistry] = useState<McfRegistry | null>(null);
+  const { registry, error: registryError } = useMcfRegistry();
   const [source, setSource] = useState<"audio" | "visual">("audio");
   const [label, setLabel] = useState("");
   const [category, setCategory] = useState<NonNullable<NewManualReviewFilter["category"]>>("language");
@@ -63,7 +60,6 @@ export function ManualReviewFilterDialog({
   const [details, setDetails] = useState("");
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(1);
-  useEffect(() => { void fetchMcfRegistry().then(setRegistry); }, []);
   const invalidTiming = !Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)
     || startSeconds < 0 || endSeconds <= startSeconds;
   const action = source === "audio" ? "mute" : "skip";
@@ -76,7 +72,7 @@ export function ManualReviewFilterDialog({
     <p>This filter will be created with the saved review when changes are saved.</p>
     <label className="field"><span>Filter type</span><select aria-label="Manual filter type" value={source} onChange={(event) => { const next = event.target.value as "audio" | "visual"; setSource(next); setCategory(next === "audio" ? "language" : "violence"); setSubcategory(next === "audio" ? "swearing" : "violence"); }}><option value="audio">Audio mute</option><option value="visual">Video skip</option></select></label>
     <label className="field"><span>{source === "audio" ? "Word or label" : "Label"}</span><input aria-label="Manual filter label" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
-    {registry ? <McfClassificationFields controlId="Manual filter" registry={registry} value={{ category, subcategory, severity, mcf_channel: channel, mcf_comment: comment }} onChange={(patch) => { if (patch.category !== undefined) setCategory(patch.category || "language"); if (patch.subcategory !== undefined) setSubcategory(patch.subcategory || ""); if (patch.severity !== undefined) setSeverity(patch.severity); if (patch.mcf_channel !== undefined) setChannel(patch.mcf_channel); if (patch.mcf_comment !== undefined) setComment(patch.mcf_comment); }} /> : <p className="loading-state">Loading MCF categories…</p>}
+    {registry ? <McfClassificationFields controlId="Manual filter" registry={registry} value={{ category, subcategory, severity, mcf_channel: channel, mcf_comment: comment }} onChange={(patch) => { if (patch.category !== undefined) setCategory(patch.category || "language"); if (patch.subcategory !== undefined) setSubcategory(patch.subcategory || ""); if (patch.severity !== undefined) setSeverity(patch.severity); if (patch.mcf_channel !== undefined) setChannel(patch.mcf_channel); if (patch.mcf_comment !== undefined) setComment(patch.mcf_comment); }} /> : <McfRegistryStatus error={registryError} />}
     <label className="field"><span>Description</span><textarea aria-label="Manual filter description" value={details} onChange={(event) => setDetails(event.target.value)} rows={3} /></label>
     <div className="finding-timing-fields"><label className="field"><span>Start seconds</span><input aria-label="Manual filter start seconds" type="number" min="0" step="0.1" value={startSeconds} onChange={(event) => setStartSeconds(Number(event.target.value))} /></label><label className="field"><span>End seconds</span><input aria-label="Manual filter end seconds" type="number" min="0.1" step="0.1" value={endSeconds} onChange={(event) => setEndSeconds(Number(event.target.value))} /></label></div>
     {preview?.filterId === previewId && <div className="finding-preview">{source === "audio"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib
+import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +12,7 @@ from scanner.model_acquisition import get_acquisition_service, manifest
 from scanner.settings.capabilities import capability_for
 from scanner.settings.config import settings
 
+from .dependencies import require_dependency
 from .inference_devices import CPU_PROVIDER, TorchInference
 
 _WD_VARIANT_REPOS = {
@@ -56,13 +57,24 @@ class ImageSafetyGateResult:
 
 
 def _require_dependency(import_name: str, install_hint: str):
+    return require_dependency(import_name, install_hint, "Image Safety Gate model requires")
+
+
+def _wd_rating_indices(tags_path: Path) -> dict[str, int]:
+    """Map WD rating tag names to their 0-based data row (model output) index."""
+    with tags_path.open(newline="", encoding="utf-8-sig") as handle:
+        return {
+            row["name"]: index
+            for index, row in enumerate(csv.DictReader(handle))
+            if _is_rating_category(row["category"])
+        }
+
+
+def _is_rating_category(value: str | None) -> bool:
     try:
-        return importlib.import_module(import_name)
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "Image Safety Gate model requires optional dependency "
-            f"'{install_hint}'. Install the stack dependencies first."
-        ) from exc
+        return float(value or "") == _WD_RATING_CATEGORY
+    except ValueError:
+        return False
 
 
 def _ensure_files(repo_id: str, model_dir: Path, names: tuple[str, ...]) -> Path:
@@ -91,7 +103,6 @@ def _load_wd_tagger(variant: str):
             return _CACHE[cache_key]
 
         numpy = _require_dependency("numpy", "numpy")
-        pandas = _require_dependency("pandas", "pandas")
         onnxruntime = _require_dependency("onnxruntime", "onnxruntime")
 
         model_dir = _ensure_files(
@@ -99,9 +110,7 @@ def _load_wd_tagger(variant: str):
             _model_root() / f"wd-{variant}-tagger-v3",
             _WD_FILES,
         )
-        tags_df = pandas.read_csv(model_dir / "selected_tags.csv")
-        rating_rows = tags_df[tags_df["category"] == _WD_RATING_CATEGORY]
-        rating_indices = {row["name"]: int(idx) for idx, row in rating_rows.iterrows()}
+        rating_indices = _wd_rating_indices(model_dir / "selected_tags.csv")
         for name in _WD_UNSAFE_RATING_NAMES:
             if name not in rating_indices:
                 raise RuntimeError(

@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   fetchFilterDefaultsSettings,
-  fetchMcfRegistry,
   updateFilterDefaultsSettings,
 } from "../../api/api-service";
 import { ApiError } from "../../api/api-transport";
+import { loadMcfRegistry } from "../../shared/mcf-registry";
 import { FreshAuthenticationDialog } from "../../auth/fresh-authentication";
 import { useOptionalAuthenticationGate } from "../../auth/auth-gate";
 import type {
@@ -47,7 +47,7 @@ export function DefaultFilters() {
     setError(null);
     try {
       const [loadedRegistry, loadedSettings] = await Promise.all([
-        fetchMcfRegistry(),
+        loadMcfRegistry(),
         fetchFilterDefaultsSettings(),
       ]);
       if (generation !== loadGeneration.current) return;

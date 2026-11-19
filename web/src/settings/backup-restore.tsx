@@ -5,6 +5,7 @@ import {
 } from "../api/api-backups";
 import type { BackupJob, RestorePlan } from "../api/api-backups";
 import { ApiError } from "../api/api-transport";
+import { useSerialPoll } from "../shared/use-serial-poll";
 
 const refusals: Record<string, string> = {
   restore_target_has_accounts: "This installation already has accounts. A backup can only be restored into a new, empty installation.",
@@ -55,22 +56,21 @@ export function SetupRestore({ onComplete, onRestored }: { onComplete: () => voi
 
   useEffect(() => { if (restored) onRestored?.(); }, [restored, onRestored]);
 
-  useEffect(() => {
-    if (!job || (job.state !== "working" && job.state !== "activating")) return;
-    const activating = job.state === "activating";
-    const timer = window.setInterval(() => {
-      void setupRestoreStatus(job.id).then((next) => {
-        setJob(next);
-        if (next.state === "activated") setRestored(true);
-        if (next.state === "failed") setError(failure(next));
-      }).catch((reason: unknown) => {
-        // Restoring an owner completes setup, which closes this flow.
-        if (activating && reason instanceof ApiError && reason.code === "setup_already_complete") setRestored(true);
-        else setError(reason instanceof Error ? reason.message : "Unable to check restore status.");
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [job?.id, job?.state]);
+  useSerialPoll({
+    enabled: job?.state === "working" || job?.state === "activating",
+    key: `${job?.id}:${job?.state}`,
+    request: () => setupRestoreStatus(job!.id),
+    onResult: (next) => {
+      setJob(next);
+      if (next.state === "activated") setRestored(true);
+      if (next.state === "failed") setError(failure(next));
+    },
+    onError: (reason) => {
+      // Restoring an owner completes setup, which closes this flow.
+      if (job?.state === "activating" && reason instanceof ApiError && reason.code === "setup_already_complete") setRestored(true);
+      else setError(reason instanceof Error ? reason.message : "Unable to check restore status.");
+    },
+  });
 
   async function selectArchive(selected: File | null) {
     if (job && token && job.state !== "activating" && job.state !== "activated") void cancelSetupRestore(job.id, token).catch(() => {});

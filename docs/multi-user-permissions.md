@@ -30,8 +30,8 @@ except the nondelegable powers below. Bulk actions use the same checks per targe
 | Choose own filter mode when no policy is enforced | Own | Own | Yes |
 | Personal active-session list/revocation UI | Excluded | Excluded | Excluded |
 
-Linked name/avatar are read-only; local avatars use uploads. Linked email and
-timezone are independent preferences. Identity proof and fresh authentication
+Linked name/avatar are read-only; local avatars use uploads. Linked display
+language is an independent preference. Identity proof and fresh authentication
 still apply; permission to initiate linking is not permission to impersonate users.
 
 ## Media, scans, and reviews
