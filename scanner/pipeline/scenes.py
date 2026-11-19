@@ -16,6 +16,10 @@ from scanner.settings.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Absorbs floating-point and container timestamp rounding (e.g. Matroska's 1 ms
+# ticks) so a frame exactly on a sample time is not skipped for the next one.
+_SAMPLE_TIME_TOLERANCE_SECONDS = 0.001
+
 
 @dataclass
 class Scene:
@@ -109,6 +113,31 @@ def detect_scenes(
     return scenes
 
 
+def interval_sample_offset(interval_seconds: float, duration_seconds: float) -> float:
+    """Return the scene-relative time of the first centered interval sample.
+
+    Samples sit at the middle of each ``interval_seconds`` bin, and a scene shorter
+    than one interval is sampled once at its midpoint. Centering also keeps samples
+    away from cut frames, which can still show a transition.
+    """
+    return min(interval_seconds, duration_seconds) / 2
+
+
+def interval_sample_filter(interval_seconds: float, offset_seconds: float) -> str:
+    """Return an FFmpeg filter keeping the first frame at or after each sample time.
+
+    Frame ``k`` is the first decoded frame whose scene-relative time is at least
+    ``offset_seconds + k * interval_seconds`` (less a 1 ms rounding tolerance), so
+    it lies within one source frame of that time. FFmpeg's ``fps`` filter is
+    unsuitable: it rounds to the nearest output slot, so its images do not match
+    their nominal times.
+    """
+    if interval_seconds <= 0:
+        raise ValueError("Frame sample interval must be greater than zero")
+    first_sample = offset_seconds - _SAMPLE_TIME_TOLERANCE_SECONDS
+    return f"select=gte(t\\,{first_sample!r}+selected_n*{interval_seconds!r})"
+
+
 def sample_scene_frames(
     video_path: str,
     scene: Scene,
@@ -118,7 +147,15 @@ def sample_scene_frames(
     should_cancel: Callable[[], bool] | None = None,
     progress_callback: Callable[[float, str], None] | None = None,
 ) -> list[tuple[Path, float]]:
-    """Extract source frames, or a regular interval sample, from one scene."""
+    """Extract every source frame, or centered interval samples, from one scene.
+
+    Returns ``(path, timestamp)`` pairs inside ``[scene.start, scene.end)``. With
+    ``interval_seconds`` the k-th frame is the first at or after
+    ``scene.start + offset + k * interval_seconds`` (see
+    :func:`interval_sample_offset`) and is stamped with that time. Otherwise every
+    source frame is extracted and stamped every ``timestamp_interval_seconds``
+    (normally the source frame interval).
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg = resolve_ffmpeg()
 
@@ -128,8 +165,12 @@ def sample_scene_frames(
 
     pattern = str(output_dir / f"scene_{scene.index:04d}_%06d.jpg")
     filters = [extracted_frame_scale_filter()]
+    frame_rate_options: list[str] = []
+    sample_offset = 0.0
     if interval_seconds is not None:
-        filters.insert(0, f"fps={1.0 / interval_seconds}")
+        sample_offset = interval_sample_offset(interval_seconds, duration)
+        filters.insert(0, interval_sample_filter(interval_seconds, sample_offset))
+        frame_rate_options = ["-fps_mode", "vfr"]
 
     def on_ffmpeg_output(line: str) -> None:
         if not progress_callback or not line.startswith("out_time_us="):
@@ -154,6 +195,7 @@ def sample_scene_frames(
         str(duration),
         "-vf",
         ",".join(filters),
+        *frame_rate_options,
         "-pix_fmt",
         "yuvj420p",
         "-q:v",
@@ -173,9 +215,10 @@ def sample_scene_frames(
 
     frames = sorted(output_dir.glob(f"scene_{scene.index:04d}_*.jpg"))
     if not frames:
-        # The fps filter can produce no output for a scene shorter than the
-        # requested interval. Scan its opening frame rather than skipping the
-        # scene altogether.
+        # A scene spanning about one source frame can have no frame at or after
+        # its midpoint. Seeking to the start is the robust fallback: it returns
+        # the first frame at or after the start, while a later seek could land
+        # in the next scene.
         fallback_path = output_dir / f"scene_{scene.index:04d}_fallback.jpg"
         fallback_command = [
             ffmpeg,
@@ -199,16 +242,19 @@ def sample_scene_frames(
             should_cancel=should_cancel,
         )
         if fallback_path.is_file():
-            frames = [fallback_path]
+            return [(fallback_path, scene.start_seconds)]
     if not frames:
         return []
     results: list[tuple[Path, float]] = []
-    if timestamp_interval_seconds is None:
+    if interval_seconds is not None:
+        first_timestamp = scene.start_seconds + sample_offset
         timestamp_interval_seconds = interval_seconds
-    if timestamp_interval_seconds is None:
-        timestamp_interval_seconds = duration / len(frames)
+    else:
+        first_timestamp = scene.start_seconds
+        if timestamp_interval_seconds is None:
+            timestamp_interval_seconds = duration / len(frames)
     for i, frame_path in enumerate(frames):
-        timestamp = scene.start_seconds + (i * timestamp_interval_seconds)
+        timestamp = first_timestamp + (i * timestamp_interval_seconds)
         if timestamp < scene.end_seconds:
             results.append((frame_path, timestamp))
 
