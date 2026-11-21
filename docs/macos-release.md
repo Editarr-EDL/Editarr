@@ -47,3 +47,12 @@ MP3/MP4 previews with generated media. It also loads a generated module with the
 pinned d1-3B remote code's imports through the transformers remote-code loader
 and runs a tiny LFM2 forward pass, without weights. Run the installed app
 verifier on a locally signed copy from the DMG before distributing it.
+
+On a Mac that already has d1-3B in its model cache, the frozen executable can
+also run one real frame through the model. The probe never downloads:
+
+```sh
+EDITARR_FROZEN_RUNTIME_SMOKE=1 EDITARR_FROZEN_RUNTIME_SMOKE_MODEL=d1-3b \
+  EDITARR_FROZEN_RUNTIME_SMOKE_FRAME=/path/to/frame.jpg \
+  Editarr.app/Contents/Resources/runtime/Editarr/Editarr
+```

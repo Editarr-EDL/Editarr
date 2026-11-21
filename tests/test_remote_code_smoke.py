@@ -1,14 +1,18 @@
-"""Frozen-runtime checks for pinned remote model code."""
+"""Frozen-runtime checks for pinned remote model code and the opt-in model probe."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from scanner.models import McfCategoryFamily
 from scanner.pipeline import d1_detector
+from scanner.pipeline.decision_detection import FrameDecision
+from scanner.runtime import model_smoke
 from scanner.runtime.remote_code_smoke import remote_code_imports, smoke_remote_code
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,3 +82,42 @@ def test_remote_code_smoke_rejects_an_ignored_modules_cache(modules_cache, monke
 
     with pytest.raises(RuntimeError, match="ignores the configured model cache"):
         smoke_remote_code({}, ())
+
+
+def _status(state):
+    return lambda: SimpleNamespace(status=lambda _artifact: SimpleNamespace(state=state))
+
+
+def test_model_probe_never_acquires_a_missing_artifact(tmp_path, monkeypatch):
+    frame = tmp_path / "frame.jpg"
+    frame.write_bytes(b"jpeg")
+    monkeypatch.setattr(
+        "scanner.model_acquisition.get_acquisition_service", _status("not_downloaded")
+    )
+    monkeypatch.setattr(d1_detector, "score_frame", pytest.fail)
+
+    with pytest.raises(RuntimeError, match="never downloads"):
+        model_smoke.run_model_probe("d1-3b", frame)
+    with pytest.raises(RuntimeError, match="Unsupported"):
+        model_smoke.run_model_probe("nudenet", frame)
+
+
+def test_model_probe_reports_decisions_and_releases_the_model(tmp_path, monkeypatch):
+    frame = tmp_path / "frame.jpg"
+    frame.write_bytes(b"jpeg")
+    released = []
+    decision = FrameDecision(
+        scores={McfCategoryFamily.VIOLENCE: 0.9, McfCategoryFamily.NUDITY: 0.1},
+        thresholds=d1_detector.THRESHOLDS,
+        levels={McfCategoryFamily.VIOLENCE: 2},
+    )
+    monkeypatch.setattr("scanner.model_acquisition.get_acquisition_service", _status("ready"))
+    monkeypatch.setattr(d1_detector, "score_frame", lambda path: decision)
+    monkeypatch.setattr(d1_detector, "release", lambda: released.append(True))
+
+    result = model_smoke.run_model_probe("d1-3b", frame)
+
+    assert result["positives"] == ["violence"]
+    assert result["severity_levels"] == {"violence": 2}
+    assert result["revision"] == d1_detector.MODEL_REVISION
+    assert released == [True]
