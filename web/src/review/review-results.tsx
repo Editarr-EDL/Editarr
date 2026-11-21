@@ -152,10 +152,19 @@ export function CensoredAudioWord({ word, context }: { word: string; context?: s
   return <span className="censored-audio-word" tabIndex={0} onMouseEnter={showAfterHoverDelay} onMouseLeave={() => { clearHoverTimer(); setTooltipVisible(false); }} onFocus={() => setTooltipVisible(true)} onBlur={() => setTooltipVisible(false)}><strong>{censorAudioWord(word)}</strong>{tooltipVisible && <span className="audio-word-tooltip" role="tooltip">{tooltipWithHighlightedWord(word, context)}</span>}</span>;
 }
 
+/**
+ * Text describing a filter. Visual filters show only their Severity and Description reply,
+ * so missing `details` yields "" (category chips still identify the row); audio filters
+ * fall back through label, details and category.
+ */
 export function savedReviewFilterDescription(filter: SavedReview["filters"][number]): string {
   return filter.source === "visual"
-    ? filter.details || filter.label || filter.subcategory || filter.category || "Unclassified"
+    ? filter.details || ""
     : filter.label || filter.details || filter.subcategory || filter.category || "Unclassified";
+}
+
+function filterDescriptions(filters: SavedReview["filters"]): string[] {
+  return [...new Set(filters.map(savedReviewFilterDescription).filter(Boolean))];
 }
 
 function isNoObjectionableContent(value: string | null | undefined): boolean {
@@ -209,14 +218,14 @@ export function mergeSavedReviewFilters(
         filters: [filter],
         startSeconds,
         endSeconds,
-        descriptions: [savedReviewFilterDescription(filter)],
+        descriptions: filterDescriptions([filter]),
         scanIds: scanById.has(filter.source_scan_id) ? [filter.source_scan_id] : [],
       });
     } else {
       current.filters.push(filter);
       current.endSeconds = Math.max(current.endSeconds, endSeconds);
       current.key = `${current.key}:${filter.id}`;
-      current.descriptions = [...new Set([...current.descriptions, savedReviewFilterDescription(filter)])];
+      current.descriptions = filterDescriptions(current.filters);
       if (scanById.has(filter.source_scan_id)) {
         current.scanIds = [...new Set([...current.scanIds, filter.source_scan_id])].sort((left, right) => (
           (scanById.get(left)?.scan_id ?? 0) - (scanById.get(right)?.scan_id ?? 0)

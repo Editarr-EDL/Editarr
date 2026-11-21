@@ -105,3 +105,24 @@ it("shows a registry load failure in the filter editor instead of loading foreve
   expect(await screen.findByRole("alert")).toBeVisible();
   expect(screen.queryByText("Loading MCF categories…")).toBeNull();
 });
+
+it("renders a visual finding without a description by its category only", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const filters: SavedReview["filters"] = [{
+    id: "finding-1", source_scan_id: "scan-1", source_finding_id: 1,
+    source: "visual", category: "violence", subcategory: "violence",
+    severity: "medium", mcf_channel: "video", mcf_comment: null,
+    label: "d1_violence", details: null, group_key: "violence",
+    start_seconds: 10, end_seconds: 12, confidence: 0.9,
+    edit_action: "skip", selected: true,
+  }];
+  render(<SavedReviewOverview filters={filters} memberships={[]} scans={[]} busy={false} focusFilterId="finding-1"
+    onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+    onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
+
+  const section = screen.getByRole("region", { name: "Video review filters" });
+  const include = await within(section).findByRole("checkbox", { name: "Include violence at 0:10" });
+  const row = include.closest("tr") as HTMLElement;
+  expect(row.querySelector(".merged-descriptions")).toBeNull();
+  expect(row).not.toHaveTextContent(/d1_violence|Unclassified/);
+});
