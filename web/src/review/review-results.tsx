@@ -163,9 +163,6 @@ export function savedReviewFilterDescription(filter: SavedReview["filters"][numb
     : filter.label || filter.details || filter.subcategory || filter.category || "Unclassified";
 }
 
-function filterDescriptions(filters: SavedReview["filters"]): string[] {
-  return [...new Set(filters.map(savedReviewFilterDescription).filter(Boolean))];
-}
 
 function isNoObjectionableContent(value: string | null | undefined): boolean {
   const normalized = value?.trim().toLocaleLowerCase().replace(/[.!]+$/, "");
@@ -208,38 +205,41 @@ export function reviewAudioRoot(label: string | null, fallback: string): string 
   return normalized;
 }
 
-/** Merge equivalent review filters across scans into display results. */
+/**
+ * Merge overlapping review filters into display results. Each group accumulates its ids,
+ * descriptions (first appearance, empties dropped) and known scan ids in linear time, then
+ * materialises arrays once, ordering scan ids by scan number.
+ */
 export function mergeSavedReviewFilters(
   filters: SavedReview["filters"],
   scanById: Map<string, Scan>,
 ): SavedReviewResult[] {
-  const merged: SavedReviewResult[] = [];
+  type Group = { filters: SavedReview["filters"]; startSeconds: number; endSeconds: number; descriptions: Set<string>; scanIds: Set<string> };
+  const groups: Group[] = [];
   for (const filter of [...filters].sort((left, right) => left.start_seconds - right.start_seconds)) {
     const startSeconds = filter.start_seconds;
     const endSeconds = Math.max(startSeconds, filter.end_seconds ?? startSeconds + 1);
-    const current = merged[merged.length - 1];
+    let current = groups[groups.length - 1];
     if (!current || startSeconds > current.endSeconds) {
-      merged.push({
-        key: filter.id,
-        filters: [filter],
-        startSeconds,
-        endSeconds,
-        descriptions: filterDescriptions([filter]),
-        scanIds: scanById.has(filter.source_scan_id) ? [filter.source_scan_id] : [],
-      });
-    } else {
-      current.filters.push(filter);
-      current.endSeconds = Math.max(current.endSeconds, endSeconds);
-      current.key = `${current.key}:${filter.id}`;
-      current.descriptions = filterDescriptions(current.filters);
-      if (scanById.has(filter.source_scan_id)) {
-        current.scanIds = [...new Set([...current.scanIds, filter.source_scan_id])].sort((left, right) => (
-          (scanById.get(left)?.scan_id ?? 0) - (scanById.get(right)?.scan_id ?? 0)
-        ));
-      }
+      current = { filters: [], startSeconds, endSeconds, descriptions: new Set(), scanIds: new Set() };
+      groups.push(current);
     }
+    current.filters.push(filter);
+    current.endSeconds = Math.max(current.endSeconds, endSeconds);
+    const description = savedReviewFilterDescription(filter);
+    if (description) current.descriptions.add(description);
+    if (scanById.has(filter.source_scan_id)) current.scanIds.add(filter.source_scan_id);
   }
-  return merged;
+  return groups.map((group) => ({
+    key: group.filters.map((filter) => filter.id).join(":"),
+    filters: group.filters,
+    startSeconds: group.startSeconds,
+    endSeconds: group.endSeconds,
+    descriptions: [...group.descriptions],
+    scanIds: [...group.scanIds].sort((left, right) => (
+      (scanById.get(left)?.scan_id ?? 0) - (scanById.get(right)?.scan_id ?? 0)
+    )),
+  }));
 }
 
 /** Order display results by the selected review sort mode. */
@@ -312,15 +312,17 @@ export function sortTieredReviewResults(
   sort: { key: ReviewTableSortKey; direction: ReviewTableSortDirection },
 ): TieredReviewResult[] {
   const direction = sort.direction === "asc" ? 1 : -1;
+  const descriptions = new Map(items.map((item) => [item, item.result.descriptions.join(" ")]));
+  const severities = sort.key === "severity" ? new Map(items.map((item) => [item, severityRank(item.pathFilters)])) : null;
   return [...items].sort((left, right) => {
     const primary = sort.key === "time"
       ? left.result.startSeconds - right.result.startSeconds
-      : sort.key === "description"
-        ? left.result.descriptions.join(" ").localeCompare(right.result.descriptions.join(" "))
-        : severityRank(left.pathFilters) - severityRank(right.pathFilters);
+      : severities
+        ? severities.get(left)! - severities.get(right)!
+        : descriptions.get(left)!.localeCompare(descriptions.get(right)!);
     return primary * direction
       || left.result.startSeconds - right.result.startSeconds
-      || left.result.descriptions.join(" ").localeCompare(right.result.descriptions.join(" "))
+      || descriptions.get(left)!.localeCompare(descriptions.get(right)!)
       || left.result.key.localeCompare(right.result.key);
   });
 }
@@ -331,11 +333,13 @@ export function sortTieredReviewGroups(
   sort: { key: ReviewTableSortKey; direction: ReviewTableSortDirection },
 ): TieredReviewGroup[] {
   const direction = sort.direction === "asc" ? 1 : -1;
+  // The first row of a time-sorted group is its earliest start ascending, or its latest descending.
+  const firstStart = new Map(groups.map((group) => [group, group.results.reduce<number | null>((first, item) => (
+    first === null || (item.result.startSeconds - first) * direction < 0 ? item.result.startSeconds : first
+  ), null) ?? 0]));
   return [...groups].sort((left, right) => {
     if (sort.key === "time") {
-      const leftFirst = sortTieredReviewResults(left.results, sort)[0]?.result.startSeconds ?? 0;
-      const rightFirst = sortTieredReviewResults(right.results, sort)[0]?.result.startSeconds ?? 0;
-      return (leftFirst - rightFirst) * direction || left.name.localeCompare(right.name);
+      return (firstStart.get(left)! - firstStart.get(right)!) * direction || left.name.localeCompare(right.name);
     }
     if (sort.key === "description") return left.name.localeCompare(right.name) * direction;
     return left.name.localeCompare(right.name);
