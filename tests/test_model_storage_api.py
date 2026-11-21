@@ -107,3 +107,70 @@ def test_unknown_model_actions_never_expose_local_files(monkeypatch):
     assert response.status_code == 404
     assert b'"code":"unknown_artifact"' in response.body
     assert str(Path.home()) not in response.body.decode()
+
+
+def _artifact_status(artifact_id: str) -> ArtifactStatus:
+    artifact = manifest().artifact(artifact_id)
+    return ArtifactStatus(
+        artifact_id=artifact.id,
+        backend_ids=artifact.backend_ids,
+        state="ready",
+        bytes_downloaded=artifact.expected_size,
+        bytes_total=artifact.expected_size,
+        error_code=None,
+        error_detail=None,
+        source_url=artifact.source_url,
+        license_spdx=artifact.license.spdx,
+        license_status=artifact.license.status,
+    )
+
+
+def _scan(status: str, *, video_model="nudenet", qwen_model="qwen3-vl-4b-instruct-4bit",
+          scan_video=True, scan_audio=False, audio_filter=None):
+    return SimpleNamespace(
+        status=status, scan_mode=api.ScanMode.CONTENT, scan_audio=scan_audio,
+        audio_model="whisper" if scan_audio else None, audio_filter=audio_filter,
+        scan_video=scan_video, video_model=video_model if scan_video else None,
+        qwen_model=qwen_model, credits_detection=None,
+    )
+
+
+_QWEN_4B = "qwen3-vl-4b-instruct-4bit"
+_QWEN_8B = "qwen3-vl-8b-instruct-4bit"
+
+
+@pytest.mark.parametrize(
+    ("scan", "artifact_id", "blocked"),
+    [
+        # Queued scans re-acquire on start, as for detector artifacts.
+        (_scan("queued"), _QWEN_4B, False),
+        # A running scan holds its description model whatever the detector is.
+        (_scan("scanning"), _QWEN_4B, True),
+        (_scan("scanning"), _QWEN_8B, False),
+        (_scan("acquiring_model", video_model="qwen3-vl-4b", qwen_model=_QWEN_8B), _QWEN_8B, True),
+        # Deferred descriptions run after the d1-3B detector is released, still "scanning".
+        (_scan("scanning", video_model="d1-3b", qwen_model=_QWEN_8B), _QWEN_8B, True),
+        (_scan("scanning", video_model="d1-3b", qwen_model=_QWEN_8B), "d1-3b", True),
+        (_scan("cancelling", video_model="shieldstral"), _QWEN_4B, True),
+        # The audio Qwen filter uses the same model; other audio filters do not.
+        (_scan("scanning", scan_video=False, scan_audio=True, audio_filter="qwen"), _QWEN_4B, True),
+        (_scan("scanning", scan_video=False, scan_audio=True, audio_filter="better_profanity"),
+         _QWEN_4B, False),
+        (_scan("complete"), _QWEN_4B, False),
+    ],
+)
+def test_active_scans_protect_their_description_model_artifact(
+    monkeypatch, db, scan, artifact_id, blocked
+):
+    service = _Service((_artifact_status(artifact_id),))
+    monkeypatch.setattr(api, "get_acquisition_service", lambda: service)
+    monkeypatch.setattr(api, "list_scan_queue", lambda _db: [scan])
+
+    response = api.api_remove_model(artifact_id, db, _ADMIN)
+
+    if blocked:
+        assert response.status_code == 409
+        assert b'"code":"model_in_use"' in response.body
+        assert service.removed == []
+    else:
+        assert response["removed"] is True
