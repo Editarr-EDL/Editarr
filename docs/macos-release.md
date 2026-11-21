@@ -43,5 +43,7 @@ UV_NO_SYNC=1 uv run python scripts/package_macos.py --runtime /path/to/runtime-o
 ```
 
 The native runtime smoke exercises the embedded helpers, scene detection and
-MP3/MP4 previews with generated media. Run the installed app verifier on a
-locally signed copy from the DMG before distributing it.
+MP3/MP4 previews with generated media. It also loads a generated module with the
+pinned d1-3B remote code's imports through the transformers remote-code loader
+and runs a tiny LFM2 forward pass, without weights. Run the installed app
+verifier on a locally signed copy from the DMG before distributing it.

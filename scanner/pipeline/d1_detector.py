@@ -35,6 +35,34 @@ from .dependencies import require_dependency
 ARTIFACT_ID = "d1-3b"
 MODEL_ID = "LiquidAI/d1-3B"
 MODEL_REVISION = "05b80faf55536582ad5ffb2da7456f6a653acf71"
+# The third-party imports of this revision's remote code, from remote_code_imports(); the
+# frozen runtime smoke loads them through transformers' remote-code loader. Update both
+# when MODEL_REVISION changes.
+REMOTE_CODE_IMPORTS = {
+    "PIL": ("Image",),
+    "torch": (),
+    "torch.nn": (),
+    "torch.nn.functional": (),
+    "transformers": (
+        "AutoModelForImageTextToText",
+        "AutoProcessor",
+        "AutoTokenizer",
+        "Lfm2Config",
+        "Lfm2VlConfig",
+        "PretrainedConfig",
+    ),
+    "transformers.modeling_layers": ("GradientCheckpointingLayer",),
+    "transformers.modeling_outputs": ("BaseModelOutputWithPast",),
+    "transformers.models.lfm2.modeling_lfm2": ("Lfm2ForCausalLM",),
+    "transformers.models.lfm2_vl.modeling_lfm2_vl": ("Lfm2VlForConditionalGeneration",),
+}
+# Modules transformers imports by name while loading this artifact's processor and model.
+RESOLVED_MODULES = (
+    "transformers.models.lfm2_vl.image_processing_lfm2_vl",
+    "transformers.models.lfm2_vl.processing_lfm2_vl",
+    "transformers.models.siglip2.modeling_siglip2",
+    "transformers.tokenization_utils_tokenizers",
+)
 # Violence uses 0.25: with only the four family questions, it reproduces the decisions of
 # the original question set (family plus specific tokens such as weapons, each at 0.5) on
 # 1592 of 1603 evaluation frames and raises violence F1 from 0.57 to 0.65. The other

@@ -9,9 +9,13 @@ import tempfile
 from pathlib import Path
 
 from .distribution import has_source_built_media
+from .remote_code_smoke import smoke_remote_code
 from .runtime_support import resolve_ffmpeg, resolve_ffprobe
 
 _BASE_IMPORTS = (
+    # Settings point the Hugging Face caches at the model cache, as in the app, before
+    # huggingface_hub reads them at import.
+    "scanner.settings.config",
     "certifi",
     "cryptography",
     "fastapi",
@@ -86,13 +90,17 @@ def _smoke_release_media(ffmpeg: str) -> None:
 
 
 def run_runtime_smoke() -> int:
-    """Exercise lazy imports, the bundled profanity detector, and media helpers."""
+    """Exercise lazy imports, remote model code, the profanity detector, and media helpers."""
 
     for name in _BASE_IMPORTS:
         importlib.import_module(name)
     if platform.system() == "Darwin":
         for name in _MACOS_IMPORTS:
             importlib.import_module(name)
+    from scanner.pipeline import d1_detector
+
+    smoke_remote_code(d1_detector.REMOTE_CODE_IMPORTS, d1_detector.RESOLVED_MODULES)
+
     from scanner.pipeline.audio_filters import _load_alt_profanity_check_detector
 
     detector = _load_alt_profanity_check_detector()
