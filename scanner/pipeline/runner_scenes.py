@@ -14,21 +14,6 @@ from .detector_memory import defer_descriptions, release_detector
 _DEFERRED_DETECTION_SHARE = 0.9
 
 
-def _load_detected_scene(path: Path) -> tuple[list, list[FindingCreate]] | None:
-    """Load a scene's cached detections awaiting description, if its frames remain."""
-    import json
-
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        frames = [(Path(item[0]), float(item[1])) for item in payload["frames"]]
-        findings = [FindingCreate(**item) for item in payload["findings"]]
-    except (OSError, KeyError, TypeError, ValueError, IndexError):
-        return None
-    if not all(frame_path.is_file() for frame_path, _timestamp in frames):
-        return None
-    return frames, findings
-
-
 def _scan_visual_by_scene(
     video_path: str,
     video_id: str,
@@ -58,6 +43,15 @@ def _scan_visual_by_scene(
         raise ValueError("Representative frames per flagged segment must be at least one")
     if qwen_segment_join_gap_seconds < 0:
         raise ValueError("Qwen segment join gap cannot be negative")
+    # A resident detector that differs from the description model is released after
+    # detecting every scene, so both are never loaded together (no per-scene reloads).
+    # Detection then reports the first share of all visual progress.
+    deferred = defer_descriptions(video_model, qwen_model)
+    report = progress_callback
+    if deferred and report:
+        progress_callback = lambda fraction, message: report(  # noqa: E731
+            _DEFERRED_DETECTION_SHARE * fraction, message
+        )
     scene_detection_weight = 0.15
     if cached_scenes is not None:
         scenes = cached_scenes
@@ -92,14 +86,6 @@ def _scan_visual_by_scene(
     if not scenes:
         return findings
 
-    # A resident detector that differs from the description model is released after
-    # detecting every scene, so both are never loaded together (no per-scene reloads).
-    deferred = defer_descriptions(video_model, qwen_model)
-    report = progress_callback
-    if deferred and report:
-        progress_callback = lambda fraction, message: report(  # noqa: E731
-            _DEFERRED_DETECTION_SHARE * fraction, message
-        )
     pending: list[tuple[int, Scene, list, list[FindingCreate]]] = []
     by_scene: dict[int, list[FindingCreate]] = {}
 
@@ -132,7 +118,6 @@ def _scan_visual_by_scene(
             progress_callback(scene_start, f"Visual scan: scene {idx}/{total_scenes}")
 
         result_path = result_dir / f"scene_{scene.index:04d}.json"
-        detected_path = result_dir / f"scene_{scene.index:04d}.detected.json"
         cached_findings = root._load_cached_visual_findings(result_path)
         if cached_findings is not None:
             if provenance_callback:
@@ -142,15 +127,6 @@ def _scan_visual_by_scene(
                 progress_callback(
                     scene_start + scene_weight,
                     f"Visual scan: scene {idx}/{total_scenes} restored from cache",
-                )
-            continue
-        restored = _load_detected_scene(detected_path) if deferred else None
-        if restored is not None:
-            pending.append((idx, scene, *restored))
-            if progress_callback:
-                progress_callback(
-                    scene_start + scene_weight,
-                    f"Visual scan: scene {idx}/{total_scenes} detections restored from cache",
                 )
             continue
 
@@ -261,13 +237,6 @@ def _scan_visual_by_scene(
             should_cancel=should_cancel,
         )
         if deferred:
-            root.atomic_write_json(
-                detected_path,
-                {
-                    "frames": [[str(path), timestamp] for path, timestamp in fine_frames],
-                    "findings": [finding.model_dump(mode="json") for finding in scene_findings],
-                },
-            )
             pending.append((idx, scene, fine_frames, scene_findings))
             if progress_callback:
                 progress_callback(
@@ -335,6 +304,8 @@ def _scan_visual_by_scene(
             [finding.model_dump(mode="json") for finding in described],
         )
         by_scene[idx] = described
+        if report:
+            report(base + step, f"Visual summary: scene {idx}/{total_scenes} complete")
     for idx in sorted(by_scene):
         findings.extend(by_scene[idx])
 

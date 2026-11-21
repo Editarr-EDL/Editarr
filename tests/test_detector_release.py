@@ -27,11 +27,18 @@ def test_descriptions_wait_only_for_a_separate_resident_detector(video_model, qw
     assert detector_memory.defer_descriptions(video_model, qwen_model) is deferred
 
 
-def _run(monkeypatch, tmp_path, video_model, events, scenes=3):
+def _run(monkeypatch, tmp_path, video_model, events, scenes=3, cached=False):
     scene_list = [
         Scene(start_seconds=i * 10.0, end_seconds=i * 10.0 + 10, index=i) for i in range(scenes)
     ]
-    monkeypatch.setattr("scanner.pipeline.runner.detect_scenes", lambda *_a, **_k: scene_list)
+
+    def detect_scenes(*_args, progress_callback=None, **_kwargs):
+        for fraction in (0.0, 0.5, 1.0):
+            if progress_callback:
+                progress_callback(fraction, "Detecting scene boundaries")
+        return scene_list
+
+    monkeypatch.setattr("scanner.pipeline.runner.detect_scenes", detect_scenes)
     monkeypatch.setattr("scanner.pipeline.runner.get_video_frame_interval", lambda *_a: 1.0)
 
     def sample(_video, scene, output_dir, interval_seconds, **_kwargs):
@@ -67,14 +74,18 @@ def _run(monkeypatch, tmp_path, video_model, events, scenes=3):
         "video.mp4", "video-1", tmp_path, coarse_scan_enabled=False,
         coarse_scan_interval_seconds=None, qwen_model=QWEN_8B, video_model=video_model,
         progress_callback=lambda fraction, _message: progress.append(fraction),
+        cached_scenes=scene_list if cached else None,
     )
     return findings, progress
 
 
-def test_d1_detects_every_scene_then_releases_once_before_describing(monkeypatch, tmp_path):
+@pytest.mark.parametrize("cached", [False, True])
+def test_d1_detects_every_scene_then_releases_once_before_describing(
+    monkeypatch, tmp_path, cached
+):
     events: list = []
 
-    findings, progress = _run(monkeypatch, tmp_path, "d1-3b", events)
+    findings, progress = _run(monkeypatch, tmp_path, "d1-3b", events, cached=cached)
 
     assert events == [
         ("detect", 0.0), ("detect", 10.0), ("detect", 20.0),
@@ -82,28 +93,18 @@ def test_d1_detects_every_scene_then_releases_once_before_describing(monkeypatch
         ("describe", 0.0), ("describe", 10.0), ("describe", 20.0),
     ]
     assert [finding.start_seconds for finding in findings] == [0.0, 10.0, 20.0]
-    assert progress == sorted(progress)
+    # Scene-boundary detection is scaled too, so progress never moves backwards.
+    assert all(later >= earlier for earlier, later in zip(progress, progress[1:]))
+    assert progress[-1] == pytest.approx(1.0)
 
 
 def test_shared_qwen_detector_keeps_per_scene_descriptions_without_release(monkeypatch, tmp_path):
     events: list = []
 
-    _run(monkeypatch, tmp_path, "qwen3-vl-8b", events, scenes=2)
+    _, progress = _run(monkeypatch, tmp_path, "qwen3-vl-8b", events, scenes=2)
 
     assert events == [("detect", 0.0), ("describe", 0.0), ("detect", 10.0), ("describe", 10.0)]
-
-
-def test_cached_detections_resume_descriptions_without_detecting_again(monkeypatch, tmp_path):
-    first: list = []
-    _run(monkeypatch, tmp_path, "d1-3b", first, scenes=2)
-    for path in (tmp_path / "visual-results").glob("scene_????.json"):
-        path.unlink()  # descriptions were interrupted; detections remain cached
-    resumed: list = []
-
-    findings, _progress = _run(monkeypatch, tmp_path, "d1-3b", resumed, scenes=2)
-
-    assert resumed == [("release", "d1-3b"), ("describe", 0.0), ("describe", 10.0)]
-    assert len(findings) == 2
+    assert all(later >= earlier for earlier, later in zip(progress, progress[1:]))
 
 
 def test_release_drops_only_the_separate_detector_model(monkeypatch):
