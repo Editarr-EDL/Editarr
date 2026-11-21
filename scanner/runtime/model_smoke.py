@@ -21,6 +21,25 @@ PROBED_MODELS = ("d1-3b",)
 _OFFLINE_ENVIRONMENT = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
 
 
+def d1_unsupported_reason() -> str | None:
+    """Why the installed transformers cannot run d1-3B, or None when it can.
+
+    Uses the same check as the d1-3B capability, so smoke gating and scans agree.
+    """
+    from scanner.settings.capabilities import (
+        D1_MIN_TRANSFORMERS,
+        current_environment,
+        d1_transformers_supported,
+    )
+
+    environment = current_environment()
+    if d1_transformers_supported(environment):
+        return None
+    installed = environment.package_version("transformers") or "not installed"
+    minimum = ".".join(map(str, D1_MIN_TRANSFORMERS))
+    return f"transformers {installed} < {minimum}"
+
+
 @contextmanager
 def hub_offline() -> Iterator[None]:
     """Put the Hugging Face Hub in offline mode, restoring the previous mode afterwards.
@@ -54,6 +73,9 @@ def run_model_probe(model: str, frame: Path) -> dict[str, object]:
         raise RuntimeError(f"Unsupported frozen model probe {model!r}")
     if not frame.is_file():
         raise RuntimeError(f"Frozen model probe frame {frame} does not exist")
+    unsupported = d1_unsupported_reason()
+    if unsupported:
+        raise RuntimeError(f"The requested {model} probe cannot run: {unsupported}")
     from scanner.model_acquisition import AcquisitionError, get_acquisition_service
     from scanner.pipeline import d1_detector
 

@@ -277,3 +277,74 @@ def test_model_probe_fails_when_the_artifact_changes_while_loading(tmp_path, mon
 
     with pytest.raises(RuntimeError, match="changed in the model cache"):
         model_smoke.run_model_probe("d1-3b", _frame(tmp_path))
+
+
+@pytest.fixture
+def transformers_version(monkeypatch):
+    """Make the shared capability environment report ``version`` for transformers."""
+    from scanner.settings import capabilities
+
+    real = capabilities.current_environment()
+
+    def install(version):
+        environment = dataclasses.replace(
+            real,
+            package_version=lambda name: (
+                version if name == "transformers" else real.package_version(name)
+            ),
+        )
+        monkeypatch.setattr(capabilities, "current_environment", lambda: environment)
+
+    return install
+
+
+def test_runtime_smoke_loads_d1_remote_code_where_d1_can_run(monkeypatch, transformers_version):
+    from scanner.runtime import runtime_smoke
+
+    probed = []
+    transformers_version("5.15.1")
+    monkeypatch.setattr(runtime_smoke, "smoke_remote_code", lambda *args: probed.append(args))
+
+    runtime_smoke._smoke_d1_remote_code()
+
+    assert probed == [(d1_detector.REMOTE_CODE_IMPORTS, d1_detector.RESOLVED_MODULES)]
+
+
+def test_runtime_smoke_skips_d1_remote_code_on_an_older_transformers(
+    monkeypatch, capsys, transformers_version
+):
+    from scanner.runtime import runtime_smoke
+    from scanner.settings import capabilities
+
+    transformers_version("4.57.1")
+    monkeypatch.setattr(runtime_smoke, "smoke_remote_code", _refuse)
+
+    runtime_smoke._smoke_d1_remote_code()
+
+    assert capsys.readouterr().out == (
+        "d1-3B remote-code probe skipped: transformers 4.57.1 < 5.14 (d1-3B reported unavailable)\n"
+    )
+    declared = capabilities.capability_for("d1-3b")
+    assert (declared.availability, declared.reason) == (
+        "unavailable",
+        "unsupported_dependency_version",
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "capability_for",
+        lambda _backend: declared.model_copy(update={"availability": "available", "reason": None}),
+    )
+    with pytest.raises(RuntimeError, match="capability reports available"):
+        runtime_smoke._smoke_d1_remote_code()
+
+
+def test_requested_d1_probe_fails_clearly_on_an_older_transformers(
+    tmp_path, monkeypatch, transformers_version
+):
+    transformers_version("5.13.9")
+    monkeypatch.setattr("scanner.model_acquisition.get_acquisition_service", _refuse)
+
+    with pytest.raises(
+        RuntimeError, match=r"d1-3b probe cannot run: transformers 5\.13\.9 < 5\.14"
+    ):
+        model_smoke.run_model_probe("d1-3b", _frame(tmp_path))

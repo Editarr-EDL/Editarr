@@ -45,8 +45,9 @@ UV_NO_SYNC=1 uv run python scripts/package_macos.py --runtime /path/to/runtime-o
 The native runtime smoke exercises the embedded helpers, scene detection and
 MP3/MP4 previews with generated media. It also loads a generated module with the
 pinned d1-3B remote code's imports through the transformers remote-code loader
-and runs a tiny LFM2 forward pass, without weights. Run the installed app
-verifier on a locally signed copy from the DMG before distributing it.
+and runs a tiny LFM2 forward pass, without weights. With a transformers release
+too old for d1-3B, it instead confirms that d1-3B is reported unavailable. Run the
+installed app verifier on a locally signed copy from the DMG before distributing it.
 
 On a Mac that already has d1-3B in its model cache, the frozen executable can
 also run one real frame through the model. The probe rehashes the cached artifact,

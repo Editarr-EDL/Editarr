@@ -11,7 +11,12 @@ import tempfile
 from pathlib import Path
 
 from .distribution import has_source_built_media
-from .model_smoke import FRAME_ENVIRONMENT, MODEL_ENVIRONMENT, run_model_probe
+from .model_smoke import (
+    FRAME_ENVIRONMENT,
+    MODEL_ENVIRONMENT,
+    d1_unsupported_reason,
+    run_model_probe,
+)
 from .remote_code_smoke import smoke_remote_code
 from .runtime_support import resolve_ffmpeg, resolve_ffprobe
 
@@ -92,6 +97,27 @@ def _smoke_release_media(ffmpeg: str) -> None:
             raise RuntimeError("Packaged NudeNet did not return a detection list")
 
 
+def _smoke_d1_remote_code() -> None:
+    """Load d1-3B's remote-code path where d1-3B can run, otherwise confirm it is gated off."""
+    from scanner.pipeline import d1_detector
+    from scanner.settings.capabilities import capability_for
+
+    unsupported = d1_unsupported_reason()
+    if unsupported is None:
+        smoke_remote_code(d1_detector.REMOTE_CODE_IMPORTS, d1_detector.RESOLVED_MODULES)
+        return
+    capability = capability_for("d1-3b")
+    if (capability.availability, capability.reason) != (
+        "unavailable",
+        "unsupported_dependency_version",
+    ):
+        raise RuntimeError(
+            f"d1-3B cannot run with {unsupported} but its capability reports "
+            f"{capability.availability} ({capability.reason})"
+        )
+    print(f"d1-3B remote-code probe skipped: {unsupported} (d1-3B reported unavailable)")
+
+
 def run_runtime_smoke() -> int:
     """Exercise lazy imports, remote model code, the profanity detector, and media helpers.
 
@@ -104,9 +130,7 @@ def run_runtime_smoke() -> int:
     if platform.system() == "Darwin":
         for name in _MACOS_IMPORTS:
             importlib.import_module(name)
-    from scanner.pipeline import d1_detector
-
-    smoke_remote_code(d1_detector.REMOTE_CODE_IMPORTS, d1_detector.RESOLVED_MODULES)
+    _smoke_d1_remote_code()
 
     from scanner.pipeline.audio_filters import _load_alt_profanity_check_detector
 
