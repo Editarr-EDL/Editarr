@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 
 import type { SavedReview } from "../api";
-import { isNoObjectionableContentFilter, mergeSavedReviewFilters, savedReviewFilterDescription } from "./review-results";
+import { buildReviewHierarchy, isNoObjectionableContentFilter, mergeSavedReviewFilters, savedReviewFilterDescription } from "./review-results";
 
 type Filter = SavedReview["filters"][number];
 const visual = (id: string, details: string | null, start = 10): Filter => ({
@@ -18,6 +18,9 @@ it("leaves a visual description empty without a Severity and Description reply",
   expect(savedReviewFilterDescription(visual("v", null))).toBe("");
   expect(savedReviewFilterDescription(visual("v", "A fistfight"))).toBe("A fistfight");
   expect(isNoObjectionableContentFilter(visual("v", null))).toBe(false);
+  expect(isNoObjectionableContentFilter({ ...visual("v", null), group_key: "violence|No objectionable content" })).toBe(false);
+  expect(isNoObjectionableContentFilter({ ...visual("v", null), group_key: "No objectionable content" })).toBe(true);
+  expect(isNoObjectionableContentFilter({ ...visual("v", null), group_key: "No objectionable content|No objectionable content" })).toBe(true);
 });
 
 it("keeps the audio description fallbacks", () => {
@@ -33,4 +36,12 @@ it("drops empty visual descriptions from merged results", () => {
   const [merged] = mergeSavedReviewFilters([visual("b", null, 10), visual("c", "A fistfight", 11), visual("d", null, 11.5)], new Map());
   expect(merged.filters).toHaveLength(3);
   expect(merged.descriptions).toEqual(["A fistfight"]);
+});
+
+it("groups a shown clean verdict under No objectionable content without a description", () => {
+  const clean = { ...visual("clean", null), group_key: "No objectionable content" };
+  const results = mergeSavedReviewFilters([clean], new Map());
+  expect(results[0].descriptions).toEqual([]);
+  const [family] = buildReviewHierarchy(results, "visual", null, true);
+  expect(family.subcategories[0].groups.map((group) => group.name)).toEqual(["No objectionable content"]);
 });

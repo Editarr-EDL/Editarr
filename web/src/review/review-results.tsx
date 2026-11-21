@@ -172,9 +172,15 @@ function isNoObjectionableContent(value: string | null | undefined): boolean {
   return normalized === "no objectionable content" || normalized === "no objectionable content detected";
 }
 
+/**
+ * Whether a filter records a clean verdict. Clean visual replies store no details, so their
+ * verdict is read from `group_key` ("No objectionable content", possibly `|`-joined).
+ */
 export function isNoObjectionableContentFilter(filter: SavedReview["filters"][number]): boolean {
   return isNoObjectionableContent(savedReviewFilterDescription(filter))
-    || isNoObjectionableContent(filter.category);
+    || isNoObjectionableContent(filter.category)
+    || (filter.source === "visual" && Boolean(filter.group_key)
+      && filter.group_key!.split("|").every((token) => isNoObjectionableContent(token.trim())));
 }
 
 /** Split a video filter group into its visible category labels. */
