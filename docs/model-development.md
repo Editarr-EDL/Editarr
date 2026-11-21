@@ -209,8 +209,13 @@ families) on an M4 Pro (24 GB):
 | `qwen3-vl-8b` (MLX) | 48/48 decisions; scores identical to `qwen3vl-8b-mlx` | 1.37 s | 6.5 GB MLX peak |
 | `d1-3b` (transformers, BF16, MPS) | 48/48 decisions vs `d1-3b-full4` and `d1-3b-sev` (llama.cpp Q8_0); 47/48 severity levels; mean \|ΔP\| 0.009 | 0.71 s | 7.0 GB MPS |
 
-Running d1-3B with the 8B description model keeps both loaded in the scan worker
-(about 13.5 GB), so 24 GB of unified memory is recommended.
+A resident detector (d1-3B, a Qwen3-VL detector, or Shieldstral) whose artifact differs
+from the description model is never loaded alongside it: the scan detects every scene
+first, caching each scene's detections, then releases the detector and runs the
+descriptions. On a 20 s clip with d1-3B and the 8B description model this cut the scan
+worker's peak footprint from 17.7 GB to 10.5 GB and wall time from 324 s to 235 s with
+identical findings. A Qwen3-VL detector that is the description model's artifact keeps
+the single shared instance and describes each scene as it is detected.
 
 ### Shieldstral
 
@@ -252,9 +257,8 @@ system + instruct prefix shared by all prompts is computed once per process, eac
 question pre-fills only its remaining tokens, and the answer logits are computed in
 float32 from the final hidden state. Both screens take about 0.66 s per frame at 288 px
 on an M4 Pro; routing adds two questions (about 0.5 s) only on sexual-positive frames. Peak MLX
-memory is about 5.3 GB at 288 px. The scan worker can keep Shieldstral and the Qwen3-VL
-summary model (about 6 GB for 8B) loaded together, so 24 GB of unified memory is
-recommended.
+memory is about 5.3 GB at 288 px. Shieldstral is released before the Qwen3-VL
+description model loads (see above), so the two are not held together.
 
 A fine scene pass scores one frame per `EDITARR_SHIELDSTRAL_FINE_SAMPLE_INTERVAL_SECONDS`
 (default 0.5), plus the first and last frames. When two consecutive samples emit

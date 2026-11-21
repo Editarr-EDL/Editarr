@@ -10,6 +10,8 @@ the model card's sample code.
 
 from __future__ import annotations
 
+import gc
+import sys
 from pathlib import Path
 from threading import Lock
 
@@ -130,6 +132,23 @@ def _load_model():
     ).to(device)
     _CACHE["model"] = model.eval()
     return _CACHE["model"]
+
+
+def release() -> bool:
+    """Drop the loaded model and return its accelerator memory; False if none was loaded."""
+    with _LOCK:
+        model = _CACHE.pop("model", None)
+    if model is None:
+        return False
+    del model
+    gc.collect()
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    return True
 
 
 def score_frame(frame_path: Path) -> FrameDecision:
