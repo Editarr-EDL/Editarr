@@ -29,6 +29,7 @@ DETECTORS = {
     "image_safety_gate",
     "siglip2_moderation_nsfw",
     "siglip2_moderation_violence",
+    "d1-3b",
 }
 FILTERS = {"better_profanity", "glin_profanity", "alt_profanity_check"}
 
