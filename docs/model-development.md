@@ -211,9 +211,9 @@ families) on an M4 Pro (24 GB):
 
 A resident detector (d1-3B, a Qwen3-VL detector, or Shieldstral) whose artifact differs
 from the description model is never loaded alongside it: the scan detects every scene
-first, keeping each scene's detections and frames for this attempt, then releases the
-detector and runs the
-descriptions. On a 20 s clip with d1-3B and the 8B description model this cut the scan
+first, spooling each scene's detections to its own file in the attempt's temporary
+`visual-results/pending/` directory, then releases the detector and describes one scene
+at a time, deleting each spooled file once its scene is described. On a 20 s clip with d1-3B and the 8B description model this cut the scan
 worker's peak footprint from 17.7 GB to 10.5 GB and wall time from 324 s to 235 s with
 identical findings. A Qwen3-VL detector that is the description model's artifact keeps
 the single shared instance and describes each scene as it is detected.

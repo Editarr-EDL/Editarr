@@ -8,6 +8,7 @@ from scanner.pipeline.processes import ScanCancelledError
 from scanner.pipeline.scenes import Scene
 from scanner.settings.capabilities import DEFAULT_QWEN_MODEL
 
+from . import pending_scenes
 from .detector_memory import defer_descriptions, release_detector
 
 # Share of visual progress for detection when descriptions run after every scene.
@@ -86,20 +87,21 @@ def _scan_visual_by_scene(
     if not scenes:
         return findings
 
-    pending: list[tuple[int, Scene, list, list[FindingCreate]]] = []
+    # Deferred scenes are spooled to disk; only this small ordered index stays in memory.
+    pending: list[pending_scenes.PendingScene] = []
     by_scene: dict[int, list[FindingCreate]] = {}
 
-    def describe(scene: Scene, idx: int, frames, detected, summary_progress):
+    def describe(scene_index: int, frames, detected, summary_progress):
         return root.summarize_flagged_segments(
             detected,
             frames,
             qwen_model=qwen_model,
             summaries_per_segment=qwen_summaries_per_segment,
             join_gap_seconds=qwen_segment_join_gap_seconds,
-            replay_dir=root.settings.qwen_replays_dir / video_id / f"scene_{scene.index:04d}",
+            replay_dir=root.settings.qwen_replays_dir / video_id / f"scene_{scene_index:04d}",
             should_cancel=should_cancel,
             provenance_callback=(
-                (lambda state: provenance_callback(f"scene_{scene.index:04d}:{state}"))
+                (lambda state: provenance_callback(f"scene_{scene_index:04d}:{state}"))
                 if provenance_callback else None
             ),
             progress_callback=summary_progress,
@@ -237,7 +239,12 @@ def _scan_visual_by_scene(
             should_cancel=should_cancel,
         )
         if deferred:
-            pending.append((idx, scene, fine_frames, scene_findings))
+            pending.append(
+                pending_scenes.spool_scene(
+                    result_dir, idx, scene.index, fine_frames, scene_findings
+                )
+            )
+            del fine_frames, scene_findings
             if progress_callback:
                 progress_callback(
                     scene_start + scene_weight,
@@ -245,8 +252,7 @@ def _scan_visual_by_scene(
                 )
             continue
         scene_findings = describe(
-            scene,
-            idx,
+            scene.index,
             fine_frames,
             scene_findings,
             (
@@ -278,34 +284,40 @@ def _scan_visual_by_scene(
 
     if pending:
         release_detector(video_model)
-    for done, (idx, scene, fine_frames, detected) in enumerate(pending, start=1):
-        if should_cancel and should_cancel():
-            raise ScanCancelledError("Scan cancelled")
-        base = _DEFERRED_DETECTION_SHARE + (1 - _DEFERRED_DETECTION_SHARE) * (done - 1) / len(
-            pending
-        )
-        step = (1 - _DEFERRED_DETECTION_SHARE) / len(pending)
-        described = describe(
-            scene,
-            idx,
-            fine_frames,
-            detected,
-            (
-                (lambda finished, total, base=base, idx=idx: report(
-                    base + step * finished / max(total, 1),
-                    f"Visual summary: scene {idx}/{total_scenes}, segment {finished}/{total}",
-                ))
-                if report
-                else None
-            ),
-        )
-        root.atomic_write_json(
-            result_dir / f"scene_{scene.index:04d}.json",
-            [finding.model_dump(mode="json") for finding in described],
-        )
-        by_scene[idx] = described
-        if report:
-            report(base + step, f"Visual summary: scene {idx}/{total_scenes} complete")
+    try:
+        for done, entry in enumerate(pending, start=1):
+            if should_cancel and should_cancel():
+                raise ScanCancelledError("Scan cancelled")
+            base = _DEFERRED_DETECTION_SHARE + (
+                (1 - _DEFERRED_DETECTION_SHARE) * (done - 1) / len(pending)
+            )
+            step = (1 - _DEFERRED_DETECTION_SHARE) / len(pending)
+            idx = entry.order
+            frames, detected = pending_scenes.load_scene(entry)
+            described = describe(
+                entry.scene_index,
+                frames,
+                detected,
+                (
+                    (lambda finished, total, base=base, idx=idx: report(
+                        base + step * finished / max(total, 1),
+                        f"Visual summary: scene {idx}/{total_scenes}, segment {finished}/{total}",
+                    ))
+                    if report
+                    else None
+                ),
+            )
+            root.atomic_write_json(
+                result_dir / f"scene_{entry.scene_index:04d}.json",
+                [finding.model_dump(mode="json") for finding in described],
+            )
+            entry.path.unlink()
+            by_scene[idx] = described
+            if report:
+                report(base + step, f"Visual summary: scene {idx}/{total_scenes} complete")
+    finally:
+        if pending:
+            pending_scenes.discard_all(result_dir)
     for idx in sorted(by_scene):
         findings.extend(by_scene[idx])
 
