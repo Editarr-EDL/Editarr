@@ -16,6 +16,7 @@ const unavailabilityMessages: Record<string, string> = {
   unsupported_architecture: "This backend does not support the server’s processor architecture.",
   missing_package: "This build is missing a required runtime package.",
   missing_provider: "A required inference provider is unavailable.",
+  unsupported_dependency_version: "Needs a newer version of a required library (transformers 5.14 or later).",
   deferred_gap: "This backend is unavailable in this build.",
 };
 
