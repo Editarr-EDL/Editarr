@@ -179,4 +179,6 @@ export interface ModelActionResult {
 export interface ScanModelCapability {
   id: string;
   display_name: string;
+  /** Marks the suggested choice in a scan model list; also its default. */
+  recommended?: boolean;
 }

@@ -374,7 +374,7 @@ describe("production saved-review UI authority", () => {
     expect(screen.queryByRole("dialog", { name: /Credits/ })).not.toBeInTheDocument();
   });
 
-  it("submits Unicode scan names with the selected Qwen model and refreshes a validated rename", async () => {
+  it("submits Unicode scan names with the selected Severity and Description model and refreshes a validated rename", async () => {
     let scan = completeScan();
     const queuedNames: Array<string | null> = [];
     const queuedQwenModels: string[] = [];
@@ -409,7 +409,7 @@ describe("production saved-review UI authority", () => {
     fireEvent.change(await screen.findByLabelText("Scan type"), {
       target: { value: "video" },
     });
-    fireEvent.change(await screen.findByLabelText("Qwen model"), {
+    fireEvent.change(await screen.findByLabelText("Severity and Description model"), {
       target: { value: "qwen3-vl-4b-instruct-4bit" },
     });
     const scanName = await screen.findByLabelText("Scan name (optional)");

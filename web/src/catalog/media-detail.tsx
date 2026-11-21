@@ -34,6 +34,7 @@ import {
   ScanCapabilityDisclosure,
 } from "../scans/scan-capability-disclosure";
 import { AudioLanguageHelp, QwenModelField } from "../scans/qwen-model-field";
+import { ModelOptions, resolveModelChoice } from "../scans/model-options";
 import { AudioTrackField } from "../scans/audio-track-field";
 import { useAudioTracks } from "../scans/use-audio-tracks";
 import { IDLE_SCAN_POLL_MS, scanPollDelay, useScanPolling } from "../scans/use-scan-polling";
@@ -104,10 +105,10 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const scanVideo = scanType === "video" || scanType === "combined";
   const [audioModel, setAudioModel] = useState("whisper");
   const [audioFilter, setAudioFilter] = useState("better_profanity");
-  const [videoModel, setVideoModel] = useState("nudenet");
+  const [videoModel, setVideoModel] = useState("");
   const [coarseScanInterval, setCoarseScanInterval] = useState(5);
   const [coarseScanEnabled, setCoarseScanEnabled] = useState(false);
-  const [qwenModel, setQwenModel] = useState("qwen3-vl-8b-instruct-4bit");
+  const [qwenModel, setQwenModel] = useState("");
   const [qwenSummariesPerSegment, setQwenSummariesPerSegment] = useState(4);
   const [qwenSegmentJoinGapSeconds, setQwenSegmentJoinGapSeconds] = useState(3);
   const [versions, setVersions] = useState(() => item.versions.map((version) => ({ ...version, exports: normalizedExportStatus(version) })));
@@ -220,16 +221,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
           ? next.audio_filters[0].id
           : current
       ));
-      setVideoModel((current) => (
-        next.video_models.length > 0 && !next.video_models.some((model) => model.id === current)
-          ? next.video_models[0].id
-          : current
-      ));
-      setQwenModel((current) => (
-        next.qwen_models.length > 0 && !next.qwen_models.some((model) => model.id === current)
-          ? next.qwen_models[0].id
-          : current
-      ));
+      setVideoModel((current) => resolveModelChoice(current, next.video_models));
+      setQwenModel((current) => resolveModelChoice(current, next.qwen_models));
     }).catch(() => setMessage("Unable to load scan options."));
   }, [mayScan, showNewScan]);
   useEffect(() => {
@@ -273,10 +266,10 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       audio_model: scanAudio ? audioModel : null,
       audio_filter: scanAudio ? audioFilter : null,
       scan_video: scanVideo,
-      video_model: scanVideo ? videoModel : null,
+      ...(scanVideo ? (videoModel ? { video_model: videoModel } : {}) : { video_model: null }),
       coarse_scan_interval: scanVideo && coarseScanEnabled ? coarseScanInterval : undefined,
       coarse_scan_enabled: scanVideo && coarseScanEnabled,
-      qwen_model: qwenModel,
+      ...(qwenModel ? { qwen_model: qwenModel } : {}),
       qwen_summaries_per_segment: qwenSummariesPerSegment,
       qwen_segment_join_gap_seconds: qwenSegmentJoinGapSeconds,
     };
@@ -348,7 +341,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       {versions.length > 0 && <label className="field"><span>Version</span><select aria-label="Version" value={mediaSourceId || ""} onChange={(event) => setMediaSourceId(event.target.value || null)}>{versions.map((version, index) => <option key={version.id || `${version.name || "version"}-${index}`} value={version.id || ""} disabled={!version.id}>{version.name || `Version ${index + 1}`}{version.resolution ? ` · ${version.resolution}` : ""}{version.media_format ? ` · ${version.media_format}` : ""}</option>)}</select></label>}
       <label className="field"><span>Scan type</span><select aria-label="Scan type" value={scanType} onChange={(event) => setScanType(event.target.value as typeof scanType)}><option value="audio">Audio</option><option value="video">Video</option><option value="combined">Audio and video</option><option value="credits">Credits</option></select></label>
       {scanAudio && <><AudioTrackField {...audioTracks} disabled={adding} /><label className="field"><span>Transcriber</span><select aria-label="Transcriber" value={audioModel} onChange={(event) => setAudioModel(event.target.value)}>{(capabilities?.audio_models || []).map((model) => <option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label><label className="field"><span>Filter</span><select aria-label="Filter" value={audioFilter} onChange={(event) => setAudioFilter(event.target.value)}>{(capabilities?.audio_filters || []).map((filter) => <option key={filter.id} value={filter.id}>{filter.display_name}</option>)}</select></label><AudioLanguageHelp /></>}
-      {scanVideo && <><label className="field"><span>Video model</span><select aria-label="Video model" value={videoModel} onChange={(event) => setVideoModel(event.target.value)}>{(capabilities?.video_models || []).map((model) => <option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label><label><input type="checkbox" checked={coarseScanEnabled} onChange={(event) => setCoarseScanEnabled(event.target.checked)} /> Enable coarse scan</label>{coarseScanEnabled && <label className="field"><span>Coarse scan interval (seconds)</span><input type="number" min="0.1" step="0.1" value={coarseScanInterval} onChange={(event) => setCoarseScanInterval(Number(event.target.value))} /></label>}<label className="field"><span>Representative frames per flagged segment</span><input aria-label="Representative frames per flagged segment" type="number" min="1" step="1" value={qwenSummariesPerSegment} onChange={(event) => setQwenSummariesPerSegment(Number(event.target.value))} /></label><label className="field"><span>Join flagged segments within (seconds)</span><input aria-label="Join flagged segments within (seconds)" type="number" min="0" step="0.1" value={qwenSegmentJoinGapSeconds} onChange={(event) => setQwenSegmentJoinGapSeconds(Number(event.target.value))} /></label><p className="muted-copy">Fine scans analyze every source frame. Qwen receives evenly spaced representative flagged frames together after the scene scan; short clean gaps can be joined into one segment.</p></>}
+      {scanVideo && <><label className="field"><span>Video model</span><select aria-label="Video model" value={videoModel} onChange={(event) => setVideoModel(event.target.value)}><ModelOptions models={capabilities?.video_models} /></select></label><label><input type="checkbox" checked={coarseScanEnabled} onChange={(event) => setCoarseScanEnabled(event.target.checked)} /> Enable coarse scan</label>{coarseScanEnabled && <label className="field"><span>Coarse scan interval (seconds)</span><input type="number" min="0.1" step="0.1" value={coarseScanInterval} onChange={(event) => setCoarseScanInterval(Number(event.target.value))} /></label>}<label className="field"><span>Representative frames per flagged segment</span><input aria-label="Representative frames per flagged segment" type="number" min="1" step="1" value={qwenSummariesPerSegment} onChange={(event) => setQwenSummariesPerSegment(Number(event.target.value))} /></label><label className="field"><span>Join flagged segments within (seconds)</span><input aria-label="Join flagged segments within (seconds)" type="number" min="0" step="0.1" value={qwenSegmentJoinGapSeconds} onChange={(event) => setQwenSegmentJoinGapSeconds(Number(event.target.value))} /></label><p className="muted-copy">Fine scans analyze every source frame. Qwen receives evenly spaced representative flagged frames together after the scene scan; short clean gaps can be joined into one segment.</p></>}
       {scanType === "credits" ? <p className="muted-copy">Detect the start of closing credits using local chapter and visual analysis.</p> : <QwenModelField capabilities={capabilities} value={qwenModel} onChange={setQwenModel} />}
       {scanAudio && <ScanCapabilityDisclosure capabilities={capabilities} backendId={audioModel} scanType="audio" />}
       {scanVideo && <ScanCapabilityDisclosure capabilities={capabilities} backendId={videoModel} scanType="video" includeScanName={!scanAudio} />}
