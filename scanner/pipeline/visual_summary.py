@@ -195,7 +195,9 @@ def _summarized_findings(
                     finding.confidence for finding in classification_findings
                 ),
                 label=", ".join(labels) or first.category.value,
-                details=combined_summary.explanation,
+                # Empty when the description step returned nothing usable; the
+                # detector's placeholder text is not carried over.
+                details=combined_summary.explanation or None,
                 group_key="|".join(summary_categories) or first.category.value,
                 mcf_channel=first.mcf_channel,
                 mcf_comment=first.mcf_comment,

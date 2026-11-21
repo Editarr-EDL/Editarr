@@ -238,9 +238,12 @@ def _summarize(
         )
     severities = extract_severities(response, families) if families else {}
     if parsed is None or not parsed.valid_output:
+        # A reply that fails the constrained schema is never shown: its description is
+        # left empty (only its leniently read severity is kept). Without families there
+        # is no schema, so the free-text reply is the description.
         return QwenSummary(
             categories=_categories_from_response(response),
-            explanation=response,
+            explanation="" if families else response,
             subcategorization=parsed.results if parsed else (),
             valid_subcategorization_output=False,
             severities=severities,
@@ -252,7 +255,8 @@ def _summarize(
     )
     return QwenSummary(
         categories=categories,
-        explanation=parsed.explanation,
+        # A "not objectionable" verdict describes nothing, so it leaves no description.
+        explanation=parsed.explanation if parsed.objectionable else "",
         subcategorization=parsed.results,
         valid_subcategorization_output=True,
         severities=severities,

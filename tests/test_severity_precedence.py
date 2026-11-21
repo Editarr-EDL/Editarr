@@ -136,3 +136,53 @@ def test_unavailable_description_model_keeps_detector_severity(monkeypatch, tmp_
     assert visual.summarize_flagged_segments(
         findings, [(tmp_path / "a.jpg", 0.0)], summaries_per_segment=1, join_gap_seconds=0
     ) == findings
+
+
+def _described(monkeypatch, tmp_path, reply: str):
+    from scanner.pipeline import qwen_summary
+
+    monkeypatch.setattr(
+        visual, "qwen_enrichment_capability", lambda: SimpleNamespace(availability="available")
+    )
+    monkeypatch.setattr(qwen_summary, "require_available", lambda _backend: None)
+    monkeypatch.setattr(qwen_summary, "_load_model", lambda _model: (object(),) * 3)
+    dependencies = {
+        "mlx_vlm": SimpleNamespace(generate=lambda *_a, **_k: SimpleNamespace(text=reply)),
+        "mlx_vlm.prompt_utils": SimpleNamespace(apply_chat_template=lambda *_a, **_k: "prompt"),
+    }
+    monkeypatch.setattr(qwen_summary, "_require_dependency", lambda name, _hint: dependencies[name])
+    detected = _finding(0, Severity.HIGH, "confidence").model_copy(
+        update={"details": "Detected d1_violence at 0.0s"}
+    )
+    return visual.summarize_flagged_segments(
+        [detected], [(tmp_path / "a.jpg", 0.0)], summaries_per_segment=1, join_gap_seconds=0
+    )
+
+
+def test_invalid_description_reply_leaves_no_description_but_keeps_its_severity(
+    monkeypatch, tmp_path: Path
+):
+    reply = (
+        '{"version": 1, "objectionable": true, "summary": "Blood.", "classifications": '
+        '[{"family": "violence", "subcategory": "bloodshed", "confidence": 0.9, '
+        '"evidence": "Blood.", "severity": 1}]}'
+    )
+
+    [finding] = _described(monkeypatch, tmp_path, reply)
+
+    assert finding.details is None
+    assert (finding.severity, finding.severity_source) == (Severity.LOW, "description_model")
+    persisted = finding.model_dump_json()
+    assert "classifications" not in persisted and "Detected d1_violence" not in persisted
+
+
+def test_valid_description_reply_is_unchanged(monkeypatch, tmp_path: Path):
+    reply = (
+        '{"version": 1, "objectionable": true, "summary": "A punch to the face.", '
+        '"classifications": [{"family": "violence", "subcategory": "punching", '
+        '"confidence": 0.9, "evidence": "A punch.", "severity": 1}]}'
+    )
+
+    [finding] = _described(monkeypatch, tmp_path, reply)
+
+    assert finding.details == "A punch to the face."

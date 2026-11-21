@@ -340,3 +340,37 @@ def test_qwen_summary_keeps_severity_when_a_subcategory_token_is_invalid(monkeyp
     assert summary.valid_subcategorization_output is False
     # Drugs has no level 3; out-of-scale values clamp to its top level.
     assert summary.severities == {McfCategoryFamily.DRUGS: 2}
+    # The invalid reply is never used as the description.
+    assert summary.explanation == ""
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # Failed validation: an empty summary.
+        {"version": 1, "objectionable": True, "summary": "", "classifications": []},
+        # Failed validation: not objectionable but with classifications.
+        {
+            "version": 1,
+            "objectionable": False,
+            "summary": "Nothing objectionable.",
+            "classifications": [_classification("violence", "violence", 1)],
+        },
+        # Valid, but a "not objectionable" verdict describes nothing.
+        {"version": 1, "objectionable": False, "summary": "No objectionable content.",
+         "classifications": []},
+    ],
+)
+def test_qwen_summary_leaves_unusable_or_clean_replies_without_a_description(
+    monkeypatch, payload
+):
+    summary = _summarize_response(monkeypatch, payload, (McfCategoryFamily.VIOLENCE,))
+
+    assert summary.explanation == ""
+
+
+def test_qwen_summary_without_families_keeps_the_free_text_reply(monkeypatch):
+    # Credits assessment uses its own JSON prompt without MCF families and parses the reply.
+    summary = _summarize_response(monkeypatch, {"credits_visible": True}, ())
+
+    assert summary.explanation == '{"credits_visible": true}'
