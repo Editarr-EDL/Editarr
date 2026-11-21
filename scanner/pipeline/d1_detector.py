@@ -11,6 +11,8 @@ the model card's sample code.
 from __future__ import annotations
 
 import gc
+import logging
+import math
 import sys
 from pathlib import Path
 from threading import Lock
@@ -81,6 +83,9 @@ SEVERITY_SUBJECTS = {
 }
 _CACHE: dict[str, object] = {}
 _LOCK = Lock()
+logger = logging.getLogger(__name__)
+# Families whose unusable severity answers were already logged by this worker process.
+_WARNED: set[McfCategoryFamily] = set()
 
 
 def _require_dependency(import_name: str, install_hint: str):
@@ -102,10 +107,35 @@ def questions() -> dict[str, dict]:
     return asked
 
 
+def severity_level(answer: object, levels: int) -> int | None:
+    """Argmax level of a ``score`` answer, or None when its distribution is unusable.
+
+    The ``probabilities`` mapping must have exactly the keys ``"0"`` to ``levels - 1``,
+    each a finite, non-negative number, with a positive sum. Anything else yields no
+    detector severity, so the description model or confidence mapping decides instead.
+    """
+    probabilities = answer.get("probabilities") if isinstance(answer, dict) else None
+    if not isinstance(probabilities, dict) or set(probabilities) != {
+        str(level) for level in range(levels)
+    }:
+        return None
+    values = [probabilities[str(level)] for level in range(levels)]
+    if not all(
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+        for value in values
+    ) or sum(values) <= 0:
+        return None
+    return max(range(levels), key=values.__getitem__)
+
+
 def parse_answers(response: dict) -> FrameDecision:
     """Map a ``system_one`` response to scores and argmax severity levels.
 
-    Raises ValueError when an answer is missing or malformed.
+    Raises ValueError when a family decision is missing, malformed, or non-finite. A
+    family whose severity answer is unusable gets no detector severity level.
     """
     answers = response.get("answers")
     if not isinstance(answers, dict):
@@ -115,16 +145,24 @@ def parse_answers(response: dict) -> FrameDecision:
     for family in DETECTED_FAMILIES:
         answer = answers.get(family.value)
         value = answer.get("noul") if isinstance(answer, dict) else None
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
             raise ValueError(f"d1-3B returned no decision for {family.value}")
         scores[family] = min(1.0, max(0.0, float(value)))
     for family, ladder in RUBRIC.items():
-        answer = answers.get(f"sev_{family.value}")
-        probabilities = answer.get("probabilities") if isinstance(answer, dict) else None
-        if not isinstance(probabilities, dict):
-            raise ValueError(f"d1-3B returned no severity for {family.value}")
-        values = [float(probabilities.get(str(level), 0.0)) for level in range(len(ladder))]
-        levels[family] = max(range(len(values)), key=values.__getitem__)
+        level = severity_level(answers.get(f"sev_{family.value}"), len(ladder))
+        if level is not None:
+            levels[family] = level
+        elif family not in _WARNED:
+            _WARNED.add(family)
+            logger.warning(
+                "d1-3B returned an unusable %s severity distribution; using the "
+                "description or confidence severity instead (logged once)",
+                family.value,
+            )
     return FrameDecision(scores=scores, thresholds=THRESHOLDS, levels=levels)
 
 

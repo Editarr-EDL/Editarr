@@ -277,3 +277,54 @@ def test_coarse_sample_dispatches_to_the_selected_decision_model(monkeypatch):
     [detection] = visual.scan_frame(Path("0.jpg"), 2.0, video_model="qwen3-vl-8b")
 
     assert (detection.category, detection.timestamp, detection.label) == (F.DRUGS, 2.0, "d1_drugs")
+
+
+_NAN = float("nan")
+
+
+@pytest.mark.parametrize(
+    "probabilities",
+    [
+        None,  # no score answer at all
+        {},
+        {"0": _NAN, "1": _NAN, "2": _NAN, "3": _NAN},
+        {"0": 0.1, "1": 0.2, "2": 0.7},  # wrong number of levels
+        {"0": 0.1, "1": 0.2, "2": 0.3, "3": 0.4, "4": 0.0},
+        {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.0},
+        {"0": -0.5, "1": 0.2, "2": 0.2, "3": 0.1},
+        {"0": 0.1, "1": float("inf"), "2": 0.1, "3": 0.1},
+        {"0": "0.9", "1": 0.0, "2": 0.0, "3": 0.0},
+    ],
+)
+def test_unusable_d1_severity_defers_to_the_description_model(probabilities):
+    from scanner.pipeline.severity import resolve_severity
+
+    response = _d1_response(
+        {"drugs": 0.1, "nudity": 0.1, "sex": 0.1, "violence": 0.9},
+        {"sex": 0, "nudity": 0, "drugs": 0},
+    )
+    if probabilities is not None:
+        response["answers"]["sev_violence"] = {"type": "score", "probabilities": probabilities}
+
+    decision = d1_detector.parse_answers(response)
+    [detection] = decision_detection.detections_for_decision(decision, 0.0, d1_detector.DETECTOR)
+
+    assert F.VIOLENCE not in decision.levels
+    assert decision.levels[F.SEX] == 0
+    assert detection.severity_source == "confidence"
+    finding = visual._findings_from_detections(
+        [detection], video_id="v", frame_interval_seconds=1.0, video_duration_seconds=None
+    )
+    # A graphic (level 2) description now wins instead of an invented detector level.
+    assert resolve_severity(finding, 2) == (Severity.MEDIUM, "description_model")
+
+
+def test_valid_d1_severity_vectors_are_unchanged():
+    assert d1_detector.severity_level(
+        {"probabilities": {"0": 0.1, "1": 0.2, "2": 0.6, "3": 0.1}}, 4
+    ) == 2
+    assert d1_detector.severity_level({"probabilities": {"0": 1, "1": 0, "2": 0}}, 3) == 0
+    with pytest.raises(ValueError):
+        d1_detector.parse_answers(
+            _d1_response({"drugs": _NAN, "nudity": 0.1, "sex": 0.1, "violence": 0.1}, {})
+        )
