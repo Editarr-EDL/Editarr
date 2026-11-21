@@ -3,14 +3,40 @@
 from __future__ import annotations
 
 import platform
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from importlib import import_module
+from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from typing import Literal
 
 PackageProbe = Callable[[str], bool]
+VersionProbe = Callable[[str], "str | None"]
+
+
+def installed_version(distribution: str) -> str | None:
+    """Return a distribution's installed version from metadata, without importing it."""
+
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
+
+
+def version_at_least(installed: str | None, minimum: tuple[int, ...]) -> bool:
+    """Compare the leading numeric release parts of ``installed`` with ``minimum``."""
+
+    if not installed:
+        return False
+    parts: list[int] = []
+    for part in installed.split(".")[: len(minimum)]:
+        digits = re.match(r"\d+", part)
+        if digits is None:
+            break
+        parts.append(int(digits.group()))
+    return tuple(parts) >= minimum
 
 
 @dataclass(frozen=True)
@@ -23,6 +49,7 @@ class CapabilityEnvironment:
     providers: frozenset[str]
     torch_devices: frozenset[str] = frozenset()
     ctranslate2_devices: frozenset[str] = frozenset()
+    package_version: VersionProbe = installed_version
 
     @property
     def target_id(self) -> str:

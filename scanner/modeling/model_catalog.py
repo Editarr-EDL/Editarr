@@ -57,6 +57,7 @@ class ModelCapability(ScanModelCapability):
             "missing_package",
             "missing_provider",
             "deferred_gap",
+            "unsupported_dependency_version",
         ]
         | None
     ) = None

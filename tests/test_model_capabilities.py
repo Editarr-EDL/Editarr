@@ -490,3 +490,38 @@ def test_capabilities_mark_only_qwen3_vl_8b_recommended(
     }
     payload = result["video_models"][0].model_dump()
     assert set(payload) == {"id", "display_name", "recommended"}
+
+
+@pytest.mark.parametrize(
+    ("installed", "available"),
+    [("4.57.1", False), ("5.13.9", False), (None, False), ("5.14.0", True), ("5.15.1rc1", True)],
+)
+def test_d1_requires_a_transformers_release_that_runs_its_remote_code(installed, available):
+    from dataclasses import replace
+
+    for system, machine in (("Darwin", "arm64"), ("Linux", "x86_64")):
+        environment = replace(
+            _environment(system, machine), package_version=lambda _name: installed
+        )
+        declared = capabilities.capability_for("d1-3b", environment=environment)
+        assert (declared.availability == "available") is available
+        if not available:
+            assert declared.reason == "unsupported_dependency_version"
+            assert declared.device == "none"
+        # Only d1-3B depends on the newer release; the default video model is unaffected.
+        assert capabilities.default_video_model(environment) == (
+            "qwen3-vl-8b" if system == "Darwin" else "nudenet"
+        )
+
+
+def test_scan_validation_refuses_d1_with_an_old_transformers(monkeypatch):
+    from dataclasses import replace
+
+    from scanner import api
+
+    old = replace(_environment("Darwin", "arm64"), package_version=lambda _name: "4.57.1")
+    monkeypatch.setattr(capabilities, "current_environment", lambda: old)
+
+    with pytest.raises(ValueError, match="d1-3B is unavailable: unsupported dependency version"):
+        api.ScanOptions(scan_audio=False, video_model="d1-3b")
+    assert api.ScanOptions(scan_audio=False).video_model == "qwen3-vl-8b"

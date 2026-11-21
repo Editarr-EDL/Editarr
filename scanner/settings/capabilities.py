@@ -18,6 +18,10 @@ from .model_runtime import (
 from .model_runtime import (
     current_environment as current_environment,
 )
+from .model_runtime import version_at_least
+
+# d1-3B's remote model code needs this transformers release or newer.
+D1_MIN_TRANSFORMERS = (5, 14)
 
 AvailabilityReason = Literal[
     "unsupported_platform",
@@ -25,6 +29,7 @@ AvailabilityReason = Literal[
     "missing_package",
     "missing_provider",
     "deferred_gap",
+    "unsupported_dependency_version",
 ]
 
 TARGET_IDS = ("macos-arm64", "windows-x64", "linux-x86_64")
@@ -271,12 +276,7 @@ def model_capabilities(
             )
             for backend_id in ("shieldstral", "qwen3-vl-8b", "qwen3-vl-4b")
         ),
-        standard(
-            "d1-3b",
-            "detector",
-            ("torch", "transformers", "PIL", "safetensors"),
-            device=environment.torch_device,
-        ),
+        _d1_capability(environment, standard),
     ]
 
     if target_failure:
@@ -313,6 +313,25 @@ def model_capabilities(
         ]
     )
     return tuple(capabilities)
+
+
+def d1_transformers_supported(environment: CapabilityEnvironment | None = None) -> bool:
+    """Whether the installed transformers can run d1-3B's pinned remote code."""
+    environment = environment or current_environment()
+    return version_at_least(environment.package_version("transformers"), D1_MIN_TRANSFORMERS)
+
+
+def _d1_capability(environment: CapabilityEnvironment, standard) -> ModelCapability:
+    capability = standard(
+        "d1-3b",
+        "detector",
+        ("torch", "transformers", "PIL", "safetensors"),
+        device=environment.torch_device,
+    )
+    if capability.availability == "available" and not d1_transformers_supported(environment):
+        return _capability("d1-3b", "detector", available=False,
+                           reason="unsupported_dependency_version")
+    return capability
 
 
 def capability_for(

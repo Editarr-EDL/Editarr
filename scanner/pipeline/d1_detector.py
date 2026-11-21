@@ -10,14 +10,17 @@ the model card's sample code.
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from threading import Lock
 
 from scanner.evaluation.severity_rubric import RUBRIC
 from scanner.model_acquisition import acquire_artifact
 from scanner.models import McfCategoryFamily
-from scanner.settings.capabilities import require_available
+from scanner.settings.capabilities import (
+    D1_MIN_TRANSFORMERS,
+    d1_transformers_supported,
+    require_available,
+)
 
 from .decision_detection import (
     DETECTED_FAMILIES,
@@ -30,7 +33,6 @@ from .dependencies import require_dependency
 ARTIFACT_ID = "d1-3b"
 MODEL_ID = "LiquidAI/d1-3B"
 MODEL_REVISION = "05b80faf55536582ad5ffb2da7456f6a653acf71"
-MIN_TRANSFORMERS = (5, 14)
 # Violence uses 0.25: with only the four family questions, it reproduces the decisions of
 # the original question set (family plus specific tokens such as weapons, each at 0.5) on
 # 1592 of 1603 evaluation frames and raises violence F1 from 0.57 to 0.65. The other
@@ -97,13 +99,9 @@ def parse_answers(response: dict) -> FrameDecision:
 
 
 def _require_transformers_version() -> None:
-    try:
-        installed = version("transformers")
-    except PackageNotFoundError as exc:
-        raise RuntimeError("d1-3B requires the transformers package") from exc
-    parts = tuple(int(part) for part in installed.split(".")[:2] if part.isdigit())
-    if parts < MIN_TRANSFORMERS:
-        raise RuntimeError(f"d1-3B requires transformers>=5.14; {installed} is installed")
+    if not d1_transformers_supported():
+        minimum = ".".join(map(str, D1_MIN_TRANSFORMERS))
+        raise RuntimeError(f"d1-3B requires transformers>={minimum}")
 
 
 def _device(torch) -> str:

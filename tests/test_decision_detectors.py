@@ -214,7 +214,7 @@ def test_d1_loads_remote_code_only_from_the_verified_artifact(monkeypatch, tmp_p
     monkeypatch.setattr(d1_detector, "require_available", lambda _backend: None)
     monkeypatch.setattr(d1_detector, "_require_dependency", lambda name, _hint: modules[name])
     monkeypatch.setattr(d1_detector, "acquire_artifact", lambda artifact: tmp_path / artifact)
-    monkeypatch.setattr(d1_detector, "version", lambda _package: "5.15.1")
+    monkeypatch.setattr(d1_detector, "d1_transformers_supported", lambda: True)
 
     model = d1_detector._load_model()
 
@@ -227,7 +227,7 @@ def test_d1_loads_remote_code_only_from_the_verified_artifact(monkeypatch, tmp_p
         ("to", "mps"),
     ]
     monkeypatch.setattr(d1_detector, "_CACHE", {})
-    monkeypatch.setattr(d1_detector, "version", lambda _package: "4.57.1")
+    monkeypatch.setattr(d1_detector, "d1_transformers_supported", lambda: False)
     with pytest.raises(RuntimeError, match="transformers>=5.14"):
         d1_detector._load_model()
 
