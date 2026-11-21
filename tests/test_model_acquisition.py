@@ -144,6 +144,7 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
         "qwen3-vl-4b-instruct-4bit",
         "qwen3-vl-8b-instruct-4bit",
         "shieldstral-3b-int8",
+        "d1-3b",
     } == {item.id for item in downloaded}
     assert all(item.revision and len(item.revision) == 40 for item in downloaded)
     assert all(item.files and item.expected_size > 0 for item in downloaded)
@@ -196,6 +197,25 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
         for path in shieldstral_files
         if path.endswith(".safetensors")
     )
+    d1 = declared.artifact("d1-3b")
+    assert artifact_ids_for_backend("d1-3b") == ("d1-3b",)
+    assert (d1.repository, d1.revision) == (
+        "LiquidAI/d1-3B",
+        "05b80faf55536582ad5ffb2da7456f6a653acf71",
+    )
+    assert d1.license.spdx == "LicenseRef-LFM-1.0"
+    d1_files = {item.path: item for item in d1.files}
+    # Remote code runs from the pinned files, so every module must be integrity-checked.
+    assert {"modeling_d1.py", "lfm2_vl.py", "hybrid.py", "runner.py", "prompt.py", "api.py"} <= set(
+        d1_files
+    )
+    assert d1_files["model.safetensors"].sha256
+    for video_model, artifact_id in (
+        ("qwen3-vl-8b", "qwen3-vl-8b-instruct-4bit"),
+        ("qwen3-vl-4b", "qwen3-vl-4b-instruct-4bit"),
+    ):
+        assert artifact_ids_for_backend(video_model) == (artifact_id,)
+        assert video_model in declared.artifact(artifact_id).backend_ids
 
 
 def test_source_media_release_offers_models_with_undeclared_licenses(tmp_path, monkeypatch):
