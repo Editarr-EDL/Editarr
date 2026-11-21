@@ -49,7 +49,8 @@ and runs a tiny LFM2 forward pass, without weights. Run the installed app
 verifier on a locally signed copy from the DMG before distributing it.
 
 On a Mac that already has d1-3B in its model cache, the frozen executable can
-also run one real frame through the model. The probe never downloads:
+also run one real frame through the model. The probe rehashes the cached artifact,
+loads only that copy with the Hugging Face Hub offline, and never downloads:
 
 ```sh
 EDITARR_FROZEN_RUNTIME_SMOKE=1 EDITARR_FROZEN_RUNTIME_SMOKE_MODEL=d1-3b \

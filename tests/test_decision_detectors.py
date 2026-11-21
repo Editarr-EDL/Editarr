@@ -179,7 +179,9 @@ def test_d1_scores_a_frame_in_one_system_one_call(monkeypatch, tmp_path):
             {"violence": 0, "sex": 0, "nudity": 0, "drugs": 0},
         )
 
-    monkeypatch.setattr(d1_detector, "_load_model", lambda: SimpleNamespace(system_one=system_one))
+    monkeypatch.setattr(
+        d1_detector, "_load_model", lambda _model_dir=None: SimpleNamespace(system_one=system_one)
+    )
 
     assert d1_detector.score_frame(frame).positives() == ()
     assert calls == [(None, list(d1_detector.questions()), [(32, 18)])]

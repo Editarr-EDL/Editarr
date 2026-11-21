@@ -202,15 +202,20 @@ def _device(torch) -> str:
     return "cpu"
 
 
-def _load_model():
-    """Acquire the pinned artifact and load it once per process from local files only."""
+def _load_model(model_dir: Path | None = None):
+    """Load the model once per process from local files only.
+
+    Acquires the pinned artifact unless ``model_dir`` names an already verified local
+    copy, in which case nothing is acquired or downloaded.
+    """
     require_available("d1-3b")
     if "model" in _CACHE:
         return _CACHE["model"]
     torch = _require_dependency("torch", "torch")
     transformers = _require_dependency("transformers", "transformers")
     _require_transformers_version()
-    model_dir = acquire_artifact(ARTIFACT_ID)
+    if model_dir is None:
+        model_dir = acquire_artifact(ARTIFACT_ID)
     device = _device(torch)
     model = transformers.AutoModel.from_pretrained(
         str(model_dir),
@@ -237,13 +242,16 @@ def release() -> bool:
     return True
 
 
-def score_frame(frame_path: Path) -> FrameDecision:
-    """Ask every family and severity question about one frame in one pass."""
+def score_frame(frame_path: Path, *, model_dir: Path | None = None) -> FrameDecision:
+    """Ask every family and severity question about one frame in one pass.
+
+    ``model_dir`` loads from a verified local artifact instead of acquiring one.
+    """
     image_module = _require_dependency("PIL.Image", "pillow")
     with image_module.open(frame_path) as opened:
         image = opened.convert("RGB")
     with _LOCK:
-        model = _load_model()
+        model = _load_model(model_dir)
         response = model.system_one(None, questions(), images=[image])
     return parse_answers(response)
 

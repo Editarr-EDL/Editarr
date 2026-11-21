@@ -2,22 +2,31 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
+import os
+import socket
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from scanner.models import McfCategoryFamily
+from scanner.evaluation.severity_rubric import RUBRIC
+from scanner.model_acquisition import ArtifactFile, ModelAcquisitionService, ModelManifest, manifest
 from scanner.pipeline import d1_detector
-from scanner.pipeline.decision_detection import FrameDecision
+from scanner.pipeline.decision_detection import DETECTED_FAMILIES
 from scanner.runtime import model_smoke
 from scanner.runtime.remote_code_smoke import remote_code_imports, smoke_remote_code
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHED_D1 = (
-    Path.home() / "Library" / "Caches" / "Editarr" / "models" / "artifacts" / "d1-3b"
+    Path.home()
+    / "Library"
+    / "Caches"
+    / "Editarr"
+    / "models"
+    / "artifacts"
+    / "d1-3b"
     / d1_detector.MODEL_REVISION
 )
 
@@ -84,40 +93,187 @@ def test_remote_code_smoke_rejects_an_ignored_modules_cache(modules_cache, monke
         smoke_remote_code({}, ())
 
 
-def _status(state):
-    return lambda: SimpleNamespace(status=lambda _artifact: SimpleNamespace(state=state))
+class _DownloadAttempted(AssertionError):
+    """Raised by every network or acquisition entry point the probe must never reach."""
 
 
-def test_model_probe_never_acquires_a_missing_artifact(tmp_path, monkeypatch):
-    frame = tmp_path / "frame.jpg"
-    frame.write_bytes(b"jpeg")
-    monkeypatch.setattr(
-        "scanner.model_acquisition.get_acquisition_service", _status("not_downloaded")
+def _refuse(*_args, **_kwargs):
+    raise _DownloadAttempted("the probe tried to acquire or download")
+
+
+class _RefusingRepository:
+    def __getattr__(self, _name):
+        return _refuse
+
+
+@pytest.fixture
+def d1_cache(tmp_path, monkeypatch):
+    """A fake d1-3B manifest entry and cache, with every download path refused."""
+    import huggingface_hub
+
+    from scanner.modeling import model_acquisition_transfer
+
+    real = manifest().artifact("d1-3b")
+    config = b"{}"
+    artifact = dataclasses.replace(
+        real,
+        files=(
+            ArtifactFile("config.json", len(config), sha256=hashlib.sha256(config).hexdigest()),
+        ),
     )
-    monkeypatch.setattr(d1_detector, "score_frame", pytest.fail)
+    service = ModelAcquisitionService(
+        tmp_path / "models",
+        repository=_RefusingRepository(),
+        model_manifest=ModelManifest(1, manifest().manifest_version, (artifact,)),
+    )
+    for target, name in (
+        (model_acquisition_transfer, "acquire"),
+        (ModelAcquisitionService, "acquire"),
+        (d1_detector, "acquire_artifact"),
+        (huggingface_hub, "hf_hub_download"),
+        (huggingface_hub, "snapshot_download"),
+        (huggingface_hub.file_download, "hf_hub_download"),
+        (socket.socket, "connect"),
+    ):
+        monkeypatch.setattr(target, name, _refuse)
+    monkeypatch.setattr("scanner.model_acquisition.get_acquisition_service", lambda: service)
+    monkeypatch.setattr(d1_detector, "_CACHE", {})
+    monkeypatch.setattr(d1_detector, "require_available", lambda _backend: None)
+    monkeypatch.setattr(d1_detector, "d1_transformers_supported", lambda: True)
+    for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        monkeypatch.delenv(name, raising=False)
+    directory = service.artifact_root / "d1-3b" / real.revision
+
+    def install():
+        directory.mkdir(parents=True)
+        (directory / "config.json").write_bytes(config)
+        (directory / ".complete.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "manifest_version": manifest().manifest_version,
+                    "artifact_id": "d1-3b",
+                    "revision": real.revision,
+                    "files": service._verified_files(artifact, directory),
+                }
+            )
+        )
+        return directory
+
+    return install
+
+
+def _fake_transformers(monkeypatch, on_load=lambda: None):
+    """Replace transformers' AutoModel with a stand-in that records how it was loaded."""
+    from huggingface_hub import constants
+
+    loads = []
+    answers = {
+        family.value: {"noul": 0.9 if family.value == "violence" else 0.1}
+        for family in DETECTED_FAMILIES
+    }
+    answers.update(
+        {
+            f"sev_{family.value}": {
+                "probabilities": {str(level): float(level == 1) for level in range(len(ladder))}
+            }
+            for family, ladder in RUBRIC.items()
+        }
+    )
+
+    class _Model:
+        def to(self, _device):
+            return self
+
+        def eval(self):
+            return self
+
+        def system_one(self, _state, _questions, images):
+            return {"answers": answers}
+
+    def from_pretrained(path, **kwargs):
+        loads.append(
+            (
+                path,
+                kwargs,
+                constants.HF_HUB_OFFLINE,
+                os.environ.get("HF_HUB_OFFLINE"),
+                os.environ.get("TRANSFORMERS_OFFLINE"),
+            )
+        )
+        on_load()
+        return _Model()
+
+    transformers = type(
+        "transformers",
+        (),
+        {"AutoModel": type("A", (), {"from_pretrained": staticmethod(from_pretrained)})},
+    )
+    real = d1_detector._require_dependency
+    monkeypatch.setattr(
+        d1_detector,
+        "_require_dependency",
+        lambda name, hint: transformers if name == "transformers" else real(name, hint),
+    )
+    return loads
+
+
+def _frame(tmp_path):
+    from PIL import Image
+
+    frame = tmp_path / "frame.jpg"
+    Image.new("RGB", (32, 18), "black").save(frame)
+    return frame
+
+
+def test_model_probe_loads_the_verified_cache_offline_without_acquiring(
+    tmp_path, monkeypatch, d1_cache
+):
+    from huggingface_hub import constants
+
+    directory = d1_cache()
+    loads = _fake_transformers(monkeypatch)
+    offline_before = constants.HF_HUB_OFFLINE
+
+    result = model_smoke.run_model_probe("d1-3b", _frame(tmp_path))
+
+    assert [(path, kwargs["local_files_only"]) for path, kwargs, *_ in loads] == [
+        (str(directory), True)
+    ]
+    assert [offline for _path, _kwargs, *offline in loads] == [[True, "1", "1"]]
+    assert result["positives"] == ["violence"]
+    assert result["severity_levels"] == {family.value: 1 for family in RUBRIC}
+    assert d1_detector._CACHE == {}
+    assert constants.HF_HUB_OFFLINE == offline_before
+    assert "HF_HUB_OFFLINE" not in os.environ and "TRANSFORMERS_OFFLINE" not in os.environ
+
+
+def test_model_probe_fails_fast_on_a_missing_artifact(tmp_path, monkeypatch, d1_cache):
+    loads = _fake_transformers(monkeypatch)
 
     with pytest.raises(RuntimeError, match="never downloads"):
-        model_smoke.run_model_probe("d1-3b", frame)
+        model_smoke.run_model_probe("d1-3b", _frame(tmp_path))
+    assert loads == []
     with pytest.raises(RuntimeError, match="Unsupported"):
-        model_smoke.run_model_probe("nudenet", frame)
+        model_smoke.run_model_probe("nudenet", _frame(tmp_path))
 
 
-def test_model_probe_reports_decisions_and_releases_the_model(tmp_path, monkeypatch):
-    frame = tmp_path / "frame.jpg"
-    frame.write_bytes(b"jpeg")
-    released = []
-    decision = FrameDecision(
-        scores={McfCategoryFamily.VIOLENCE: 0.9, McfCategoryFamily.NUDITY: 0.1},
-        thresholds=d1_detector.THRESHOLDS,
-        levels={McfCategoryFamily.VIOLENCE: 2},
+def test_model_probe_rejects_an_artifact_that_fails_verification(tmp_path, monkeypatch, d1_cache):
+    directory = d1_cache()
+    (directory / "config.json").write_bytes(b"[]")
+    loads = _fake_transformers(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="never downloads"):
+        model_smoke.run_model_probe("d1-3b", _frame(tmp_path))
+    assert loads == []
+
+
+def test_model_probe_fails_when_the_artifact_changes_while_loading(tmp_path, monkeypatch, d1_cache):
+    directory = d1_cache()
+    config = directory / "config.json"
+    _fake_transformers(
+        monkeypatch, on_load=lambda: os.utime(config, ns=(1, config.stat().st_mtime_ns + 1))
     )
-    monkeypatch.setattr("scanner.model_acquisition.get_acquisition_service", _status("ready"))
-    monkeypatch.setattr(d1_detector, "score_frame", lambda path: decision)
-    monkeypatch.setattr(d1_detector, "release", lambda: released.append(True))
 
-    result = model_smoke.run_model_probe("d1-3b", frame)
-
-    assert result["positives"] == ["violence"]
-    assert result["severity_levels"] == {"violence": 2}
-    assert result["revision"] == d1_detector.MODEL_REVISION
-    assert released == [True]
+    with pytest.raises(RuntimeError, match="changed in the model cache"):
+        model_smoke.run_model_probe("d1-3b", _frame(tmp_path))
