@@ -141,6 +141,27 @@ def test_scan_options_reject_unknown_qwen_model():
         api.ScanOptions(scan_audio=False, qwen_model="unknown-qwen")
 
 
+@pytest.mark.parametrize("default", ["qwen3-vl-8b", "nudenet"])
+def test_scan_options_default_to_the_platform_video_model(monkeypatch, default):
+    monkeypatch.setattr(api, "require_available", lambda _backend_id: None)
+    monkeypatch.setattr(api, "default_video_model", lambda: default)
+
+    assert api.ScanOptions(scan_audio=False).video_model == default
+    assert api.ScanOptions(scan_audio=False, video_model="d1-3b").video_model == "d1-3b"
+
+
+def test_fake_model_mode_accepts_the_decision_video_models(monkeypatch):
+    def unavailable(backend_id):
+        raise ValueError(f"{backend_id} is unavailable")
+
+    monkeypatch.setattr(api, "require_available", unavailable)
+    monkeypatch.setattr("scanner.testing.test_fake_models.enabled", lambda: True)
+
+    for video_model in ("qwen3-vl-8b", "qwen3-vl-4b", "d1-3b"):
+        options = api.ScanOptions(scan_audio=False, video_model=video_model)
+        assert options.video_model == video_model
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

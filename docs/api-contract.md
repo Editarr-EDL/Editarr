@@ -900,6 +900,17 @@ unavailable capability is `unsupported`. Cache reuse has partial/unknown origina
 model provenance; queued options alone do not prove a stage ran. Versioned
 checkpoints may resume only when linked to completed attempt coverage.
 
+### Scan model choices
+
+`GET /api/capabilities` lists the selectable `audio_models`, `audio_filters`,
+`video_models`, and `qwen_models` (the Severity and Description model) available on
+this host, each as `{id, display_name, recommended}`. Only Qwen3-VL 8B is
+`recommended` in the video and description lists; clients label it "(recommended)".
+Video models are listed in selection order, so the first entry is the default:
+`qwen3-vl-8b` where MLX runs (Apple silicon), otherwise `nudenet`. A scan request that
+omits `video_model` uses the same default. The description model keeps the request
+field name `qwen_model` for compatibility with stored scan options.
+
 ### Audio track selection
 
 Protected `GET /api/media/audio-tracks?item_id=<Jellyfin item ID>&media_source_id=<optional version>`

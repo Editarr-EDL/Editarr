@@ -39,6 +39,7 @@ from scanner.pipeline.visual_summary import (
 from scanner.pipeline.visual_summary import (
     summarize_flagged_segments as summarize_flagged_segments,
 )
+from scanner.settings.capabilities import SUPPORTED_VIDEO_MODELS as CAPABILITY_VIDEO_MODELS
 from scanner.settings.capabilities import (
     capability_for,
 )
@@ -68,13 +69,8 @@ class VisualDetection:
 _detector: NudeDetector | None = None
 _SEVERITY_ORDER = {Severity.LOW: 1, Severity.MEDIUM: 2, Severity.HIGH: 3}
 
-SUPPORTED_VIDEO_MODELS = {
-    "nudenet",
-    "image_safety_gate",
-    "siglip2_moderation_nsfw",
-    "siglip2_moderation_violence",
-    "shieldstral",
-}
+SUPPORTED_VIDEO_MODELS = set(CAPABILITY_VIDEO_MODELS)
+_DECISION_VIDEO_MODELS = ("qwen3-vl-8b", "qwen3-vl-4b", "d1-3b")
 _VIDEO_MODEL_ALIASES = {
     "image-safety-gate": "image_safety_gate",
     "comfyui-image-safety-gate": "image_safety_gate",
@@ -378,6 +374,10 @@ def scan_frame(
         from scanner.pipeline import shieldstral
 
         return shieldstral.scan_frame(frame_path, timestamp)
+    if selected_model in _DECISION_VIDEO_MODELS:
+        from scanner.pipeline import decision_detection
+
+        return decision_detection.scan_frame(frame_path, timestamp, selected_model)
     if selected_model.startswith("siglip2_moderation_"):
         return _scan_frame_siglip2_moderation(
             frame_path,
@@ -429,6 +429,13 @@ def scan_frames(
 
         # Shieldstral delays sexual runs for smoothing, so report on resolution.
         detection_lists = shieldstral.scan_frames(frames, interval, on_resolved=frame_done)
+        report_on_yield = False
+    elif selected_model in _DECISION_VIDEO_MODELS:
+        from scanner.pipeline import decision_detection
+
+        detection_lists = decision_detection.scan_frames(
+            frames, interval, selected_model, on_resolved=frame_done
+        )
         report_on_yield = False
     else:
         detection_lists = (

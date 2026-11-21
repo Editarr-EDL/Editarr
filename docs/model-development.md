@@ -168,6 +168,50 @@ budget.
 The complete scanner/model configuration is defined in
 [`scanner/settings/config.py`](../scanner/settings/config.py).
 
+### Qwen3-VL and d1-3B video detectors
+
+`qwen3-vl-8b` (recommended and the default on Apple silicon), `qwen3-vl-4b`, and `d1-3b`
+ask one yes/no question per family about each frame, using the evaluation harness's
+wording: `Does this video frame show <subject>? Answer yes or no.` with subjects
+`drugs, alcohol, smoking, or gambling`, `nudity`, `sexual content`, and `violence`.
+Positive families become general-family findings (`drugs`, `nudity`, `sex`,
+`violence`) that the description model can refine. Thresholds are module constants in
+[`qwen_detector.py`](../scanner/pipeline/qwen_detector.py) and
+[`d1_detector.py`](../scanner/pipeline/d1_detector.py).
+
+The Qwen3-VL detectors (macOS Apple silicon only) run on MLX with the same pinned
+artifacts and loader as the description model. The questions are chained in one
+conversation per frame: the image is encoded once, each later question feeds only its
+new tokens into the KV cache, and the greedy answer token stays in the conversation.
+A family's score is P(yes) / (P(yes) + P(no)) from the first answer token's top 20
+log-probabilities at temperature 0, flagged at 0.5. When the detector and the
+description model are the same artifact, the scan worker loads it once.
+
+d1-3B is a decision model that answers typed questions in one forward pass without
+generating text. It runs through transformers (≥ 5.14) and torch, on MPS on macOS and
+CUDA or CPU elsewhere, with `trust_remote_code` loading the model's own code from the
+pinned, hash-verified artifact only. Each frame gets the four family `noul` questions
+plus four `score` severity questions whose levels are the rubric above. The argmax
+level sets the finding's severity (level 0 on a positive decision is reported as
+`low`). Families are flagged at 0.5 except violence at 0.25: with only the four family
+questions, 0.25 reproduces the decisions of the original question set (family plus
+specific tokens such as weapons, each at 0.5) on 1,592 of 1,603 evaluation frames and
+raises violence F1 from 0.57 to 0.65; the other families scored best at 0.5.
+
+Fine passes score one frame per `EDITARR_DECISION_FINE_SAMPLE_INTERVAL_SECONDS`
+(default 0.5) and bisect changes in the set of positive families, as Shieldstral does.
+
+A real-inference check on 12 film frames (8 positive d1-3B decisions, covering all four
+families) on an M4 Pro (24 GB):
+
+| Detector | Agreement with the evaluation | Warm time per frame | Memory |
+| --- | --- | ---: | ---: |
+| `qwen3-vl-8b` (MLX) | 48/48 decisions; scores identical to `qwen3vl-8b-mlx` | 1.37 s | 6.5 GB MLX peak |
+| `d1-3b` (transformers, BF16, MPS) | 48/48 decisions vs `d1-3b-full4` and `d1-3b-sev` (llama.cpp Q8_0); 47/48 severity levels; mean \|ΔP\| 0.009 | 0.71 s | 7.0 GB MPS |
+
+Running d1-3B with the 8B description model keeps both loaded in the scan worker
+(about 13.5 GB), so 24 GB of unified memory is recommended.
+
 ### Shieldstral
 
 Shieldstral (macOS Apple silicon only) answers yes/no policy questions about each frame.

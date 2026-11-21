@@ -39,6 +39,7 @@ from scanner.security.access.request_access import request_access
 from scanner.security.audit.actions import AuditAction
 from scanner.settings.capabilities import (
     QWEN_MODEL_DISPLAY_NAMES,
+    RECOMMENDED_QWEN_MODEL,
     SUPPORTED_AUDIO_FILTERS,
     SUPPORTED_AUDIO_MODELS,
     SUPPORTED_QWEN_MODELS,
@@ -266,7 +267,11 @@ def api_capabilities():
 
     def choices(ids: tuple[str, ...]) -> list[ScanModelCapability]:
         return [
-            ScanModelCapability(id=backend_id, display_name=by_id[backend_id].display_name)
+            ScanModelCapability(
+                id=backend_id,
+                display_name=by_id[backend_id].display_name,
+                recommended=by_id[backend_id].recommended,
+            )
             for backend_id in ids
             if by_id[backend_id].availability == "available"
         ]
@@ -279,6 +284,7 @@ def api_capabilities():
             ScanModelCapability(
                 id=model_id,
                 display_name=QWEN_MODEL_DISPLAY_NAMES[model_id],
+                recommended=model_id == RECOMMENDED_QWEN_MODEL,
             )
             for model_id in SUPPORTED_QWEN_MODELS
         ],

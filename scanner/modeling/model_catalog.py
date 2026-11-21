@@ -31,6 +31,8 @@ from .model_scans import ExportStatus
 class ScanModelCapability(BaseModel):
     id: str
     display_name: str
+    # Clients label the recommended choice in each list.
+    recommended: bool = False
 
 
 class ModelDownloadState(BaseModel):

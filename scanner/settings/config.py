@@ -148,6 +148,11 @@ class Settings(BaseSettings):
     shieldstral_fine_sample_interval_seconds: float = Field(
         default=0.5, gt=0, allow_inf_nan=False
     )
+    # Qwen3-VL and d1-3B video detectors: fine passes score one frame per interval and
+    # bisect changes between samples. Thresholds are per-detector module constants.
+    decision_fine_sample_interval_seconds: float = Field(
+        default=0.5, gt=0, allow_inf_nan=False
+    )
 
     model_config = {"env_prefix": "EDITARR_"}
 

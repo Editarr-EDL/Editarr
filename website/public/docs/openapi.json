@@ -17751,6 +17751,11 @@
             "type": "string",
             "title": "Display Name"
           },
+          "recommended": {
+            "type": "boolean",
+            "title": "Recommended",
+            "default": false
+          },
           "stage": {
             "type": "string",
             "enum": [
@@ -21938,6 +21943,11 @@
           "display_name": {
             "type": "string",
             "title": "Display Name"
+          },
+          "recommended": {
+            "type": "boolean",
+            "title": "Recommended",
+            "default": false
           }
         },
         "type": "object",
@@ -22597,8 +22607,7 @@
                 "type": "null"
               }
             ],
-            "title": "Video Model",
-            "default": "nudenet"
+            "title": "Video Model"
           },
           "jellyfin_item_id": {
             "type": "string",

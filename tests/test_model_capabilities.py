@@ -27,7 +27,7 @@ _PACKAGES = {
     "mlx_vlm",
     "mlx",
 }
-_MAC_ONLY_DETECTORS = {"shieldstral"}
+_MAC_ONLY_DETECTORS = {"shieldstral", "qwen3-vl-8b", "qwen3-vl-4b"}
 _PORTABLE_DETECTORS = tuple(
     backend
     for backend in capabilities.SUPPORTED_VIDEO_MODELS
@@ -85,13 +85,15 @@ def test_target_matrix_declares_only_supported_backends(system, machine, target)
         assert declared["qwen3_vl"].availability == "available"
         assert declared["qwen3_vl"].device == "mlx"
         assert declared["qwen3_vl"].enrichment_behavior == "qwen_summary"
-        assert declared["shieldstral"].availability == "available"
-        assert declared["shieldstral"].device == "mlx"
+        for backend in _MAC_ONLY_DETECTORS:
+            assert declared[backend].availability == "available"
+            assert declared[backend].device == "mlx"
     else:
         assert declared["mlx_whisper"].availability == "unavailable"
         assert declared["mlx_whisper"].reason == "unsupported_platform"
-        assert declared["shieldstral"].availability == "unavailable"
-        assert declared["shieldstral"].reason == "unsupported_platform"
+        for backend in _MAC_ONLY_DETECTORS:
+            assert declared[backend].availability == "unavailable"
+            assert declared[backend].reason == "unsupported_platform"
         assert declared["qwen3_vl"].availability == "unavailable"
         assert declared["qwen3_vl"].reason == "deferred_gap"
         assert declared["qwen3_vl"].enrichment_behavior == "detector_findings_only"
@@ -429,3 +431,62 @@ def test_deferred_qwen_keeps_clean_scene_empty(monkeypatch, tmp_path: Path):
         summaries_per_segment=1,
         join_gap_seconds=0,
     ) == []
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "packages", "expected"),
+    [
+        ("Darwin", "arm64", _PACKAGES, "qwen3-vl-8b"),
+        ("Darwin", "arm64", _PACKAGES - {"mlx_vlm"}, "nudenet"),
+        ("Windows", "AMD64", _PACKAGES, "nudenet"),
+        ("Linux", "x86_64", _PACKAGES, "nudenet"),
+    ],
+)
+def test_default_video_model_is_qwen3_vl_8b_only_where_it_runs(system, machine, packages, expected):
+    environment = _environment(system, machine, packages=packages)
+
+    assert capabilities.default_video_model(environment) == expected
+
+
+@pytest.mark.parametrize("missing", ["torch", "transformers", "PIL", "safetensors"])
+def test_d1_requires_its_torch_runtime_on_every_target(missing):
+    for system, machine in (("Darwin", "arm64"), ("Windows", "AMD64"), ("Linux", "x86_64")):
+        environment = _environment(system, machine, packages=_PACKAGES - {missing})
+        declared = capabilities.capability_for("d1-3b", environment=environment)
+        assert (declared.availability, declared.reason) == ("unavailable", "missing_package")
+    metal = _environment("Darwin", "arm64", torch_devices=frozenset({"mps"}))
+    assert capabilities.capability_for("d1-3b", environment=metal).device == "metal"
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "first_video_model"),
+    [("Darwin", "arm64", "qwen3-vl-8b"), ("Linux", "x86_64", "nudenet")],
+)
+def test_capabilities_mark_only_qwen3_vl_8b_recommended(
+    monkeypatch, system, machine, first_video_model
+):
+    from scanner import api
+
+    environment = _environment(system, machine)
+    monkeypatch.setattr("scanner.http.scan_catalog_api.current_environment", lambda: environment)
+    result = api.api_capabilities()
+    video = {choice.id: choice for choice in result["video_models"]}
+    qwen = {choice.id: choice for choice in result["qwen_models"]}
+
+    assert next(iter(video)) == first_video_model
+    assert {key for key, choice in video.items() if choice.recommended} == (
+        {"qwen3-vl-8b"} if system == "Darwin" else set()
+    )
+    assert "d1-3b" in video
+    if system == "Darwin":
+        assert (video["qwen3-vl-8b"].display_name, video["qwen3-vl-4b"].display_name) == (
+            "Qwen3-VL 8B",
+            "Qwen3-VL 4B",
+        )
+        assert video["d1-3b"].display_name == "d1-3B"
+    assert {key: choice.recommended for key, choice in qwen.items()} == {
+        "qwen3-vl-8b-instruct-4bit": True,
+        "qwen3-vl-4b-instruct-4bit": False,
+    }
+    payload = result["video_models"][0].model_dump()
+    assert set(payload) == {"id", "display_name", "recommended"}

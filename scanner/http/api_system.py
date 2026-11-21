@@ -45,6 +45,12 @@ def api_get_version() -> VersionInformation:
     return version_information()
 
 
+def _default_video_model() -> str:
+    from scanner import api as root
+
+    return root.default_video_model()
+
+
 class ScanOptions(BaseModel):
     """The options persisted with every queued scan and completed video."""
 
@@ -60,7 +66,8 @@ class ScanOptions(BaseModel):
     audio_filter: str | None = DEFAULT_AUDIO_FILTER
     audio_selection: AudioSelection | None = None
     scan_video: bool = True
-    video_model: str | None = "nudenet"
+    # Qwen3-VL 8B where it can run, otherwise NudeNet.
+    video_model: str | None = Field(default_factory=lambda: _default_video_model())
 
     @model_validator(mode="after")
     def validate_scan_options(self):
