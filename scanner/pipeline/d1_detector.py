@@ -4,7 +4,7 @@ d1-3B is a decision model: one forward pass answers several typed questions abou
 frame without generating text. Each frame gets one ``noul`` (P(yes)) question per family
 and one ``score`` severity question per family, using the shared rubric levels. The
 model runs through transformers with ``trust_remote_code`` from the pinned,
-hash-verified artifact directory only (MPS on macOS, CUDA or CPU elsewhere), following
+hash-verified artifact directory only (MPS where verified on macOS, else CPU), following
 the model card's sample code.
 """
 
@@ -22,6 +22,7 @@ from scanner.model_acquisition import acquire_artifact
 from scanner.models import McfCategoryFamily
 from scanner.settings.capabilities import (
     D1_MIN_TRANSFORMERS,
+    current_environment,
     d1_transformers_supported,
     require_available,
 )
@@ -84,8 +85,14 @@ SEVERITY_SUBJECTS = {
 _CACHE: dict[str, object] = {}
 _LOCK = Lock()
 logger = logging.getLogger(__name__)
-# Families whose unusable severity answers were already logged by this worker process.
-_WARNED: set[McfCategoryFamily] = set()
+# Unusable-answer kinds already logged by this worker process (one scan per process).
+_WARNED: set[str] = set()
+
+
+def _warn_once(key: str, message: str, *args) -> None:
+    if key not in _WARNED:
+        _WARNED.add(key)
+        logger.warning(message + " (logged once)", *args)
 
 
 def _require_dependency(import_name: str, install_hint: str):
@@ -134,12 +141,16 @@ def severity_level(answer: object, levels: int) -> int | None:
 def parse_answers(response: dict) -> FrameDecision:
     """Map a ``system_one`` response to scores and argmax severity levels.
 
-    Raises ValueError when a family decision is missing, malformed, or non-finite. A
-    family whose severity answer is unusable gets no detector severity level.
+    A malformed answer never fails the scan. Like the other detectors, whose
+    non-finite scores never reach a threshold, a missing, non-numeric, or non-finite
+    family decision leaves that family undecided (not flagged) for the frame. A family
+    whose severity answer is unusable gets no detector severity level. Each kind of
+    problem is logged once per worker process.
     """
-    answers = response.get("answers")
+    answers = response.get("answers") if isinstance(response, dict) else None
     if not isinstance(answers, dict):
-        raise ValueError("d1-3B returned no answers")
+        _warn_once("answers", "d1-3B returned no answers for a frame; skipping its decisions")
+        answers = {}
     scores: dict[McfCategoryFamily, float] = {}
     levels: dict[McfCategoryFamily, int] = {}
     for family in DETECTED_FAMILIES:
@@ -150,17 +161,25 @@ def parse_answers(response: dict) -> FrameDecision:
             or not isinstance(value, (int, float))
             or not math.isfinite(value)
         ):
-            raise ValueError(f"d1-3B returned no decision for {family.value}")
+            if answers:
+                _warn_once(
+                    f"decision:{family.value}",
+                    "d1-3B returned an unusable %s decision; leaving it undecided",
+                    family.value,
+                )
+            continue
         scores[family] = min(1.0, max(0.0, float(value)))
     for family, ladder in RUBRIC.items():
+        if family not in scores:
+            continue
         level = severity_level(answers.get(f"sev_{family.value}"), len(ladder))
         if level is not None:
             levels[family] = level
-        elif family not in _WARNED:
-            _WARNED.add(family)
-            logger.warning(
+        else:
+            _warn_once(
+                f"severity:{family.value}",
                 "d1-3B returned an unusable %s severity distribution; using the "
-                "description or confidence severity instead (logged once)",
+                "description or confidence severity instead",
                 family.value,
             )
     return FrameDecision(scores=scores, thresholds=THRESHOLDS, levels=levels)
@@ -173,9 +192,12 @@ def _require_transformers_version() -> None:
 
 
 def _device(torch) -> str:
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
+    """MPS where the capability verified Metal, otherwise CPU.
+
+    Like the other torch detectors this never touches ``torch.cuda``: the Windows and
+    Linux runtimes ship CPU-only torch and exclude its CUDA stack.
+    """
+    if current_environment().torch_device == "metal" and torch.backends.mps.is_available():
         return "mps"
     return "cpu"
 
@@ -194,6 +216,7 @@ def _load_model():
         str(model_dir),
         trust_remote_code=True,
         local_files_only=True,
+        # bf16 is unsupported or slow on many CPUs; fp32 is the model card's CPU dtype.
         dtype=torch.float32 if device == "cpu" else torch.bfloat16,
     ).to(device)
     _CACHE["model"] = model.eval()
@@ -209,11 +232,8 @@ def release() -> bool:
     del model
     gc.collect()
     torch = sys.modules.get("torch")
-    if torch is not None:
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    if torch is not None and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
     return True
 
 

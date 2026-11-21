@@ -188,9 +188,13 @@ log-probabilities at temperature 0, flagged at 0.5. When the detector and the
 description model are the same artifact, the scan worker loads it once.
 
 d1-3B is a decision model that answers typed questions in one forward pass without
-generating text. It runs through transformers (≥ 5.14) and torch, on MPS on macOS and
-CUDA or CPU elsewhere, with `trust_remote_code` loading the model's own code from the
-pinned, hash-verified artifact only. Each frame gets the four family `noul` questions
+generating text. It runs through transformers (≥ 5.14) and torch, on MPS where the
+runtime verified Metal and otherwise on CPU in float32 (the Windows and Linux runtimes
+ship CPU-only torch; its 3.1B float32 weights need about 12.5 GB there and run much
+more slowly than on MPS), with `trust_remote_code` loading the model's own code from the pinned,
+hash-verified artifact only. A malformed answer never fails a scan: an unusable family
+decision leaves that family unflagged for the frame, and an unusable severity
+distribution gives no detector severity; each is logged once per scan. Each frame gets the four family `noul` questions
 plus four `score` severity questions whose levels are the rubric above. The argmax
 level sets the finding's severity (level 0 on a positive decision is reported as
 `low`). Families are flagged at 0.5 except violence at 0.25: with only the four family

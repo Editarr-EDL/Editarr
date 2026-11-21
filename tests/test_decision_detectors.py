@@ -165,8 +165,6 @@ def test_d1_decisions_use_detector_severity_and_violence_threshold():
         (F.SEX, Severity.LOW, "detector", "d1_sex", "sex"),
         (F.VIOLENCE, Severity.MEDIUM, "detector", "d1_violence", "violence"),
     }
-    with pytest.raises(ValueError):
-        d1_detector.parse_answers({"answers": {"drugs": {"noul": 0.1}}})
 
 
 def test_d1_scores_a_frame_in_one_system_one_call(monkeypatch, tmp_path):
@@ -198,8 +196,8 @@ def test_d1_loads_remote_code_only_from_the_verified_artifact(monkeypatch, tmp_p
         def eval(self):
             return self
 
+    # No torch.cuda: Windows/Linux runtimes exclude it, so the loader must not touch it.
     torch = SimpleNamespace(
-        cuda=SimpleNamespace(is_available=lambda: False),
         backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
         float32="float32",
         bfloat16="bfloat16",
@@ -214,6 +212,9 @@ def test_d1_loads_remote_code_only_from_the_verified_artifact(monkeypatch, tmp_p
     monkeypatch.setattr(d1_detector, "require_available", lambda _backend: None)
     monkeypatch.setattr(d1_detector, "_require_dependency", lambda name, _hint: modules[name])
     monkeypatch.setattr(d1_detector, "acquire_artifact", lambda artifact: tmp_path / artifact)
+    monkeypatch.setattr(
+        d1_detector, "current_environment", lambda: SimpleNamespace(torch_device="metal")
+    )
     monkeypatch.setattr(d1_detector, "d1_transformers_supported", lambda: True)
 
     model = d1_detector._load_model()
@@ -324,7 +325,62 @@ def test_valid_d1_severity_vectors_are_unchanged():
         {"probabilities": {"0": 0.1, "1": 0.2, "2": 0.6, "3": 0.1}}, 4
     ) == 2
     assert d1_detector.severity_level({"probabilities": {"0": 1, "1": 0, "2": 0}}, 3) == 0
-    with pytest.raises(ValueError):
-        d1_detector.parse_answers(
-            _d1_response({"drugs": _NAN, "nudity": 0.1, "sex": 0.1, "violence": 0.1}, {})
+
+
+def test_d1_uses_float32_cpu_when_metal_is_not_verified(monkeypatch, tmp_path):
+    loaded = []
+    torch = SimpleNamespace(
+        backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
+        float32="float32",
+        bfloat16="bfloat16",
+    )
+    model = SimpleNamespace(to=lambda device: loaded.append(device) or model, eval=lambda: model)
+    transformers = SimpleNamespace(
+        AutoModel=SimpleNamespace(
+            from_pretrained=lambda _path, **kwargs: loaded.append(kwargs["dtype"]) or model
         )
+    )
+    modules = {"torch": torch, "transformers": transformers}
+    monkeypatch.setattr(d1_detector, "_CACHE", {})
+    monkeypatch.setattr(d1_detector, "require_available", lambda _backend: None)
+    monkeypatch.setattr(d1_detector, "_require_dependency", lambda name, _hint: modules[name])
+    monkeypatch.setattr(d1_detector, "acquire_artifact", lambda artifact: tmp_path / artifact)
+    monkeypatch.setattr(d1_detector, "d1_transformers_supported", lambda: True)
+    monkeypatch.setattr(
+        d1_detector, "current_environment", lambda: SimpleNamespace(torch_device="cpu")
+    )
+
+    d1_detector._load_model()
+
+    assert loaded == ["float32", "cpu"]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        _d1_response({"drugs": _NAN, "nudity": 0.9, "sex": 0.1, "violence": 0.1}, {"nudity": 2}),
+        _d1_response({"drugs": "0.9", "nudity": 0.9, "sex": 0.1, "violence": 0.1}, {"nudity": 2}),
+        _d1_response({"nudity": 0.9, "sex": 0.1, "violence": 0.1}, {"nudity": 2}),
+    ],
+)
+def test_unusable_d1_decision_leaves_only_that_family_undecided(monkeypatch, caplog, response):
+    monkeypatch.setattr(d1_detector, "_WARNED", set())
+
+    for _ in range(3):
+        decision = d1_detector.parse_answers(response)
+
+    assert F.DRUGS not in decision.scores
+    assert decision.positives() == (F.NUDITY,)
+    assert decision.levels == {F.NUDITY: 2}
+    warnings = [record for record in caplog.records if "drugs decision" in record.getMessage()]
+    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize("response", [{}, {"answers": None}, None])
+def test_frame_without_answers_is_skipped_without_failing_the_scan(monkeypatch, response):
+    monkeypatch.setattr(d1_detector, "_WARNED", set())
+
+    decision = d1_detector.parse_answers(response)
+
+    assert decision.positives() == ()
+    assert decision.levels == {}
