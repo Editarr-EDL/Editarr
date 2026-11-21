@@ -62,6 +62,7 @@ class VisualDetection:
     category: McfCategoryFamily
     subcategory: str
     severity: Severity
+    severity_source: str = "confidence"
 
 
 _detector: NudeDetector | None = None
@@ -353,6 +354,7 @@ def _findings_from_detections(
                 start_seconds=det.timestamp,
                 end_seconds=end_seconds,
                 severity=det.severity,
+                severity_source=det.severity_source,
                 confidence=det.confidence,
                 label=det.label,
                 details=f"Detected {det.label} at {det.timestamp:.1f}s",

@@ -137,7 +137,7 @@ def test_scan_options_preserve_the_legacy_alt_profanity_filter_alias(monkeypatch
 
 
 def test_scan_options_reject_unknown_qwen_model():
-    with pytest.raises(ValueError, match="Unsupported Qwen model"):
+    with pytest.raises(ValueError, match="Unsupported Severity and Description model"):
         api.ScanOptions(scan_audio=False, qwen_model="unknown-qwen")
 
 

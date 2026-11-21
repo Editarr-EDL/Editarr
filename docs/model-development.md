@@ -6,9 +6,31 @@ For ordinary Editarr setup and use, see the project [README](../README.md).
 
 ## Qwen prompt replay
 
-Video scans can use either the pinned Qwen3-VL 8B or 4B Instruct 4-bit model. The 8B
-variant remains the default; 4B reduces download size and memory use. Each scan persists
-its choice, and only the selected artifact is acquired on demand.
+The **Severity and Description model** (API field `qwen_model`) describes flagged
+segments after detection, for every video model. Scans can use either the pinned
+Qwen3-VL 8B (recommended, default) or 4B Instruct 4-bit model; 4B reduces download size
+and memory use. Each scan persists its choice, and only the selected artifact is
+acquired on demand.
+
+The description prompt (`qwen_summary.PROMPT` plus the constrained JSON instructions)
+also asks for a `severity` level per classification on the rubric in
+[`scanner/evaluation/severity_rubric.py`](../scanner/evaluation/severity_rubric.py):
+violence 0 none / 1 non-graphic / 2 graphic / 3 gore; sex 0 none / 1 kissing / 2 sex
+without nudity / 3 sex with nudity or assault; nudity 0 none / 1 immodesty / 2 nudity /
+3 explicit; drugs 0 none / 1 legal use / 2 illegal use. Levels 1–3 map to MCF `low`,
+`medium`, and `high`. Severity is read leniently: a response whose subcategory token is
+invalid still contributes its severity, out-of-scale levels clamp to the family's top
+level, and unusable values are ignored. The description itself is unchanged.
+
+Each visual finding's severity follows this precedence, recorded in its in-memory
+`severity_source` (scan caches and debug logs only; not stored in the database):
+
+1. `detector`: a detector's own severity question (d1-3B);
+2. `description_model`: the description model's level, when it returns one of at least 1;
+3. `confidence`: the detector-confidence mapping (≥ 0.85 high, ≥ 0.65 medium, else low).
+
+Where the description model is unavailable (Windows and Linux), findings keep detector
+or confidence severity and no prose.
 
 Each flagged visual scene preserves the exact representative frames sent to
 Qwen and its detector metadata in `data/qwen-replays/<scan-id>/scene_*`. This

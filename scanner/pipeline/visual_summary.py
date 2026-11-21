@@ -1,6 +1,7 @@
 """Qwen segment grouping, enrichment, and replay bundles."""
 
 import json
+import logging
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,11 +13,14 @@ from scanner.evaluation.subcategorization import (
 )
 from scanner.models import FindingCreate, McfCategoryFamily
 from scanner.pipeline.cache import atomic_write_json
+from scanner.pipeline.severity import resolve_severity
 from scanner.settings.capabilities import (
     DEFAULT_QWEN_MODEL,
     SUPPORTED_QWEN_MODELS,
     CapabilityUnavailableError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -130,9 +134,10 @@ def _save_qwen_replay(
 def _summarized_findings(
     segment: _FlaggedSegment, combined_summary
 ) -> list[FindingCreate]:
-    """Combine one flagged segment and its Qwen summary into review findings."""
-    from scanner.pipeline import visual as root
+    """Combine one flagged segment and its Qwen summary into review findings.
 
+    Severity follows :func:`scanner.pipeline.severity.resolve_severity`.
+    """
     findings_by_classification: dict[tuple[object, object], list[FindingCreate]] = {}
     for finding in segment.findings:
         findings_by_classification.setdefault(
@@ -166,6 +171,17 @@ def _summarized_findings(
             and qwen_result.method == SubcategorizationMethod.QWEN_SUMMARY
         ):
             subcategory = qwen_result.subcategory
+        severity, severity_source = resolve_severity(
+            classification_findings,
+            getattr(combined_summary, "severities", {}).get(first.category),
+        )
+        logger.debug(
+            "Segment at %.2fs %s severity %s from %s",
+            segment.frames[0][1],
+            first.category.value,
+            severity.value if severity else None,
+            severity_source,
+        )
         summarized.append(
             FindingCreate(
                 video_id=first.video_id,
@@ -173,15 +189,8 @@ def _summarized_findings(
                 subcategory=subcategory,
                 start_seconds=segment.frames[0][1],
                 end_seconds=segment.end_seconds,
-                severity=max(
-                    (
-                        finding.severity
-                        for finding in classification_findings
-                        if finding.severity
-                    ),
-                    key=lambda severity: root._SEVERITY_ORDER[severity],
-                    default=None,
-                ),
+                severity=severity,
+                severity_source=severity_source,
                 confidence=max(
                     finding.confidence for finding in classification_findings
                 ),
