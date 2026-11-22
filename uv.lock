@@ -617,7 +617,7 @@ wheels = [
 
 [[package]]
 name = "editarr"
-version = "0.1.3"
+version = "0.1.9"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
