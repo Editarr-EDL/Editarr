@@ -4,7 +4,7 @@ from math import isclose
 
 from scanner.db import ScanFindingRow
 from scanner.mcf import TimingInterval, map_affine_range
-from scanner.models import ReviewFilterInput
+from scanner.models import ReviewFilterInput, SavedReviewFilter
 from scanner.settings.filter_defaults import fill_filter_defaults
 
 from .community_import_targets import project_review_channel, verified_target
@@ -123,3 +123,23 @@ def track_manual_edits(db, review, replacement, synchronization, memberships) ->
                 if _same_retime(_timing(row), expected):
                     continue
         row.manually_edited = True
+
+
+def label_edited(row) -> bool:
+    """Whether a stored filter's label differs from its source finding's label."""
+    finding = row.source_finding
+    if finding is None:
+        return False
+    return (row.label or None) != (finding.label or None)
+
+
+def with_label_provenance(review, filters) -> list[SavedReviewFilter]:
+    """Attach each effective filter's label provenance from its stored row."""
+    stored = {value.id: value for value in review.filters}
+    return [
+        SavedReviewFilter(
+            **value.model_dump(),
+            label_edited=value.id in stored and label_edited(stored[value.id]),
+        )
+        for value in filters
+    ]

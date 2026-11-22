@@ -1020,6 +1020,14 @@ UTC `imported_at` and have no execution duration; import creation is a separate 
   or reuses the target version's Manual evidence scan and returns assigned provenance;
   a failed or discarded draft creates no source finding. There are no immediate
   Manual-finding endpoints.
+- Label provenance: each `SavedReview.filters` and `base_filters` entry is a `SavedReviewFilter`, a
+  `ReviewFilter` plus read-only `label_edited: boolean`. It is `true` when the stored
+  label differs from the label of the scan finding the filter was copied from (a
+  person relabelled it), and `false` when it matches or the source finding is
+  unavailable. It does not reflect other edits such as severity, action, or timing, and
+  hand-added filters keep their Manual scan finding's label, so it is `false` for them
+  (identify those by their source scan's `manual` origin). Clients may echo the field
+  back in `ReviewFilterInput`; it is ignored, and the server recomputes it.
 - Review previews and export: review-filter preview routes live under
   `/api/reviews/{review_id}/filters/{filter_id}`. `POST
   /api/reviews/{review_id}/edl` takes the expected review `revision`, exports only

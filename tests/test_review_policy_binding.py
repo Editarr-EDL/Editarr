@@ -15,8 +15,11 @@ from tests.test_review_policy_view import policy_review as policy_review
 
 
 def body(detail):
+    """A save request from a review response (read-only filter provenance dropped)."""
     return {
-        field: detail[field]
+        field: (
+            [_input(value) for value in detail[field]] if field == "filters" else detail[field]
+        )
         for field in (
             "revision",
             "name",
@@ -29,6 +32,10 @@ def body(detail):
             "policy_revision",
         )
     }
+
+
+def _input(review_filter):
+    return {key: value for key, value in review_filter.items() if key != "label_edited"}
 
 
 def tokens(detail):

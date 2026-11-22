@@ -164,3 +164,36 @@ def test_pure_retime_keeps_legacy_unknown_and_draft_adjustment_is_recorded(retim
     draft = saved.filters[0].model_copy(update={"start_seconds": 25.5})
     _save(db, saved, [draft])
     assert _flags(db, review.id) == {1: (None, True)}
+
+
+def test_saved_filters_report_label_edits_separately_from_other_edits():
+    with review_db() as db:
+        review = _create(db, memberships=[ReviewScanMembership(scan_id="scan", role="audio")])
+        [generated] = review.filters
+        source_label = db.get(ScanFindingRow, 1).label
+        assert generated.label == source_label and generated.label_edited is False
+
+        # Another field changed: the filter is manually edited, but its label is not.
+        retimed = _save(db, review, [generated.model_copy(update={"start_seconds": 1.25})])
+        assert retimed.filters[0].label_edited is False
+        assert _flags(db, review.id) == {1: (False, True)}
+
+        relabelled = _save(
+            db, retimed, [retimed.filters[0].model_copy(update={"label": "my own label"})]
+        )
+        assert relabelled.filters[0].label == "my own label"
+        assert relabelled.filters[0].label_edited is True
+        # Clients echo the flag back; it is read-only and never stored or trusted.
+        echoed = _save(
+            db,
+            relabelled,
+            [
+                relabelled.filters[0].model_copy(
+                    update={"label": source_label, "label_edited": True}
+                )
+            ],
+        )
+        assert echoed.filters[0].label_edited is False
+        assert "label_edited" not in ReviewFilterInput.model_validate(
+            echoed.filters[0].model_dump()
+        ).model_dump()

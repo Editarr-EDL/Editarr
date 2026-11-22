@@ -267,7 +267,10 @@ class ReviewAccess:
         from .review_policy import validate_policy_draft
 
         base_draft = validate_policy_draft(self.db, self.db.get(SavedReviewRow, review_id), draft)
-        before = {value.id: value.model_dump() for value in stored.base_filters}
+        # Read-only provenance is not editable content and must not count as a change.
+        before = {
+            value.id: value.model_dump(exclude={"label_edited"}) for value in stored.base_filters
+        }
         after = {value.id: value.model_dump() for value in base_draft}
         common = before.keys() & after.keys()
         cue_fields = {

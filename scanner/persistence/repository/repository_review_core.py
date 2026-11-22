@@ -50,6 +50,7 @@ from .repository_rows import (
     _scan_from_row,
     _utc,
 )
+from .review_filter_tracking import with_label_provenance
 from .review_policy import prepare_review_policy
 from .review_policy_display import locked_severities
 from .review_repairs import repair_records_by_review
@@ -83,8 +84,8 @@ def _review_detail(
             ReviewScanReference(scan=_scan_from_row(membership.scan), role=membership.role)
             for membership in row.memberships
         ],
-        filters=list(prepared.filters),
-        base_filters=list(prepared.base_filters),
+        filters=with_label_provenance(row, prepared.filters),
+        base_filters=with_label_provenance(row, prepared.base_filters),
         policy_owner_id=prepared.owner_id,
         policy_revision=prepared.policy_revision,
         policy_missing_evidence=list(prepared.missing_evidence),

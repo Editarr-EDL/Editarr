@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .model_core import (
     MAX_PERSISTED_INTEGER,
@@ -77,11 +77,24 @@ class ReviewFilter(BaseModel):
         return self
 
 
+class SavedReviewFilter(ReviewFilter):
+    """A saved review's filter with read-only edit provenance."""
+
+    # Accept plain ReviewFilter values (label_edited then defaults to False).
+    model_config = ConfigDict(from_attributes=True)
+
+    # True when the stored label differs from the label of the scan finding the filter
+    # was copied from, i.e. someone changed it. False when it matches, and when the
+    # source finding is unavailable (provenance unknown). A hand-added filter's label is
+    # its source finding's, so it is False there too; its scan origin is "manual".
+    label_edited: bool = False
+
+
 class SavedReview(SavedReviewSummary):
     memberships: list[ReviewScanMembership]
     scans: list[ReviewScanReference]
-    filters: list[ReviewFilter]
-    base_filters: list[ReviewFilter] = Field(default_factory=list)
+    filters: list[SavedReviewFilter]
+    base_filters: list[SavedReviewFilter] = Field(default_factory=list)
     policy_owner_id: int | None = None
     policy_revision: int = Field(default=0, ge=0)
     policy_missing_evidence: list[ReviewFilter] = Field(default_factory=list)
@@ -96,6 +109,14 @@ class SavedReview(SavedReviewSummary):
 
 class ReviewFilterInput(ReviewFilter, ReviewWriteModel):
     id: ReviewFilterId
+
+    @model_validator(mode="before")
+    @classmethod
+    def ignore_read_only_provenance(cls, value):
+        """Accept and drop SavedReviewFilter's read-only flag when a client echoes it."""
+        if isinstance(value, dict) and "label_edited" in value:
+            value = {key: item for key, item in value.items() if key != "label_edited"}
+        return value
     start_seconds: float = Field(ge=0, allow_inf_nan=False)
     end_seconds: float | None = Field(allow_inf_nan=False)
     confidence: float | None = Field(ge=0, le=1, allow_inf_nan=False)
