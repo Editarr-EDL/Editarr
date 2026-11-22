@@ -113,6 +113,7 @@
     "McfImportOptions": [
       "target",
       "name",
+      "stage_for_verification",
       "ignore_errors",
       "synchronization",
       "mcf_material_end_seconds",
@@ -197,6 +198,7 @@
     "mcf_import_options": {
       "target": {"source": "jellyfin", "item_id": "test", "media_source_id": null},
       "name": "Synchronized import",
+      "stage_for_verification": false,
       "ignore_errors": false,
       "synchronization": {
         "start_seconds": 0.0,

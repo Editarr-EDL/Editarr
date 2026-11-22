@@ -17,6 +17,7 @@ from scanner.persistence.repository.activity_ownership import (
     ActivityOwner,
     assign_awaiting_activity,
 )
+from scanner.persistence.repository.media_identity_store import get_version, review_version_id
 from scanner.persistence.repository.review_deletion import PublishedReviewDeletionBlocked
 from scanner.persistence.rows.db_policies import ExportScope
 from tests.activity_migration_support import build_activity_database, sidecar_state
@@ -210,6 +211,14 @@ def test_existing_owner_workflows_run_on_an_upgraded_database(tmp_path):
             )
             assert not (media / "Movie.edl").exists()
             review = db.get(SavedReviewRow, "review-legacy-001")
+            version = get_version(db, review_version_id(db, review.id))
+            assert version.content_sha256 is None
+            with pytest.raises(repository.ReviewMembershipError, match="physical media version"):
+                repository.export_saved_review_edl(db, review.id, review.revision)
+            db.rollback()
+            # The fixture owns the original media bytes, so its exact identity is known.
+            version.content_sha256 = _sha(media / "Movie.mkv")
+            db.commit()
             exported = repository.export_saved_review_edl(db, review.id, review.revision)
             assert exported.exported_format_revision == review.edl_content_revision
             assert _sha(media / "Movie.mcf") == mcf_hash
