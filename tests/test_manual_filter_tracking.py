@@ -197,3 +197,57 @@ def test_saved_filters_report_label_edits_separately_from_other_edits():
         assert "label_edited" not in ReviewFilterInput.model_validate(
             echoed.filters[0].model_dump()
         ).model_dump()
+
+
+def _statements_for_detail(db, review_id):
+    from sqlalchemy import event
+
+    from scanner.db import SavedReviewRow
+    from scanner.persistence.repository.repository_review_core import _review_detail
+
+    statements = []
+
+    def count(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+
+    db.expire_all()
+    row = db.get(SavedReviewRow, review_id)
+    event.listen(db.get_bind(), "before_cursor_execute", count)
+    try:
+        detail = _review_detail(db, row)
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", count)
+    return detail, statements
+
+
+def test_label_provenance_uses_a_constant_number_of_queries(monkeypatch):
+    from scanner.persistence.repository import review_filter_tracking
+
+    # A smaller chunk also exercises splitting the IN list across queries.
+    monkeypatch.setattr(review_filter_tracking, "_SOURCE_QUERY_CHUNK", 1000)
+    counts = {}
+    with review_db() as db:
+        for findings in (3, 1200):
+            db.query(ScanFindingRow).filter(ScanFindingRow.id > 1).delete()
+            for index in range(findings - 1):
+                db.add(
+                    ScanFindingRow(
+                        scan_id="scan", category="language", subcategory="swearing",
+                        start_seconds=3 + index * 0.01, end_seconds=3.005 + index * 0.01,
+                        label=f"word {index}", source="audio", selected=True,
+                        edit_action="mute",
+                    )
+                )
+            db.commit()
+            review = _create(db, memberships=[ReviewScanMembership(scan_id="scan", role="audio")])
+            assert len(review.filters) == findings
+            detail, statements = _statements_for_detail(db, review.id)
+            assert not any(value.label_edited for value in detail.filters)
+            counts[findings] = (
+                sum("FROM scan_findings" in sql for sql in statements),
+                len(statements),
+            )
+
+    # One batched source-finding query per 1000 filters, never one per filter.
+    small_findings, small_total = counts[3]
+    assert counts[1200] == (small_findings + 1, small_total + 1)

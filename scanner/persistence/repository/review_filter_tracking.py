@@ -125,21 +125,42 @@ def track_manual_edits(db, review, replacement, synchronization, memberships) ->
         row.manually_edited = True
 
 
-def label_edited(row) -> bool:
-    """Whether a stored filter's label differs from its source finding's label."""
-    finding = row.source_finding
-    if finding is None:
-        return False
-    return (row.label or None) != (finding.label or None)
+# Source-finding ids per IN query, well below SQLite's bound-variable limit.
+_SOURCE_QUERY_CHUNK = 500
 
 
-def with_label_provenance(review, filters) -> list[SavedReviewFilter]:
-    """Attach each effective filter's label provenance from its stored row."""
-    stored = {value.id: value for value in review.filters}
-    return [
-        SavedReviewFilter(
-            **value.model_dump(),
-            label_edited=value.id in stored and label_edited(stored[value.id]),
+def load_source_findings(db, review) -> dict[int, ScanFindingRow]:
+    """Load every stored filter's source finding in a few batched queries.
+
+    Keep the returned mapping alive while building a response: the session's identity
+    map then answers each later ``db.get(ScanFindingRow, ...)`` without another query.
+    """
+    finding_ids = sorted({row.source_finding_id for row in review.filters if row.source_finding_id})
+    loaded: dict[int, ScanFindingRow] = {}
+    for start in range(0, len(finding_ids), _SOURCE_QUERY_CHUNK):
+        chunk = finding_ids[start : start + _SOURCE_QUERY_CHUNK]
+        loaded.update(
+            (finding.id, finding)
+            for finding in db.query(ScanFindingRow).filter(ScanFindingRow.id.in_(chunk))
         )
+    return loaded
+
+
+def label_edits(review, findings: dict[int, ScanFindingRow]) -> dict[str, bool]:
+    """Map each stored filter id to whether its label differs from its source finding's.
+
+    A filter whose source finding is unavailable reports False.
+    """
+    return {
+        row.id: row.source_finding_id in findings
+        and (row.label or None) != (findings[row.source_finding_id].label or None)
+        for row in review.filters
+    }
+
+
+def with_label_provenance(filters, edits: dict[str, bool]) -> list[SavedReviewFilter]:
+    """Attach precomputed label provenance (see :func:`label_edits`) to response filters."""
+    return [
+        SavedReviewFilter(**value.model_dump(), label_edited=edits.get(value.id, False))
         for value in filters
     ]
