@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mockApi } from "./app-fixtures";
+import { chooseWorkflowStep } from "./workflow-actions";
 
 test.skip(!process.env.EDITARR_CAPTURE_WEBSITE, "Opt-in website asset capture");
 
@@ -9,12 +10,14 @@ test("capture Editarr for the website with example media", async ({ page }) => {
   await mockApi(page);
   await page.goto("/#/library/movies/item/movie-1");
   await expect(page.getByRole("heading", { name: "Example Movie", exact: true })).toBeVisible();
+  await chooseWorkflowStep(page, "Review");
   const panel = page.locator(".saved-review-panel");
   await panel.getByRole("button", { name: "New Review", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New Review", exact: true });
   await dialog.getByLabel("New review name").fill("Movie night");
   await dialog.getByRole("button", { name: "Start new review" }).click();
   await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
+  await panel.getByLabel("Sort", { exact: true }).selectOption("category");
   await expect(panel.getByRole("heading", { name: "Movie night", exact: true })).toBeVisible();
   await expect(panel.locator(".hierarchy-subcategory button").first()).toBeVisible();
   await expect(panel.getByRole("button", { name: "Save Review", exact: true })).toBeEnabled();
