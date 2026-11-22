@@ -52,11 +52,15 @@ def scan_list_loading():
 
 
 def _scan_from_row(
-    row: ScanRow, *, finding_count: int = 0, community_approvals: list | None = None
+    row: ScanRow,
+    *,
+    finding_count: int = 0,
+    community_approvals: list | None = None,
+    community_pending: list | None = None,
 ) -> Scan:
     """Convert a scan database row and supplied finding count to the API model.
 
-    ``community_approvals`` accepts batch-loaded approvals; otherwise they are queried.
+    List reads can supply batch-loaded community approvals and pending targets.
     """
     from .community_import_targets import scan_pending_targets, scan_target_approvals
     from .version_reuse import approved_reuse, source_pending_reuse
@@ -181,7 +185,9 @@ def _scan_from_row(
         community_approvals=(
             scan_target_approvals(row) if community_approvals is None else community_approvals
         ),
-        community_pending_targets=scan_pending_targets(row),
+        community_pending_targets=(
+            scan_pending_targets(row) if community_pending is None else community_pending
+        ),
     )
 
 

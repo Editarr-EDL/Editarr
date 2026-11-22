@@ -2,15 +2,18 @@
 
 import json
 import sqlite3
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
-from scanner.db import initialize_sqlite_connection
+from scanner.db import SavedReviewRow, initialize_sqlite_connection
 from scanner.persistence.migrations import adoption
+from scanner.persistence.repository.media_identity_store import get_version, review_version_id
 from scanner.repository import get_saved_review, list_saved_reviews
+from scanner.runtime.media_fingerprints import content_digest
 from tests.activity_migration_support import _upgrade
 from tests.test_review_policy_migration import _built
 
@@ -39,6 +42,17 @@ def broken_review(tmp_path, monkeypatch):
     with Session(engine) as database:
         yield database, "review-legacy-001"
     engine.dispose()
+
+
+@pytest.fixture
+def broken_review_with_original_file(broken_review):
+    database, review_id = broken_review
+    review = database.get(SavedReviewRow, review_id)
+    version = get_version(database, review_version_id(database, review_id))
+    # The synthetic file is known to be the original used by this fixture.
+    version.content_sha256 = content_digest(Path(review.media_item.path))
+    database.commit()
+    return database, review_id
 
 
 def test_list_flags_broken_review_without_loading_missing_scans(broken_review):
@@ -90,12 +104,12 @@ def test_recovery_counts_and_drops_lost_credits_and_evidence(broken_review):
     assert repair_summary(database, review_id) is None
 
 
-def test_recover_keeps_manual_cues_and_then_saves_and_exports(broken_review):
+def test_recover_keeps_manual_cues_and_then_saves_and_exports(broken_review_with_original_file):
     from scanner.models import ReviewSave
     from scanner.persistence.repository.review_repairs import recover_review
     from scanner.repository import export_saved_review_edl, save_saved_review
 
-    database, review_id = broken_review
+    database, review_id = broken_review_with_original_file
     recovered = recover_review(database, review_id)
     assert recovered.repair is None
     assert len(recovered.filters) == 1
@@ -119,16 +133,14 @@ def test_recover_keeps_manual_cues_and_then_saves_and_exports(broken_review):
 
 @pytest.mark.parametrize("mapped", [False, True])
 def test_recovered_review_can_delete_its_existing_export_and_replace_it(
-    broken_review, monkeypatch, mapped
+    broken_review_with_original_file, monkeypatch, mapped
 ):
-    from pathlib import Path
-
     from scanner.db import MediaItemExportRow
     from scanner.models import ExportFormat
     from scanner.persistence.repository.review_repairs import recover_review
     from scanner.repository import delete_library_item_export, export_saved_review_edl
 
-    database, review_id = broken_review
+    database, review_id = broken_review_with_original_file
     row = database.query(MediaItemExportRow).filter_by(review_id=review_id).one()
     media = row.media_item
     destination = Path(media.path).with_suffix(".edl")

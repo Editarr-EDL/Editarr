@@ -6922,6 +6922,470 @@
         ]
       }
     },
+    "/api/editarr-items/legacy/{item_id}": {
+      "get": {
+        "summary": "Legacy Item",
+        "description": "Resolve an old bookmark from saved bindings, including non-current Jellyfin IDs.",
+        "operationId": "legacy_item_api_editarr_items_legacy__item_id__get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "library_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Library Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/editarr-items/{title_id}": {
+      "get": {
+        "summary": "Stable Item",
+        "description": "Look up a stable title, projecting only the viewer's reachable bindings.",
+        "operationId": "stable_item_api_editarr_items__title_id__get",
+        "parameters": [
+          {
+            "name": "title_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Title Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/editarr-items/{title_id}/versions": {
+      "post": {
+        "summary": "Stable Version",
+        "description": "Assign a version ID to a selected, authorized and readable live source.",
+        "operationId": "stable_version_api_editarr_items__title_id__versions_post",
+        "parameters": [
+          {
+            "name": "title_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Title Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionTarget"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/media-fingerprints/queue": {
+      "get": {
+        "summary": "Fingerprint Queue",
+        "description": "Report the caller's active fingerprint work.",
+        "operationId": "fingerprint_queue_api_media_fingerprints_queue_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FingerprintActivity"
+                  },
+                  "type": "array",
+                  "title": "Response Fingerprint Queue Api Media Fingerprints Queue Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/media-versions/{version_id}/reuse/transcript-status": {
+      "post": {
+        "summary": "Transcript Status",
+        "description": "Report transcript readiness for an authorized source and target track.",
+        "operationId": "transcript_status_api_media_versions__version_id__reuse_transcript_status_post",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionReuseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionReuseTranscriptStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/media-versions/{version_id}/reuse/preview": {
+      "post": {
+        "summary": "Preview Version Reuse",
+        "description": "Prepare an actor/file-bound preview without changing their reviews or scans.",
+        "operationId": "preview_version_reuse_api_media_versions__version_id__reuse_preview_post",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionReuseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionReusePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/media-versions/{version_id}/reuse/approve": {
+      "post": {
+        "summary": "Approve Version Reuse",
+        "description": "Attach only the confirmed mapped cues to an authorized exact target.",
+        "operationId": "approve_version_reuse_api_media_versions__version_id__reuse_approve_post",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionReuseApproval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionReuseResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/media/subtitles/publications": {
+      "get": {
+        "summary": "List Subtitle Publications",
+        "description": "Discover verified sidecars without requiring a saved review to be selected.",
+        "operationId": "list_subtitle_publications_api_media_subtitles_publications_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "const": "jellyfin",
+              "type": "string",
+              "default": "jellyfin",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "media_source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitlePublications"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
     "/api/scans": {
       "post": {
         "summary": "Api Enqueue Scan",
@@ -7571,6 +8035,22 @@
               "type": "string",
               "default": "desc",
               "title": "Direction"
+            }
+          },
+          {
+            "name": "stable_version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stable Version Id"
             }
           }
         ],
@@ -9025,6 +9505,180 @@
         ]
       }
     },
+    "/api/reviews/{review_id}/subtitles/sources": {
+      "post": {
+        "summary": "Subtitle Sources",
+        "description": "Return only admissible source metadata; local filenames are never source identifiers.",
+        "operationId": "subtitle_sources_api_reviews__review_id__subtitles_sources_post",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubtitleSourcesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitleSources"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/reviews/{review_id}/subtitles/preview": {
+      "post": {
+        "summary": "Subtitle Preview",
+        "description": "Render a capped plain-text sample from the exact saved review and source.",
+        "operationId": "subtitle_preview_api_reviews__review_id__subtitles_preview_post",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubtitleSourceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitlePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/reviews/{review_id}/subtitles/publish": {
+      "post": {
+        "summary": "Subtitle Publish",
+        "description": "Require the exact preview, then reauthorize and atomically publish one sidecar.",
+        "operationId": "subtitle_publish_api_reviews__review_id__subtitles_publish_post",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubtitlePublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitlePublication"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
     "/api/reviews/{review_id}/deletion": {
       "get": {
         "summary": "Api Preview Review Deletion",
@@ -9961,7 +10615,7 @@
     "/api/library-items/{item_id}/scans": {
       "get": {
         "summary": "Api List Library Item Scans",
-        "description": "List scans associated with a Jellyfin item.",
+        "description": "List visible scans. Explicit links require access to the current target as well.",
         "operationId": "api_list_library_item_scans_api_library_items__item_id__scans_get",
         "parameters": [
           {
@@ -9971,6 +10625,16 @@
             "schema": {
               "type": "string",
               "title": "Item Id"
+            }
+          },
+          {
+            "name": "associated_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Associated Only"
             }
           }
         ],
@@ -14409,6 +15073,11 @@
             "type": "boolean",
             "title": "Confirmed",
             "default": false
+          },
+          "stage_for_verification": {
+            "type": "boolean",
+            "title": "Stage For Verification",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -14459,6 +15128,44 @@
               }
             ],
             "title": "Media Source Id"
+          },
+          "stable_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stable Version Id"
+          },
+          "target_generation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Generation"
+          },
+          "audio_track_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 127.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Track Index"
           },
           "review_id": {
             "anyOf": [
@@ -14580,7 +15287,14 @@
       "EdlImportResult": {
         "properties": {
           "review": {
-            "$ref": "#/components/schemas/SavedReview"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "scan": {
             "$ref": "#/components/schemas/Scan"
@@ -15573,6 +16287,73 @@
         ],
         "title": "FilterSelectionRule"
       },
+      "FingerprintActivity": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "item_name": {
+            "type": "string",
+            "title": "Item Name"
+          },
+          "version_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Name"
+          },
+          "bytes_read": {
+            "type": "integer",
+            "title": "Bytes Read"
+          },
+          "bytes_total": {
+            "type": "integer",
+            "title": "Bytes Total"
+          },
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "media_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Source Id"
+          },
+          "source_scan_id": {
+            "type": "string",
+            "title": "Source Scan Id"
+          },
+          "reading": {
+            "type": "boolean",
+            "title": "Reading",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "item_name",
+          "version_name",
+          "bytes_read",
+          "bytes_total",
+          "item_id",
+          "media_source_id",
+          "source_scan_id"
+        ],
+        "title": "FingerprintActivity"
+      },
       "FreshKeyRequest": {
         "properties": {
           "reauthentication": {
@@ -16483,6 +17264,19 @@
               }
             ],
             "title": "Media Source Id"
+          },
+          "stable_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stable Version Id"
           }
         },
         "additionalProperties": false,
@@ -17314,7 +18108,14 @@
       "McfImportResult": {
         "properties": {
           "review": {
-            "$ref": "#/components/schemas/SavedReview"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "scan": {
             "$ref": "#/components/schemas/Scan"
@@ -18714,6 +19515,34 @@
         ],
         "title": "PublicationRequest"
       },
+      "PublishedSubtitle": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "forced": {
+            "type": "boolean",
+            "title": "Forced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "label",
+          "format",
+          "forced"
+        ],
+        "title": "PublishedSubtitle"
+      },
       "QuickConnectAttemptResponse": {
         "properties": {
           "state": {
@@ -19022,6 +19851,66 @@
           "confirmed"
         ],
         "title": "RestoreConfirmation"
+      },
+      "ReuseAnchor": {
+        "properties": {
+          "source_seconds": {
+            "type": "number",
+            "maximum": 172800.0,
+            "minimum": 0.0,
+            "title": "Source Seconds"
+          },
+          "target_seconds": {
+            "type": "number",
+            "maximum": 172800.0,
+            "minimum": 0.0,
+            "title": "Target Seconds"
+          },
+          "segment": {
+            "type": "integer",
+            "maximum": 4095.0,
+            "minimum": 0.0,
+            "title": "Segment",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_seconds",
+          "target_seconds"
+        ],
+        "title": "ReuseAnchor",
+        "description": "One matched playback time, scoped to a continuous interval."
+      },
+      "ReviewAudioSource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ReviewAudioSource"
       },
       "ReviewCommunityRepair": {
         "properties": {
@@ -21185,6 +22074,33 @@
             ],
             "title": "Imported At"
           },
+          "reuse_pending": {
+            "type": "boolean",
+            "title": "Reuse Pending",
+            "default": false
+          },
+          "stable_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stable Version Id"
+          },
+          "verified_from_scan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified From Scan Id"
+          },
           "scan_mode": {
             "$ref": "#/components/schemas/ScanMode",
             "default": "content"
@@ -21531,6 +22447,13 @@
             },
             "type": "array",
             "title": "Community Approvals"
+          },
+          "community_pending_targets": {
+            "items": {
+              "$ref": "#/components/schemas/CommunityTargetApproval"
+            },
+            "type": "array",
+            "title": "Community Pending Targets"
           }
         },
         "type": "object",
@@ -22220,6 +23143,33 @@
             ],
             "title": "Imported At"
           },
+          "reuse_pending": {
+            "type": "boolean",
+            "title": "Reuse Pending",
+            "default": false
+          },
+          "stable_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stable Version Id"
+          },
+          "verified_from_scan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified From Scan Id"
+          },
           "scan_mode": {
             "$ref": "#/components/schemas/ScanMode",
             "default": "content"
@@ -22566,6 +23516,13 @@
             },
             "type": "array",
             "title": "Community Approvals"
+          },
+          "community_pending_targets": {
+            "items": {
+              "$ref": "#/components/schemas/CommunityTargetApproval"
+            },
+            "type": "array",
+            "title": "Community Pending Targets"
           },
           "queue_id": {
             "type": "integer",
@@ -23230,6 +24187,425 @@
         "title": "StatusChange",
         "description": "The account's status before and after linking.\n\nLinking enables an account disabled for having no link (`cause` `unlinked`);\nany other disable cause stays."
       },
+      "SubtitlePreview": {
+        "properties": {
+          "preview_token": {
+            "type": "string",
+            "title": "Preview Token"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SubtitleSource"
+          },
+          "cues": {
+            "items": {
+              "$ref": "#/components/schemas/SubtitlePreviewCue"
+            },
+            "type": "array",
+            "title": "Cues"
+          },
+          "changed_cues": {
+            "type": "integer",
+            "title": "Changed Cues"
+          },
+          "unchanged_cues": {
+            "type": "integer",
+            "title": "Unchanged Cues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "preview_token",
+          "source",
+          "cues",
+          "changed_cues",
+          "unchanged_cues"
+        ],
+        "title": "SubtitlePreview"
+      },
+      "SubtitlePreviewCue": {
+        "properties": {
+          "start_seconds": {
+            "type": "number",
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "type": "number",
+            "title": "End Seconds"
+          },
+          "original": {
+            "type": "string",
+            "title": "Original"
+          },
+          "filtered": {
+            "type": "string",
+            "title": "Filtered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_seconds",
+          "end_seconds",
+          "original",
+          "filtered"
+        ],
+        "title": "SubtitlePreviewCue"
+      },
+      "SubtitlePublication": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SubtitleSource"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "replaced": {
+            "type": "boolean",
+            "title": "Replaced"
+          },
+          "refresh_pending": {
+            "type": "boolean",
+            "title": "Refresh Pending",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "filename",
+          "replaced"
+        ],
+        "title": "SubtitlePublication"
+      },
+      "SubtitlePublications": {
+        "properties": {
+          "published_subtitles": {
+            "items": {
+              "$ref": "#/components/schemas/PublishedSubtitle"
+            },
+            "type": "array",
+            "title": "Published Subtitles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "published_subtitles"
+        ],
+        "title": "SubtitlePublications"
+      },
+      "SubtitlePublishRequest": {
+        "properties": {
+          "policy_owner_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Owner Id"
+          },
+          "policy_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Revision"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "audio_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Source Id"
+          },
+          "source_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Id"
+          },
+          "preview_token": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Preview Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "source_id",
+          "preview_token"
+        ],
+        "title": "SubtitlePublishRequest"
+      },
+      "SubtitleSource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "external",
+              "embedded",
+              "transcript"
+            ],
+            "title": "Kind"
+          },
+          "forced": {
+            "type": "boolean",
+            "title": "Forced",
+            "default": false
+          },
+          "sdh": {
+            "type": "boolean",
+            "title": "Sdh",
+            "default": false
+          },
+          "supported": {
+            "type": "boolean",
+            "title": "Supported",
+            "default": true
+          },
+          "recommended": {
+            "type": "boolean",
+            "title": "Recommended",
+            "default": false
+          },
+          "published_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Filename"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "language",
+          "format",
+          "kind"
+        ],
+        "title": "SubtitleSource"
+      },
+      "SubtitleSourceRequest": {
+        "properties": {
+          "policy_owner_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Owner Id"
+          },
+          "policy_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Revision"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "audio_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Source Id"
+          },
+          "source_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "source_id"
+        ],
+        "title": "SubtitleSourceRequest"
+      },
+      "SubtitleSources": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SubtitleSource"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "scan_required",
+                  "choose_audio"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback"
+          },
+          "audio_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewAudioSource"
+            },
+            "type": "array",
+            "title": "Audio Sources"
+          },
+          "audio_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Source Id"
+          },
+          "published_subtitles": {
+            "items": {
+              "$ref": "#/components/schemas/PublishedSubtitle"
+            },
+            "type": "array",
+            "title": "Published Subtitles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sources",
+          "fallback",
+          "audio_sources",
+          "audio_source_id",
+          "published_subtitles"
+        ],
+        "title": "SubtitleSources"
+      },
+      "SubtitleSourcesRequest": {
+        "properties": {
+          "policy_owner_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Owner Id"
+          },
+          "policy_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Revision"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "audio_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Source Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "title": "SubtitleSourcesRequest"
+      },
       "SuccessorRefusal": {
         "type": "string",
         "enum": [
@@ -23542,6 +24918,369 @@
           "artifact_schema"
         ],
         "title": "VersionInformation"
+      },
+      "VersionReuseApproval": {
+        "properties": {
+          "source_scan_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Scan Id"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ReviewTargetRequest"
+          },
+          "channels": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "audio",
+                "video"
+              ]
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Channels"
+          },
+          "audio_track_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 127.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Track Index"
+          },
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/ReuseAnchor"
+            },
+            "type": "array",
+            "maxItems": 4096,
+            "title": "Anchors"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "original",
+              "manual",
+              "transcript"
+            ],
+            "title": "Method",
+            "default": "manual"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Token"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_scan_id",
+          "target",
+          "channels",
+          "token",
+          "confirmed"
+        ],
+        "title": "VersionReuseApproval"
+      },
+      "VersionReuseCue": {
+        "properties": {
+          "source_finding_id": {
+            "type": "integer",
+            "title": "Source Finding Id"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "audio",
+              "video",
+              "both"
+            ],
+            "title": "Channel"
+          },
+          "source_start": {
+            "type": "number",
+            "title": "Source Start"
+          },
+          "source_end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source End"
+          },
+          "target_start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Start"
+          },
+          "target_end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_finding_id",
+          "channel",
+          "source_start",
+          "source_end",
+          "target_start",
+          "target_end"
+        ],
+        "title": "VersionReuseCue"
+      },
+      "VersionReusePreview": {
+        "properties": {
+          "source_scan_id": {
+            "type": "string",
+            "title": "Source Scan Id"
+          },
+          "version_id": {
+            "type": "string",
+            "title": "Version Id"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "target_generation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Generation"
+          },
+          "verified_channels": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "audio",
+                "video"
+              ]
+            },
+            "type": "array",
+            "title": "Verified Channels"
+          },
+          "exact": {
+            "type": "boolean",
+            "title": "Exact"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "cues": {
+            "items": {
+              "$ref": "#/components/schemas/VersionReuseCue"
+            },
+            "type": "array",
+            "title": "Cues"
+          },
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/ReuseAnchor"
+            },
+            "type": "array",
+            "title": "Anchors"
+          },
+          "alignment_audio_scan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Audio Scan Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_scan_id",
+          "version_id",
+          "token",
+          "verified_channels",
+          "exact",
+          "issues",
+          "cues",
+          "anchors"
+        ],
+        "title": "VersionReusePreview"
+      },
+      "VersionReuseRequest": {
+        "properties": {
+          "source_scan_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Scan Id"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ReviewTargetRequest"
+          },
+          "channels": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "audio",
+                "video"
+              ]
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Channels"
+          },
+          "audio_track_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 127.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Track Index"
+          },
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/ReuseAnchor"
+            },
+            "type": "array",
+            "maxItems": 4096,
+            "title": "Anchors"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "original",
+              "manual",
+              "transcript"
+            ],
+            "title": "Method",
+            "default": "manual"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_scan_id",
+          "target",
+          "channels"
+        ],
+        "title": "VersionReuseRequest"
+      },
+      "VersionReuseResult": {
+        "properties": {
+          "scan": {
+            "$ref": "#/components/schemas/Scan"
+          },
+          "reused": {
+            "type": "boolean",
+            "title": "Reused"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scan",
+          "reused"
+        ],
+        "title": "VersionReuseResult"
+      },
+      "VersionReuseTranscriptStatus": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "verify_existing": {
+            "type": "boolean",
+            "title": "Verify Existing",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "title": "VersionReuseTranscriptStatus"
+      },
+      "VersionTarget": {
+        "properties": {
+          "cached_only": {
+            "type": "boolean",
+            "title": "Cached Only",
+            "default": false
+          },
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "media_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Source Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id"
+        ],
+        "title": "VersionTarget"
       },
       "VoteChange": {
         "properties": {

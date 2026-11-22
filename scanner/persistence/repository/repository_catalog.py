@@ -25,7 +25,7 @@ from scanner.models import (
 )
 from scanner.pipeline.cache import compute_video_md5
 
-from .community_import_targets import scan_target_approvals_by_scan
+from .community_import_targets import scan_pending_targets_by_scan, scan_target_approvals_by_scan
 from .repository_rows import (
     _scan_finding_from_row,
     _scan_from_row,
@@ -203,6 +203,7 @@ def list_scan_history(db: Session) -> list[Scan]:
         .all()
     )
     approvals = scan_target_approvals_by_scan(db, rows)
+    pending = scan_pending_targets_by_scan(db, rows)
     finding_counts = (
         dict(
             db.query(ScanFindingRow.scan_id, func.count(ScanFindingRow.id))
@@ -218,6 +219,7 @@ def list_scan_history(db: Session) -> list[Scan]:
             row,
             finding_count=finding_counts.get(row.id, 0),
             community_approvals=approvals[row.id],
+            community_pending=pending.get(row.id, []),
         )
         for row in rows
     ]
@@ -249,7 +251,13 @@ def list_scans_for_library_item(
         .all()
     )
     approvals = scan_target_approvals_by_scan(db, rows)
-    return [_scan_from_row(row, community_approvals=approvals[row.id]) for row in rows]
+    pending = scan_pending_targets_by_scan(db, rows)
+    return [
+        _scan_from_row(
+            row, community_approvals=approvals[row.id], community_pending=pending.get(row.id, [])
+        )
+        for row in rows
+    ]
 
 
 def associate_scans_with_media_item(

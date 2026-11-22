@@ -141,6 +141,10 @@ def scan_pending_targets(scan):
         import_id=imported.id,
         media_item_id=scan.media_item_id,
     )
+    return _pending_targets(scan, rows)
+
+
+def _pending_targets(scan, rows):
     return [
         {
             "source": "jellyfin",
@@ -151,6 +155,23 @@ def scan_pending_targets(scan):
         for item in rows
         if (pending := pending_target_channels(item))
     ]
+
+
+def scan_pending_targets_by_scan(db, scans):
+    """Batch pending target lookups and expose only each scan's own media item."""
+    imports = {scan.community_import.id: scan for scan in scans if scan.community_import}
+    rows_by_import = {import_id: [] for import_id in imports}
+    if imports:
+        rows = db.query(CommunityImportTargetRow).filter(
+            CommunityImportTargetRow.import_id.in_(imports),
+        )
+        for row in rows:
+            if row.media_item_id == imports[row.import_id].media_item_id:
+                rows_by_import[row.import_id].append(row)
+    return {
+        scan.id: _pending_targets(scan, rows_by_import[import_id])
+        for import_id, scan in imports.items()
+    }
 
 
 def scan_target_approvals_by_scan(db, scans):
