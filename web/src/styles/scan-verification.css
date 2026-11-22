@@ -95,7 +95,7 @@
 .scan-verification-cues .library-table { min-width: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
 .scan-verification-cues :is(th, td) { padding: 6px 8px; font-size: inherit; white-space: nowrap; }
 .scan-verification-cues th { position: sticky; top: 0; background: #202734; }
-.verification-review video { max-width: 100%; max-height: 16rem; }
+.verification-review :is(audio, video) { max-width: 100%; max-height: 16rem; }
 .verification-queue {
   position: absolute;
   z-index: 2;

@@ -246,6 +246,7 @@ test("opens the account menu from the brand row and reaches My Profile", async (
   const menu = page.getByRole("menu");
   await expect(menu).toContainText("owner");
   await expect(menu.getByRole("menuitem", { name: "My Profile" })).toBeFocused();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expectNoAccessibilityViolations(page);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);

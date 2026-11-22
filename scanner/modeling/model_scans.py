@@ -128,6 +128,13 @@ class ScanStageCoverage(BaseModel):
     sampling_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 
+class ScanVerificationCoverage(BaseModel):
+    """Source finding IDs covered by a derived scan, with totals per source channel."""
+
+    source_counts: dict[Literal["audio", "video"], int]
+    covered_finding_ids: dict[Literal["audio", "video"], list[int]]
+
+
 class Scan(BaseModel):
     """A Editarr scan, numbered independently for each Jellyfin video item."""
 
@@ -141,6 +148,7 @@ class Scan(BaseModel):
     reuse_pending: bool = False
     stable_version_id: str | None = None
     verified_from_scan_id: str | None = None
+    verification_coverage: ScanVerificationCoverage | None = None
     scan_mode: ScanMode = ScanMode.CONTENT
     release_version: str | None = None
     scanner_behavior_version: str | None = None

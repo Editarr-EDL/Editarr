@@ -32,6 +32,7 @@ from .repository_rows import (
     _scan_queue_from_row,
     scan_list_loading,
 )
+from .scan_verification_coverage import verification_coverage_by_scan
 
 
 def find_filter_candidates(
@@ -204,6 +205,7 @@ def list_scan_history(db: Session) -> list[Scan]:
     )
     approvals = scan_target_approvals_by_scan(db, rows)
     pending = scan_pending_targets_by_scan(db, rows)
+    coverage = verification_coverage_by_scan(db, rows)
     finding_counts = (
         dict(
             db.query(ScanFindingRow.scan_id, func.count(ScanFindingRow.id))
@@ -220,6 +222,7 @@ def list_scan_history(db: Session) -> list[Scan]:
             finding_count=finding_counts.get(row.id, 0),
             community_approvals=approvals[row.id],
             community_pending=pending.get(row.id, []),
+            verification_coverage=coverage,
         )
         for row in rows
     ]
@@ -252,9 +255,13 @@ def list_scans_for_library_item(
     )
     approvals = scan_target_approvals_by_scan(db, rows)
     pending = scan_pending_targets_by_scan(db, rows)
+    coverage = verification_coverage_by_scan(db, rows)
     return [
         _scan_from_row(
-            row, community_approvals=approvals[row.id], community_pending=pending.get(row.id, [])
+            row,
+            community_approvals=approvals[row.id],
+            community_pending=pending.get(row.id, []),
+            verification_coverage=coverage,
         )
         for row in rows
     ]

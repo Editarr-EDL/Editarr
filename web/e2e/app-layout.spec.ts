@@ -12,7 +12,6 @@ for (const width of [320, 1440]) {
   test(`limits idle requests and refreshes the queue on demand at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.clock.install();
-    await page.clock.pauseAt(new Date(Date.now() + 1_000));
     const requests: string[] = [];
     page.on("request", (request) => {
       if (new URL(request.url()).pathname.startsWith("/api/")) requests.push(request.url());
@@ -22,13 +21,15 @@ for (const width of [320, 1440]) {
       ["library/movies/item/movie-1", "Example Movie"],
       ["settings/audit", "Audit History"],
     ]) {
+      await page.clock.resume();
       await page.goto(`/?idle-route=${encodeURIComponent(route)}#/${route}`);
       await expect(page.locator(".app-main").getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
       await page.waitForLoadState("networkidle");
+      await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 100));
       const initialRequests = requests.length;
-      await page.clock.fastForward(29_000);
+      await page.clock.fastForward(28_000);
       expect(requests).toHaveLength(initialRequests);
-      await page.clock.fastForward(1_100);
+      await page.clock.fastForward(3_000);
       await expect.poll(() => requests.length).toBeGreaterThan(initialRequests);
       await page.waitForLoadState("networkidle");
       const beforeOpening = requests.length;

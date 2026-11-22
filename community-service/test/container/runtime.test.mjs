@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -147,9 +147,11 @@ test('real Compose isolates mounts and preserves populated data across image rep
     assert.equal(before.Mounts.find(mount => mount.Destination === '/etc/community/service.json').RW, false);
     assert.equal(before.Mounts.find(mount => mount.Destination === '/run/secrets/community_service').RW, false);
     assert.equal(docker('exec', container, 'node', '-p', 'process.versions.node.split(".")[0]'), '24');
+    const migrations = readdirSync(resolve(root, 'community-service/migrations'))
+      .filter(name => name.endsWith('.sql')).sort();
     assert.equal(docker('exec', container, 'node', '--input-type=module', '-e', `
       import assert from 'node:assert/strict'; import { readdirSync, existsSync } from 'node:fs';
-      assert.equal(readdirSync('migrations').filter(name => name.endsWith('.sql')).length, 16);
+      assert.deepEqual(readdirSync('migrations').filter(name => name.endsWith('.sql')).sort(), ${JSON.stringify(migrations)});
       assert.ok(existsSync('dist/runtime/assets/index.html')); console.log('packaged_resources_verified');`), 'packaged_resources_verified');
     const initialOrigin = `http://${compose('port', 'community', '8787')}`;
     await healthy(initialOrigin);

@@ -255,8 +255,13 @@ class ScanCaller:
             "is_own": seen.facts.initiator_id == int(self.access.principal.user_id)
         }
         if isinstance(scan, Scan) and scan.verified_from_scan_id:
-            if scan.verified_from_scan_id not in self.seen([scan.verified_from_scan_id]):
+            source = self.seen([scan.verified_from_scan_id]).get(scan.verified_from_scan_id)
+            if source is None:
                 update["verified_from_scan_id"] = None
+            if source is None or not self.allowed(
+                C.SCANS_FINDINGS_READ, MediaRef(source.media, existence_visible=True)
+            ):
+                update["verification_coverage"] = None
         if isinstance(scan, ScanQueueItem):
             keys = self._job_keys() if jobs is None else jobs
             update["sort_order"] = bisect_left(keys, (scan.sort_order, scan.queue_id))

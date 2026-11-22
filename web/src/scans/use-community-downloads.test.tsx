@@ -32,6 +32,22 @@ it("does not send uncertain choices without deliberate confirmation", async () =
   expect(downloadCommunityFilter).not.toHaveBeenCalled();
 });
 
+it("finishes every selected download before opening the first staged scan", async () => {
+  const firstStaged = { ...success, verificationPending: true };
+  const secondStaged = { ...firstStaged, revisionId: "second", scan: { id: "other" } };
+  const onStaged = vi.fn(() => expect(downloadCommunityFilter).toHaveBeenCalledTimes(2));
+  vi.mocked(downloadCommunityFilter).mockResolvedValueOnce(firstStaged as never)
+    .mockResolvedValueOnce(secondStaged as never);
+  const { result } = renderHook(() => useCommunityDownloads(input, vi.fn(), onStaged));
+
+  await act(() => result.current.start([mixedCandidate, second], [
+    selection("mixed", mixedCandidate.artifactDigest), selection("second", second.artifactDigest),
+  ], false));
+
+  expect(result.current.entries.map((entry) => entry.status)).toEqual(["imported", "imported"]);
+  expect(onStaged).toHaveBeenCalledExactlyOnceWith(firstStaged.scan);
+});
+
 it("cancelled in-flight outcomes remain unknown and reconcile to committed truth", async () => {
   vi.mocked(downloadCommunityFilter).mockImplementation((_input, _key, _choice, _confirmed, signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))));
   const { result } = renderHook(() => useCommunityDownloads(input, vi.fn()));

@@ -6,12 +6,46 @@ import pytest
 
 from scanner.db import ScanRow
 from scanner.http.scan_access import ScanCaller, SeenScan
+from scanner.modeling.model_scans import ScanVerificationCoverage
 from scanner.models import ScanQueueItem
+from scanner.persistence.repository.repository_catalog import get_scan
 from scanner.persistence.repository.scan_jobs import scan_job_facts
+from scanner.security.access.capability_ids import Capability as C
+from scanner.security.access.overrides import OverrideEffect
 from scanner.security.access.vocabulary import Role
 from tests.multi_user_access_support import ALLOWED_MEDIA, OWNER, USER, build_access
 from tests.scan_access_http import guid
 from tests.test_scan_access_http import app as app
+
+
+def test_copy_coverage_requires_access_to_original_findings(app, monkeypatch):
+    source_id, _ = app.seed_scan(USER, "original", status="complete")
+    copy_id, _ = app.seed_scan(USER, "copy", status="complete")
+    with app.accounts.factory() as db:
+        facts = scan_job_facts(db, [source_id, copy_id])
+        source = SeenScan(facts[source_id], ALLOWED_MEDIA, job=True)
+        copy = SeenScan(facts[copy_id], ALLOWED_MEDIA, job=True)
+        coverage = ScanVerificationCoverage(
+            source_counts={"audio": 1, "video": 0},
+            covered_finding_ids={"audio": [1], "video": []},
+        )
+        scan = get_scan(db, copy_id).model_copy(
+            update={
+                "verified_from_scan_id": source_id,
+                "verification_coverage": coverage,
+            }
+        )
+        caller = ScanCaller(
+            build_access(
+                Role.USER,
+                overrides={C.SCANS_FINDINGS_READ: OverrideEffect.DENY},
+            ),
+            db,
+            datetime.now(UTC),
+        )
+        monkeypatch.setattr(caller, "seen", lambda _ids: {source_id: source})
+        assert caller.present(scan, copy).verified_from_scan_id == source_id
+        assert caller.present(scan, copy).verification_coverage is None
 
 
 @pytest.mark.parametrize("credential", ["session", "key"])

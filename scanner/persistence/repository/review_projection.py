@@ -1,6 +1,5 @@
 """Path-free projections of already authorized saved-review results."""
 
-
 from pydantic import BaseModel
 
 
@@ -33,12 +32,17 @@ def project_review(value, *, paths=False, visible=None, scan_visible=None):
             result[key] = None
         elif key == "verified_from_scan_id" and item and scan_visible and not scan_visible(item):
             result[key] = None
+        elif key == "verification_coverage":
+            result[key] = None
         elif not paths and key in {"path", "source_path", "resolved_local_path"}:
             result[key] = None
         elif not paths and key in {"error_message", "progress_message"} and item:
             result[key] = None
         else:
             result[key] = project_review(
-                item, paths=paths, visible=visible, scan_visible=scan_visible,
+                item,
+                paths=paths,
+                visible=visible,
+                scan_visible=scan_visible,
             )
     return result

@@ -22101,6 +22101,16 @@
             ],
             "title": "Verified From Scan Id"
           },
+          "verification_coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanVerificationCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scan_mode": {
             "$ref": "#/components/schemas/ScanMode",
             "default": "content"
@@ -23170,6 +23180,16 @@
             ],
             "title": "Verified From Scan Id"
           },
+          "verification_coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanVerificationCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scan_mode": {
             "$ref": "#/components/schemas/ScanMode",
             "default": "content"
@@ -23913,6 +23933,46 @@
           "source"
         ],
         "title": "ScanStageCoverage"
+      },
+      "ScanVerificationCoverage": {
+        "properties": {
+          "source_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "audio",
+                "video"
+              ]
+            },
+            "type": "object",
+            "title": "Source Counts"
+          },
+          "covered_finding_ids": {
+            "additionalProperties": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "propertyNames": {
+              "enum": [
+                "audio",
+                "video"
+              ]
+            },
+            "type": "object",
+            "title": "Covered Finding Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_counts",
+          "covered_finding_ids"
+        ],
+        "title": "ScanVerificationCoverage",
+        "description": "Source finding IDs covered by a derived scan, with totals per source channel."
       },
       "ScopeBody": {
         "properties": {

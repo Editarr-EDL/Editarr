@@ -162,6 +162,27 @@ def test_hidden_review_and_publish_only_role(app):
     assert unavailable.json()["fallback"] == "scan_required"
 
 
+def test_download_only_review_export_access_can_publish_shared_subtitles(app, monkeypatch):
+    app.client.app.include_router(review_subtitle_api.router)
+    monkeypatch.setattr(review_subtitle_api, "_refresh", lambda *_: True)
+    review, source = _seed(app)
+    for capability in (C.EXPORTS_PERSONAL_PUBLISH_OWN, C.EXPORTS_DEFAULT_PUBLISH):
+        app.accounts.set_override(USER, capability, OverrideEffect.DENY)
+
+    listed = _request(app, review, "sources", {})
+    assert listed.status_code == 200, listed.text
+    selected = {"source_id": listed.json()["sources"][0]["id"]}
+    preview = _request(app, review, "preview", selected)
+    assert preview.status_code == 200, preview.text
+    published = _request(
+        app, review, "publish", selected | {"preview_token": preview.json()["preview_token"]}
+    )
+    assert published.status_code == 200, published.text
+    assert (source.parent / published.json()["filename"]).read_bytes() == _TEXT.replace(
+        b"Damn, ", b""
+    )
+
+
 def test_existing_subtitle_accepts_a_saved_review_without_scan_membership(app):
     app.client.app.include_router(review_subtitle_api.router)
     review, _source = _seed(app)

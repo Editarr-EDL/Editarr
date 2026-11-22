@@ -50,6 +50,7 @@ export function useCommunityDownloads(input: LookupInput | null, onImported: () 
     const controller = new AbortController(); pending.current = controller;
     setRunning(true);
     selected.forEach((entry) => replace({ ...entry, status: "queued", confirmed, error: undefined }));
+    let firstStaged: Scan | undefined;
     try {
       const outcomes = await communityDownloadStatus(current.target, selected[0].targetKey, selected.map((entry) => entry.choice), controller.signal);
       for (const [index, entry] of selected.entries()) {
@@ -66,12 +67,13 @@ export function useCommunityDownloads(input: LookupInput | null, onImported: () 
             : await downloadCommunityFilter(current, entry.targetKey, entry.choice, confirmed, controller.signal);
           if (!lifetime.current() || controller.signal.aborted || token !== generation.current) break;
           replace({ ...entry, status: result.status, confirmed, result: { scanId: result.scan.id, receiptState: result.receiptState, reviewRequired: result.reviewRequired, reviewed: result.reviewed } });
-          if (result.verificationPending) notifyStaged.current?.(result.scan);
+          if (result.verificationPending) firstStaged ??= result.scan;
           notify.current();
         } catch (error) {
           if (!lifetime.current() || controller.signal.aborted || token !== generation.current) break;
           if (error instanceof CommunityApiError && [403, 404].includes(error.status)) {
             setEntries([]);
+            firstStaged = undefined;
             break;
           }
           const uncertain = !(error instanceof CommunityApiError) || error.status === 0 || error.status >= 500;
@@ -84,6 +86,9 @@ export function useCommunityDownloads(input: LookupInput | null, onImported: () 
       else selected.forEach((entry) => replace({ ...entry, status: "unknown", confirmed }));
     } finally {
       if (lifetime.current() && token === generation.current) { setRunning(false); pending.current = null; }
+    }
+    if (firstStaged && lifetime.current() && !controller.signal.aborted && token === generation.current) {
+      notifyStaged.current?.(firstStaged);
     }
   };
 

@@ -123,6 +123,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
 
   async function play(cue: VerificationCue) {
     if (cue.target_start === null || busy) return;
+    const audioOnly = cue.channel === "audio";
     const controller = new AbortController();
     pendingRead.current = controller;
     setActivity("clip");
@@ -131,15 +132,15 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
       const blob = await fetchDraftFilterPreview(target, {
         start_seconds: cue.target_start, end_seconds: cue.target_end,
         target_generation: preview?.result.target_generation ?? undefined,
-        audio_track_index: cue.channel !== "video" ? preview?.request.audio_track_index : undefined,
-        source: cue.channel === "video" ? "visual" : "audio",
-        edit_action: cue.channel === "video" ? "skip" : "mute",
+        audio_track_index: audioOnly ? preview?.request.audio_track_index : undefined,
+        source: audioOnly ? "audio" : "visual",
+        edit_action: audioOnly ? "mute" : "skip",
       }, controller.signal);
       if (controller.signal.aborted) return;
       const url = URL.createObjectURL(blob);
       if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
       clipUrl.current = url;
-      setClip({ source: cue.source_finding_id, url });
+      setClip({ source: cue.source_finding_id, url, kind: audioOnly ? "audio" : "video" });
     } catch (reason) {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Unable to preview the cue.");
     } finally { if (!controller.signal.aborted) setActivity(null); }

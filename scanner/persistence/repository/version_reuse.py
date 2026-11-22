@@ -93,11 +93,12 @@ def source_findings(db, scan_id: str) -> list[ScanFindingRow]:
     return rows
 
 
-def _channel_for(finding: ScanFindingRow, selected: set[Channel]) -> str | None:
-    stored = finding.mcf_channel or ("audio" if finding.source == "audio" else "video")
-    choices = {"audio", "video"} if stored == "both" else {stored}
-    available = choices & selected
-    return "both" if len(available) == 2 else next(iter(available), None)
+def cue_channels(source: str, mcf_channel: str | None) -> tuple[Channel, ...]:
+    """Resolve the audio and video components of an original finding."""
+    if mcf_channel == "both":
+        return ("audio", "video")
+    channel = mcf_channel or ("audio" if source == "audio" else "video")
+    return ("audio",) if channel == "audio" else ("video",)
 
 
 def project_cues(
@@ -110,12 +111,16 @@ def project_cues(
     using = set(channels)
     cues = []
     for item in findings:
-        channel = _channel_for(item, using)
+        pending = [
+            channel for channel in cue_channels(item.source, item.mcf_channel) if channel in using
+        ]
+        channel = "both" if len(pending) == 2 else next(iter(pending), None)
         if not channel:
             continue
         direct = (
             alignment.audio_matches.get((item.start_seconds, item.end_seconds))
-            if channel == "audio" and item.end_seconds is not None else None
+            if channel == "audio" and item.end_seconds is not None
+            else None
         )
         projected = direct or alignment.project(item.start_seconds, item.end_seconds)
         start, end = projected or (None, None)

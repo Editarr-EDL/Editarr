@@ -47,6 +47,7 @@ for (const width of [320, 1440]) {
       return json(route, { ...sharingContextFixture(), jobs: job ? [job] : [] });
     });
     await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Scans");
     const share = page.getByRole("button", { name: /^Share Audio test scan/ });
     await share.click();
     const dialog = page.getByRole("dialog", { name: "Share scan" });
@@ -162,6 +163,7 @@ for (const width of [320, 1440]) {
       return json(route, { ...sharingContextFixture("manual"), mediaIdentity: null, audioSources: [{ scanId: "scan-previous", track: null }] });
     });
     await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Scans");
     await page.getByRole("button", { name: /^Share Manual evidence/ }).click();
     const dialog = page.getByRole("dialog", { name: "Share scan" });
     await dialog.getByLabel("TMDB/TVDB ID or URL").fill("https://www.imdb.com/title/tt123");

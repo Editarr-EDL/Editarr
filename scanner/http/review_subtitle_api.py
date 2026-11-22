@@ -49,7 +49,7 @@ _DEFAULT_WRITE = ActionPair(C.REVIEWS_VIEW_OWN, C.REVIEWS_EXPORT_OTHER)
 
 
 def _require_review_export(access, target: ResourceRef) -> None:
-    """Admit any same-media destination that the existing exports admit for this review."""
+    """Apply saved-review export eligibility to discovery, preview, and shared publication."""
     principal = access.principal
     self_target = ResourceRef(AccountRef(principal.user_id, principal.account.role), target.media)
 

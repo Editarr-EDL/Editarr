@@ -86,8 +86,28 @@ def _finding(scan_id: str, start: float) -> ScanFindingRow:
     )
 
 
-def _add_scans(db: Session, count: int, *, start: int = 0, findings: int = 2) -> None:
+def _add_scans(
+    db: Session,
+    count: int,
+    *,
+    start: int = 0,
+    findings: int = 2,
+    verified_finding_id: int | None = None,
+) -> None:
     """Add complete scans with every relationship the scan model reads."""
+    verification = {}
+    if verified_finding_id is not None:
+        verification = {
+            "origin": "imported",
+            "checkpoint_state": json.dumps(
+                {
+                    "identity_reuse": {
+                        "source_scan_id": "scan",
+                        "cues": [{"source_finding_id": verified_finding_id, "channel": "audio"}],
+                    }
+                }
+            ),
+        }
     for index in range(start, start + count):
         scan_id = f"scan-{index}"
         import_id = f"import-{index}"
@@ -105,6 +125,7 @@ def _add_scans(db: Session, count: int, *, start: int = 0, findings: int = 2) ->
                 scan_mode="credits_detection" if index % 2 else "content",
                 updated_at=_BASE + timedelta(minutes=index),
                 created_at=_BASE,
+                **verification,
             )
         )
         db.flush()
@@ -235,9 +256,10 @@ def test_scan_lists_do_not_scale_queries_with_scan_count():
         def by_item():
             return repository.list_scans_for_library_item(db, jellyfin_item_id="item")
 
-        _add_scans(db, 2)
+        original_finding_id = db.query(ScanFindingRow.id).filter_by(scan_id="scan").scalar()
+        _add_scans(db, 2, verified_finding_id=original_finding_id)
         small = (_count(db, history), _count(db, by_item))
-        _add_scans(db, 10, start=2)
+        _add_scans(db, 10, start=2, verified_finding_id=original_finding_id)
         large = (_count(db, history), _count(db, by_item))
 
         assert large == small
@@ -259,6 +281,11 @@ def test_scan_lists_do_not_scale_queries_with_scan_count():
         scans = by_item()
         assert [scan.model_dump_json() for scan in scans] == expected_item
         assert len(scans) == 14 and scans[-1].id == "associated"
+        copied = next(scan for scan in scans if scan.id == "scan-0")
+        assert copied.verification_coverage.covered_finding_ids == {
+            "audio": [original_finding_id],
+            "video": [],
+        }
         approvals = {
             scan.id: [approval.model_dump() for approval in scan.community_approvals]
             for scan in scans

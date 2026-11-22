@@ -1236,6 +1236,11 @@ canonical personal attachment filename and `Cache-Control: private, no-store`.
 It creates no export row, directory, or sidecar. Cross-user downloads also need
 the actor's personal download capability.
 
+The `/api/reviews/{review_id}/subtitles/sources`, `/preview`, and `/publish`
+operations share the same saved-review export eligibility. This includes users
+whose only export permission is to download that review. A published subtitle is
+available to everyone who can play that media version in Jellyfin.
+
 Migration `0021_export_snapshots` appends `content_bytes`, `snapshot_json`,
 `destination_path`, and `publication_revision` to `media_item_exports`.
 Existing rows retain null snapshots and revision zero. The private

@@ -42,6 +42,7 @@ export function useReviewSelection({ item, mediaSourceId, stableVersionId, impor
   const [draft, setDraft] = useState<ReturnType<typeof createReviewDraft> | null>(null);
   const [conflict, setConflict] = useState<"loading" | "ready" | "failed" | null>(null);
   const reviewLoadRequest = useRef(0);
+  const lastReviewTarget = useRef<{ itemId: string; mediaSourceId: string | null; stableVersionId?: string } | null>(null);
   const isCurrent = useReviewLifetime();
   const knownRepairs = useRef(new Map<string, ReviewRepairSummary>());
   const withKnownRepairs = (next: SavedReviewSummary[]) => next.map((review) => {
@@ -113,6 +114,10 @@ export function useReviewSelection({ item, mediaSourceId, stableVersionId, impor
 
   useEffect(() => {
     let active = true;
+    const previous = lastReviewTarget.current;
+    lastReviewTarget.current = { itemId: item.id, mediaSourceId, stableVersionId };
+    if (previous?.itemId === item.id && previous.mediaSourceId === mediaSourceId &&
+      previous.stableVersionId === undefined && stableVersionId && draft && isReviewDraftDirty(draft)) return;
     const request = ++reviewLoadRequest.current;
     knownRepairs.current.clear();
     setSelected(null);

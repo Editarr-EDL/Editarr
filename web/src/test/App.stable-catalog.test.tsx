@@ -51,6 +51,10 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
   const adopted = completeScan({
     id: "approved-copy", name: "Adopted video scan", origin: "imported", scan_audio: false,
     verified_from_scan_id: scan.id, stable_version_id: "new-cut",
+    verification_coverage: {
+      source_counts: { audio: 0, video: 2 },
+      covered_finding_ids: { audio: [], video: [1] },
+    },
   });
   let saved = false;
   const token = "a".repeat(64);
@@ -157,10 +161,11 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
   await waitFor(() => expect(within(queue).queryByRole("region", { name: "File fingerprints" })).not.toBeInTheDocument());
   expect(approvals).toEqual([expect.objectContaining({ source_scan_id: scan.id, token, confirmed: true })]);
 
-  await waitFor(() => expect(within(previous).queryByText(/Original video scan/)).not.toBeInTheDocument());
-  expect(within(previous).getByText(/Other earlier scan/)).toBeVisible();
+  await waitFor(() => expect(screen.getAllByText(/Adopted video scan/).length).toBeGreaterThan(0));
+  expect(within(original).getByRole("button", { name: "Verify for this version" })).toBeVisible();
+  const other = within(previous).getByText(/Other earlier scan/).closest("li")!;
   holdPreview = true;
-  fireEvent.click(within(previous).getByRole("button", { name: "Verify for this version" }));
+  fireEvent.click(within(other).getByRole("button", { name: "Verify for this version" }));
   const slowDialog = screen.getByRole("dialog", { name: "Verify for this version" });
   fireEvent.change(within(slowDialog).getByRole("combobox", { name: "Timing method" }), { target: { value: "original" } });
   fireEvent.click(within(slowDialog).getByRole("button", { name: "Preview alignment" }));

@@ -60,6 +60,10 @@ export interface Scan {
   origin: "generated" | "manual" | "imported";
   reuse_pending?: boolean;
   verified_from_scan_id?: string | null;
+  verification_coverage?: {
+    source_counts: Record<"audio" | "video", number>;
+    covered_finding_ids: Record<"audio" | "video", number[]>;
+  } | null;
   stable_version_id?: string | null;
   community_pending_targets?: { target_item_id: string; media_source_id: string | null; channels: ("audio" | "video")[] }[];
   import_source_name: string | null;

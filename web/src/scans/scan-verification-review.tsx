@@ -9,7 +9,7 @@ function timestamp(seconds: number | null) {
   return hours > 0 ? `${hours}:${clock}` : clock;
 }
 
-export type CueClip = { source: VerificationCue["source_finding_id"]; url: string };
+export type CueClip = { source: VerificationCue["source_finding_id"]; url: string; kind: "audio" | "video" };
 
 export function VerificationCueReview({ preview, method, busy, mapped, videoToCheck, clip, viewedVideo,
   onManual, onPlay, onViewed }: {
@@ -59,8 +59,9 @@ export function VerificationCueReview({ preview, method, busy, mapped, videoToCh
         </table>
       </div>}
     </>}
-    {clip && <video controls tabIndex={0} preload="metadata" aria-label="Target cue preview" src={clip.url}
-      onPlay={() => onViewed(clip.source)} />}
+    {clip?.kind === "audio" && <audio controls tabIndex={0} preload="metadata" aria-label="Target cue preview" src={clip.url} />}
+    {clip?.kind === "video" && <video controls tabIndex={0} preload="metadata" aria-label="Target cue preview" src={clip.url}
+      onPlaying={() => onViewed(clip.source)} />}
     {videoToCheck > 0 && <p className="verification-callout">{videoToCheck === 1
       ? "Play the target clip for the remaining video cue before approving."
       : `Play the target clips for the ${videoToCheck} remaining video cues before approving.`}</p>}

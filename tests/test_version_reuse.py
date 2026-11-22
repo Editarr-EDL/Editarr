@@ -298,6 +298,11 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
         assert identity.scan_version_id(db, "scan") == old_version
         derived = db.get(ScanRow, approved.scan.id)
         assert approved.scan.name == derived.name == source_name
+        assert approved.scan.verification_coverage.source_counts == {"audio": 1, "video": 2}
+        assert approved.scan.verification_coverage.covered_finding_ids == {
+            "audio": [],
+            "video": [result.cues[0].source_finding_id],
+        }
         assert derived.import_source_name == "Verified reuse"
         assert approved_reuse(derived)["source_scan_id"] == "scan"
         assert [
