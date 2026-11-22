@@ -16,6 +16,7 @@ import {
   snapshotReviewFilters,
   stageManualReviewFilter,
   updateReviewFilter,
+  applyReviewFilterResult,
 } from "./review-draft";
 import type { ReviewDraft } from "./review-draft";
 import type { SavedReview } from "../api";
@@ -81,6 +82,14 @@ describe("review draft state", () => {
     const changed = updateReviewFilter(initial, "filter-1", { label: "changed" });
     expect(initial.filters[0].label).toBe("word");
     expect(changed.filters[0].label).toBe("changed");
+    expect(changed.filters[0].label_edited).toBe(true);
+    const reverted = updateReviewFilter(changed, "filter-1", { label: "word" });
+    expect(reverted.filters[0].label_edited).toBeUndefined();
+    expect(isReviewDraftDirty(reverted)).toBe(false);
+
+    const { label_edited: _omitted, ...echoed } = changed.filters[0];
+    const adjusted = applyReviewFilterResult(changed, { filters: [{ ...echoed, selected: false }] });
+    expect(adjusted.filters[0]).toMatchObject({ label: "changed", label_edited: true, selected: false });
     const staged = stageManualReviewFilter(changed, {
       id: "manual-1", source: "visual", category: "violence", subcategory: "violence", severity: null, mcf_channel: null, mcf_comment: null, label: "manual", details: null,
       group_key: null, start_seconds: 3, end_seconds: 4, edit_action: "skip",

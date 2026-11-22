@@ -79,8 +79,15 @@ export function reviewDraftFilters(draft: ReviewDraft): ReviewFilter[] {
   });
 }
 
+/** Adopt server-adjusted filters; write endpoints omit read-only `label_edited`, so keep the draft's. */
 export function applyReviewFilterResult(draft: ReviewDraft, result: { filters: ReviewFilter[]; base_filters?: ReviewFilter[] }): ReviewDraft {
-  return { ...draft, filters: clone(result.filters), filterBases: filterBases(result.filters, result.base_filters) };
+  const previousById = new Map(draft.filters.map((filter) => [filter.id, filter]));
+  const filters = clone(result.filters).map((filter) => {
+    const previous = previousById.get(filter.id);
+    return "label_edited" in filter || !previous || !("label_edited" in previous) || previous.label !== filter.label
+      ? filter : { ...filter, label_edited: previous.label_edited };
+  });
+  return { ...draft, filters, filterBases: filterBases(filters, result.base_filters) };
 }
 
 /** Create an editable review snapshot with its saved baseline.
@@ -237,8 +244,19 @@ export function snapshotReviewFilters(draft: ReviewDraft, filters: ReviewFilter[
   };
 }
 
+/**
+ * Apply a local filter edit. A label change marks `label_edited` immediately so the display
+ * follows the relabel; restoring the loaded label restores its loaded flag (keeping the draft clean).
+ */
 export function updateReviewFilter(draft: ReviewDraft, filterId: string, patch: Partial<ReviewFilter>): ReviewDraft {
   const pair = draft.filterBases[filterId];
+  if ("label" in patch && !("label_edited" in patch)) {
+    const current = draft.filters.find((filter) => filter.id === filterId);
+    const loaded = pair?.effective;
+    if (current && patch.label !== current.label) {
+      patch = { ...patch, label_edited: loaded && patch.label === loaded.label ? loaded.label_edited : true };
+    }
+  }
   return {
     ...draft,
     filters: draft.filters.map((filter) => filter.id === filterId ? { ...filter, ...patch, id: filter.id } : filter),

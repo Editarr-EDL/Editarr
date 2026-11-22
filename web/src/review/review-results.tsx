@@ -152,30 +152,38 @@ export function CensoredAudioWord({ word, context }: { word: string; context?: s
   return <span className="censored-audio-word" tabIndex={0} onMouseEnter={showAfterHoverDelay} onMouseLeave={() => { clearHoverTimer(); setTooltipVisible(false); }} onFocus={() => setTooltipVisible(true)} onBlur={() => setTooltipVisible(false)}><strong>{censorAudioWord(word)}</strong>{tooltipVisible && <span className="audio-word-tooltip" role="tooltip">{tooltipWithHighlightedWord(word, context)}</span>}</span>;
 }
 
+/** Whether a visual filter is a machine finding: from a generated (or unknown) scan. */
+function isGeneratedFilter(sourceOrigin: Scan["origin"] | null | undefined): boolean {
+  return (sourceOrigin ?? "generated") === "generated";
+}
+
 /**
  * Text describing a filter. Model findings from a generated (or unknown) scan show only their
- * Severity and Description reply, so missing `details` yields "" and machine detector labels
- * stay hidden; category chips still identify the row. User-authored filters, whose source
- * scan is a Manual or imported scan, fall back to their label and classification, as does audio.
+ * Severity and Description reply, so missing `details` hides machine detector labels; category
+ * chips still identify the row. A user-relabelled finding (`label_edited`) also shows its label.
+ * User-authored filters, whose source scan is a Manual or imported scan, fall back to their label
+ * and classification, as does audio.
  * @param sourceOrigin Origin of the filter's source scan, when known.
  */
 export function savedReviewFilterDescription(
   filter: SavedReview["filters"][number],
   sourceOrigin?: Scan["origin"] | null,
 ): string {
-  if (filter.source === "visual" && (sourceOrigin ?? "generated") === "generated") return filter.details || "";
+  if (filter.source === "visual" && isGeneratedFilter(sourceOrigin)) {
+    return filter.details || (filter.label_edited ? filter.label || "" : "");
+  }
   return filter.source === "visual"
     ? filter.details || filter.label || filter.subcategory || filter.category || "Unclassified"
     : filter.label || filter.details || filter.subcategory || filter.category || "Unclassified";
 }
 
-/** Name a visual filter in a plain list: model findings by description only, user filters by label first. */
+/** Name a visual filter in a plain list: model findings by description only, user-named filters by label first. */
 export function visualFilterListLabel(
   filter: SavedReview["filters"][number],
   index: number,
   sourceOrigin?: Scan["origin"] | null,
 ): string {
-  const named = (sourceOrigin ?? "generated") === "generated" ? filter.details : filter.label || filter.details;
+  const named = isGeneratedFilter(sourceOrigin) && !filter.label_edited ? filter.details : filter.label || filter.details;
   return named || `Video filter ${index + 1}`;
 }
 

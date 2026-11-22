@@ -2,7 +2,10 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { SavedReview, Scan } from "../api";
+import { useState } from "react";
+
 import { SavedReviewOverview } from "./review-overview";
+import { updateReviewFilter, type ReviewDraft } from "./review-draft";
 
 afterEach(() => {
   cleanup();
@@ -156,4 +159,36 @@ it("names manual visual filters by their label beside undescribed model findings
   const model = within(section).getByRole("checkbox", { name: "Include violence at 0:50" });
   expect((model.closest("tr") as HTMLElement).querySelector(".merged-descriptions")).toBeNull();
   for (const row of [mixed, manual, model]) expect(row.closest("tr")).not.toHaveTextContent("d1_violence");
+});
+
+it("shows a relabelled generated finding's label and follows a relabel in the editor", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const base = {
+    source_scan_id: "scan-generated", source_finding_id: 1, source: "visual", category: "violence", subcategory: "violence",
+    severity: "medium", mcf_channel: "video", mcf_comment: null, details: null, group_key: "violence",
+    confidence: 0.9, edit_action: "skip", selected: true, label: "d1_violence", label_edited: false,
+  } as const;
+  const initial: SavedReview["filters"] = [
+    { ...base, id: "relabelled", label: "Bar fight", label_edited: true, start_seconds: 10, end_seconds: 12 },
+    { ...base, id: "untouched", start_seconds: 30, end_seconds: 32 },
+  ];
+  const scans = [{ id: "scan-generated", scan_id: 1, origin: "generated", name: "Scan" }] as Scan[];
+  function Editable() {
+    const [draft, setDraft] = useState({ filters: initial, filterBases: {} } as unknown as ReviewDraft);
+    return <SavedReviewOverview filters={draft.filters} memberships={[]} scans={scans} busy={false} metadataEditable focusFilterId="untouched"
+      onToggleFilters={vi.fn()} onChangeFilter={(id, patch) => setDraft((current) => updateReviewFilter(current, id, patch))} onDeleteFilter={vi.fn()}
+      onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />;
+  }
+  render(<Editable />);
+
+  const section = screen.getByRole("region", { name: "Video review filters" });
+  const relabelled = await within(section).findByRole("checkbox", { name: "Include Bar fight at 0:10" });
+  expect(relabelled.closest("tr")).toHaveTextContent("Bar fight");
+  const untouched = within(section).getByRole("checkbox", { name: "Include violence at 0:30" });
+  expect((untouched.closest("tr") as HTMLElement).querySelector(".merged-descriptions")).toBeNull();
+  expect(untouched.closest("tr")).not.toHaveTextContent("d1_violence");
+
+  fireEvent.change(await screen.findByLabelText("Filter untouched label"), { target: { value: "Car chase" } });
+  const renamed = within(section).getByRole("checkbox", { name: "Include Car chase at 0:30" });
+  expect(renamed.closest("tr")).toHaveTextContent("Car chase");
 });

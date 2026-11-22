@@ -67,6 +67,8 @@ export interface ReviewFilter {
   confidence: number | null;
   edit_action: ReviewEditAction;
   selected: boolean;
+  /** Read-only: the label differs from the source scan finding's. Absent in older responses; saves may echo it. */
+  label_edited?: boolean;
 }
 
 export interface McfMetadata {

@@ -42,6 +42,12 @@ it("keeps labels on user-authored visual filters but not on model findings", () 
   expect(visualFilterListLabel(manual, 0, "manual")).toBe("Bar fight");
   expect(visualFilterListLabel(visual("g", null), 1, "generated")).toBe("Video filter 2");
   expect(visualFilterListLabel(visual("g", "A fistfight"), 1, "generated")).toBe("A fistfight");
+
+  const relabelled = { ...visual("r", null), label: "Bar fight", label_edited: true };
+  expect(savedReviewFilterDescription(relabelled, "generated")).toBe("Bar fight");
+  expect(visualFilterListLabel(relabelled, 0, "generated")).toBe("Bar fight");
+  expect(savedReviewFilterDescription({ ...visual("u", null), label_edited: false }, "generated")).toBe("");
+  expect(visualFilterListLabel({ ...visual("u", null), label_edited: false }, 0, "generated")).toBe("Video filter 1");
 });
 
 it("keeps the audio description fallbacks", () => {
