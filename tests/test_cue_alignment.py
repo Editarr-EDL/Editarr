@@ -2,7 +2,12 @@
 
 import pytest
 
-from scanner.modeling.cue_alignment import AudioCue, cue_anchors
+from scanner.modeling.cue_alignment import (
+    AudioCue,
+    cue_anchors,
+    infer_transcript_offset,
+    match_unmapped_dialogue,
+)
 from scanner.modeling.version_alignment import Alignment, TimedWord
 
 _FIRST = "please turn the silver lantern down tonight"
@@ -95,13 +100,48 @@ def test_shared_verification_uses_target_transcript_for_downloads(monkeypatch, t
     monkeypatch.setattr(reuse_alignment, "source_findings", findings)
     monkeypatch.setattr(reuse_alignment, "target_transcript_words", lambda *_: _phrase(_FIRST, 109))
     context = (SimpleNamespace(db=None), original, None, None, tmp_path, None, 400)
-    anchors, messages, scan_id = reuse_alignment.align_from_transcript(*context)
-    assert Alignment.from_anchors(anchors).project(99.75, 100.25) == (109.25, 109.75)
+    alignment, messages, scan_id = reuse_alignment.align_from_transcript(*context)
+    assert alignment.project(99.75, 100.25) == (109.25, 109.75)
     assert scan_id == target_scan.id
     assert "flagged audio times" in messages[0]
 
     flags[original.id] = flags[original.id][:2]
-    anchors, messages, scan_id = reuse_alignment.align_from_transcript(*context)
-    assert anchors == [] and scan_id is None
+    alignment, messages, scan_id = reuse_alignment.align_from_transcript(*context)
+    assert alignment.anchors == [] and scan_id is None
     assert "enough confidence" in messages[0]
     assert "manually" in messages[0]
+
+
+def test_local_match_uses_saved_context_for_cue_outside_matched_intervals():
+    first = _cue(98.1, "lantern", _FIRST)
+    second = _cue(195.6, "ribbon", _SECOND)
+    middle = _cue(147.1, "copper", "open that copper gate tomorrow please")
+    words = (
+        _phrase(_FIRST, 100)
+        + _phrase("open that copper window today", 149.6)
+        + _phrase(_SECOND, 198)
+    )
+    anchors, _ = cue_anchors([first, second], words, [], 400)
+    alignment = Alignment.from_anchors(anchors)
+    assert alignment.project(middle.start, middle.end) is None
+    assert match_unmapped_dialogue([middle], words, alignment) == {
+        (middle.start, middle.end): (149.95, 150.45)
+    }
+    assert (
+        match_unmapped_dialogue(
+            [_cue(147.1, "copper", "shine the copper coins now")], words, alignment
+        )
+        == {}
+    )
+
+
+def test_legacy_clock_uses_repeated_matching_flags_on_the_same_track():
+    third = "the signal light flickered four times before dawn"
+    original = [
+        _cue(105.1, "lantern", _FIRST),
+        _cue(204.6, "ribbon", _SECOND),
+        _cue(304.85, "flickered", third),
+    ]
+    words = _phrase(_FIRST, 100) + _phrase(_SECOND, 200) + _phrase(third, 300)
+    assert infer_transcript_offset(original, words) == pytest.approx(4.0)
+    assert infer_transcript_offset(original[:2], words) is None

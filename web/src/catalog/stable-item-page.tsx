@@ -40,7 +40,7 @@ function HistoricalMedia({ title, version }: { title: string; version: Historica
   const [reviewId, setReviewId] = useState<string | null>(null);
   return <>
     <header className="page-header"><div><h1>{title}</h1><p>{version.label} · Previous version</p></div></header>
-    <p>Original scan and review history. Select a current version to verify these scans for reuse.</p>
+    <p>Original scan and review history.</p>
     <h2>Scans</h2>
     {version.scans.length
       ? <ul>{version.scans.map((scan) => <li key={scan.id}>{scanLabel(scan)} · {scan.status}</li>)}</ul>
@@ -102,29 +102,6 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
   const library = libraries.find((entry) => entry.id === activeItem?.library_id);
   const libraryCrumb = library ? { label: library.name, route: `library/${encodeURIComponent(library.id)}` } : null;
   const crumbs = [...(libraryCrumb ? [libraryCrumb] : []), { label: identity.name }];
-  const choose = (version?: string, live?: string) => onNavigate(editarrItemRoute(identity.title_id, version, live));
-  const versionLinks = (historical || !activeItem || identity.versions.length > 0) && <section className="stable-version-picker" aria-label="Item versions">
-    <label className="field"><span>Item history</span><select aria-label="Item history"
-      value={historical ? `old:${historical.id}` : activeItem ? `live:${activeItem.id}` : ""}
-      onChange={(event) => {
-        const selection = event.target.value;
-        if (selection.startsWith("old:")) choose(selection.slice(4));
-        if (selection.startsWith("live:")) {
-          const item = selection.slice(5);
-          const exact = identity.current_versions?.filter((version) => version.item_id === item);
-          choose(exact?.length === 1 ? exact[0].version_id : undefined, identity.active_items.length > 1 ? item : undefined);
-        }
-      }}>
-      <option value="" disabled>Choose a version</option>
-      {identity.active_items.map((item) => <option key={item.id} value={`live:${item.id}`}>
-        {item.versions[0]?.name || item.name} · Current
-      </option>)}
-      {identity.versions.filter((version) => !version.available && (version.scans.length > 0 || version.reviews.length > 0)).map((version) => (
-        <option key={version.id} value={`old:${version.id}`}>{version.label} · Previous version</option>
-      ))}
-    </select></label>
-  </section>;
-
   if (activeItem?.item_type === "Series" && library) {
     return <SeriesSeasonsPage library={library} seriesId={activeItem.id} />;
   }
@@ -132,13 +109,24 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
     return <CatalogItemBoundary source="jellyfin" itemId={activeItem.id} onUnavailable={onUnavailable}>
       <MediaDetail key={`${activeItem.id}:${recorded?.active_media_source_id || ""}`} item={activeItem} breadcrumbs={crumbs}
         seasonNumber={activeItem.season_number} onNavigate={onNavigate} onDirtyChange={onDirtyChange}
-        stableIdentity={identity} versionPicker={versionLinks} initialSourceId={recorded?.active_media_source_id} />
+        stableIdentity={identity} initialSourceId={recorded?.active_media_source_id} />
     </CatalogItemBoundary>;
   }
   return <div className="content-page media-detail">
     <LibraryBreadcrumbs crumbs={crumbs} onNavigate={onNavigate} />
-    {versionLinks}
     {historical ? <HistoricalMedia key={historical.id} title={identity.name} version={historical} />
       : <><h1>{identity.name}</h1><p>Select a version to open its scans and reviews.</p></>}
+    {identity.active_items.map((item) => {
+      const exact = identity.current_versions?.filter((version) => version.item_id === item.id);
+      const path = editarrItemRoute(identity.title_id, exact?.length === 1 ? exact[0].version_id : undefined,
+        identity.active_items.length > 1 ? item.id : undefined);
+      return <p key={item.id}><button type="button" className="item-link" onClick={() => onNavigate(path)}>
+        {identity.active_items.length === 1 ? "Open current version" : `${item.versions[0]?.name || item.name} · Current`}
+      </button></p>;
+    })}
+    {!historical && identity.versions.filter((version) => !version.available && (version.scans.length || version.reviews.length)).map((version) =>
+      <p key={version.id}><button type="button" className="item-link" onClick={() => onNavigate(editarrItemRoute(identity.title_id, version.id))}>
+        {version.label} · Previous version
+      </button></p>)}
   </div>;
 }

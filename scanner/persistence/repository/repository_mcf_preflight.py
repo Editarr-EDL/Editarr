@@ -4,6 +4,7 @@ import math
 
 from scanner.db import ReviewFilterRow
 from scanner.mcf import MAX_LINE_CODEPOINTS
+from scanner.modeling.model_core import channel_for_source
 from scanner.models import (
     MCF_CATEGORY_TO_FAMILY,
     McfCategory,
@@ -18,6 +19,17 @@ from scanner.models import (
 
 def _signature_value(value):
     return value.value if hasattr(value, "value") else value
+
+
+def filter_mcf_value(review_filter, field):
+    """Resolve implicit Review cue fields consistently for export and revision tracking."""
+    value = getattr(review_filter, field)
+    if value is None and field == "mcf_channel":
+        return channel_for_source(review_filter.source)
+    if value is None and field == "mcf_comment" and review_filter.details:
+        # Each MCF payload occupies a single line. Keep the original review text intact.
+        return " ".join(review_filter.details.splitlines()).strip() or None
+    return value
 
 
 def _mcf_document_issues(document, scans, *, durations=None) -> list[McfPreflightIssue]:
@@ -189,7 +201,7 @@ def _mcf_filter_issues(
                     **identity,
                 )
             )
-    comment = review_filter.mcf_comment
+    comment = filter_mcf_value(review_filter, "mcf_comment")
     if comment is not None and (
         not comment or "\n" in comment or "\r" in comment or "-->" in comment
     ):
@@ -204,11 +216,7 @@ def _mcf_filter_issues(
     elif comment is not None:
         subcategory_value = review_filter.subcategory or ""
         severity_value = _signature_value(review_filter.severity) if review_filter.severity else ""
-        channel_value = (
-            _signature_value(review_filter.mcf_channel)
-            if review_filter.mcf_channel is not None
-            else McfChannel.BOTH.value
-        )
+        channel_value = _signature_value(filter_mcf_value(review_filter, "mcf_channel"))
         if (
             len(f"{subcategory_value}={severity_value}={channel_value} # {comment}")
             > MAX_LINE_CODEPOINTS

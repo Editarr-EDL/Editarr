@@ -1,3 +1,4 @@
+import { useId, useState } from "react";
 import type { JellyfinMediaItem, JellyfinMediaVersion } from "../api/api-media-types";
 import { formatRating, MediaDuration } from "./media-display";
 import { MediaFiles } from "./media-files";
@@ -10,6 +11,9 @@ export function MediaWorkflowHeader({ item, versions, sourceId, onSourceChange, 
   imageUrl: string | null;
   onManageLegacyExports?: () => void;
 }) {
+  const detailsId = useId();
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const hasDetails = Boolean(item.overview || versions.length || onManageLegacyExports);
   const version = versions.find((entry) => entry.id === sourceId);
   const format = version?.media_format || item.media_format;
   const resolution = version?.resolution || item.resolution;
@@ -22,6 +26,10 @@ export function MediaWorkflowHeader({ item, versions, sourceId, onSourceChange, 
         <p className="detail-meta">
           {item.year || "Year unavailable"} · Rating {formatRating(item)} · <MediaDuration seconds={version?.duration_seconds ?? item.duration_seconds} />
           {resolution && ` · ${resolution}`}{format && ` · ${format}`}
+          {hasDetails && <> <button type="button" className="item-link media-details-toggle"
+            aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen(!detailsOpen)}>
+            {detailsOpen ? "Hide Details" : "Show Details"}
+          </button></>}
         </p>
       </div>
     </div>
@@ -32,11 +40,10 @@ export function MediaWorkflowHeader({ item, versions, sourceId, onSourceChange, 
           value={entry.id || ""} disabled={!entry.id}>{entry.name || `Version ${index + 1}`}</option>)}
       </select>
     </label>}
-    {(item.overview || versions.length > 0 || onManageLegacyExports) && <details className="media-workflow-details">
-      <summary>Media files</summary>
+    {hasDetails && <div className="media-workflow-details" id={detailsId} hidden={!detailsOpen}>
       {item.overview && <p>{item.overview}</p>}
       <MediaFiles versions={versions} />
       {onManageLegacyExports && <button type="button" className="btn-secondary" onClick={onManageLegacyExports}>Manage legacy exports</button>}
-    </details>}
+    </div>}
   </header>;
 }

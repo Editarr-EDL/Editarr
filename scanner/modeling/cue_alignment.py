@@ -9,9 +9,10 @@ from bisect import bisect_left, bisect_right
 from collections import Counter
 from dataclasses import dataclass
 from itertools import pairwise
+from statistics import median
 
 from .model_version_reuse import ReuseAnchor
-from .version_alignment import TimedWord
+from .version_alignment import Alignment, TimedWord
 
 _WORD = re.compile(r"[^\W_]+(?:['’][^\W_]+)*")
 _PHRASE = 5
@@ -253,3 +254,78 @@ def cue_anchors(
     landmarks = _pattern_matches(original, target)
     anchors = _points(landmarks, duration)
     return anchors, "timing" if anchors else None
+
+
+def infer_transcript_offset(cues: list[AudioCue], words: list[TimedWord]) -> float | None:
+    """Recover a legacy extraction clock from independent flags on that same track."""
+    matches = _dialogue_matches(_independent(cues), words, [])
+    if len(matches) < 3:
+        return None
+    offset = median(-match.shift for match in matches)
+    inliers = [match for match in matches if abs(match.shift + offset) <= 0.1]
+    if len(inliers) >= max(3, math.ceil(len(matches) * 0.8)) and (
+        inliers[-1].source.midpoint - inliers[0].source.midpoint >= 30
+    ):
+        return offset
+    return None
+
+
+def match_unmapped_dialogue(
+    cues: list[AudioCue], words: list[TimedWord], alignment: Alignment
+) -> dict[tuple[float, float], tuple[float, float]]:
+    """Match the flagged phrase and nearby saved words at the established local offset."""
+    anchors = alignment.anchors
+    if not anchors:
+        return {}
+    source_times = [anchor.source_seconds for anchor in anchors]
+    word_times = [word.start for word in words]
+    tokens = [word.text for word in words]
+    matches = {}
+    for cue in cues:
+        if alignment.project(cue.start, cue.end) or not 0 < cue.end - cue.start <= 4:
+            continue
+        index = bisect_left(source_times, cue.midpoint)
+        nearby = anchors[max(0, index - 1) : index + 1]
+        if min(abs(anchor.source_seconds - cue.midpoint) for anchor in nearby) > _MAX_BRIDGE:
+            continue
+        shifts = [anchor.target_seconds - anchor.source_seconds for anchor in nearby]
+        if max(shifts) - min(shifts) > 0.4:
+            continue
+        center = cue.midpoint + median(shifts)
+        label = list(_tokens(cue.label))
+        dialogue = list(_tokens(cue.dialogue))
+        if not label or len(label) > _PHRASE or len(cue.dialogue) > 2048:
+            continue
+        label_places = [i for i in range(len(dialogue)) if dialogue[i : i + len(label)] == label]
+        if len(label_places) != 1:
+            continue
+        position = label_places[0]
+        left = dialogue[max(0, position - 2) : position]
+        right = dialogue[position + len(label) : position + len(label) + 2]
+        candidates = []
+        for first in range(
+            bisect_left(word_times, center - 1.5), bisect_right(word_times, center + 0.65)
+        ):
+            after = first + len(label)
+            if tokens[first:after] != label:
+                continue
+            word_center = (words[first].start + words[after - 1].end) / 2
+            if abs(word_center - center) > 0.65:
+                continue
+            left_matches = (
+                len(left) == 2
+                and first >= 2
+                and tokens[first - 2 : first] == left
+                and words[after - 1].end - words[first - 2].start <= 8
+            )
+            right_matches = (
+                len(right) == 2
+                and tokens[after : after + 2] == right
+                and words[after + 1].end - words[first].start <= 8
+            )
+            if left_matches or right_matches:
+                candidates.append(word_center - cue.midpoint)
+        if len(candidates) == 1:
+            shift = candidates[0]
+            matches[cue.start, cue.end] = (round(cue.start + shift, 6), round(cue.end + shift, 6))
+    return matches

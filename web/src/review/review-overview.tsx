@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useMcfRegistry } from "../shared/mcf-registry";
+import { ReviewScanInfo, reviewScanSourceLabel } from "./review-scan-source";
 import type { Scan } from "../api/api-scan-types";
 import type { SavedReview } from "../api/api-review-types";
-import { formatTime, scanLabel, scanOriginLabel } from "../shared/display";
+import { formatTime } from "../shared/display";
 import { McfClassificationFields, McfRegistryStatus } from "./review-mcf";
-import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, filterSourceOrigin, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, channelText, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
+import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, filterSourceOrigin, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
 
 /** Edit one review filter's classification and timing.
  * @param props Filter values, registry, and change callbacks.
@@ -29,6 +30,7 @@ function ReviewFilterEditor({
   metadataEditable: boolean;
 }) {
   const { registry, error: registryError } = useMcfRegistry();
+  const description = filter.mcf_comment ?? filter.details ?? "";
   return <fieldset className="saved-review-filter">
     <legend>{filter.source === "audio" ? "Audio" : "Video"} filter</legend>
     <label><input type="checkbox" checked={filter.selected} disabled={required || !filtersEditable} onChange={(event) => onChange({ selected: event.target.checked })} /> Selected{required ? " - required by instance policy" : ""}</label>
@@ -37,11 +39,11 @@ function ReviewFilterEditor({
     {registry ? <McfClassificationFields controlId={`Filter ${filter.id}`} registry={registry} value={filter} onChange={onChange} allowClear severityLocked={severityLocked} /> : <McfRegistryStatus error={registryError} />}
     {filter.source === "audio" && !metadataEditable ? <>
       <div className="field" aria-label="Audio filter label"><span>Label</span><CensoredAudioWord word={filter.label || ""} context={filter.details} /></div>
-      <div className="field" aria-label="Audio filter description"><span>Description</span><CensoredAudioWord word={filter.details || ""} /></div>
+      <div className="field" aria-label="Audio filter description"><span>Description</span><CensoredAudioWord word={description} /></div>
       <div className="field" aria-label="Audio filter group"><span>Group</span><CensoredAudioWord word={filter.group_key || ""} /></div>
     </> : <>
       <label className="field"><span>Label</span><input aria-label={`Filter ${filter.id} label`} value={filter.label || ""} onChange={(event) => onChange({ label: event.target.value || null })} /></label>
-      <label className="field"><span>Description</span><textarea aria-label={`Filter ${filter.id} description`} value={filter.details || ""} onChange={(event) => onChange({ details: event.target.value || null })} rows={2} /></label>
+      <label className="field"><span>Description</span><textarea aria-label={`Filter ${filter.id} description`} value={description} onChange={(event) => onChange({ details: event.target.value || null, mcf_comment: null })} rows={2} /></label>
       <label className="field"><span>Group</span><input aria-label={`Filter ${filter.id} group`} value={filter.group_key || ""} onChange={(event) => onChange({ group_key: event.target.value || null })} /></label>
     </>}
     </fieldset>
@@ -156,6 +158,7 @@ export function SavedReviewOverview({
 
   const renderResult = (item: TieredReviewResult, source: "audio" | "visual", key: string, categoryName: string) => {
     const result = item.result;
+    const sourceScans = result.scanIds.map((id) => scanById.get(id)).filter((scan): scan is Scan => !!scan);
     const rowSelected = result.filters.every((filter) => filter.selected);
     const rowMixed = !rowSelected && result.filters.some((filter) => filter.selected);
     const editingFilter = result.filters.find((filter) => filter.id === editingFilterId);
@@ -172,8 +175,8 @@ export function SavedReviewOverview({
         <td>{result.descriptions.length ? <span className="merged-descriptions">{result.descriptions.map(description => <span className="merged-description-item" key={description}>
           {source === "audio" ? <CensoredAudioWord word={description} context={descriptionFilters.get(description)?.details} /> : description}
           {linkedIndicator}</span>)}</span> : <>{sort === "time" && categoryName}{linkedIndicator}</>}</td>
-        <td>{severityText(item.pathFilters)}{item.pathFilters.some(filter => lockedSeverities[filter.id]) && <small>Locked by instance policy</small>}</td><td>{channelText(item.pathFilters)}</td>
-        <td className="finding-scan-attribution">{result.scanIds.length ? result.scanIds.map(scanId => { const scan = scanById.get(scanId); return scan ? `${scanLabel(scan)} · ${scanOriginLabel(scan)}` : null; }).filter(Boolean).join(", ") : "Source unavailable"}</td>
+        <td>{severityText(item.pathFilters)}{item.pathFilters.some(filter => lockedSeverities[filter.id]) && <small>Locked by instance policy</small>}</td>
+        <td className="finding-scan-attribution"><span className="review-scan-source">{reviewScanSourceLabel(sourceScans)}<ReviewScanInfo scans={sourceScans} /></span></td>
         <td><span className="finding-preview"><span className="saved-review-filter-actions">{result.filters.map(filter => <span className="saved-review-filter-action" key={filter.id}>
           {requiredIds.has(filter.id) && <small>Required by instance policy</small>}
           <button type="button" className="btn-secondary compact-button" aria-label={`Preview filter ${filter.id}`} onClick={() => onPreviewFilter(filter)} disabled={busy || previewDisabled}>Preview</button>
@@ -181,7 +184,7 @@ export function SavedReviewOverview({
           <button type="button" className="danger-button compact-button" aria-label={`Delete filter ${filter.id}`} disabled={busy || !cuesEditable || requiredIds.has(filter.id)} onClick={() => { if (editingFilterId === filter.id) setEditingFilterId(null); onDeleteFilter(filter.id); }}>Delete</button>
         </span>)}</span>{preview && result.filters.some(filter => filter.id === preview.filterId) && (source === "audio" ? <audio aria-label={`Mute preview for ${rowName} at ${formatTime(result.startSeconds)}`} controls src={preview.url}>Your browser does not support audio previews.</audio> : <video aria-label={`Video preview for ${rowName} at ${formatTime(result.startSeconds)}`} controls src={preview.url}>Your browser does not support video previews.</video>)}</span></td>
       </tr>
-      {editingFilter && <tr className="saved-review-filter-editor-row"><td colSpan={7}><fieldset className="review-fieldset" disabled={busy}><ReviewFilterEditor filter={editingFilter} required={requiredIds.has(editingFilter.id)} severityLocked={Boolean(lockedSeverities[editingFilter.id])} filtersEditable={filtersEditable} cuesEditable={cuesEditable} metadataEditable={metadataEditable} onChange={patch => onChangeFilter(editingFilter.id, patch)} onDone={() => setEditingFilterId(null)} /></fieldset></td></tr>}
+      {editingFilter && <tr className="saved-review-filter-editor-row"><td colSpan={6}><fieldset className="review-fieldset" disabled={busy}><ReviewFilterEditor filter={editingFilter} required={requiredIds.has(editingFilter.id)} severityLocked={Boolean(lockedSeverities[editingFilter.id])} filtersEditable={filtersEditable} cuesEditable={cuesEditable} metadataEditable={metadataEditable} onChange={patch => onChangeFilter(editingFilter.id, patch)} onDone={() => setEditingFilterId(null)} /></fieldset></td></tr>}
     </Fragment>;
   };
 
@@ -210,9 +213,9 @@ export function SavedReviewOverview({
       const mixed = !selected && nodeFilters.some((filter) => filter.selected);
       const displayName = source === "audio" && level === "group" ? censorAudioWord(name) : name;
       const levelLabel = level === "group" ? "finding group" : level;
-      return <tr className={`combined-result-hierarchy-header hierarchy-${level}`} key={key}><th className="combined-result-group-use"><input type="checkbox" aria-label={`Use all ${title.toLowerCase()} filters in ${name} ${levelLabel}`} aria-checked={mixed ? "mixed" : selected} ref={(node) => { if (node) node.indeterminate = mixed; }} checked={selected} disabled={busy || !filtersEditable || nodeFilters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(nodeFilters.filter(filter => !requiredIds.has(filter.id)).map((filter) => filter.id), !selected)} /></th><th colSpan={6}><button type="button" onClick={onToggle} aria-expanded={open} aria-label={`${name} ${levelLabel}, ${items.length} ${items.length === 1 ? "result" : "results"}, ${selectedCount} selected`}><span>{displayName}</span><small>{items.length} {items.length === 1 ? "result" : "results"} · {selectedCount} selected</small></button></th></tr>;
+      return <tr className={`combined-result-hierarchy-header hierarchy-${level}`} key={key}><th className="combined-result-group-use"><input type="checkbox" aria-label={`Use all ${title.toLowerCase()} filters in ${name} ${levelLabel}`} aria-checked={mixed ? "mixed" : selected} ref={(node) => { if (node) node.indeterminate = mixed; }} checked={selected} disabled={busy || !filtersEditable || nodeFilters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(nodeFilters.filter(filter => !requiredIds.has(filter.id)).map((filter) => filter.id), !selected)} /></th><th colSpan={5}><button type="button" onClick={onToggle} aria-expanded={open} aria-label={`${name} ${levelLabel}, ${items.length} ${items.length === 1 ? "result" : "results"}, ${selectedCount} selected`}><span>{displayName}</span><small>{items.length} {items.length === 1 ? "result" : "results"} · {selectedCount} selected</small></button></th></tr>;
     };
-    return <section className={`finding-group combined-${source}-findings`} aria-label={`${title} review filters`}><div className="section-heading"><div><h3>{title}</h3><p>{results.length} {results.length === 1 ? "result" : "results"} in {hierarchy.length} {hierarchy.length === 1 ? "family" : "families"}</p></div></div><div className="library-table-wrap tiered-review-table-wrap" role="region" tabIndex={0} aria-label={`${title} review filters table`}><table className={`scan-filter-table combined-scan-filter-table tiered-review-table${hasVideoPreview ? " has-video-preview" : ""}`}><thead><tr><th>Use</th>{sortHeader("time", "Time")}{sortHeader("description", "Description")}{sortHeader("severity", "Severity")}<th>Channel</th><th>Scan</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>{hierarchy.map((family) => {
+    return <section className={`finding-group combined-${source}-findings`} aria-label={`${title} review filters`}><div className="section-heading"><div><h3>{title}</h3><p>{results.length} {results.length === 1 ? "result" : "results"} in {hierarchy.length} {hierarchy.length === 1 ? "family" : "families"}</p></div></div><div className="library-table-wrap tiered-review-table-wrap" role="region" tabIndex={0} aria-label={`${title} review filters table`}><table className={`scan-filter-table combined-scan-filter-table tiered-review-table${hasVideoPreview ? " has-video-preview" : ""}`}><thead><tr><th>Use</th>{sortHeader("time", "Time")}{sortHeader("description", "Description")}{sortHeader("severity", "Severity")}<th>Scan</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>{hierarchy.map((family) => {
       const familyItems = family.subcategories.flatMap((subcategory) => subcategory.groups.flatMap((group) => group.results));
       const familyKey = `${source}:family:${family.id}`;
       const familyOpen = !collapsedFamilies.has(familyKey);
@@ -279,7 +282,7 @@ export function SavedReviewOverview({
           {showAudio && renderTieredSection("Audio", audioResults, "audio")}
         </> : chronological.length ? <div className="library-table-wrap tiered-review-table-wrap">
           <table className="scan-filter-table tiered-review-table" aria-label="Review filters by time">
-            <thead><tr><th>Use</th><th>Time</th><th>Description</th><th>Severity</th><th>Channel</th><th>Scan</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>
+            <thead><tr><th>Use</th><th>Time</th><th>Description</th><th>Severity</th><th>Scan</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>
             <tbody>{chronological.map((result) => {
               const filter = result.filters[0];
               const category = filter.source === "visual" ? reviewVideoCategories(filter, true).join(", ") : "Audio";

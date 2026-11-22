@@ -5,7 +5,7 @@ import re
 import unicodedata
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import groupby
 
 from .model_version_reuse import ReuseAnchor
@@ -19,6 +19,11 @@ _MAX_DIALOGUE_GAP = 75.0
 @dataclass(frozen=True)
 class Alignment:
     segments: tuple[tuple[ReuseAnchor, ...], ...]
+    audio_matches: dict[tuple[float, float], tuple[float, float]] = field(default_factory=dict)
+
+    @property
+    def anchors(self) -> list[ReuseAnchor]:
+        return [anchor for segment in self.segments for anchor in segment]
 
     @classmethod
     def from_anchors(cls, anchors: Iterable[ReuseAnchor]) -> "Alignment":

@@ -1,5 +1,6 @@
 """Exercise the actual embedded ASS extraction and reviewed audio transcript timing."""
 
+import json
 import shutil
 import subprocess
 from fractions import Fraction
@@ -15,6 +16,27 @@ from scanner.pipeline.subtitle_tracks import embedded_subtitle_streams
 from scanner.runtime import subtitle_transcript
 from scanner.runtime.subtitle_inputs import read_subtitle
 from scanner.runtime.subtitle_transcript import ReviewedAudio, transcript_document
+
+
+def test_cached_transcript_retains_timed_words_around_empty_mlx_markers(tmp_path, monkeypatch):
+    cache = tmp_path / "transcript_mlx_whisper_base.json"
+    monkeypatch.setattr(subtitle_transcript, "_cache_paths", lambda _: [cache])
+    marker = {"text": "", "start_seconds": 5, "end_seconds": 5, "words": []}
+    speech = {
+        "text": "hello",
+        "start_seconds": 6,
+        "end_seconds": 7,
+        "words": [{"word": "hello", "start_seconds": 6, "end_seconds": 7}],
+    }
+    cache.write_text(json.dumps([marker, speech, {**marker, "start_seconds": 8, "end_seconds": 8}]))
+    assert subtitle_transcript.cached_segments(None) == [speech]
+    for invalid in (
+        [marker],
+        [speech, {**marker, "text": "spoken"}],
+        [speech, {**marker, "end_seconds": 4}],
+    ):
+        cache.write_text(json.dumps(invalid))
+        assert subtitle_transcript.cached_segments(None) is None
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="the live embed fixture requires FFmpeg")

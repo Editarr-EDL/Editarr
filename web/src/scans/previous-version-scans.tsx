@@ -2,11 +2,11 @@ import type { HistoricalVersion } from "../api/api-stable-media";
 import type { Scan } from "../api/api-scan-types";
 import { scanLabel } from "../shared/display";
 
-export function PreviousVersionScans({ versions, imports = [], linkedScans = [], verifiedSources, canVerify, onVerify }: {
+export function PreviousVersionScans({ versions, imports = [], linkedScans = [], verifiedCopies, canVerify, onVerify }: {
   versions: HistoricalVersion[];
   imports?: Scan[];
   linkedScans?: Scan[];
-  verifiedSources: ReadonlySet<string>;
+  verifiedCopies: Scan[];
   canVerify: boolean;
   onVerify: (scan: Scan) => void;
 }) {
@@ -20,12 +20,17 @@ export function PreviousVersionScans({ versions, imports = [], linkedScans = [],
   const linked = linkedScans.filter((scan) => !displayedIds.has(scan.id) && scan.status === "complete"
     && scan.scan_mode !== "credits_detection" && (scan.scan_audio || scan.scan_video))
     .map((scan) => ({ scan, label: scan.media_source_name || "Linked scan" }));
-  if (!entries.length && !pending.length && !linked.length) return null;
+  const verifiedAudio = new Set(verifiedCopies.filter((scan) => scan.scan_audio).map((scan) => scan.verified_from_scan_id));
+  const verifiedVideo = new Set(verifiedCopies.filter((scan) => scan.scan_video).map((scan) => scan.verified_from_scan_id));
+  const needsVerification = [...entries, ...pending, ...linked].filter(({ scan }) =>
+    (scan.scan_audio && !verifiedAudio.has(scan.id)) || (scan.scan_video && !verifiedVideo.has(scan.id)));
+  if (!needsVerification.length) return null;
   return <section className="previous-version-scans" aria-label="Previous version scans">
     <h3>Scans that need verification</h3>
-    <ul>{[...entries, ...pending, ...linked].map(({ scan, label }) => <li key={scan.id}>
-      <div><strong>{scanLabel(scan)}</strong><div>{label} · {verifiedSources.has(scan.id)
-        ? "Has verified cues for this version" : "Needs verification for this version"}</div></div>
+    <ul>{needsVerification.map(({ scan, label }) => <li key={scan.id}>
+      <div><strong>{scanLabel(scan)}</strong><div>{label} · {verifiedAudio.has(scan.id)
+        ? "Video needs verification for this version" : verifiedVideo.has(scan.id)
+          ? "Audio needs verification for this version" : "Needs verification for this version"}</div></div>
       {canVerify && <button type="button" className="btn-secondary compact-button"
         onClick={() => onVerify(scan)}>Verify for this version</button>}
     </li>)}</ul>

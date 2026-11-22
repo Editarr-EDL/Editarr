@@ -1,5 +1,6 @@
 """Version-bound cue projection, transcript gaps, and verified target writes."""
 
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -169,8 +170,9 @@ def test_track_cache_can_be_aligned_after_original_file_is_deleted(tmp_path, mon
 
 
 @pytest.mark.parametrize("deferred", (False, True))
+@pytest.mark.parametrize("source_name", ("chuck profanity 1", None))
 def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
-    tmp_path, monkeypatch, deferred
+    tmp_path, monkeypatch, deferred, source_name
 ):
     old_path = tmp_path / "original.mkv"
     new_path = tmp_path / "replacement.mkv"
@@ -178,6 +180,7 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
     new_path.write_bytes(b"replacement")
     with review_db() as db:
         original = db.get(ScanRow, "scan")
+        original.name = source_name
         original.scan_video = True
         original.media_item.path = str(old_path)
         original.resolved_local_path = str(old_path)
@@ -209,7 +212,7 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
             media_source_id=None,
             source_path=str(new_path),
             resolved_path=str(new_path),
-            content_sha256=content_digest(new_path),
+            content_sha256=sha256(new_path.read_bytes()).hexdigest(),
         )
         for start in (2, 20):
             db.add(
@@ -294,6 +297,8 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
         assert approved.scan.stable_version_id == new_version
         assert identity.scan_version_id(db, "scan") == old_version
         derived = db.get(ScanRow, approved.scan.id)
+        assert approved.scan.name == derived.name == source_name
+        assert derived.import_source_name == "Verified reuse"
         assert approved_reuse(derived)["source_scan_id"] == "scan"
         assert [
             (row.start_seconds, row.end_seconds)
@@ -342,7 +347,7 @@ def _register_http_reuse_target(app, monkeypatch):
                 media_source_id=None,
                 source_path=str(path),
                 resolved_path=str(path),
-                content_sha256=content_digest(path),
+                content_sha256=sha256(path.read_bytes()).hexdigest(),
                 scan_id=row.id,
             )
         db.add(
@@ -428,3 +433,64 @@ def test_transcript_status_is_scoped_to_an_authorized_target_track(app, monkeypa
     )
     assert forbidden.status_code == 403, forbidden.text
     assert read_tracks == [4, 1]
+
+
+def test_verification_reuses_legacy_transcript_only_after_matching_file_bytes(app, monkeypatch):
+    original_id, target_item, _ = _register_http_reuse_target(app, monkeypatch)
+    requested = AudioSelection.model_validate(
+        {"file_version": "1" * 64, "track": {"stream_index": 1, "disposition": 1}}
+    )
+    current = requested.model_copy(update={"file_version": "2" * 64}).selection()
+    with app.accounts.factory() as db:
+        row = db.query(ScanRow).join(MediaItemRow).filter_by(jellyfin_id=target_item).one()
+        row.scan_audio = True
+        row.requested_audio_selection_json = requested.model_dump_json()
+        record_analyzed_audio_selection(db, row.id, requested)
+        path = Path(row.resolved_local_path)
+
+    monkeypatch.setattr(
+        version_reuse_audio,
+        "probe_audio_tracks",
+        lambda _: SimpleNamespace(select=lambda _: current, revalidate=lambda _: current.track),
+    )
+    monkeypatch.setattr(version_reuse_audio, "audio_playback_start", lambda *_, **__: 0)
+    monkeypatch.setattr(
+        version_reuse_audio,
+        "cached_segments",
+        lambda audio: (
+            [{"words": [{"word": "dialogue", "start_seconds": 2, "end_seconds": 3}]}]
+            if audio.selection == requested.selection()
+            else None
+        ),
+    )
+    reads = []
+
+    def get_digest(selected, **_):
+        reads.append(selected)
+        return content_digest(selected)
+
+    monkeypatch.setattr(api, "file_digest", get_digest)
+    route = "/api/media-versions/current/reuse"
+    body = {
+        "source_scan_id": original_id,
+        "target": {"source": "jellyfin", "item_id": target_item},
+        "channels": ["audio"],
+        "method": "transcript",
+        "audio_track_index": 1,
+    }
+    headers = app.accounts.unsafe_cookie(USER)
+    preflight = app.send("POST", f"{route}/transcript-status", headers, body)
+    assert preflight.json() == {"ready": False, "verify_existing": True}, preflight.text
+    assert reads == []
+
+    preview = app.send("POST", f"{route}/preview", headers, body)
+    assert preview.status_code == 200, preview.text
+    assert "Couldn’t align automatically" in preview.json()["issues"][0]
+    assert reads == [str(path)]
+    ready = app.send("POST", f"{route}/transcript-status", headers, body)
+    assert ready.json() == {"ready": True}, ready.text
+
+    path.write_bytes(b"replacement cut")
+    content_digest(path)
+    unavailable = app.send("POST", f"{route}/transcript-status", headers, body)
+    assert unavailable.json() == {"ready": False}, unavailable.text

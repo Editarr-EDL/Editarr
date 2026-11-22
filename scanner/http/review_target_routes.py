@@ -25,9 +25,26 @@ from scanner.security.scan_jobs.media import decide_scans
 
 from .review_access import review_caller
 from .review_targets import capture_target
-from .stable_media_capture import file_digest, observe_target_version
+from .stable_media_capture import cached_target_digest, file_digest, observe_target_version
 
 router = APIRouter()
+
+
+def _matches_target_version(db, media_id, prepared, version_id: str) -> bool:
+    """Require exact file evidence before listing reviews pinned to a version."""
+    if not any(
+        locator.media_item_id == media_id
+        and locator.media_source_id == (prepared.source.media_source_id or "")
+        for locator in version_locators(db, version_id)
+    ):
+        return False
+    version = get_version(db, version_id)
+    if version is None or version.content_sha256 is None:
+        return False
+    digest = cached_target_digest(db, prepared)
+    if digest is not None:
+        return digest == version.content_sha256
+    return version_file_matches(version, prepared.media.resolved_path)
 
 
 def list_target(caller, target, sort, direction, stable_version_id=None):
@@ -52,14 +69,6 @@ def list_target(caller, target, sort, direction, stable_version_id=None):
         SavedReviewRow.media_source_id == (prepared.source.media_source_id or ""),
     )
     if stable_version_id is not None:
-        if not any(
-            locator.media_item_id == media.id
-            and locator.media_source_id == (prepared.source.media_source_id or "")
-            for locator in version_locators(caller.db, stable_version_id)
-        ) or not version_file_matches(
-            get_version(caller.db, stable_version_id), prepared.media.resolved_path
-        ):
-            return []
         rows = rows.join(
             ReviewMediaVersionRow, ReviewMediaVersionRow.review_id == SavedReviewRow.id
         )
@@ -70,6 +79,12 @@ def list_target(caller, target, sort, direction, stable_version_id=None):
         except AccessDenied:
             continue
         visible_ids.append(review_id)
+    if not visible_ids:
+        return []
+    if stable_version_id is not None and not _matches_target_version(
+        caller.db, media.id, prepared, stable_version_id
+    ):
+        return []
     summaries = root.list_saved_reviews(
         caller.db,
         media_item_id=media.id,

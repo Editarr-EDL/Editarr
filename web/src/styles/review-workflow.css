@@ -16,10 +16,9 @@
 .media-workflow-heading h1 { margin: 0; overflow-wrap: anywhere; }
 .media-workflow-heading .eyebrow, .media-workflow-heading .detail-meta { margin: 4px 0; }
 .media-workflow-version { min-width: 0; max-width: min(100%, 260px); }
-.media-workflow-details { margin-inline-start: auto; }
-.media-workflow-details[open] { flex: 1 1 100%; }
-.media-workflow-details summary { width: fit-content; padding: 8px 0; cursor: pointer; color: #c8d9f3; font-weight: 650; }
-.media-workflow-details > :not(summary) { margin-block: 10px; }
+.media-details-toggle { margin-inline-start: .35em; text-decoration: underline; text-underline-offset: .15em; }
+.media-workflow-details { flex: 1 1 100%; min-width: 0; }
+.media-workflow-details > * { margin-block: 10px; }
 
 .review-workflow { display: grid; gap: 12px; min-width: 0; }
 .review-workflow [hidden] { display: none; }
@@ -130,7 +129,7 @@
 .review-filter-actions { padding-block-start: 9px; border-block-start: 1px solid #303641; }
 .guided-review-editor .saved-review-overview { padding: 0; border: 0; }
 .guided-review-editor .tiered-review-table { min-width: 665px; }
-.guided-review-editor .tiered-review-table :is(th, td):nth-child(6) { width: 120px; }
+.guided-review-editor .tiered-review-table :is(th, td):nth-child(5) { width: 120px; }
 
 @media (max-width: 1010px) {
   .guided-review-editor { grid-template-columns: minmax(0, 1fr); }
@@ -138,7 +137,6 @@
 
 @media (max-width: 560px) {
   .media-workflow-heading .detail-poster { flex-basis: 48px; width: 48px; height: 68px; }
-  .media-workflow-details { margin-inline-start: 0; }
   .review-workflow-tabs { gap: 4px; }
   .review-workflow-tabs > button { padding-inline: 3px; font-size: 13px; }
   .review-timeline-summary .scan-review-heading { flex-flow: row wrap; gap: 8px; }
@@ -149,8 +147,6 @@
   .workflow-published-files > ul > li { flex-basis: 120px; }
 }
 
-.stable-version-picker { margin-block: .75rem; }
-.stable-version-picker select { max-width: 100%; }
 .previous-version-scans { margin-block: 1rem; }
 .previous-version-scans ul { display: grid; gap: .5rem; list-style: none; padding: 0; }
 .previous-version-scans li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .5rem 0; }

@@ -17,6 +17,7 @@ from scanner.pipeline.audio_timing import audio_playback_start
 from scanner.pipeline.audio_tracks import AudioTrackSelection, probe_audio_tracks
 from scanner.pipeline.cache import transcription_cache_path
 
+from .media_fingerprints import cached_content_digest
 from .subtitle_sidecars import read_local_bytes
 
 _MAX_TRANSCRIPT_BYTES = 24 * 1024 * 1024
@@ -27,10 +28,13 @@ class ReviewedAudio:
     source: ReviewAudioSource
     selection: AudioTrackSelection
     models: tuple[str | None, ...]
+    content_sha256: str | None = None
 
 
-def reviewed_audio_sources(memberships, scans) -> list[ReviewedAudio]:
+def reviewed_audio_sources(db, memberships, scans) -> list[ReviewedAudio]:
     """Deduplicate completed, explicitly analyzed audio tracks in the saved review."""
+    from scanner.persistence.repository.media_identity_store import get_version, scan_version_id
+
     audio = {}
     for membership in memberships:
         scan = scans[membership.scan_id]
@@ -53,8 +57,13 @@ def reviewed_audio_sources(memberships, scans) -> list[ReviewedAudio]:
             title = selection.track.title or language or "Audio"
             title = " ".join(title.split())[:128]
             label = f"{title} · Track {selection.track.stream_index}"
+            version_id = scan_version_id(db, scan.id)
+            version = get_version(db, version_id) if version_id else None
             audio[identity] = ReviewedAudio(
-                ReviewAudioSource(id=identity, label=label, language=language), selection, ()
+                ReviewAudioSource(id=identity, label=label, language=language),
+                selection,
+                (),
+                version.content_sha256 if version else None,
             )
         entry = audio[identity]
         if scan.audio_model not in entry.models:
@@ -83,6 +92,22 @@ def _cache_paths(audio: ReviewedAudio):
         yield from sorted(path.parent.glob(f"transcript_{backend}_*.json"), reverse=True)
 
 
+def _timed_segments(data: list) -> list[dict]:
+    """Keep timed speech and skip empty point markers emitted by MLX Whisper."""
+    timed = []
+    for segment in data:
+        if not isinstance(segment, dict) or not isinstance(segment.get("text"), str):
+            raise ValueError("Invalid cached transcript segment")
+        start = _time(segment.get("start_seconds"))
+        end = _time(segment.get("end_seconds"))
+        if start == end and not segment["text"].strip() and not segment.get("words"):
+            continue
+        if end <= start:
+            raise ValueError("Invalid cached transcript duration")
+        timed.append(segment)
+    return timed
+
+
 def cached_segments(audio: ReviewedAudio) -> list[dict] | None:
     """Find a usable transcript only in the cache scoped to the selected physical track."""
     for path in dict.fromkeys(_cache_paths(audio)):
@@ -90,13 +115,9 @@ def cached_segments(audio: ReviewedAudio) -> list[dict] | None:
             data = json.loads(read_local_bytes(path, _MAX_TRANSCRIPT_BYTES))
             if not isinstance(data, list) or not data or len(data) > 50_000:
                 continue
-            if all(
-                isinstance(segment, dict)
-                and isinstance(segment.get("text"), str)
-                and _time(segment.get("end_seconds")) > _time(segment.get("start_seconds"))
-                for segment in data
-            ):
-                return data
+            timed = _timed_segments(data)
+            if timed:
+                return timed
         except (ValueError, OSError, UnicodeError):
             continue
     return None
@@ -127,8 +148,16 @@ def transcript_document(
     from av.error import FFmpegError
 
     try:
-        probe_audio_tracks(media).revalidate(audio.selection)
-        offset = float(audio_playback_start(media, audio.selection, bounded=True))
+        inventory = probe_audio_tracks(media)
+        selection = audio.selection
+        if (
+            audio.content_sha256
+            and selection.file_version != inventory.file_version
+            and cached_content_digest(media) == audio.content_sha256
+        ):
+            selection = replace(selection, file_version=inventory.file_version)
+        inventory.revalidate(selection)
+        offset = float(audio_playback_start(media, selection, bounded=True))
     except FFmpegError as exc:
         raise ValueError("The selected audio timeline could not be verified") from exc
     srt = []

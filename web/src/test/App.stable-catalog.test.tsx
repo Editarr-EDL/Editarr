@@ -32,7 +32,7 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
     active_items: [current],
     selected_version_id: "original-cut",
     choose_version: false,
-    current_versions: [],
+    current_versions: [{ item_id: "movie-1", media_source_id: "source-1", version_id: "new-cut" }],
     versions: [{
       id: "original-cut",
       jellyfin_item_id: "old-jellyfin-id",
@@ -41,13 +41,18 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
       available: false,
       active_item_id: null,
       active_media_source_id: null,
-      scans: [scan],
+      scans: [scan, { ...scan, id: "another-source", name: "Other earlier scan" }],
       reviews: [{ id: review.id, name: review.name }],
     }],
   };
   const fallback = installProductionApi();
   const verificationRequests: VerificationRequest[] = [];
   const approvals: unknown[] = [];
+  const adopted = completeScan({
+    id: "approved-copy", name: "Adopted video scan", origin: "imported", scan_audio: false,
+    verified_from_scan_id: scan.id, stable_version_id: "new-cut",
+  });
+  let saved = false;
   const token = "a".repeat(64);
   let slowPreview: AbortSignal | undefined;
   let holdPreview = false;
@@ -60,6 +65,7 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
       return json(record);
     }
     if (url.pathname === "/api/editarr-items/editarr-title") return json(record);
+    if (url.pathname === "/api/scans/history") return json(saved ? [adopted] : []);
     if (url.pathname === "/api/reviews/old-review") return json(review);
     if (url.pathname === "/api/media-versions/current/reuse/preview") {
       if (holdPreview) {
@@ -86,7 +92,8 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
       return new Promise<Response>((resolve) => {
         finishApproval = () => {
           fingerprinting = false;
-          resolve(json({ scan: completeScan({ id: "approved-copy", origin: "imported" }), reused: false }));
+          saved = true;
+          resolve(json({ scan: adopted, reused: false }));
         };
       });
     }
@@ -108,11 +115,13 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
   fireEvent.click(screen.getByRole("button", { name: review.name }));
   expect(await screen.findByText(/Revision 3/)).toBeVisible();
 
-  fireEvent.change(screen.getByRole("combobox", { name: "Item history" }), { target: { value: "live:movie-1" } });
+  expect(screen.queryByRole("combobox", { name: "Item history" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Open current version" }));
   await openWorkflowStep("Scans");
   const previous = screen.getByRole("region", { name: "Previous version scans" });
-  expect(within(previous).getByText(/Needs verification for this version/)).toBeVisible();
-  fireEvent.click(within(previous).getByRole("button", { name: "Verify for this version" }));
+  const original = within(previous).getByText(/Original video scan/).closest("li")!;
+  expect(within(original).getByText(/Needs verification for this version/)).toBeVisible();
+  fireEvent.click(within(original).getByRole("button", { name: "Verify for this version" }));
   const dialog = screen.getByRole("dialog", { name: "Verify for this version" });
   const timing = within(dialog).getByRole("combobox", { name: "Timing method" });
   expect(timing).toHaveValue("manual");
@@ -148,6 +157,8 @@ it("opens the old bookmark on its historical version and verifies cues explicitl
   await waitFor(() => expect(within(queue).queryByRole("region", { name: "File fingerprints" })).not.toBeInTheDocument());
   expect(approvals).toEqual([expect.objectContaining({ source_scan_id: scan.id, token, confirmed: true })]);
 
+  await waitFor(() => expect(within(previous).queryByText(/Original video scan/)).not.toBeInTheDocument());
+  expect(within(previous).getByText(/Other earlier scan/)).toBeVisible();
   holdPreview = true;
   fireEvent.click(within(previous).getByRole("button", { name: "Verify for this version" }));
   const slowDialog = screen.getByRole("dialog", { name: "Verify for this version" });
@@ -201,7 +212,7 @@ it("lists associated scans with their original source ID and keeps them pending 
     String(input).endsWith("/api/scans") && init?.method === "POST")).toBe(false);
 });
 
-it("tries audio alignment for imported cues and offers manual timing if confidence is low", async () => {
+it("checks a saved transcript for imported cues and offers manual timing if confidence is low", async () => {
   const scan = completeScan({
     id: "downloaded-audio", name: "Downloaded audio", origin: "imported",
     scan_audio: true, scan_video: false, jellyfin_item_id: "original", media_source_id: "earlier",
@@ -218,7 +229,9 @@ it("tries audio alignment for imported cues and offers manual timing if confiden
     const url = new URL(String(input), "http://editarr.test");
     if (url.pathname === "/api/editarr-items/imported-item") return json(record);
     if (url.pathname === "/api/library-items/movie-1/scans") return json([]);
-    if (url.pathname === "/api/media-versions/current/reuse/transcript-status") return json({ ready: true });
+    if (url.pathname === "/api/media-versions/current/reuse/transcript-status") {
+      return json({ ready: false, verify_existing: true });
+    }
     if (url.pathname === "/api/media-versions/current/reuse/preview") {
       expect(JSON.parse(String(init?.body))).toMatchObject({
         source_scan_id: scan.id, method: "transcript", channels: ["audio"], audio_track_index: 1,
@@ -238,6 +251,8 @@ it("tries audio alignment for imported cues and offers manual timing if confiden
   fireEvent.click(await screen.findByRole("button", { name: "Verify for this version" }));
   const dialog = screen.getByRole("dialog", { name: "Verify for this version" });
   expect(within(dialog).getByLabelText("Timing method")).toHaveValue("transcript");
+  expect(await within(dialog).findByText("Existing audio scan found")).toBeVisible();
+  expect(within(dialog).queryByRole("button", { name: "Run audio scan" })).not.toBeInTheDocument();
   const preview = within(dialog).getByRole("button", { name: "Preview alignment" });
   await waitFor(() => expect(preview).toBeEnabled());
   fireEvent.click(preview);

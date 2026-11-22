@@ -70,7 +70,11 @@ def test_worker_refuses_a_changed_pinned_media_file(monkeypatch, tmp_path, repla
 @pytest.mark.parametrize("changed", [False, True])
 def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, changed):
     from scanner.persistence.repository.media_identity_store import scan_version_id
-    from scanner.runtime.scan_version import file_generation, stage_scan_generation
+    from scanner.runtime.scan_version import (
+        completed_scan_digest,
+        file_generation,
+        stage_scan_generation,
+    )
 
     path = tmp_path / "queued.mkv"
     path.write_bytes(b"original media")
@@ -106,7 +110,78 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
         monkeypatch.setattr(worker, "run_scan", fake_scan)
         assert worker.run_scan_worker(scan.id, "worker-token") == 0
         with factory() as db:
-            assert db.get(ScanRow, scan.id).status == ("failed" if changed else "complete")
+            row = db.get(ScanRow, scan.id)
+            assert row.status == ("failed" if changed else "complete")
             assert bool(scan_version_id(db, scan.id)) is not changed
+            target = {
+                "server_id": row.media_item.server_id,
+                "item_id": row.media_item.jellyfin_id,
+                "media_source_id": row.media_source_id,
+                "path": path,
+            }
+            expected = None if changed else content_digest(path)
+            assert completed_scan_digest(db, **target) == expected
+            assert completed_scan_digest(db, **{**target, "media_source_id": "another-cut"}) is None
+            if not changed:
+                path.write_bytes(b"changed! media")
+                assert completed_scan_digest(db, **target) is None
+    finally:
+        engine.dispose()
+
+
+def test_reuse_checks_the_legacy_audio_scan_against_the_current_inventory(monkeypatch, tmp_path):
+    from scanner.modeling.model_audio_tracks import AudioSelection
+    from scanner.persistence.repository.repository_audio_tracks import (
+        record_analyzed_audio_selection,
+    )
+    from scanner.pipeline import audio_tracks
+    from scanner.runtime.scan_version import completed_scan_digest, file_generation
+
+    path = tmp_path / "movie.mkv"
+    path.write_bytes(b"original media")
+    engine = create_engine(f"sqlite:///{tmp_path / 'scanner.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    try:
+        with factory() as db:
+            scan, _ = _scan_with_queue(db)
+            row = db.get(ScanRow, scan.id)
+            row.resolved_local_path = str(path)
+            row.scan_audio = True
+            selection = AudioSelection.model_validate(
+                {
+                    "file_version": "a" * 64,
+                    "track": {"stream_index": 1, "disposition": 1},
+                }
+            )
+            row.requested_audio_selection_json = selection.model_dump_json()
+            digest = content_digest(path)
+            observe_version(
+                db,
+                media=row.media_item,
+                media_source_id=row.media_source_id,
+                source_path=row.source_path,
+                resolved_path=str(path),
+                content_sha256=digest,
+                scan_id=scan.id,
+            )
+            record_analyzed_audio_selection(db, scan.id, selection, playback_offset_seconds=0)
+            row.status = "complete"
+            db.commit()
+            target = {
+                "server_id": row.media_item.server_id,
+                "item_id": row.media_item.jellyfin_id,
+                "media_source_id": row.media_source_id,
+                "path": path,
+            }
+            inventory = SimpleNamespace(file_version=selection.file_version)
+            monkeypatch.setattr(audio_tracks, "probe_audio_tracks", lambda _path: inventory)
+            assert completed_scan_digest(db, **target) == digest
+            inventory.file_version = "b" * 64
+            assert completed_scan_digest(db, **target) is None
+            selected_evidence = (file_generation(str(path)), selection.file_version)
+            assert completed_scan_digest(db, **target, audio_evidence=selected_evidence) == digest
+            path.write_bytes(b"different clip")
+            assert completed_scan_digest(db, **target, audio_evidence=selected_evidence) is None
     finally:
         engine.dispose()

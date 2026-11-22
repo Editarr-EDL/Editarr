@@ -91,12 +91,11 @@ class AudioTrackInventory:
         return actual
 
 
-def _file_state(path: Path) -> tuple[int, int, int, int, int]:
+def _file_state(path: Path) -> tuple[int, int, int, int]:
     observed = path.stat()
     if not stat.S_ISREG(observed.st_mode):
         raise AudioSelectionError("Audio input must be a regular file")
     return (
-        observed.st_dev,
         observed.st_ino,
         observed.st_size,
         observed.st_mtime_ns,
@@ -149,7 +148,7 @@ def inventory_from_streams(path: Path, before: tuple, streams) -> AudioTrackInve
         raise AudioSelectionError("Duplicate audio stream indexes")
     version_bytes = json.dumps(
         {
-            "version": 1,
+            "version": 2,
             "path": str(path),
             "state": before,
             "tracks": [asdict(track) for track in tracks],

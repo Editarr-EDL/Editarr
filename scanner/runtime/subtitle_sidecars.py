@@ -43,13 +43,13 @@ def file_fingerprint(path: Path) -> tuple[int, ...]:
 def _fingerprint(state: os.stat_result) -> tuple[int, ...]:
     if not stat.S_ISREG(state.st_mode):
         raise ValueError("Expected a regular file")
-    return state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns, state.st_ctime_ns
+    return state.st_ino, state.st_size, state.st_mtime_ns, state.st_ctime_ns
 
 
 def read_local_bytes(path: Path, limit: int = MAX_SUBTITLE_BYTES) -> bytes:
     """Bound local input reads and refuse symlinks, FIFOs, and changed files."""
     before = file_fingerprint(path)
-    if before[2] > limit:
+    if before[1] > limit:
         raise ValueError("Subtitle input is too large")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     with os.fdopen(os.open(path, flags), "rb") as stream:
@@ -89,7 +89,7 @@ def _record_path(destination: Path) -> Path:
 
 
 def _identity(fingerprint: tuple[int, ...], content: bytes) -> dict:
-    return {"inode": list(fingerprint[:2]), "digest": _digest(content)}
+    return {"inode": [fingerprint[0]], "digest": _digest(content)}
 
 
 def _valid_identity(entry) -> bool:
@@ -98,7 +98,7 @@ def _valid_identity(entry) -> bool:
         and isinstance(entry.get("digest"), str)
         and _HASH.fullmatch(entry["digest"]) is not None
         and isinstance(entry.get("inode"), list)
-        and len(entry["inode"]) == 2
+        and len(entry["inode"]) in (1, 2)
         and all(type(value) is int and value >= 0 for value in entry["inode"])
     )
 
@@ -117,6 +117,8 @@ def _read_record(destination: Path, slot: str):
         or not all(_valid_identity(value) for value in record["inputs"])
     ):
         raise SubtitleConflict("Subtitle publication ownership could not be verified")
+    for entry in record["inputs"]:
+        entry["inode"] = entry["inode"][-1:]
     return record
 
 
@@ -183,7 +185,7 @@ def _destination_lock(record_path: Path):
         acquired = _lock(descriptor, exclusive=True, blocking=False)
         if not acquired:
             raise SubtitleConflict("This subtitle is already being published. Try again.")
-        if file_fingerprint(path)[:2] != opened[:2]:
+        if file_fingerprint(path)[0] != opened[0]:
             raise SubtitleConflict("The subtitle publication lock changed")
         yield
     finally:

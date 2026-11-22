@@ -46,6 +46,7 @@ class VersionReuseApproval(VersionReuseRequest):
 
 class VersionReuseTranscriptStatus(BaseModel):
     ready: bool
+    verify_existing: bool = False
 
 
 class VersionReuseCue(BaseModel):

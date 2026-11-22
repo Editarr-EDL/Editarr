@@ -4,7 +4,7 @@ from pathlib import Path
 
 from av.error import FFmpegError
 
-from scanner.modeling.cue_alignment import AudioCue
+from scanner.modeling.cue_alignment import AudioCue, infer_transcript_offset
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.modeling.model_subtitles import ReviewAudioSource
 from scanner.modeling.version_alignment import transcript_anchors, transcript_words
@@ -49,8 +49,8 @@ def target_transcript_ready(selection, model_names):
     return bool(segments and transcript_words(segments, 0))
 
 
-def _words(path, selection, model_names, *, subject, playback_offset=None):
-    segments = _cached_segments(selection, model_names)
+def _words(path, selection, model_names, *, subject, playback_offset=None, cache_selection=None):
+    segments = _cached_segments(cache_selection or selection, model_names)
     if segments is None:
         raise TranscriptAlignmentUnavailable(f"The {subject} audio track needs a cached transcript")
     try:
@@ -67,9 +67,23 @@ def _words(path, selection, model_names, *, subject, playback_offset=None):
     return words
 
 
-def target_transcript_words(path, selection, model_names):
+def target_transcript_words(path, selection, model_names, cache_selection=None):
     """Use only the timed transcript of the selected target file and track."""
-    return _words(path, selection, model_names, subject="target")
+    return _words(path, selection, model_names, subject="target", cache_selection=cache_selection)
+
+
+def original_playback_offset(scan, selection, cues: list[AudioCue]) -> float | None:
+    """Use the recorded or measurable clock, or infer it from independent old flags."""
+    recorded = recorded_playback_offset(scan, selection)
+    if recorded is not None:
+        return recorded
+    try:
+        path = Path(scan.resolved_local_path)
+        probe_audio_tracks(path).revalidate(selection)
+        return float(audio_playback_start(path, selection, bounded=True))
+    except (OSError, FFmpegError, ValueError):
+        segments = _cached_segments(selection, (scan.audio_model,))
+        return infer_transcript_offset(cues, transcript_words(segments, 0)) if segments else None
 
 
 def saved_audio_cues(findings):
@@ -88,7 +102,9 @@ def saved_audio_cues(findings):
     ]
 
 
-def match_audio_transcripts(scan, target_path, target_selection, model_names, *, target_words=None):
+def match_audio_transcripts(
+    scan, target_path, target_selection, model_names, *, target_words=None, original_offset=None
+):
     """Line up cached source and target words on their verified playback clocks."""
     source_selection = analyzed_selection(scan)
     if source_selection is None:
@@ -98,7 +114,11 @@ def match_audio_transcripts(scan, target_path, target_selection, model_names, *,
         source_selection,
         (scan.audio_model,),
         subject="original",
-        playback_offset=recorded_playback_offset(scan, source_selection),
+        playback_offset=(
+            original_offset
+            if original_offset is not None
+            else recorded_playback_offset(scan, source_selection)
+        ),
     )
     target = (
         target_words

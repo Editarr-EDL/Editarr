@@ -31,7 +31,7 @@ def stage_imported_scan(
     resolved_local_path: str,
     media_source_id: str | None,
     source_name: str,
-    review_name: str,
+    review_name: str | None,
     duration_seconds: float | None,
     has_audio: bool,
     has_video: bool,

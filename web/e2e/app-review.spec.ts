@@ -46,7 +46,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   let dialog = page.getByRole("dialog", { name: "New Review" });
   await dialog.getByLabel("New review name").fill("Review A");
   await dialog.getByRole("button", { name: "Start new review" }).click();
-  await panel.getByLabel("Scan #2").check();
+  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
   await openFirstReviewFilterEditor();
   await expect(panel.getByLabel(/Filter .* label/)).toHaveValue("Visual content");
   await expect(panel.getByRole("heading", { name: "Review A", level: 3 })).toBeVisible();
@@ -118,7 +118,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   await page.getByRole("dialog", { name: "Delete review" }).getByRole("button", { name: "Delete review" }).click();
   await expect(panel.getByRole("row").filter({ hasText: "Review B copy" })).toHaveCount(0);
   await panel.getByRole("button", { name: "Open review Review B renamed" }).click();
-  await panel.getByLabel("Scan #2").check();
+  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
   await panel.getByRole("button", { name: "Save Changes" }).click();
 
   await (await chooseExportFormat(page, "EDL")).click();

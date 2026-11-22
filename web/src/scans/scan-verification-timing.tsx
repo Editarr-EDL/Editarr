@@ -1,6 +1,7 @@
 import type { VerificationRequest } from "../api/api-stable-media";
 import { AudioTrackField } from "./audio-track-field";
 import type { useAudioTracks } from "./use-audio-tracks";
+import type { TranscriptStatus } from "./use-verification-transcript";
 
 export type AnchorInput = { source: string; target: string };
 export const emptyAnchor = (): AnchorInput => ({ source: "", target: "" });
@@ -15,7 +16,7 @@ export function VerificationTiming({ options, channels, method, anchors, tracks,
   anchors: AnchorInput[];
   tracks: ReturnType<typeof useAudioTracks>;
   busy: boolean;
-  transcript: { active: boolean; status: "checking" | "ready" | "missing" | "unknown"; failure: string | null };
+  transcript: { active: boolean; status: TranscriptStatus; failure: string | null };
   mayStartAudioScan: boolean;
   onChannels: (channels: Channel[]) => void;
   onMethod: (method: VerificationRequest["method"]) => void;
@@ -28,7 +29,8 @@ export function VerificationTiming({ options, channels, method, anchors, tracks,
   };
   const transcriptNotice = transcript.active
     ? ["Audio scan in Queue", "Return to preview alignment when the selected audio track has a transcript."]
-    : transcript.status === "ready" ? ["Target transcript ready", "Editarr can match saved dialogue or timing patterns from flagged audio cues."]
+    : transcript.status === "verify" ? ["Existing audio scan found", "Preview alignment checks that the file is unchanged so Editarr can reuse the saved transcript. Follow the check in Queue."]
+      : transcript.status === "ready" ? ["Target transcript ready", "Editarr can match saved dialogue or timing patterns from flagged audio cues."]
       : transcript.status === "checking" ? ["Checking target transcript…", "Looking for timed dialogue on the selected audio track."]
         : transcript.status === "missing" ? ["Target transcript needed", mayStartAudioScan
           ? "Run an audio scan on this version so Editarr can try matching the saved cues."

@@ -244,7 +244,21 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
       expect(row.contentRight).toBeLessThanOrEqual(row.actionLeft);
     }
 
-    await page.locator("summary").filter({ hasText: "Media files" }).click();
+    const metadata = page.locator(".detail-meta");
+    const showDetails = metadata.getByRole("button", { name: "Show Details", exact: true });
+    const hideDetails = metadata.getByRole("button", { name: "Hide Details", exact: true });
+    const files = page.getByRole("region", { name: "Media files" });
+    await expect(page.getByRole("combobox", { name: "Item history" })).toHaveCount(0);
+    await expect(showDetails).toHaveAttribute("aria-expanded", "false");
+    await showDetails.focus();
+    await showDetails.press("Enter");
+    await expect(hideDetails).toHaveAttribute("aria-expanded", "true");
+    await expect(files).toBeVisible();
+    await hideDetails.press("Space");
+    await expect(showDetails).toHaveAttribute("aria-expanded", "false");
+    await expect(files).toBeHidden();
+    await showDetails.click();
+    await expect(hideDetails).toBeVisible();
     const manage = page.getByRole("button", { name: "Manage legacy exports" });
     await manage.click();
     const manageDialog = page.getByRole("dialog", { name: "Manage exports" });
@@ -291,6 +305,17 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await mockApi(page);
     await page.goto("/#/library/movies/item/movie-1");
 
+    const membership = page.locator(".saved-review-memberships");
+    const choice = membership.getByRole("checkbox", { name: "Imported scan", exact: true });
+    const info = membership.getByRole("button", { name: "Show scan details for Imported scan" });
+    await expect(choice).toBeChecked();
+    await info.hover();
+    await expect(page.getByRole("tooltip")).toContainText("Scan #1");
+    await expect(page.getByRole("tooltip")).toContainText(/imported/i);
+    await info.press("Escape");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(choice).toBeChecked();
+
     await page.getByLabel("Sort", { exact: true }).selectOption("category");
     const video = page.getByRole("region", { name: "Video review filters" });
     const audio = page.getByRole("region", { name: "Audio review filters" });
@@ -312,6 +337,11 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
 
     const linkedRows = video.getByRole("checkbox", { name: /^Include Linked fight; Linked weapon at 0:30/ });
     await expect(linkedRows).toHaveCount(2);
+    await expect(video.getByRole("columnheader", { name: "Channel" })).toHaveCount(0);
+    const sourceInfo = video.getByRole("button", { name: "Show scan details for Imported scan" }).first();
+    await sourceInfo.focus();
+    await expect(page.getByRole("tooltip")).toContainText("Scan #1");
+    await sourceInfo.press("Escape");
     await expect(video.getByRole("img", { name: "Linked result repeated in another category" })).toHaveCount(4);
     await linkedRows.first().click();
     await expect(linkedRows.first()).toBeChecked();

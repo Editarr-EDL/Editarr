@@ -516,6 +516,9 @@ scan and saved review atomically without queueing or changing active EDL state.
 `ScanFinding` and `ReviewFilter` expose nullable `category`, `subcategory`, `severity`,
 `mcf_channel`, and `mcf_comment`. New generated/manual/MCF data requires a registry-valid
 family/subcategory pair; null classification is reserved for unresolved legacy EDL input.
+When exporting a review, a missing MCF channel derives from the filter source (audio or
+video), and a missing MCF comment derives from its description. Explicit values on
+imported or previously saved filters take precedence.
 `ScanMcfDocument` adds immutable `source_version` and finite material bounds to the MCF
 metadata fields. `ReviewMcfDocument` is the review-owned editable copy.
 

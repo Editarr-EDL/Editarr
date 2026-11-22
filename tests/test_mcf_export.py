@@ -79,6 +79,10 @@ def test_mcf_export_writes_exact_grouped_bytes_and_generic_provenance(tmp_path):
     try:
         row = db.get(repository.SavedReviewRow, review.id)
         row.filters[0].mcf_channel = None
+        row.filters[0].details = "Saved\nDescription"
+        row.filters[1].details = "Original description"
+        row.filters[1].mcf_comment = "Authored comment"
+        row.filters[2].mcf_channel = None
         db.commit()
         exported = repository.export_saved_review_mcf(db, review.id, 0)
 
@@ -90,8 +94,8 @@ def test_mcf_export_writes_exact_grouped_bytes_and_generic_provenance(tmp_path):
             b"NOTE\nTITLE Movie\nTYPE movie\n\n"
             b"NOTE\nSTART 00:00:00.000\nEND 00:00:10.000\n\n"
             b"00:00:01.000 --> 00:00:03.000\n"
-            b"swearing=high=both\n"
-            b"violence=medium=video\n\n"
+            b"swearing=high=audio # Saved Description\n"
+            b"violence=medium=video # Authored comment\n\n"
             b"00:00:02.000 --> 00:00:04.000\n"
             b"nudity=low=video\n\n"
         )
@@ -113,6 +117,8 @@ def test_preflight_defensively_orders_all_invalid_filter_fields():
         category="unknown",
         subcategory="unknown",
         severity="critical",
+        source="audio",
+        details=None,
         mcf_channel="speech",
         mcf_comment="bad --> comment",
         start_seconds=2,

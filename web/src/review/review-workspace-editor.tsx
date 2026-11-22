@@ -6,7 +6,8 @@ import { ExportDialog } from "./review-export-dialog";
 import { ReviewDeletionDialog } from "./review-deletion-dialog";
 import { canDownload, publishDestinations } from "./export-model";
 import { usePrincipal } from "../auth/auth-gate";
-import { scanLabel, scanOriginLabel } from "../shared/display";
+import { scanLabel } from "../shared/display";
+import { ReviewScanInfo, reviewScanName } from "./review-scan-source";
 import { ShareAction } from "../scans/sharing-dialog";
 import { useReviewAccountLabel } from "./review-access";
 import {
@@ -53,7 +54,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       lockedSeverities={selected?.policy_locked_severities}
       filters={draft.filters}
       memberships={draft.memberships}
-      scans={scans}
+      scans={[...(selected?.scans ?? []).map((reference) => reference.scan), ...scans]}
       defaultSort={guided ? "time" : "category"}
       busy={busy || Boolean(conflict)}
       filtersEditable={access.field("filters")}
@@ -75,15 +76,15 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
         <strong>Included scans</strong>
         {availableScans.map((scan) => {
           const included = draft.memberships.some((membership) => membership.scan_id === scan.id);
-          return <label key={scan.id}>
-            <input
+          return <span className="review-scan-source" key={scan.id}>
+            <label><input
               type="checkbox"
               checked={included}
               disabled={busy || !access.field("evidence")}
               onChange={(event) => void toggleScanMembership(scan, event.target.checked)}
-            /> {scanLabel(scan)} · {scanOriginLabel(scan)}
-            {scan.community_provenance && <span className="community-source-author">Source author: {scan.community_provenance.author_id}</span>}
-          </label>;
+            /> {reviewScanName(scan)}</label>
+            <ReviewScanInfo scans={[scan]} />
+          </span>;
         })}
       </div>;
   const roles = hasCombinedMembership && <div className="saved-review-membership-roles">
@@ -91,7 +92,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       {combinedScans.map((scan) => {
         const membership = draft.memberships.find((item) => item.scan_id === scan.id);
         return membership && <label className="field" key={scan.id}>
-          <span>{scanLabel(scan)}</span>
+          <span>{reviewScanName(scan)}</span>
           <select
             aria-label={`Review role for ${scanLabel(scan)}`}
             value={membership.role}

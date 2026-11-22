@@ -196,12 +196,13 @@ export function savedReviewFilterDescription(
   filter: SavedReview["filters"][number],
   sourceOrigin?: Scan["origin"] | null,
 ): string {
+  const description = filter.mcf_comment ?? filter.details;
   if (filter.source === "visual" && isGeneratedFilter(sourceOrigin)) {
-    return filter.details || (filter.label_edited ? filter.label || "" : "");
+    return description || (filter.label_edited ? filter.label || "" : "");
   }
   return filter.source === "visual"
-    ? filter.details || filter.label || filter.subcategory || filter.category || "Unclassified"
-    : filter.label || filter.details || filter.subcategory || filter.category || "Unclassified";
+    ? description || filter.label || filter.subcategory || filter.category || "Unclassified"
+    : filter.label || description || filter.subcategory || filter.category || "Unclassified";
 }
 
 /** Name a visual filter in a plain list: model findings by description only, user-named filters by label first. */
@@ -210,7 +211,8 @@ export function visualFilterListLabel(
   index: number,
   sourceOrigin?: Scan["origin"] | null,
 ): string {
-  const named = isGeneratedFilter(sourceOrigin) && !filter.label_edited ? filter.details : filter.label || filter.details;
+  const description = filter.mcf_comment ?? filter.details;
+  const named = isGeneratedFilter(sourceOrigin) && !filter.label_edited ? description : filter.label || description;
   return named || `Video filter ${index + 1}`;
 }
 
@@ -414,9 +416,4 @@ export function severityText(filters: SavedReview["filters"]): string {
   const present = new Set(filters.map((filter) => filter.severity));
   const values = labels.filter((severity) => present.has(severity));
   return values.map((severity) => severity ? `${severity[0].toUpperCase()}${severity.slice(1)}` : "None").join(", ");
-}
-
-export function channelText(filters: SavedReview["filters"]): string {
-  const channels = [...new Set(filters.map((filter) => filter.mcf_channel || "both"))].sort();
-  return channels.map((channel) => `${channel[0].toUpperCase()}${channel.slice(1)}`).join(", ");
 }

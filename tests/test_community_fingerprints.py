@@ -5,7 +5,9 @@ import io
 import json
 import os
 import struct
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -17,6 +19,9 @@ from scanner.formats.community.fingerprints import (
     sample_ranges,
 )
 from scanner.integrations.community import fingerprints as files
+from scanner.runtime import media_fingerprints
+from scanner.runtime.fingerprint_activity import active_fingerprints, track_fingerprint
+from scanner.runtime.scan_version import file_generation
 
 
 @pytest.mark.parametrize(
@@ -78,6 +83,50 @@ def test_cache_reuses_stable_file_and_separates_full(tmp_path, monkeypatch):
     monkeypatch.setattr(files, "digest_stream", lambda *_args: pytest.fail("Unexpected read"))
     assert cache.fingerprint(path) is sampled
     assert cache.fingerprint(path, full=True) is full
+
+
+def test_approval_reports_fingerprint_progress_from_an_existing_read(tmp_path, monkeypatch):
+    path = tmp_path / "video"
+    path.write_bytes(b"exact media")
+    generation = file_generation(str(path))
+    monkeypatch.setattr(
+        media_fingerprints, "_fingerprints", files.FingerprintCache(track_full_reads=True)
+    )
+    reading = Event()
+    finish = Event()
+    real_digest = files.digest_stream
+
+    def slow_read(stream, size, algorithm, *, on_progress):
+        on_progress(4, size)
+        reading.set()
+        assert finish.wait(5)
+        return real_digest(stream, size, algorithm, on_progress=on_progress)
+
+    monkeypatch.setattr(files, "digest_stream", slow_read)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        lookup = executor.submit(media_fingerprints.content_digest, path)
+        try:
+            assert reading.wait(5)
+            with track_fingerprint(
+                actor=(1, 2),
+                item_name="Movie",
+                version_name="Cut",
+                generation=generation,
+                item_id="movie",
+                media_source_id="cut",
+                source_scan_id="source",
+            ):
+                (activity,) = active_fingerprints((1, 2))
+                assert (activity.reading, activity.bytes_read, activity.bytes_total) == (
+                    True,
+                    4,
+                    11,
+                )
+                assert active_fingerprints((1, 3)) == []
+        finally:
+            finish.set()
+        assert lookup.result(timeout=5) == hashlib.sha256(b"exact media").hexdigest()
+    assert media_fingerprints.active_digest_progress(generation) is None
 
 
 def test_same_size_edit_restored_mtime_invalidates_cache(tmp_path):

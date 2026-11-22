@@ -113,10 +113,14 @@ def project_cues(
         channel = _channel_for(item, using)
         if not channel:
             continue
-        projected = alignment.project(item.start_seconds, item.end_seconds)
+        direct = (
+            alignment.audio_matches.get((item.start_seconds, item.end_seconds))
+            if channel == "audio" and item.end_seconds is not None else None
+        )
+        projected = direct or alignment.project(item.start_seconds, item.end_seconds)
         start, end = projected or (None, None)
         if start is not None and (
-            start >= target_duration
+            not 0 <= start < target_duration
             or (end is not None and (end <= start or end > target_duration))
         ):
             start, end = None, None
@@ -242,7 +246,6 @@ def stage_verified_reuse(
         return existing, True
 
     scan_number = db.query(func.max(ScanRow.scan_number)).filter_by(media_item_id=media.id).scalar()
-    suffix = source.name or f"Scan #{source.scan_number}"
     scan = stage_imported_scan(
         db,
         media_item=media,
@@ -250,7 +253,7 @@ def stage_verified_reuse(
         resolved_local_path=target.media.resolved_path,
         media_source_id=target.source.media_source_id,
         source_name="Verified reuse",
-        review_name=f"Verified reuse · {suffix}"[:100].rstrip(),
+        review_name=source.name,
         duration_seconds=duration,
         has_audio="audio" in preview.verified_channels,
         has_video="video" in preview.verified_channels,

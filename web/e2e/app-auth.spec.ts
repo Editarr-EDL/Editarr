@@ -336,7 +336,7 @@ test("browses a library in both views and opens item metadata", async ({ page })
   await page.getByLabel("Rating filter").selectOption("PG-13");
   await page.getByLabel("Resolution filter").selectOption("4K");
   await page.getByRole("button", { name: "Example Movie" }).click();
-  await page.locator("summary").filter({ hasText: "Media files" }).click();
+  await page.getByRole("button", { name: "Show Details", exact: true }).click();
   await expect(page.getByText("A test movie.")).toBeVisible();
   await expect(page).toHaveTitle("Editarr — Media Editing — Example Movie");
   await expect(page.getByText(/^2025 · Rating PG-13/)).toBeVisible();

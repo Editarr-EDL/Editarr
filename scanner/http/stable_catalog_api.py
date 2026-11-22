@@ -1,6 +1,7 @@
 """Resolve stable Editarr titles and legacy Jellyfin bookmarks under live access."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from scanner.persistence.repository.repository_catalog import get_scan, upsert_m
 from scanner.persistence.repository.review_access import ReviewAccess
 from scanner.persistence.write_lock import write_lock
 from scanner.runtime.media_fingerprints import cached_content_digest
+from scanner.runtime.scan_version import completed_scan_digest
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied
 
@@ -25,7 +27,7 @@ from .catalog_library_api import (
 )
 from .review_targets import capture_target
 from .scan_access import ScanCaller
-from .stable_media_capture import file_digest, observe_target_version
+from .stable_media_capture import cached_target_digest, file_digest, observe_target_version
 
 router = APIRouter()
 _browse = catalog_viewer(C.MEDIA_BROWSE)
@@ -33,6 +35,7 @@ _CONTAINER_TYPES = {"Season", "Folder", "BoxSet", "CollectionFolder"}
 
 
 class VersionTarget(BaseModel):
+    cached_only: bool = False
     item_id: str
     media_source_id: str | None = None
 
@@ -160,7 +163,7 @@ def _history(db, viewer, versions, media_by_id):
     return scan_lists, review_lists
 
 
-def _source_generations(db, live, requested):
+def _source_generations(db, server_id, live, requested):
     """Find verified live versions without putting full file reads on ordinary title loads."""
     current = {}
     for item in live:
@@ -171,6 +174,14 @@ def _source_generations(db, live, requested):
             try:
                 path = root.resolve_local_path(db, source_path).local_path
                 digest = cached_content_digest(path)
+                if digest is None:
+                    digest = completed_scan_digest(
+                        db,
+                        server_id=server_id,
+                        item_id=item.id,
+                        media_source_id=source_id,
+                        path=Path(path),
+                    )
                 if digest is None and requested and requested.content_sha256:
                     # An explicit version bookmark may need its physical file revalidated.
                     digest = file_digest(path)
@@ -222,7 +233,7 @@ def _resolve(db, viewer, credentials, title_id, *, preferred=None, original=None
     scan_lists, review_lists = _history(db, viewer, versions, media_by_id)
     active_ids = {item.id for item in live}
     requested = next((version for version in versions if version.id == version_id), None)
-    digests = _source_generations(db, live, requested)
+    digests = _source_generations(db, credentials[0], live, requested)
     current_versions = {}
     for version in versions:
         if version.content_sha256:
@@ -352,6 +363,9 @@ def stable_version(
     prepared = capture_target(caller, target)
     if prepared.source.media_source_id != target.media_source_id:
         raise not_found()
-    version_id = observe_target_version(db, prepared)
+    digest = cached_target_digest(db, prepared) if target.cached_only else None
+    if target.cached_only and digest is None:
+        return {"version_id": None}
+    version_id = observe_target_version(db, prepared, digest=digest)
     db.commit()
     return {"version_id": version_id}

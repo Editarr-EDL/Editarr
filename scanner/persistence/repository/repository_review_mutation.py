@@ -30,6 +30,7 @@ from .activity_ownership import new_review_owner_columns
 from .media_identity_store import bind_review_version, review_version_id
 from .repository_mcf_preflight import (
     _signature_value,
+    filter_mcf_value,
 )
 from .repository_review_retime import (
     _map_retime_entries as _map_retime_entries,
@@ -68,9 +69,9 @@ def _revision_signatures(
         (membership.scan_id, _signature_value(membership.role)) for membership in memberships
     )
 
-    def filter_signature(fields):
+    def filter_signature(fields, field_value=getattr):
         return tuple(
-            tuple(_signature_value(getattr(review_filter, field)) for field in fields)
+            tuple(_signature_value(field_value(review_filter, field)) for field in fields)
             for review_filter in filters
         )
 
@@ -92,7 +93,7 @@ def _revision_signatures(
     edl = (membership_signature, filter_signature(root._EDL_FILTER_FIELDS))
     mcf = (
         membership_signature,
-        filter_signature(root._MCF_FILTER_FIELDS),
+        filter_signature(root._MCF_FILTER_FIELDS, filter_mcf_value),
         document_signature,
     )
     return aggregate, edl, mcf

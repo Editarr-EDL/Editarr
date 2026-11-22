@@ -32,7 +32,7 @@ interface Props {
   mayStartAudioScan: boolean;
   onStartAudioScan: (channels: VerificationRequest["channels"], trackIndex: number | undefined) => void;
   onClose: () => void;
-  onApproved: () => void;
+  onApproved: (approved: Scan) => void;
   onApprovalError: (message: string) => void;
 }
 
@@ -54,7 +54,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
   const [anchors, setAnchors] = useState([emptyAnchor(), emptyAnchor()]);
   const [preview, setPreview] = useState<{ request: VerificationRequest; result: VerificationPreview } | null>(null);
   const [viewedVideo, setViewedVideo] = useState<number[]>([]);
-  const [activity, setActivity] = useState<"preview" | "clip" | "approve" | null>(null);
+  const [activity, setActivity] = useState<"preview" | "verify" | "clip" | "approve" | null>(null);
   const busy = activity !== null;
   const [error, setError] = useState<string | null>(null);
   const [clip, setClip] = useState<CueClip | null>(null);
@@ -90,7 +90,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
     if (busy || !channels.length) return;
     const controller = new AbortController();
     pendingRead.current = controller;
-    setActivity("preview");
+    setActivity(transcript.status === "verify" && method === "transcript" ? "verify" : "preview");
     resetPreview();
     try {
       const provided = method === "manual" ? anchors.filter((anchor) => anchor.source.trim() || anchor.target.trim()) : [];
@@ -158,8 +158,8 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
     setActivity("approve");
     setError(null);
     try {
-      await approveScanReuse(preview.result.version_id, preview.request, preview.result.token);
-      onApproved();
+      const result = await approveScanReuse(preview.result.version_id, preview.request, preview.result.token);
+      onApproved(result.scan);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Unable to approve the scan.";
       if (dismissed.current) onApprovalError(message);
@@ -178,7 +178,8 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
   const transcriptPending = method === "transcript" && transcript.status === "checking";
   const transcriptMissing = method === "transcript" && transcript.status === "missing" && mayStartAudioScan;
   const approving = activity === "approve";
-  const jobs = Number(!!transcript.active) + Number(approving);
+  const fingerprinting = approving || activity === "verify";
+  const jobs = Number(!!transcript.active) + Number(fingerprinting);
   return <ModalDialog className="modal-dialog scan-verification-dialog" labelledBy={headingId}
     onClose={approving ? undefined : onClose}>
     <header className="verification-header">
@@ -192,7 +193,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
     </header>
     {showQueue && <VerificationQueue id={queueId} source={scan.id} target={target} audio={transcript.active}
       transcriptReady={!!submittedAudioScan && transcript.status === "ready"}
-      approving={approving} onClose={closeQueue} />}
+      fingerprinting={fingerprinting} onClose={closeQueue} />}
     <div className="verification-versions" aria-label="Versions">
       <div><span>Original scan</span><strong>{scanLabel(scan)}{originalName ? ` · ${originalName}` : ""}</strong>
         <small>{scan.finding_count} {scan.finding_count === 1 ? "cue" : "cues"} in source scan</small></div>
@@ -227,7 +228,8 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
       {error && <p className="form-error" role="alert">{error}</p>}
       {activity && <p className="form-status" role="status">{approving
         ? "Reading the full file to verify this version before saving. Large files can take several minutes."
-        : activity === "clip" ? "Loading the cue preview…" : "Calculating proposed cue times…"}</p>}
+        : activity === "verify" ? "Checking the file before reusing the saved transcript…"
+          : activity === "clip" ? "Loading the cue preview…" : "Calculating proposed cue times…"}</p>}
     </div>
     <footer className="verification-footer">
       <div className="verification-footer-back">

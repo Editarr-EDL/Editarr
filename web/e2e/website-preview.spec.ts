@@ -14,7 +14,7 @@ test("capture Editarr for the website with example media", async ({ page }) => {
   const dialog = page.getByRole("dialog", { name: "New Review", exact: true });
   await dialog.getByLabel("New review name").fill("Movie night");
   await dialog.getByRole("button", { name: "Start new review" }).click();
-  await panel.getByLabel("Scan #2").check();
+  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
   await expect(panel.getByRole("heading", { name: "Movie night", exact: true })).toBeVisible();
   await expect(panel.locator(".hierarchy-subcategory button").first()).toBeVisible();
   await expect(panel.getByRole("button", { name: "Save Review", exact: true })).toBeEnabled();

@@ -12,7 +12,7 @@ import {
   resumeOrphanedScan,
   reorderScanQueue,
 } from "../api/api-scans";
-import { fetchFingerprintQueue, hasPendingFingerprintApproval, type FingerprintQueueItem } from "../api/api-stable-media";
+import { fetchFingerprintQueue, hasPendingFingerprintWork, type FingerprintQueueItem } from "../api/api-stable-media";
 import { OPEN_SCAN_QUEUE_EVENT } from "../shared/scan-events";
 import type { Scan, ScanQueueItem } from "../api/api-scan-types";
 import {
@@ -128,7 +128,7 @@ function AuthorizedScansPanel({ principal }: { principal: Principal }) {
     ]);
     setFingerprints(activeFingerprints);
     if (expanded && showScans) await loadHistory();
-    return hasPendingFingerprintApproval() || activeFingerprints.length ? ACTIVE_SCAN_POLL_MS : delay;
+    return hasPendingFingerprintWork() || activeFingerprints.length ? ACTIVE_SCAN_POLL_MS : delay;
   }, expanded);
 
   useEffect(() => {

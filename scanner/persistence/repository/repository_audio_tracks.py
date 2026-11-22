@@ -4,12 +4,13 @@ import json
 import math
 from pathlib import Path
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from scanner.db import AudioTrackSelectionRow, ScanRow
 from scanner.modeling.model_audio_tracks import AudioSelection
-from scanner.pipeline.audio_tracks import AudioSelectionError
+from scanner.persistence.rows.db_media_identity import MediaVersionRow, ScanMediaVersionRow
+from scanner.pipeline.audio_tracks import AudioSelectionError, AudioTrack
 
 from .repository_checkpoints import _checkpoint_state
 
@@ -26,6 +27,31 @@ def remember_audio_selection(db: Session, path: Path, selection: AudioSelection)
         db.add(row)
     row.selection_json = selection.model_dump_json()
     db.commit()
+
+
+def analyzed_track_matches_file(db: Session, path: Path, checksum: str, track: AudioTrack) -> bool:
+    """Check for a completed scan of this stream on the exact file at this path."""
+    selections = db.scalars(
+        select(ScanRow.analyzed_audio_selection_json)
+        .join(ScanMediaVersionRow, ScanMediaVersionRow.scan_id == ScanRow.id)
+        .join(MediaVersionRow, MediaVersionRow.id == ScanMediaVersionRow.version_id)
+        .where(
+            ScanRow.resolved_local_path == str(path),
+            ScanRow.origin == "generated",
+            ScanRow.status == "complete",
+            ScanRow.scan_audio.is_(True),
+            ScanRow.analyzed_audio_selection_json.is_not(None),
+            MediaVersionRow.content_sha256 == checksum,
+        )
+        .distinct()
+    )
+    for saved in selections:
+        try:
+            if AudioSelection.model_validate_json(saved).selection().track == track:
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def recorded_playback_offset(scan, selection) -> float | None:

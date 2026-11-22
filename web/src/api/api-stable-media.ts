@@ -90,17 +90,23 @@ function post<T>(path: string, value: unknown, failure: string, signal?: AbortSi
 }
 
 export function identifyEditarrVersion(titleId: string, target: VerificationRequest["target"]) {
-  return post<{ version_id: string }>(`${stableItemPath(titleId)}/versions`, target, "Unable to verify the selected source file");
+  return post<{ version_id: string | null }>(`${stableItemPath(titleId)}/versions`, { ...target, cached_only: true }, "Unable to verify the selected source file");
 }
 
 export function previewScanReuse(versionId: string, request: VerificationRequest, signal?: AbortSignal) {
   const path = `${runtimeApiBasePath()}/media-versions/${encodeURIComponent(versionId)}/reuse/preview`;
-  return post<VerificationPreview>(path, request, "Unable to align this scan", signal);
+  const preview = post<VerificationPreview>(path, request, "Unable to align this scan", signal).finally(() => {
+    pendingPreviews.delete(preview);
+    notifyScansChanged();
+  });
+  pendingPreviews.add(preview);
+  notifyScansChanged();
+  return preview;
 }
 
 export function fetchVerificationTranscriptStatus(request: VerificationRequest, signal: AbortSignal) {
   const path = `${runtimeApiBasePath()}/media-versions/current/reuse/transcript-status`;
-  return post<{ ready: boolean }>(path, request, "Unable to check the target transcript", signal);
+  return post<{ ready: boolean; verify_existing?: boolean }>(path, request, "Unable to check the target transcript", signal);
 }
 
 export interface FingerprintQueueItem {
@@ -116,9 +122,10 @@ export interface FingerprintQueueItem {
 }
 
 const pendingApprovals = new Map<string, Promise<{ scan: Scan; reused: boolean }>>();
+const pendingPreviews = new Set<Promise<VerificationPreview>>();
 
-export function hasPendingFingerprintApproval() {
-  return pendingApprovals.size > 0;
+export function hasPendingFingerprintWork() {
+  return pendingApprovals.size > 0 || pendingPreviews.size > 0;
 }
 
 export function fetchFingerprintQueue() {

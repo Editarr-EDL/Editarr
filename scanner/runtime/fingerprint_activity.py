@@ -6,6 +6,8 @@ from dataclasses import dataclass, replace
 from threading import Lock
 from uuid import uuid4
 
+from .media_fingerprints import active_digest_progress
+
 
 @dataclass(frozen=True)
 class FingerprintActivity:
@@ -21,7 +23,7 @@ class FingerprintActivity:
 
 
 _lock = Lock()
-_activities: dict[str, tuple[tuple[int, int], FingerprintActivity]] = {}
+_activities: dict[str, tuple[tuple[int, int], tuple[int, ...], FingerprintActivity]] = {}
 
 
 @contextmanager
@@ -30,22 +32,29 @@ def track_fingerprint(
     actor: tuple[int, int],
     item_name: str,
     version_name: str | None,
-    size: int,
+    generation: tuple[int, ...],
     item_id: str,
     media_source_id: str | None,
     source_scan_id: str,
 ) -> Iterator[Callable[[int, int], None]]:
     """Publish one authorized read until it finishes or fails."""
     item = FingerprintActivity(
-        uuid4().hex, item_name, version_name, 0, size, item_id, media_source_id, source_scan_id
+        uuid4().hex,
+        item_name,
+        version_name,
+        0,
+        generation[2],
+        item_id,
+        media_source_id,
+        source_scan_id,
     )
     with _lock:
-        _activities[item.id] = (actor, item)
+        _activities[item.id] = (actor, generation, item)
 
     def report(done: int, total: int) -> None:
         current = replace(item, bytes_read=done, bytes_total=total, reading=True)
         with _lock:
-            _activities[item.id] = (actor, current)
+            _activities[item.id] = (actor, generation, current)
 
     try:
         yield report
@@ -57,4 +66,13 @@ def track_fingerprint(
 def active_fingerprints(actor: tuple[int, int]) -> list[FingerprintActivity]:
     """Return only work initiated under the caller's current authority."""
     with _lock:
-        return [item for owner, item in _activities.values() if owner == actor]
+        activities = [
+            (generation, item) for owner, generation, item in _activities.values() if owner == actor
+        ]
+    results = []
+    for generation, item in activities:
+        progress = active_digest_progress(generation) if not item.reading else None
+        if progress is not None:
+            item = replace(item, bytes_read=progress[0], bytes_total=progress[1], reading=True)
+        results.append(item)
+    return results

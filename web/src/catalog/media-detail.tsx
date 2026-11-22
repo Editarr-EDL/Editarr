@@ -4,7 +4,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import {
   fetchCapabilities,
@@ -89,7 +88,7 @@ export function LibraryBreadcrumbs({
 }
 
 /** Manage one catalog item, its scan history, versions, and saved reviews. */
-export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDirtyChange, stableIdentity, versionPicker, initialSourceId }: { item: JellyfinMediaItem; breadcrumbs: Breadcrumb[]; onNavigate: (route: string) => void; seasonNumber?: number | null; onDirtyChange: (dirty: boolean) => void; stableIdentity?: EditarrItem; versionPicker?: ReactNode; initialSourceId?: string | null }) {
+export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDirtyChange, stableIdentity, initialSourceId }: { item: JellyfinMediaItem; breadcrumbs: Breadcrumb[]; onNavigate: (route: string) => void; seasonNumber?: number | null; onDirtyChange: (dirty: boolean) => void; stableIdentity?: EditarrItem; initialSourceId?: string | null }) {
   usePageTitle(item.name);
   const mayScan = useCan("scans.start");
   const mayVerify = useCan("reviews.import.upload");
@@ -217,23 +216,26 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const verifyCurrent = !!stableIdentity && !currentVersion && stableIdentity.versions.some((version) =>
     version.jellyfin_item_id === item.id && version.media_source_id === selectedReviewMediaSourceId
       && version.scans.some((scan) => scan.stable_version_id === version.id));
+  const completedScans = scans.filter((scan) => scan.status === "complete").map((scan) => scan.id).sort().join(",");
   useEffect(() => {
     const title = stableIdentity?.title_id;
     if (!title || !verifyCurrent) return;
     let active = true;
     void identifyEditarrVersion(title, { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId })
-      .then((result) => { if (active) setIdentified({ source: scanContext, id: result.version_id }); })
+      .then((result) => { if (active && result.version_id) setIdentified({ source: scanContext, id: result.version_id }); })
       .catch(() => {});
     return () => { active = false; };
-  }, [stableIdentity?.title_id, verifyCurrent, item.id, selectedReviewMediaSourceId, scanContext]);
+  }, [stableIdentity?.title_id, verifyCurrent, item.id, selectedReviewMediaSourceId, scanContext, completedScans]);
   const previousVersions = stableIdentity?.versions.filter((version) =>
     version.id !== currentVersion && (version.jellyfin_item_id !== item.id
       || version.media_source_id !== selectedReviewMediaSourceId || !version.available)) || [];
   const previousIds = new Set(previousVersions.flatMap((version) => version.scans.map((scan) => scan.id)));
   const isPending = (scan: Scan) => !!scan.reuse_pending || !!scan.community_pending_targets?.some((target) =>
     target.target_item_id === item.id && target.media_source_id === selectedReviewMediaSourceId);
-  const pendingImports = scans.filter(isPending);
-  const readyScans = scans.filter((scan) => !isPending(scan) && !previousIds.has(scan.id));
+  const versionScans = scanResult?.context === scanContext ? scans
+    : stableIdentity?.versions.find((version) => version.id === currentVersion)?.scans ?? [];
+  const pendingImports = versionScans.filter(isPending);
+  const readyScans = versionScans.filter((scan) => !isPending(scan) && !previousIds.has(scan.id));
   const reviewScans = communityReviewScans(readyScans, { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId });
   const filters = useFindFilters({
     communityInput,
@@ -389,7 +391,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   };
   return <div className="content-page media-detail">
     <LibraryBreadcrumbs crumbs={breadcrumbs} onNavigate={leaveDetail} />
-    {versionPicker}
     <MediaWorkflowHeader item={item} versions={versions} sourceId={selectedReviewMediaSourceId} imageUrl={imageUrl}
       onSourceChange={selectReviewVersion} onManageLegacyExports={mayDeleteLegacy && Object.values(legacyExports(activeExportStatus)).some((status) => status.present)
         ? () => setShowManageExports(true) : undefined} />
@@ -422,7 +423,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
           {linkedError && <p role="alert">{linkedError} <button type="button" className="btn-secondary compact-button"
             onClick={() => void loadScans()}>Retry</button></p>}
           <PreviousVersionScans versions={previousVersions} imports={pendingImports} linkedScans={linkedScans}
-            verifiedSources={new Set(readyScans.flatMap((scan) => scan.verified_from_scan_id ? [scan.verified_from_scan_id] : []))} canVerify={mayVerify} onVerify={openVerification} />
+            verifiedCopies={readyScans.filter((scan) => scan.status === "complete" && !!scan.verified_from_scan_id
+              && !!currentVersion && scan.stable_version_id === currentVersion)} canVerify={mayVerify} onVerify={openVerification} />
         </>,
         onStartAudioScan: () => openNewScan(true),
         stageImportsForVerification: !!stableIdentity,
@@ -453,8 +455,9 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       onApprovalError={(failure) => {
         if (currentScanContext.current === scanContext) setMessage(failure);
       }}
-      onApproved={() => {
+      onApproved={(approved) => {
         if (currentScanContext.current !== scanContext) return;
+        if (approved.stable_version_id) setIdentified({ source: scanContext, id: approved.stable_version_id });
         if (verificationSession.current === activeVerificationSession) setScanToVerify(null);
         setMessage("Verified cues are now available in Review for this version.");
         void loadScans();

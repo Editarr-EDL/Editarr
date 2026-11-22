@@ -38,10 +38,11 @@ def _video_cache_dir(video_hash: str) -> Path:
     return _video_cache_root() / video_hash
 
 
-def cached_audio_path(video_hash: str) -> Path:
+def cached_audio_path(video_hash: str, *, create: bool = True) -> Path:
     """Return the persisted audio extraction path for a video hash."""
     cache_dir = _video_cache_dir(video_hash)
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    if create:
+        cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / "audio.wav"
 
 

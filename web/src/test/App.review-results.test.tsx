@@ -272,7 +272,9 @@ describe("production saved-review UI authority", () => {
     expect(screen.queryByRole("region", { name: "Review filters" })).not.toBeInTheDocument();
     expect(screen.getByText("Skipped Time 0:10")).toBeVisible();
     expect(screen.getByRole("img", { name: "1 selected results across 2 scans" })).toBeVisible();
-    expect(screen.getAllByText(/Imported from input\.edl on/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Imported from input\.edl/)).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Primary" })).toBeChecked();
+    expect(screen.getAllByRole("button", { name: "Show scan details for Primary" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("No objectionable content detected")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show No Objectionable Content" }));
     expect(await screen.findByText("1/3 results")).toBeVisible();

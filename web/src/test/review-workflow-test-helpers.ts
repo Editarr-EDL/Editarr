@@ -13,8 +13,8 @@ export async function exportAction(format: "EDL" | "MCF") {
 }
 
 export function revealMediaFiles() {
-  const summary = screen.getByText("Media files", { selector: "summary" });
-  if (!summary.closest("details")?.open) fireEvent.click(summary);
+  const details = screen.getByRole("button", { name: /^(Show|Hide) Details$/ });
+  if (details.getAttribute("aria-expanded") === "false") fireEvent.click(details);
 }
 
 export async function useCategorySort() {

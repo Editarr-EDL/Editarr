@@ -4,7 +4,7 @@ import type { AudioTrackSelection } from "../api/api-audio-tracks";
 import { fetchVerificationTranscriptStatus, type VerificationRequest } from "../api/api-stable-media";
 import type { Scan, ScanQueueItem } from "../api/api-scan-types";
 
-type TranscriptStatus = "checking" | "ready" | "missing" | "unknown";
+export type TranscriptStatus = "checking" | "ready" | "verify" | "missing" | "unknown";
 
 /** Scope queued audio work and readiness to the selected physical version and stream. */
 export function useVerificationTranscript({ source, target, selection, channels, scans, submittedScan }: {
@@ -43,8 +43,9 @@ export function useVerificationTranscript({ source, target, selection, channels,
       audio_track_index: trackIndex,
       channels: selectedChannels.split(",") as VerificationRequest["channels"],
       method: "transcript",
-    }, controller.signal).then(({ ready }) => {
-      if (!controller.signal.aborted) setState({ key, status: ready === true ? "ready" : ready === false ? "missing" : "unknown" });
+    }, controller.signal).then(({ ready, verify_existing }) => {
+      const status = ready === true ? "ready" : verify_existing ? "verify" : ready === false ? "missing" : "unknown";
+      if (!controller.signal.aborted) setState({ key, status });
     }).catch(() => {
       if (!controller.signal.aborted) setState({ key, status: "unknown" });
     });
