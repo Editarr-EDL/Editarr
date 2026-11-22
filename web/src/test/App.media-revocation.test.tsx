@@ -1,3 +1,4 @@
+import { openWorkflowStep } from "./review-workflow-test-helpers";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import App from "../App";
@@ -26,6 +27,7 @@ it("renders the projected scan failure without hiding its status", async () => {
   }));
   window.location.hash = "#/library/movies/item/movie-1";
   render(<AuthenticationGate><App /></AuthenticationGate>);
+  await openWorkflowStep("Scans");
   await screen.findByText(/Own failed scan.*failed/);
   expect(await screen.findByText("Scan could not complete")).toBeVisible();
 });
@@ -52,6 +54,7 @@ it.each([403, 404])("clears the workspace on an item-scoped %s without a princip
   }));
   window.location.hash = "#/library/movies/item/movie-1";
   render(<AuthenticationGate><App /></AuthenticationGate>);
+  await openWorkflowStep("Scans");
   await screen.findByText(/Previously visible result.*complete/);
   denied = true;
   fireEvent.click(screen.getByRole("button", { name: "New Scan" }));

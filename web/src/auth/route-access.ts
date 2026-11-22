@@ -17,6 +17,7 @@ const SETTINGS: Record<SettingsSection, Capability | null> = {
 export function routeCapability(route: Route): Capability | null {
   switch (route.kind) {
     case "settings": return SETTINGS[route.section];
+    case "title":
     case "library": return "media.browse";
   }
 }

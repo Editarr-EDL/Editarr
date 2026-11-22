@@ -52,6 +52,7 @@ from .review_policy import (
     prepare_review_policy,
     require_policy_evidence,
 )
+from .review_version_evidence import review_file_matches
 from .scan_jobs import ScanMedia
 
 
@@ -189,6 +190,8 @@ def render_saved_review_filter_preview(
         target_path = Path(resolve_local_path(db, row.media_item.path).local_path).resolve()
         if not root._scan_matches_physical_version(scan, target_path):
             raise ValueError("The review filter source media is unavailable")
+    if review_file_matches(db, review_id, scan.resolved_local_path) is False:
+        raise ReviewMembershipError("The original Editarr review version is unavailable")
     if preview_kind == "mute":
         if review_filter.source != "audio" or review_filter.edit_action != EditAction.MUTE.value:
             raise ValueError("Only audio mute filters can be previewed")

@@ -41,6 +41,7 @@ from .catalog_access import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _browse = catalog_viewer(Capability.MEDIA_BROWSE)
+_BROWSABLE_ITEM_TYPES = ("Movie", "Series", "Video", "MusicVideo")
 
 
 @router.get("/api/libraries", response_model=list[JellyfinLibrary])
@@ -241,7 +242,7 @@ def _cached_library_items(
         items = client.all_items(
             library_id,
             recursive=False,
-            include_item_types=("Movie", "Series", "Video", "MusicVideo"),
+            include_item_types=_BROWSABLE_ITEM_TYPES,
         )
     with LIBRARY_ITEMS_CACHE_LOCK:
         LIBRARY_ITEMS_CACHE[cache_key] = items
@@ -297,15 +298,29 @@ def api_list_jellyfin_library_items(
         raise HTTPException(409, "Configure Jellyfin before browsing libraries")
     if not viewer.library_visible(library_id):
         raise not_found()
+    title_query = (search or "").strip()
+    search_value = _normalized_title(title_query)
     try:
         items = _cached_library_items(library_id, credentials, refresh=refresh)
+        if search_value:
+            # Jellyfin can return a title match omitted from its unfiltered listing.
+            # Keep the library's normal facets and local accent-insensitive matching.
+            with root.JellyfinClient(*credentials) as client:
+                matches = client.all_items(
+                    library_id,
+                    recursive=False,
+                    include_item_types=_BROWSABLE_ITEM_TYPES,
+                    search_term=title_query,
+                )
+            by_id = {item.id: item for item in items}
+            by_id.update((item.id, item) for item in matches)
+            items = list(by_id.values())
     except JellyfinNotFound as exc:
         raise not_found() from exc
     except JellyfinError as exc:
         root.record_jellyfin_connection(db, str(exc))
         raise HTTPException(502, str(exc)) from exc
     root.record_jellyfin_connection(db, None)
-    search_value = _normalized_title(search) if search else ""
     reachable = viewer.visible(
         _library_browse_items(library_id, items),
         lambda item: jellyfin_item_target(viewer, credentials, item, library_id),

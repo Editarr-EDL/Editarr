@@ -331,10 +331,21 @@ class ReviewAccess:
                 return False
             return True
 
+        def scan_visible(scan_id):
+            facts = scan_job_facts(self.db, [scan_id]).get(scan_id)
+            if not facts:
+                return False
+            try:
+                self.require_scan(facts, self.media_decision(facts.media))
+            except AccessDenied:
+                return False
+            return True
+
         return project_review(
             project_publications(self, value),
             paths=C.MEDIA_PATHS_VIEW in self.access.capabilities,
             visible=visible,
+            scan_visible=scan_visible,
         )
 
     def create(

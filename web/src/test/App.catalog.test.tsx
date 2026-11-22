@@ -1,3 +1,4 @@
+import { openWorkflowStep, revealMediaFiles } from "./review-workflow-test-helpers";
 import { cleanup, fireEvent, render as renderComponent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -18,18 +19,19 @@ describe("production saved-review UI authority", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
     const mediaHeading = await screen.findByRole("heading", { name: "Example Movie" });
-    const scansHeading = screen.getByRole("heading", { name: "Scans" });
-    const importButton = screen.getByRole("button", { name: "Import" });
-    const savedReviewsHeading = screen.getByRole("heading", { name: "Saved reviews" });
-    expect(mediaHeading.compareDocumentPosition(scansHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(scansHeading.compareDocumentPosition(savedReviewsHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(savedReviewsHeading.compareDocumentPosition(importButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(savedReviewsHeading).toBeVisible();
-    const savedReviewsTable = screen.getByRole("table", { name: "Saved reviews" });
-    expect(savedReviewsTable).toBeVisible();
+    const workflow = screen.getByRole("tablist", { name: "Library item workflow" });
+    const published = screen.getByRole("region", { name: "Published files" });
+    expect(mediaHeading.compareDocumentPosition(published) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(published.compareDocumentPosition(workflow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(workflow).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Scans", "Review", "Subtitles", "Publish"]);
+    expect(screen.getByRole("heading", { name: "Saved reviews" })).toBeVisible();
+    expect(screen.getByRole("table", { name: "Saved reviews" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Import$/ })).not.toBeInTheDocument();
+    await openWorkflowStep("Scans");
+    const scanTools = screen.getByRole("button", { name: /^Find Filters$/ }).parentElement!;
+    expect(within(scanTools).getByRole("button", { name: /^Import$/ })).toBeVisible();
+    await openWorkflowStep("Review");
     const newReviewButton = screen.getByRole("button", { name: "New Review" });
-    expect(newReviewButton.compareDocumentPosition(savedReviewsTable)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(importButton.compareDocumentPosition(savedReviewsTable)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     fireEvent.click(newReviewButton);
     expect(screen.getByRole("button", { name: "Start new review" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("New review name"), { target: { value: "Named review" } });
@@ -70,6 +72,7 @@ describe("production saved-review UI authority", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Example Movie" }));
     expect(await screen.findByRole("heading", { name: "Example Movie" })).toBeVisible();
+    revealMediaFiles();
     expect(screen.getAllByRole("button", { name: "Show exact length: 01:01:01.235" })).toHaveLength(2);
   });
 
@@ -91,6 +94,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "Import" }));
     const dialog = await screen.findByRole("dialog", { name: "Import" });
     fireEvent.click(within(dialog).getByRole("button", { name: "MCF" }));
@@ -125,6 +129,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "Import" }));
     const dialog = await screen.findByRole("dialog", { name: "Import" });
     fireEvent.click(within(dialog).getByRole("button", { name: "MCF" }));
@@ -174,6 +179,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "Import" }));
     let dialog = await screen.findByRole("dialog", { name: "Import" });
     fireEvent.click(within(dialog).getByRole("button", { name: "MCF" }));
@@ -220,6 +226,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "Import" }));
     const dialog = await screen.findByRole("dialog", { name: "Import" });
     fireEvent.click(within(dialog).getByRole("button", { name: "MCF" }));
@@ -405,6 +412,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     fireEvent.change(await screen.findByLabelText("Scan type"), {
       target: { value: "video" },
@@ -470,6 +478,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
     fireEvent.change(within(dialog).getByLabelText("Scan type"), { target: { value: "credits" } });
@@ -496,6 +505,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     expect(await screen.findByText("decoder failed on the selected video stream")).toBeVisible();
   });
 

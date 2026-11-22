@@ -254,6 +254,9 @@ class ScanCaller:
         update: dict[str, object] = {
             "is_own": seen.facts.initiator_id == int(self.access.principal.user_id)
         }
+        if isinstance(scan, Scan) and scan.verified_from_scan_id:
+            if scan.verified_from_scan_id not in self.seen([scan.verified_from_scan_id]):
+                update["verified_from_scan_id"] = None
         if isinstance(scan, ScanQueueItem):
             keys = self._job_keys() if jobs is None else jobs
             update["sort_order"] = bisect_left(keys, (scan.sort_order, scan.queue_id))

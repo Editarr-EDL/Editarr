@@ -19,6 +19,7 @@ def run_audio_stages(
     completed_stages,
     checkpoint_callback,
     analyzed_audio_callback,
+    analyzed_audio_timing_callback,
     findings_writer,
     record_stage,
     emit,
@@ -107,6 +108,8 @@ def run_audio_stages(
             probe_audio_tracks(path).revalidate(audio_selection)
             if analyzed_audio_callback:
                 analyzed_audio_callback(audio_selection)
+            if analyzed_audio_timing_callback:
+                analyzed_audio_timing_callback(audio_selection, playback_offset)
         if findings:
             findings_writer(db, video_id, findings)
         if checkpoint_callback:

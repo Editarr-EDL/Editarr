@@ -1,3 +1,4 @@
+import { exportAction, openWorkflowStep, revealMediaFiles, useCategorySort } from "./review-workflow-test-helpers";
 import { act, cleanup, fireEvent, render as renderComponent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,6 +34,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "Delete Combined scan · Scan #7" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Delete Combined scan · Scan #7?" });
@@ -88,7 +90,8 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
     const role = await screen.findByLabelText("Review role for Combined scan · Scan #7");
     expect(role).toHaveValue("both");
-    expect(screen.queryByRole("region", { name: "Review filters" })).not.toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Review filters by time" })).toBeVisible();
+    await useCategorySort();
     await openFirstReviewFindingGroup(await screen.findByRole("region", { name: "Audio review filters" }));
     await openFirstReviewFindingGroup(screen.getByRole("region", { name: "Video review filters" }));
     const audioToggle = screen.getByRole("button", { name: "Edit filter audio-filter" });
@@ -118,6 +121,7 @@ describe("production saved-review UI authority", () => {
 
     fireEvent.change(role, { target: { value: "both" } });
     await waitFor(() => expect(findingRequests).toBe(1));
+    await useCategorySort();
     const refreshedVideoSection = await screen.findByRole("region", { name: "Video review filters" });
     if (!within(refreshedVideoSection).queryByRole("button", { name: /^Edit filter / })) {
       await openFirstReviewFindingGroup(refreshedVideoSection);
@@ -266,6 +270,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await useCategorySort();
     await openFirstReviewFindingGroup(await screen.findByRole("region", { name: "Audio review filters" }));
     fireEvent.click(await screen.findByRole("button", { name: "Edit filter audio-filter" }));
     fireEvent.change(await screen.findByLabelText("Filter audio-filter label"), { target: { value: "Dirty local edit" } });
@@ -321,6 +326,7 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
     expect(screen.queryByRole("columnheader", { name: "Action" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Preview filter", { exact: true })).not.toBeInTheDocument();
+    await useCategorySort();
     await openFirstReviewFindingGroup(await screen.findByRole("region", { name: "Audio review filters" }));
     const audioPreview = screen.getByRole("button", { name: "Preview filter audio-filter" });
     expect(audioPreview.closest("td")).not.toBeNull();
@@ -381,12 +387,14 @@ describe("production saved-review UI authority", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
     await screen.findByRole("heading", { name: "Existing review", level: 3 });
-    fireEvent.click(await screen.findByRole("button", { name: "Export" }));
+    fireEvent.click(await exportAction("EDL"));
     const exportDialog = await screen.findByRole("dialog", { name: "Export" });
     fireEvent.click(within(exportDialog).getByRole("button", { name: "Publish EDL" }));
     await waitFor(() => expect(releaseReread).not.toBeNull());
     fireEvent.click(within(exportDialog).getByRole("button", { name: "Close" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open review Other review" }));
+    fireEvent.change(screen.getByLabelText("Saved review"), { target: { value: second.id } });
+    await waitFor(() => expect(screen.getByLabelText("Saved review")).toHaveValue(second.id));
+    await openWorkflowStep("Review");
     await screen.findByRole("heading", { name: "Other review", level: 3 });
     await act(async () => { releaseReread!(); });
     expect(screen.getByRole("heading", { name: "Other review", level: 3 })).toBeInTheDocument();
@@ -458,7 +466,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
-    const exportButton = await screen.findByRole("button", { name: "Export" });
+    const exportButton = await exportAction("EDL");
     exportButton.focus();
     fireEvent.click(exportButton);
     let exportDialog = await screen.findByRole("dialog", { name: "Export" });
@@ -472,11 +480,14 @@ describe("production saved-review UI authority", () => {
     await waitFor(() => expect(within(exportDialog).getByRole("listitem", { name: "EDL at Your personal files" })).toHaveTextContent("CurrentFrom this review."));
     expect(exportRequests).toEqual([{ revision: 1, policy_owner_id: review.policy_owner_id, policy_revision: review.policy_revision, target: "self" }]);
     fireEvent.click(within(exportDialog).getByRole("button", { name: "Close" }));
+    await openWorkflowStep("Review");
     const reviewRow = screen.getByRole("button", { name: "Open review Existing review" }).closest("tr")!;
     await waitFor(() => expect(reviewRow).toHaveTextContent("EDL · Current"));
     expect(screen.getByRole("listitem", { name: "EDL · Personal · You" })).toHaveTextContent("Current");
-    expect(screen.getByRole("button", { name: "Manage exports" })).toBeEnabled();
+    revealMediaFiles();
+    expect(screen.getByRole("button", { name: "Manage legacy exports" })).toBeEnabled();
 
+    await useCategorySort();
     await openFirstReviewFindingGroup(await screen.findByRole("region", { name: "Audio review filters" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit filter audio-filter" }));
     fireEvent.change(screen.getByLabelText("Filter audio-filter label"), { target: { value: "Changed after export" } });
@@ -495,13 +506,14 @@ describe("production saved-review UI authority", () => {
     await waitFor(() => expect(screen.getByRole("listitem", { name: "EDL · Personal · You" })).toHaveTextContent("From a deleted or unavailable review."));
     expect(screen.getAllByText(/EDL · Outdated/).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Manage exports" }));
+    revealMediaFiles();
+    fireEvent.click(screen.getByRole("button", { name: "Manage legacy exports" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage exports" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete EDL" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm Delete EDL" }));
     await waitFor(() => expect(sidecarDeletes).toBe(1));
     expect(screen.queryByText(/EDL · Current/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Manage exports" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage legacy exports" })).not.toBeInTheDocument();
   });
 
   it("blocks MCF export on actionable preflight issues then preserves an active EDL", async () => {
@@ -546,7 +558,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Export" }));
+    fireEvent.click(await exportAction("MCF"));
     fireEvent.click(within(await screen.findByRole("dialog", { name: "Export" })).getByRole("button", { name: "Publish MCF" }));
     const issues = await screen.findByRole("alert", { name: "MCF export needs attention" });
     expect(screen.queryByRole("dialog", { name: "Export" })).not.toBeInTheDocument();
@@ -555,18 +567,19 @@ describe("production saved-review UI authority", () => {
     expect(mcfExports).toBe(0);
 
     eligible = true;
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    fireEvent.click(await exportAction("MCF"));
     const exportDialog = await screen.findByRole("dialog", { name: "Export" });
     fireEvent.click(within(exportDialog).getByRole("button", { name: "Publish MCF" }));
     await waitFor(() => expect(mcfExports).toBe(1));
     await waitFor(() => expect(within(exportDialog).getByRole("listitem", { name: "MCF at Your personal files" })).toHaveTextContent("Current"));
-    expect(within(exportDialog).getByRole("listitem", { name: "EDL at Your personal files" })).toHaveTextContent("Current");
     fireEvent.click(within(exportDialog).getByRole("button", { name: "Close" }));
+    await openWorkflowStep("Review");
     const reviewRow = screen.getByRole("button", { name: "Open review Existing review" }).closest("tr")!;
     await waitFor(() => expect(reviewRow).toHaveTextContent("MCF · Current"));
     expect(reviewRow).toHaveTextContent("EDL · Current");
 
-    fireEvent.click(screen.getByRole("button", { name: "Manage exports" }));
+    revealMediaFiles();
+    fireEvent.click(screen.getByRole("button", { name: "Manage legacy exports" }));
     const manageDialog = await screen.findByRole("dialog", { name: "Manage exports" });
     fireEvent.click(within(manageDialog).getByRole("button", { name: "Delete MCF" }));
     fireEvent.click(within(manageDialog).getByRole("button", { name: "Confirm Delete MCF" }));

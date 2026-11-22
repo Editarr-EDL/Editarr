@@ -19,7 +19,7 @@ import type {
 import { usePageTitle } from "./shared/display";
 import { settingsSectionTitle } from "./settings/settings-sections";
 import { ScansFloatingPanel } from "./scans/scans-floating-panel";
-import { LibraryViewPage, MediaDetailPage, SeriesSeasonsPage, SeasonEpisodesPage } from "./catalog/library-pages";
+import { LibraryViewPage, SeasonEpisodesPage } from "./catalog/library-pages";
 import { AppSidebar } from "./ui/AppSidebar";
 import { EmptyPage } from "./ui/EmptyPage";
 import { navigate, parseRoute, isRootRoute, type Route } from "./routes";
@@ -27,7 +27,7 @@ import { writeUserValue } from "./shared/user-storage";
 import { usePrincipal } from "./auth/auth-gate";
 import { homeRoute, mayOpen } from "./auth/route-access";
 import { can } from "./auth/session";
-import { CatalogItemBoundary } from "./catalog/catalog-item-boundary";
+import { StableItemPage } from "./catalog/stable-item-page";
 
 const SettingsView = lazy(() => import("./settings/settings-view").then((module) => ({ default: module.SettingsView })));
 const UsersView = lazy(() => import("./settings/users/users-view").then((module) => ({ default: module.UsersView })));
@@ -136,6 +136,12 @@ function App() {
     );
   }, [route]);
 
+  const replaceRoute = useCallback((path: string) => {
+    window.history.replaceState(null, "", `#${path}`);
+    acceptedHashRef.current = window.location.hash;
+    setRoute(parseRoute());
+  }, []);
+
   const activeLibrary = route.kind === "library"
     ? libraries.find((library) => library.id === route.libraryId)
     : undefined;
@@ -159,14 +165,16 @@ function App() {
         {route.section === "profile" && <ProfileView />}
         {route.section !== "users" && route.section !== "profile" && route.section !== "audit" && <SettingsView section={route.section} filterTab={route.filterTab} openBackups={route.openBackups} settings={settings} onSaved={async () => { libraryPageCacheRef.current.clear(); await refreshNavigation(); }} />}
       </Suspense>}
-      {route.kind === "library" && activeLibrary && route.itemId && <CatalogItemBoundary key={`jellyfin:${route.itemId}`} source="jellyfin" itemId={route.itemId} onUnavailable={clearUnavailableMedia}><MediaDetailPage library={activeLibrary} itemId={route.itemId} seriesId={route.seriesId} seasonId={route.seasonId} onNavigate={guardedNavigate} onDirtyChange={setReviewDirty} /></CatalogItemBoundary>}
+      {(route.kind === "title" || route.kind === "library" && (route.itemId || route.seriesId && !route.seasonId)) &&
+        <StableItemPage key={route.kind === "title" ? route.titleId : route.itemId || route.seriesId}
+          route={route} libraries={libraries} onNavigate={guardedNavigate} onReplace={replaceRoute}
+          onDirtyChange={setReviewDirty} onUnavailable={clearUnavailableMedia} />}
       {route.kind === "library" && activeLibrary && route.seriesId && route.seasonId && !route.itemId && <SeasonEpisodesPage key={route.seasonId} library={activeLibrary} seriesId={route.seriesId} seasonId={route.seasonId} />}
-      {route.kind === "library" && activeLibrary && route.seriesId && !route.seasonId && !route.itemId && <SeriesSeasonsPage key={route.seriesId} library={activeLibrary} seriesId={route.seriesId} />}
       {route.kind === "library" && activeLibrary && !route.itemId && !route.seriesId && <LibraryViewPage key={activeLibrary.id} library={activeLibrary} cache={libraryPageCacheRef.current} />}
-      {route.kind === "library" && !activeLibrary && <EmptyPage title="Library unavailable" body="Reconnect Jellyfin or choose a library from the sidebar." />}
+      {route.kind === "library" && !activeLibrary && !route.itemId && (!route.seriesId || route.seasonId) && <EmptyPage title="Library unavailable" body="Reconnect Jellyfin or choose a library from the sidebar." />}
       </>}
     </main>
-    {can(principal, "scan_jobs.view.own") && <ScansFloatingPanel />}
+    <ScansFloatingPanel />
   </div>;
 }
 

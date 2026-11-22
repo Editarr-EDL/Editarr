@@ -106,14 +106,15 @@ class FakeJellyfin:
         self.calls.append(("libraries", ""))
         return list(LIBRARIES)
 
-    def all_items(self, library_id, recursive=False, include_item_types=()):
-        self.calls.append(("listing", library_id))
+    def all_items(self, library_id, recursive=False, include_item_types=(), search_term=""):
+        self.calls.append(("search" if search_term else "listing", library_id))
         return [
             _jellyfin(item_id, library_id)
             for item_id, item in JELLYFIN_ITEMS.items()
             if item.library_id == library_id
             and item.item_type in include_item_types
             and item.item_type != "Series"
+            and (not search_term or search_term.casefold() in item.name.casefold())
         ]
 
     def item(self, item_id):

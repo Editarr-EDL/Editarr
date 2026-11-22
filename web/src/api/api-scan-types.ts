@@ -58,6 +58,10 @@ export interface Scan {
   updated_at: string;
   name: string | null;
   origin: "generated" | "manual" | "imported";
+  reuse_pending?: boolean;
+  verified_from_scan_id?: string | null;
+  stable_version_id?: string | null;
+  community_pending_targets?: { target_item_id: string; media_source_id: string | null; channels: ("audio" | "video")[] }[];
   import_source_name: string | null;
   imported_at: string | null;
   mcf_document: ScanMcfDocument | null;

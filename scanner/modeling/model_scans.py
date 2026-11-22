@@ -138,6 +138,9 @@ class Scan(BaseModel):
     origin: ScanOrigin = ScanOrigin.GENERATED
     import_source_name: str | None = None
     imported_at: AwareDatetime | None = None
+    reuse_pending: bool = False
+    stable_version_id: str | None = None
+    verified_from_scan_id: str | None = None
     scan_mode: ScanMode = ScanMode.CONTENT
     release_version: str | None = None
     scanner_behavior_version: str | None = None
@@ -183,6 +186,7 @@ class Scan(BaseModel):
     credits_detection: CreditsDetection | None = None
     community_provenance: CommunityScanProvenance | None = None
     community_approvals: list[CommunityTargetApproval] = Field(default_factory=list)
+    community_pending_targets: list[CommunityTargetApproval] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_credits_detection(self):

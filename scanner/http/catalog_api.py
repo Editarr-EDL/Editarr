@@ -2,12 +2,22 @@
 
 from fastapi import APIRouter
 
-from . import catalog_candidates_api, catalog_library_api, catalog_settings_api
+from . import (
+    catalog_candidates_api,
+    catalog_library_api,
+    catalog_settings_api,
+    identity_verification_api,
+    stable_catalog_api,
+    subtitle_publications_api,
+)
 
 router = APIRouter()
 router.include_router(catalog_settings_api.router)
 router.include_router(catalog_candidates_api.router)
 router.include_router(catalog_library_api.router)
+router.include_router(stable_catalog_api.router)
+router.include_router(identity_verification_api.router)
+router.include_router(subtitle_publications_api.router)
 
 _test_jellyfin_connection = catalog_settings_api._test_jellyfin_connection
 _candidate_jellyfin_credentials = catalog_settings_api._candidate_jellyfin_credentials

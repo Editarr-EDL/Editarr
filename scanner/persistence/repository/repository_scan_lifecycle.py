@@ -12,6 +12,7 @@ from scanner.db import (
     MediaItemRow,
     SavedReviewRow,
     ScanFindingRow,
+    ScanMediaVersionRow,
     ScanQueueRow,
     ScanRow,
 )
@@ -356,12 +357,13 @@ def find_active_credits_detection(
     media_source_id: str | None,
     configuration: CreditsDetectionConfiguration,
     initiator_id: int,
+    version_id: str | None = None,
 ) -> tuple[Scan, int] | None:
     """Find this initiator's matching queued or running credits scan for a media version."""
     configuration_json = json.dumps(
         configuration.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
     )
-    row = (
+    matching = (
         db.query(ScanQueueRow)
         .join(ScanRow)
         .join(CreditsDetectionRunRow)
@@ -383,12 +385,14 @@ def find_active_credits_detection(
             ),
             CreditsDetectionRunRow.configuration_json == configuration_json,
         )
-        .order_by(ScanQueueRow.id)
-        .first()
     )
+    if version_id is not None:
+        matching = matching.join(ScanMediaVersionRow, ScanMediaVersionRow.scan_id == ScanRow.id)
+        matching = matching.filter(ScanMediaVersionRow.version_id == version_id)
+    row = matching.order_by(ScanQueueRow.id).first()
     if row is None:
         return None
-    if not root._scan_matches_physical_version(
+    if version_id is None and not root._scan_matches_physical_version(
         row.scan, Path(resolved_local_path), require_hash=True
     ):
         return None

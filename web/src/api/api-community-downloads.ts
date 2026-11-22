@@ -6,9 +6,9 @@ import { runtimeApiBasePath } from "../shared/runtime-urls";
 
 export type DownloadChoice = { contributionId: string; revisionId: string; artifactDigest: string; channels: ("audio" | "video")[] };
 export type DownloadOutcome = { revisionId: string; status: "imported" | "partial" | "not_imported";
-  scanId?: string; approvedChannels?: ("audio" | "video")[]; receiptState?: string; reviewRequired?: boolean; reviewed?: boolean };
+  scanId?: string; approvedChannels?: ("audio" | "video")[]; receiptState?: string; reviewRequired?: boolean; reviewed?: boolean; verificationPending?: boolean };
 export type DownloadResult = { version: 1; revisionId: string; status: "imported" | "reused";
-  scan: Scan; receiptState: string; reviewRequired: boolean; reviewed: boolean };
+  scan: Scan; receiptState: string; reviewRequired: boolean; reviewed: boolean; verificationPending?: boolean };
 
 async function post(path: string, body: unknown, signal: AbortSignal) {
   let response: Response;
@@ -26,8 +26,9 @@ async function post(path: string, body: unknown, signal: AbortSignal) {
   return value;
 }
 
-export async function downloadCommunityFilter(input: LookupInput, targetKey: string, choice: DownloadChoice, confirmed: boolean, signal: AbortSignal): Promise<DownloadResult> {
-  const result = await post("", { lookup: { ...input, target_key: targetKey }, choice, confirmed }, signal);
+export async function downloadCommunityFilter(input: LookupInput, targetKey: string, choice: DownloadChoice, confirmed: boolean, signal: AbortSignal, stageForVerification = false): Promise<DownloadResult> {
+  const result = await post("", { lookup: { ...input, target_key: targetKey }, choice, confirmed,
+    ...(stageForVerification ? { stage_for_verification: true } : {}) }, signal);
   if (result.revisionId !== choice.revisionId || !["imported", "reused"].includes(result.status)
     || typeof result.scan?.id !== "string" || typeof result.receiptState !== "string" || typeof result.reviewRequired !== "boolean" || typeof result.reviewed !== "boolean") {
     throw new CommunityApiError("invalid_response", false, 0);
@@ -42,7 +43,7 @@ export async function communityDownloadStatus(target: LookupTarget, targetKey: s
       || !["imported", "partial", "not_imported"].includes(entry.status)
       || (entry.status !== "not_imported" && (typeof entry.scanId !== "string" || typeof entry.receiptState !== "string"
         || typeof entry.reviewRequired !== "boolean" || typeof entry.reviewed !== "boolean" || !Array.isArray(entry.approvedChannels)
-        || !entry.approvedChannels.length || entry.approvedChannels.some((channel) => channel !== "audio" && channel !== "video"))))) {
+        || (!entry.approvedChannels.length && !entry.verificationPending) || entry.approvedChannels.some((channel) => channel !== "audio" && channel !== "video"))))) {
     throw new CommunityApiError("invalid_response", false, 0);
   }
   return result.outcomes;

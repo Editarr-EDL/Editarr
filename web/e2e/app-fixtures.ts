@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "../src/auth/capabilities";
+import { mockReviewWorkflowRoutes } from "./review-workflow-mock";
 import type { AuditEntry } from "../src/api/api-audit";
 import { expect, type Page, type Route } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
@@ -153,6 +154,13 @@ export async function mockApi(page: Page) {
   let mappings: Array<{ id: number; remote_path: string; local_path: string; sort_order: number; created_at: string; updated_at: string }> = [];
   let reviews: MockReview[] = [];
   let nextReviewId = 1;
+  const workflow = mockReviewWorkflowRoutes({
+    readReviews: () => reviews,
+    removeReview: (id) => { reviews = reviews.filter((candidate) => candidate.id !== id); },
+    legacyEdl: previousEdl.exports,
+    emptyExports,
+    json,
+  });
   let modelState = "not_downloaded";
   let defaultFilterMode = "live";
   let personalFilters = { user_id: 1, mode: "live", mode_locked: false, revision: 1, policy_revision: 1, instance_revision: 0,
@@ -287,7 +295,7 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/library-items/episode-1" && method === "GET") { await json(route, episode); return; }
     if (url.pathname === "/api/library-items/series-1/seasons") { await json(route, [season]); return; }
     if (url.pathname === "/api/library-items/season-1/children") { await json(route, [episode]); return; }
-    if (url.pathname === "/api/library-items/movie-1/exports/edl" && method === "DELETE") { await route.fulfill({ status: 204 }); return; }
+    if (await workflow(route, url, method)) return;
     if (url.pathname === "/api/library-items/movie-1/scans") {
       await json(route, [{
         ...scanScope,
@@ -298,10 +306,10 @@ export async function mockApi(page: Page) {
       }]);
       return;
     }
-    if (url.pathname === "/api/scans/scan-previous/findings" && method === "GET") {
+    if (["/api/scans/scan-previous/findings", "/api/scans/scan-history/findings"].includes(url.pathname) && method === "GET") {
       await new Promise((resolve) => setTimeout(resolve, 50));
       await json(route, { revision: 0, findings: [{
-        id: 10, scan_id: "scan-previous", source: "visual", category: "nudity", subcategory: "nudity", severity: "medium", mcf_channel: "video", mcf_comment: null, label: "Visual content",
+        id: 10, scan_id: url.pathname.split("/")[3], source: "visual", category: "nudity", subcategory: "nudity", severity: "medium", mcf_channel: "video", mcf_comment: null, label: "Visual content",
         details: null, group_key: null, start_seconds: 10, end_seconds: 18, confidence: 0.9,
         edit_action: "skip", selected: true,
       }] }); return;
@@ -374,13 +382,6 @@ export async function mockApi(page: Page) {
       reviews = [duplicate, ...reviews];
       await json(route, duplicate, 201); return;
     }
-    const reviewExport = url.pathname.match(/^\/api\/reviews\/([^/]+)\/edl$/)?.[1];
-    if (reviewExport && method === "POST") {
-      const review = reviews.find((candidate) => candidate.id === reviewExport)!;
-      const exportedScans = [{ id: "scan-previous", scan_id: 2, role: "both" }];
-      review.exports = { exports: { ...review.exports.exports, edl: { ...emptyExport("edl"), present: true, exported_at: "2026-08-20T00:00:00Z", review_id: review.id, exported_format_revision: review.edl_content_revision, current: true, exported_scans: exportedScans, exported_review: null } } };
-      await json(route, { format: "edl", review_id: review.id, exported_format_revision: review.edl_content_revision, exported_at: "2026-08-20T00:00:00Z", exported_scans: exportedScans, exported_review: review }); return;
-    }
     if (url.pathname === "/api/edl-imports/upload" && method === "POST") {
       const form = route.request().postData() ?? "";
       const fileName = form.match(/filename="([^"]*)"/)?.[1] ?? "";
@@ -389,6 +390,7 @@ export async function mockApi(page: Page) {
       if (fileName.includes("invalid")) { await json(route, { detail: { code: "invalid_edl_import", message: "Invalid EDL", line_number: 1, references: null } }, 422); return; }
       const importedFilter: MockReviewFilter = { id: `import-${nextReviewId}-filter`, source_scan_id: `import-${nextReviewId}-scan`, source_finding_id: null, source: "audio", category: null, subcategory: null, severity: null, mcf_channel: null, mcf_comment: null, label: "Imported mute", details: null, group_key: null, start_seconds: 1, end_seconds: 2, confidence: 1, edit_action: "mute", selected: true };
       const imported = mockReview(`review-${nextReviewId++}`, payload.name, payload.target.media_source_id, [importedFilter]);
+      imported.memberships = [{ scan_id: importedFilter.source_scan_id, role: "audio" }];
       reviews = [imported, ...reviews];
       await json(route, { review: imported, scan: { id: importedFilter.source_scan_id, scan_id: 3, name: payload.name, origin: "imported" }, warning: fileName.includes("mixed") ? { code: "unsupported_actions_ignored", message: "Unsupported EDL actions were ignored and not imported", ignored_action_count: 2 } : null }, 201); return;
     }

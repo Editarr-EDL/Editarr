@@ -22,7 +22,13 @@ from scanner.models import (
     ReviewSave,
     ReviewScanMembership,
 )
+from scanner.persistence.repository.media_identity_store import (
+    get_version,
+    scan_version_id,
+    version_locators,
+)
 from scanner.pipeline.audio_tracks import AudioTrack, AudioTrackInventory
+from scanner.runtime.scan_version import prepare_scan_digest
 from scanner.security.api_key_crypto import load_api_key_wrap_key
 from scanner.security.api_keys import rotate_api_key
 from scanner.security.auth_repository import owner_id
@@ -52,7 +58,7 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
     video = tmp_path / "example.mkv"
     video.write_bytes(b"video")
     alternate_video = tmp_path / "alternate.mkv"
-    alternate_video.write_bytes(b"video")
+    alternate_video.write_bytes(b"alternate video")
     repository.update_jellyfin_settings(
         db,
         JellyfinSettingsUpdate(server_url="http://jellyfin.test", api_key="saved-server-key"),
@@ -125,6 +131,20 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
     assert second_row.media_source_id == "source-2"
     assert second_row.media_source_name == "Alternate cut"
     assert second.media_source_name == "Alternate cut"
+    assert [item.id for item in api.api_list_scan_queue(owner_caller(db))] == [first.id, second.id]
+    for item, path in ((first, video), (second, alternate_video)):
+        assert scan_version_id(db, item.id) is None
+        prepare_scan_digest(
+            db, item.id, str(path),
+            write=lambda operation, *args: operation(db, *args),
+            on_hashing=lambda: None,
+        )
+    first_version = scan_version_id(db, first.id)
+    second_version = scan_version_id(db, second.id)
+    assert first_version is not None and second_version is not None
+    assert first_version != second_version
+    assert get_version(db, first_version).title_id == get_version(db, second_version).title_id
+    assert version_locators(db, second_version)[0].media_source_id == "source-2"
     repository.update_scan_duration(db, first.id, 123.5)
     repository.update_scan_progress(
         db,

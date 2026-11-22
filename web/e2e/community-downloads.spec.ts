@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi } from "./app-fixtures";
 import { communityResponse, mixedCandidate } from "../src/test/community-lookup-fixtures";
@@ -53,8 +54,9 @@ async function setup(page: Page) {
   });
   await page.goto("/#/library/movies");
   await page.getByRole("button", { name: "Open Example Movie" }).click();
-  await page.getByLabel("Review version").selectOption("source-2");
+  await page.getByLabel("Media version").selectOption("source-2");
   const open = async () => {
+    await chooseWorkflowStep(page, "Scans");
     await page.getByRole("button", { name: "Find Filters", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Found Filters" });
     await expect(dialog.getByLabel("Audio track")).toHaveValue("1");
@@ -170,6 +172,7 @@ for (const width of [320, 1440]) {
     await expect(dialog.getByRole("button", { name: "Downloaded Second scan" })).toBeDisabled();
     expect(state.downloads).toHaveLength(3);
     await page.keyboard.press("Escape");
+    await chooseWorkflowStep(page, "Review");
     await page.getByRole("button", { name: "New Review", exact: true }).click();
     await page.getByLabel("New review name").fill("Community assembly");
     await page.getByRole("button", { name: "Start new review" }).click();

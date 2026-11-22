@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { McfCategoryFamily, McfRegistry } from "../api/api-mcf-types";
 import type { Scan } from "../api/api-scan-types";
 import type { SavedReview } from "../api/api-review-types";
@@ -138,18 +138,45 @@ function tooltipWithHighlightedWord(word: string, context?: string | null) {
 
 /** Reveal the spoken word on focus or delayed hover while masking its inline label. */
 export function CensoredAudioWord({ word, context }: { word: string; context?: string | null }) {
-  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; above: boolean } | null>(null);
+  const tooltipId = useId();
   const hoverTimer = useRef<number | null>(null);
   const clearHoverTimer = () => {
     if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
   };
+  const showTooltip = () => {
+    const rect = labelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const above = rect.top > 100;
+    setPosition({ top: above ? rect.top - 7 : rect.bottom + 7, left: Math.max(8, Math.min(rect.left, window.innerWidth - 228)), above });
+  };
+  const hideTooltip = () => { clearHoverTimer(); setPosition(null); };
   const showAfterHoverDelay = () => {
     clearHoverTimer();
-    hoverTimer.current = window.setTimeout(() => setTooltipVisible(true), 2_000);
+    hoverTimer.current = window.setTimeout(showTooltip, 2_000);
   };
   useEffect(() => clearHoverTimer, []);
-  return <span className="censored-audio-word" tabIndex={0} onMouseEnter={showAfterHoverDelay} onMouseLeave={() => { clearHoverTimer(); setTooltipVisible(false); }} onFocus={() => setTooltipVisible(true)} onBlur={() => setTooltipVisible(false)}><strong>{censorAudioWord(word)}</strong>{tooltipVisible && <span className="audio-word-tooltip" role="tooltip">{tooltipWithHighlightedWord(word, context)}</span>}</span>;
+  useEffect(() => {
+    if (!position) return;
+    // A fixed tooltip stays inside the viewport even when the filter list clips the label.
+    const onScroll = () => setPosition(null);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [position]);
+  return <span className="censored-audio-word" ref={labelRef} tabIndex={0} aria-describedby={position ? tooltipId : undefined}
+    onMouseEnter={showAfterHoverDelay} onMouseLeave={hideTooltip} onFocus={showTooltip} onBlur={hideTooltip}>
+    <strong>{censorAudioWord(word)}</strong>
+    {position && <span className="audio-word-tooltip" id={tooltipId} role="tooltip"
+      style={{ top: position.top, left: position.left, transform: position.above ? "translateY(-100%)" : undefined }}>
+      {tooltipWithHighlightedWord(word, context)}
+    </span>}
+  </span>;
 }
 
 /** Whether a visual filter is a machine finding: from a generated (or unknown) scan. */

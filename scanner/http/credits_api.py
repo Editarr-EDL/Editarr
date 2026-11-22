@@ -21,6 +21,7 @@ from scanner.models import (
     Scan,
     ScanMode,
 )
+from scanner.persistence.repository.media_identity_store import bind_scan_version, observe_version
 from scanner.persistence.repository.review_access import CREDITS, ReviewAccess, not_found
 from scanner.persistence.repository.scan_jobs import ScanMedia, scan_job_facts
 from scanner.repository import (
@@ -48,6 +49,7 @@ from .review_access import review_caller, run_review
 from .review_import_helpers_api import _import_target_media
 from .review_targets import capture_target
 from .scan_access import JOB_RESUME, ScanCaller, scan_caller
+from .stable_media_capture import file_digest
 
 router = APIRouter()
 
@@ -154,10 +156,16 @@ def api_start_credits_detection(
             db, request.target, persist=False
         )
         consent = _credits_consent_if_required(request.qwen_model)
-        with caller.starting(
-            C.SCANS_START,
-            ScanMedia(media.server_id, media.jellyfin_id, media.library_id, str(local_path)),
-        ):
+        resolved = str(local_path)
+        target = ScanMedia(media.server_id, media.jellyfin_id, media.library_id, resolved)
+        caller.require_start(C.SCANS_START, target)
+        try:
+            checksum = file_digest(resolved)
+        except HTTPException as exc:
+            raise root._review_http_error(
+                "credits_media_unavailable", "The selected media file could not be verified", 409
+            ) from exc
+        with caller.starting(C.SCANS_START, target):
             media = upsert_media_item(
                 db,
                 server_id=media.server_id,
@@ -168,19 +176,28 @@ def api_start_credits_detection(
                 path=media.path,
                 commit=False,
             )
+            version_id = observe_version(
+                db,
+                media=media,
+                media_source_id=media_source_id,
+                source_path=media.path,
+                resolved_path=resolved,
+                content_sha256=checksum,
+            )
             active = find_active_credits_detection(
                 db,
                 media_item_id=media.id,
-                resolved_local_path=str(local_path),
+                resolved_local_path=resolved,
                 media_source_id=media_source_id,
                 configuration=configuration,
                 initiator_id=caller.initiator.user_id,
+                version_id=version_id,
             )
             if active is None:
                 scan = create_scan(
                     db,
                     media_item=media,
-                    resolved_local_path=str(local_path),
+                    resolved_local_path=resolved,
                     name="End Credits detection",
                     source_path=media.path,
                     media_source_id=media_source_id,
@@ -196,10 +213,13 @@ def api_start_credits_detection(
                     commit=False,
                     initiator=caller.initiator,
                 )
+                if version_id is not None:
+                    bind_scan_version(db, scan.id, version_id)
                 queue = enqueue_scan(db, scan.id)
                 queue_id = queue.queue_id
             else:
                 queue, queue_id = active
+                db.commit()
     except HTTPException:
         db.rollback()
         raise

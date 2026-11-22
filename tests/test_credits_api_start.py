@@ -14,6 +14,7 @@ from scanner.models import (
     ReviewSave,
     ScanMode,
 )
+from scanner.persistence.repository.media_identity_store import scan_version_id
 from tests.credits_api_support import _database, review_caller
 from tests.jellyfin_item_support import jellyfin_target
 from tests.scan_access_support import owner_caller
@@ -44,12 +45,16 @@ def test_start_credits_detection_queues_once_and_reconnects(monkeypatch, tmp_pat
     assert reconnected.scan.id == started.scan.id
     assert reconnected.queue_id == started.queue_id
     assert db.query(ScanQueueRow).count() == 1
+    initial_version = scan_version_id(db, started.scan.id)
+    assert initial_version is not None
 
     video_path.write_bytes(b"replacement-physical-version")
     replacement = api.api_start_credits_detection(request, owner_caller(db))
     assert replacement.scan.id != started.scan.id
     assert replacement.queue_id != started.queue_id
     assert db.query(ScanQueueRow).count() == 2
+    replacement_version = scan_version_id(db, replacement.scan.id)
+    assert replacement_version is not None and replacement_version != initial_version
     db.close()
 
 

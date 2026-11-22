@@ -40,12 +40,20 @@ media_item_exports|original_author_id|users|id|NO ACTION
 media_item_exports|policy_owner_id|users|id|NO ACTION
 media_item_exports|review_id|saved_reviews|id|NO ACTION
 media_item_exports|target_user_id|users|id|NO ACTION
+media_title_aliases|title_id|media_titles|id|NO ACTION
+media_title_sources|media_item_id|media_items|id|CASCADE
+media_title_sources|title_id|media_titles|id|NO ACTION
+media_version_locators|media_item_id|media_items|id|CASCADE
+media_version_locators|version_id|media_versions|id|NO ACTION
+media_versions|title_id|media_titles|id|NO ACTION
 review_accepted_credits|review_id|saved_reviews|id|CASCADE
 review_accepted_credits|source_finding_id,scan_id|scan_findings|id,scan_id|NO ACTION
 review_filters|review_id|saved_reviews|id|CASCADE
 review_filters|source_finding_id,source_scan_id|scan_findings|id,scan_id|NO ACTION
 review_filters|source_scan_id|scans|id|NO ACTION
 review_mcf_documents|review_id|saved_reviews|id|CASCADE
+review_media_versions|review_id|saved_reviews|id|CASCADE
+review_media_versions|version_id|media_versions|id|NO ACTION
 review_policy_evidence|review_id|saved_reviews|id|CASCADE
 review_policy_evidence|source_finding_id|scan_findings|id|NO ACTION
 review_scan_repairs|review_id|saved_reviews|id|CASCADE
@@ -59,6 +67,8 @@ scan_findings|scan_id|scans|id|NO ACTION
 scan_mcf_documents|scan_id|scans|id|CASCADE
 scan_media_item_associations|media_item_id|media_items|id|NO ACTION
 scan_media_item_associations|scan_id|scans|id|NO ACTION
+scan_media_versions|scan_id|scans|id|CASCADE
+scan_media_versions|version_id|media_versions|id|NO ACTION
 scan_queue|scan_id|scans|id|NO ACTION
 scan_stage_coverage|scan_id|scans|id|CASCADE
 scans|initiator_id|users|id|NO ACTION

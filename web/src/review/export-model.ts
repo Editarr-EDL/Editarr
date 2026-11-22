@@ -51,6 +51,11 @@ export function canDownload(reviewOwnerId: number | null | undefined, me: number
   return allowed("exports.personal.download.own") && (!other || allowed("reviews.export.other"));
 }
 
+/** A saved review can be exported when any existing download or publication action is available. */
+export function canExportSavedReview(reviewOwnerId: number | null | undefined, me: number | null, allowed: Allowed): boolean {
+  return canDownload(reviewOwnerId, me, allowed) || publishDestinations(reviewOwnerId, me, allowed).length > 0;
+}
+
 /** Whether the caller holds the capability that deleting this file exercises. */
 export function canDeletePublication(publication: ExportPublication, me: number | null, allowed: Allowed): boolean {
   if (publication.scope === "default") return allowed("exports.default.delete");

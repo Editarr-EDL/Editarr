@@ -1,3 +1,4 @@
+import { openWorkflowStep } from "./review-workflow-test-helpers";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MediaDetail } from "../catalog/media-detail";
@@ -39,7 +40,8 @@ it("uses the shared local flow for Jellyfin and the selected review version", as
   render(<AuthenticationGate><MediaDetail item={{ ...mediaItem, versions: [...mediaItem.versions, secondVersion] }} breadcrumbs={[]} onNavigate={vi.fn()} onDirtyChange={vi.fn()} /></AuthenticationGate>);
   await screen.findByRole("button", { name: "Open review Existing review" });
   expect(searches).toEqual([]);
-  fireEvent.change(screen.getByLabelText("Review version"), { target: { value: "source-2" } });
+  fireEvent.change(screen.getByLabelText("Media version"), { target: { value: "source-2" } });
+  await openWorkflowStep("Scans");
   fireEvent.click(screen.getByRole("button", { name: "Find Filters" }));
   const dialog = await screen.findByRole("dialog", { name: "Found Filters" });
   expect(searches).toEqual([{
@@ -54,6 +56,7 @@ it("uses the shared local flow for Jellyfin and the selected review version", as
   expect(await screen.findByRole("status")).toHaveTextContent("Associated 1 scan.");
   expect(await within(screen.getByRole("list", { name: "Scan history" })).findByText(/Found local evidence/)).toBeVisible();
   expect(historyPaths.at(-1)).toBeNull();
+  await openWorkflowStep("Review");
   expect(screen.getByRole("button", { name: "Open review Existing review" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "New Review" }));
   fireEvent.change(screen.getByLabelText("New review name"), { target: { value: "Reuse found evidence" } });
@@ -73,6 +76,7 @@ it("uses item metadata and can search when the catalog withholds all paths", asy
   }));
   const props = { breadcrumbs: [], onNavigate: vi.fn(), onDirtyChange: vi.fn() };
   const { rerender } = render(<AuthenticationGate><MediaDetail {...props} item={{ ...mediaItem, versions: [] }} /></AuthenticationGate>);
+  await openWorkflowStep("Scans");
   fireEvent.click(await screen.findByRole("button", { name: "Find Filters" }));
   const dialog = await screen.findByRole("dialog", { name: "Found Filters" });
   expect(searches).toEqual([{

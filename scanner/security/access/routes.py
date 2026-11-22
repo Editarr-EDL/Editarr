@@ -14,7 +14,7 @@ from typing import Any
 
 from .capability_ids import Capability
 
-ROUTE_INVENTORY_VERSION = "editarr-route-actions-23"
+ROUTE_INVENTORY_VERSION = "editarr-route-actions-24"
 
 RouteKey = tuple[str, str]
 """An uppercase HTTP method and a FastAPI path template."""

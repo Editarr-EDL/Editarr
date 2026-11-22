@@ -44,8 +44,11 @@ def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
                 }
             ]
 
-        def all_items(self, library_id, *, recursive=True, include_item_types=()):
-            calls.append((library_id, recursive, include_item_types))
+        def all_items(self, library_id, *, recursive=True, include_item_types=(), search_term=""):
+            calls.append((library_id, recursive, include_item_types, search_term))
+            if search_term:
+                # Jellyfin may not match a spelling with different accents than the title.
+                return []
             return [
                 JellyfinMediaItem(
                     id="movie-1",
@@ -178,9 +181,11 @@ def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
     assert calls == [
         ("http://jellyfin.test", "saved-server-key"),
         ("http://jellyfin.test", "saved-server-key"),
-        ("movies", False, ("Movie", "Series", "Video", "MusicVideo")),
+        ("movies", False, ("Movie", "Series", "Video", "MusicVideo"), ""),
         ("http://jellyfin.test", "saved-server-key"),
-        ("movies", False, ("Movie", "Series", "Video", "MusicVideo")),
+        ("movies", False, ("Movie", "Series", "Video", "MusicVideo"), "alpha"),
+        ("http://jellyfin.test", "saved-server-key"),
+        ("movies", False, ("Movie", "Series", "Video", "MusicVideo"), ""),
     ]
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import stat
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -63,7 +64,29 @@ class FingerprintCache:
         self._entries: OrderedDict[tuple[tuple[int, ...], str], FileFingerprint] = OrderedDict()
         self._lock = RLock()
 
-    def fingerprint(self, path: Path, *, full: bool = False) -> FileFingerprint:
+    def cached(self, path: Path, *, full: bool = False) -> FileFingerprint | None:
+        """Look up a previously read, unchanged file without reading its contents."""
+        try:
+            state = _file_state(path.stat())
+        except OSError:
+            return None
+        if not stat.S_ISREG(state[-1]) or not state[1]:
+            return None
+        algorithm = FULL_ALGORITHM if full else SAMPLED_ALGORITHM
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            return self._entries.get((state, algorithm))
+        finally:
+            self._lock.release()
+
+    def fingerprint(
+        self,
+        path: Path,
+        *,
+        full: bool = False,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> FileFingerprint:
         """Return stable evidence or raise; never silently fall back to a stale hash."""
         path = Path(path)
         algorithm = FULL_ALGORITHM if full else SAMPLED_ALGORITHM
@@ -85,7 +108,11 @@ class FingerprintCache:
                         self._entries.move_to_end(key)
                         return cached
                     try:
-                        digest = digest_stream(stream, state[2], algorithm)
+                        digest = (
+                            digest_stream(stream, state[2], algorithm, on_progress=on_progress)
+                            if on_progress is not None
+                            else digest_stream(stream, state[2], algorithm)
+                        )
                     except OSError as error:
                         raise FileChangedError("File could not be read stably; retry") from error
                     _check_state(path, stream, state)

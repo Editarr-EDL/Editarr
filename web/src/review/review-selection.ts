@@ -26,9 +26,9 @@ function reviewConflictOutcome(code: string | undefined): "stale" | "refused" {
     : "refused";
 }
 
-export function useReviewSelection({ item, mediaSourceId, importedReview, sort, direction,
+export function useReviewSelection({ item, mediaSourceId, stableVersionId, importedReview, sort, direction,
   catalogMcfDocument, setBusy, setError, setEditingReviewName, resetMetadata,
-}: Pick<SavedReviewPanelProps, "item" | "mediaSourceId" | "importedReview"> & {
+}: Pick<SavedReviewPanelProps, "item" | "mediaSourceId" | "stableVersionId" | "importedReview"> & {
   sort: "name" | "updated_at";
   direction: "asc" | "desc";
   catalogMcfDocument: () => ReviewMcfDocument;
@@ -59,7 +59,7 @@ export function useReviewSelection({ item, mediaSourceId, importedReview, sort, 
     return true;
   };
   const refreshReviews = async () => {
-    const next = await fetchSavedReviews(item.id, { media_source_id: mediaSourceId, sort, direction });
+    const next = await fetchSavedReviews(item.id, { media_source_id: mediaSourceId, stable_version_id: stableVersionId, sort, direction });
     if (!isCurrent()) return;
     knownRepairs.current.clear();
     setReviews(next);
@@ -103,13 +103,13 @@ export function useReviewSelection({ item, mediaSourceId, importedReview, sort, 
 
   useEffect(() => {
     let active = true;
-    void fetchSavedReviews(item.id, { media_source_id: mediaSourceId, sort, direction }).then((next) => {
+    void fetchSavedReviews(item.id, { media_source_id: mediaSourceId, stable_version_id: stableVersionId, sort, direction }).then((next) => {
       if (active) setReviews(withKnownRepairs(next));
     }).catch((reason) => {
       if (active) setError(reason instanceof Error ? reason.message : "Unable to load saved reviews.");
     });
     return () => { active = false; };
-  }, [direction, item.id, mediaSourceId, sort]);
+  }, [direction, item.id, mediaSourceId, stableVersionId, sort]);
 
   useEffect(() => {
     let active = true;
@@ -122,7 +122,7 @@ export function useReviewSelection({ item, mediaSourceId, importedReview, sort, 
     resetMetadata();
     setBusy(false);
     void fetchSavedReviews(item.id, {
-      media_source_id: mediaSourceId, sort: "updated_at", direction: "desc",
+      media_source_id: mediaSourceId, stable_version_id: stableVersionId, sort: "updated_at", direction: "desc",
     }).then(async (next) => {
       if (!active || !isCurrent() || request !== reviewLoadRequest.current) return;
       setReviews(withKnownRepairs(next));
@@ -148,7 +148,7 @@ export function useReviewSelection({ item, mediaSourceId, importedReview, sort, 
       }
     });
     return () => { active = false; };
-  }, [item.id, mediaSourceId]);
+  }, [item.id, mediaSourceId, stableVersionId]);
 
   useEffect(() => {
     if (!importedReview) return;

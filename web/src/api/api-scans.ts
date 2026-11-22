@@ -75,6 +75,13 @@ export async function fetchScanHistory(): Promise<Scan[]> {
   return response.json();
 }
 
+export async function fetchAssociatedScans(itemId: string): Promise<Scan[]> {
+  const path = `${runtimeApiBasePath()}/library-items/${encodeURIComponent(itemId)}/scans?associated_only=true`;
+  const response = await fetch(path);
+  if (!response.ok) throw await responseError(response, "Unable to load linked scans");
+  return response.json();
+}
+
 export async function fetchScanFindings(scanId: string): Promise<ScanFindings> {
   const response = await fetch(`${runtimeApiBasePath()}/scans/${encodeURIComponent(scanId)}/findings`);
   if (!response.ok) throw await responseError(response, "Unable to load scan findings");

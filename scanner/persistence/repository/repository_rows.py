@@ -43,6 +43,7 @@ def scan_list_loading():
     )
     return (
         selectinload(ScanRow.media_item),
+        selectinload(ScanRow.media_version_pin),
         selectinload(ScanRow.stage_coverage),
         selectinload(ScanRow.mcf_document),
         selectinload(ScanRow.credits_detection),
@@ -57,16 +58,21 @@ def _scan_from_row(
 
     ``community_approvals`` accepts batch-loaded approvals; otherwise they are queried.
     """
-    from .community_import_targets import scan_target_approvals
+    from .community_import_targets import scan_pending_targets, scan_target_approvals
+    from .version_reuse import approved_reuse, source_pending_reuse
 
     item = row.media_item
     duration, as_of = scan_timing(row)
+    reuse_approval = approved_reuse(row)
     return Scan(
         id=row.id,
         scan_id=row.scan_number,
         name=row.name,
         origin=row.origin,
         import_source_name=row.import_source_name,
+        reuse_pending=source_pending_reuse(row),
+        stable_version_id=row.media_version_pin.version_id if row.media_version_pin else None,
+        verified_from_scan_id=reuse_approval.get("source_scan_id") if reuse_approval else None,
         imported_at=(
             row.imported_at.replace(tzinfo=timezone.utc)
             if row.imported_at is not None and row.imported_at.tzinfo is None
@@ -175,6 +181,7 @@ def _scan_from_row(
         community_approvals=(
             scan_target_approvals(row) if community_approvals is None else community_approvals
         ),
+        community_pending_targets=scan_pending_targets(row),
     )
 
 

@@ -25,6 +25,8 @@ class LocalImportTarget:
     evidence: MatchEvidence
     selected_channels: tuple[str, ...] | None = None
     lookup_target_key: str | None = None
+    stage_for_verification: bool = False
+    content_sha256: str | None = None
 
 
 def canonical(value: object) -> str:

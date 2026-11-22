@@ -1,0 +1,92 @@
+.workflow-release,
+.workflow-release-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.workflow-release-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.workflow-release-panel {
+  padding: 14px;
+  border: 1px solid #343b49;
+  border-radius: 8px;
+  background: #1b2029;
+}
+
+.workflow-release-panel :is(h3, p) { margin: 0; }
+
+.workflow-release-options { display: grid; gap: 8px; }
+
+.workflow-release-options button.workflow-release-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.workflow-release-option > span:first-child { display: grid; gap: 3px; }
+.workflow-release-option small, .published-subtitle-files small { color: #adb7c9; }
+
+:is(.workflow-release-options, .workflow-release) button[aria-pressed="true"] {
+  background: #28395a;
+  border-color: #86a7eb;
+}
+
+.workflow-subtitle-tag {
+  flex: none;
+  border-radius: 5px;
+  padding: 2px 6px;
+  background: #303e59;
+  color: #d8e5fb;
+  font-size: 12px;
+}
+
+.workflow-subtitle-cues {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 14px;
+}
+
+.workflow-subtitle-cues :is(th, td) {
+  padding: 8px 5px;
+  border-bottom: 1px solid #343b49;
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.workflow-subtitle-cues :is(th, td):first-child {
+  width: 5.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+.workflow-subtitle-cues td { white-space: pre-wrap; }
+.workflow-subtitle-cues i { color: #adb7c9; }
+
+.published-subtitle-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.published-subtitle-files li { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 620px) {
+  .workflow-release-grid { grid-template-columns: minmax(0, 1fr); }
+  .workflow-subtitle-cues { font-size: 13px; }
+}

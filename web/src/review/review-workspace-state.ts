@@ -46,6 +46,7 @@ export type SavedReviewPanelProps = {
   mediaItemId?: string | null;
   seasonNumber?: number | null;
   mediaSourceId: string | null;
+  stableVersionId?: string;
   scans: Scan[];
   importedReview?: SavedReview | null;
   exportStatus?: ExportStatus;
@@ -63,6 +64,7 @@ export function useSavedReviewWorkspace({
   mediaItemId,
   seasonNumber,
   mediaSourceId,
+  stableVersionId,
   scans,
   importedReview,
   exportStatus,
@@ -92,7 +94,7 @@ export function useSavedReviewWorkspace({
     reviews, setReviews, selected, setSelected, draft, setDraft, reviewLoadRequest,
     selectReview, refreshAfterConflict, refreshReviews, conflict, setConflict,
   } = useReviewSelection({
-    item, mediaSourceId, importedReview, sort, direction, catalogMcfDocument,
+    item, mediaSourceId, stableVersionId, importedReview, sort, direction, catalogMcfDocument,
     setBusy, setError, setEditingReviewName,
     resetMetadata: () => { setMetadataCandidates([]); setApplyStatus(null); },
   });
@@ -105,6 +107,10 @@ export function useSavedReviewWorkspace({
   const reviewTarget: ReviewTargetRequest = { source: "jellyfin", item_id: item.id, media_source_id: mediaSourceId };
   const { preview, previewFilter, clearPreview } = useReviewPreview({ target: reviewTarget, selected, draft, setBusy, setError,
     disabled: Boolean(conflict) || !access.preview, onDenied: refreshAfterConflict });
+  useEffect(() => {
+    setMcfPreflightIssues([]);
+    setPreflightFocusFilterId(null);
+  }, [selected?.id]);
   const pendingNameValidation = validateDisplayName(name, true);
   const draftNameValidation = draft ? validateDisplayName(draft.name, true) : null;
   const invalidDraftClassification = Boolean(draft && mcfRegistry && draft.filters.some((filter) => (
@@ -216,7 +222,7 @@ export function useSavedReviewWorkspace({
           accepted_credits: draft.acceptedCredits,
           new_manual_filters: draft.newManualFilters,
         })
-        : await createSavedReview(reviewTarget, {
+        : await createSavedReview({ ...reviewTarget, stable_version_id: stableVersionId }, {
           name: draftNameValidation.normalized,
           memberships: draft.memberships,
           filters: reviewDraftFilters(draft),

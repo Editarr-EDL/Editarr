@@ -1,3 +1,4 @@
+import { openWorkflowStep } from "./review-workflow-test-helpers";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +46,7 @@ describe("Qwen language scan controls", () => {
     render(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
     expect(within(dialog).getByLabelText("Scan type")).toHaveValue("audio");
@@ -111,6 +113,7 @@ describe("Qwen language scan controls", () => {
     render(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
     fireEvent.change(within(dialog).getByLabelText("Scan type"), { target: { value: "video" } });
@@ -143,6 +146,7 @@ describe("Qwen language scan controls", () => {
     render(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
     expect(within(dialog).getByLabelText("Scan type")).toHaveValue("audio");

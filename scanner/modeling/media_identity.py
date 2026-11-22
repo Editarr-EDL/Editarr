@@ -128,7 +128,7 @@ def provider_identifiers(
     """Keep distinct typed aliases without inferring episode IDs from series IDs."""
     keys: dict[str, EntityType] = {
         "tmdb": "movie" if entity_type == "movie" else "series",
-        "tvdb": "series",
+        "tvdb": "movie" if entity_type == "movie" else "series",
     }
     identifiers: list[ProviderIdentifier] = []
     for provider, kind in keys.items():

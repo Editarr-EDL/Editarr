@@ -48,6 +48,7 @@ from .review_import_helpers_api import (
     _safe_mcf_import_basename,
 )
 from .review_targets import capture_target
+from .stable_media_capture import file_digest, observe_target_version
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -61,10 +62,13 @@ def _run_edl_import(
     source_name: str,
     caller=None,
     prepared=None,
+    pending_digest=None,
 ):
     """Import EDL content for a resolved target and return the new review."""
     if caller is not None:
         prepared = capture_target(caller, options.target)
+        if options.stage_for_verification:
+            pending_digest = file_digest(prepared.media.resolved_path)
         return caller.present(
             caller.create(
                 prepared.media,
@@ -74,6 +78,7 @@ def _run_edl_import(
                     options=options,
                     source_name=source_name,
                     prepared=prepared,
+                    pending_digest=pending_digest,
                 ),
                 capability=C.REVIEWS_IMPORT_UPLOAD,
                 capabilities=CONTENT_EDITS,
@@ -103,7 +108,10 @@ def _run_edl_import(
         catalog_document = catalog_document.model_copy(update={"material_end_seconds": duration})
     from scanner.formats.edl import parse_edl_content
 
-    parsed = parse_edl_content(content, duration_seconds=duration)
+    version_id = (
+        observe_target_version(db, prepared, digest=pending_digest) if pending_digest else None
+    )
+    parsed = parse_edl_content(content, duration_seconds=None if version_id else duration)
     return import_edl_as_saved_review(
         db,
         media_item=media,
@@ -114,6 +122,7 @@ def _run_edl_import(
         parsed=parsed,
         duration_seconds=duration,
         catalog_mcf_document=catalog_document,
+        verification_version_id=version_id,
     )
 
 
@@ -125,10 +134,13 @@ def _run_mcf_import(
     source_name: str,
     caller=None,
     prepared=None,
+    pending_digest=None,
 ):
     """Parse and import MCF content with synchronization and metadata checks."""
     if caller is not None:
         prepared = capture_target(caller, options.target)
+        if options.stage_for_verification:
+            pending_digest = file_digest(prepared.media.resolved_path)
         return caller.present(
             caller.create(
                 prepared.media,
@@ -138,6 +150,7 @@ def _run_mcf_import(
                     options=options,
                     source_name=source_name,
                     prepared=prepared,
+                    pending_digest=pending_digest,
                 ),
                 capability=C.REVIEWS_IMPORT_UPLOAD,
                 capabilities=CONTENT_EDITS
@@ -171,6 +184,9 @@ def _run_mcf_import(
     if recovered.issues and not options.ignore_errors:
         raise _McfImportIssues(recovered.issues)
     parsed = recovered.parsed
+    version_id = (
+        observe_target_version(db, prepared, digest=pending_digest) if pending_digest else None
+    )
     return import_mcf_as_saved_review(
         db,
         media_item=media,
@@ -184,6 +200,7 @@ def _run_mcf_import(
         synchronization=options.synchronization,
         mcf_material_end_seconds=options.mcf_material_end_seconds,
         accepted_credits=options.accepted_credits,
+        verification_version_id=version_id,
     )
 
 

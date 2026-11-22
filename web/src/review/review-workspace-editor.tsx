@@ -19,7 +19,7 @@ type Workspace = ReturnType<typeof useSavedReviewWorkspace>;
 /** Edit the selected review's name, filters, scans, and exports.
  * @param workspace Review state and edit actions.
  */
-export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
+export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace: Workspace; guided?: boolean }) {
   const accountLabel = useReviewAccountLabel(workspace.selected);
   const me = usePrincipal()?.userId ?? null;
   const [dialog, setDialog] = useState<"export" | "delete" | null>(null);
@@ -34,7 +34,7 @@ export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
     toggleScanMembership, changeScanMembership, access, conflict,
   } = workspace;
   if (!draft) return null;
-  const exportable = selected !== null && (publishDestinations(selected.owner_id, me, access.allowed).length > 0 || canDownload(selected.owner_id, me, access.allowed));
+  const exportable = !guided && selected !== null && (publishDestinations(selected.owner_id, me, access.allowed).length > 0 || canDownload(selected.owner_id, me, access.allowed));
 
   const saveDisabled = busy || Boolean(conflict) || !access.save || invalidMcfDocument || invalidDraftClassification
     || metadataSourceRequired || Boolean(draftNameValidation?.error)
@@ -47,6 +47,85 @@ export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
     ));
   const combinedScans = availableScans.filter((scan) => scan.scan_audio && scan.scan_video);
   const hasCombinedMembership = combinedScans.some((scan) => draft.memberships.some((membership) => membership.scan_id === scan.id));
+
+  const overview = <SavedReviewOverview
+      requiredFilterIds={selected?.policy_required_filter_ids}
+      lockedSeverities={selected?.policy_locked_severities}
+      filters={draft.filters}
+      memberships={draft.memberships}
+      scans={scans}
+      defaultSort={guided ? "time" : "category"}
+      busy={busy || Boolean(conflict)}
+      filtersEditable={access.field("filters")}
+      cuesEditable={access.field("cues")}
+      metadataEditable={access.field("metadata") && !workspace.conflict && !selected?.repair}
+      onToggleFilters={(filterIds, enabled) => setDraft((current) => current
+        ? filterIds.reduce((draft, filterId) => updateReviewFilter(draft, filterId, { selected: enabled }), current)
+        : current)}
+      onChangeFilter={(filterId, patch) => setDraft((current) => current ? updateReviewFilter(current, filterId, patch) : current)}
+      onDeleteFilter={(filterId) => setDraft((current) => current ? deleteReviewFilter(current, filterId) : current)}
+      onApplyDefaults={() => void applyFilterDefaults()}
+      onPreviewFilter={(filter) => void previewFilter(filter)}
+      preview={preview}
+      previewDisabled={!access.preview}
+      focusFilterId={preflightFocusFilterId}
+      onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
+    />;
+  const memberships = <div className="saved-review-memberships">
+        <strong>Included scans</strong>
+        {availableScans.map((scan) => {
+          const included = draft.memberships.some((membership) => membership.scan_id === scan.id);
+          return <label key={scan.id}>
+            <input
+              type="checkbox"
+              checked={included}
+              disabled={busy || !access.field("evidence")}
+              onChange={(event) => void toggleScanMembership(scan, event.target.checked)}
+            /> {scanLabel(scan)} · {scanOriginLabel(scan)}
+            {scan.community_provenance && <span className="community-source-author">Source author: {scan.community_provenance.author_id}</span>}
+          </label>;
+        })}
+      </div>;
+  const roles = hasCombinedMembership && <div className="saved-review-membership-roles">
+      <strong>Combined scan roles</strong>
+      {combinedScans.map((scan) => {
+        const membership = draft.memberships.find((item) => item.scan_id === scan.id);
+        return membership && <label className="field" key={scan.id}>
+          <span>{scanLabel(scan)}</span>
+          <select
+            aria-label={`Review role for ${scanLabel(scan)}`}
+            value={membership.role}
+            disabled={busy || !access.field("evidence")}
+            onChange={(event) => void changeScanMembership(scan, event.target.value as typeof membership.role)}
+          >
+            <option value="audio">Audio only</option>
+            <option value="video">Video only</option>
+            <option value="both">Audio and video</option>
+          </select>
+        </label>;
+      })}
+    </div>;
+  const evidence = <aside className="guided-review-evidence" aria-label="Review scan evidence">{memberships}{roles}</aside>;
+  const saveControls = <div className="button-row review-save-actions">
+        <button type="button" className="btn-primary" onClick={() => void save()} disabled={saveDisabled}>
+          {busy ? "Saving…" : selected ? "Save Changes" : "Save Review"}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => {
+            setDraft(discardReviewDraft(draft));
+            setMetadataCandidates([]);
+            setApplyStatus(null);
+            setEditingReviewName(false);
+          }}
+          disabled={busy || !isReviewDraftDirty(draft)}
+        >Discard</button>
+        {exportable && <button type="button" className="btn-secondary" aria-haspopup="dialog"
+          disabled={busy || Boolean(conflict) || isReviewDraftDirty(draft)}
+          title={busy ? "Wait for the current review action to finish" : isReviewDraftDirty(draft) ? "Save or discard review changes before exporting" : undefined}
+          onClick={() => { setError(null); setDialog("export"); }}>Export</button>}
+      </div>;
 
   return <>
     <div className="saved-review-current-header">
@@ -87,8 +166,8 @@ export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
         </>}
       </div>
       {selected && <div className="button-row saved-review-current-actions">
-        <ShareAction source={{ kind: "review", id: selected.id }} name={selected.name}
-          disabled={busy || isReviewDraftDirty(draft)} />
+        {!guided && <ShareAction source={{ kind: "review", id: selected.id }} name={selected.name}
+          disabled={busy || isReviewDraftDirty(draft)} />}
         {access.duplicate && <button
           type="button"
           className="btn-secondary compact-button"
@@ -103,89 +182,19 @@ export function ReviewWorkspaceEditor({ workspace }: { workspace: Workspace }) {
           disabled={busy || Boolean(conflict)}
         >Delete Review</button>}
       </div>}
+      {guided && saveControls}
     </div>
     {selected && <p className="muted-copy">Current owner: {accountLabel(selected.owner_id)}. Historical author: {accountLabel(selected.original_author_id)}. Policy source: {selected.policy_owner_id === selected.owner_id ? "current review owner" : accountLabel(selected.policy_owner_id)}, revision {selected.policy_revision}.</p>}
-    <SavedReviewOverview
-      requiredFilterIds={selected?.policy_required_filter_ids}
-      lockedSeverities={selected?.policy_locked_severities}
-      filters={draft.filters}
-      memberships={draft.memberships}
-      scans={scans}
-      busy={busy || Boolean(conflict)}
-      filtersEditable={access.field("filters")}
-      cuesEditable={access.field("cues")}
-      metadataEditable={access.field("metadata") && !workspace.conflict && !selected?.repair}
-      onToggleFilters={(filterIds, enabled) => setDraft((current) => current
-        ? filterIds.reduce((draft, filterId) => updateReviewFilter(draft, filterId, { selected: enabled }), current)
-        : current)}
-      onChangeFilter={(filterId, patch) => setDraft((current) => current ? updateReviewFilter(current, filterId, patch) : current)}
-      onDeleteFilter={(filterId) => setDraft((current) => current ? deleteReviewFilter(current, filterId) : current)}
-      onApplyDefaults={() => void applyFilterDefaults()}
-      onPreviewFilter={(filter) => void previewFilter(filter)}
-      preview={preview}
-      previewDisabled={!access.preview}
-      focusFilterId={preflightFocusFilterId}
-      onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
-    />
+    {guided ? <div className="guided-review-editor">{evidence}{overview}</div> : overview}
     <div className="saved-review-editor">
       {editingReviewName && draft.name && draftNameValidation?.error && <span className="form-error" role="alert">
         {draftNameValidation.error}
       </span>}
-      <div className="saved-review-memberships">
-        <strong>Included scans</strong>
-        {availableScans.map((scan) => {
-          const included = draft.memberships.some((membership) => membership.scan_id === scan.id);
-          return <label key={scan.id}>
-            <input
-              type="checkbox"
-              checked={included}
-              disabled={busy || !access.field("evidence")}
-              onChange={(event) => void toggleScanMembership(scan, event.target.checked)}
-            /> {scanLabel(scan)} · {scanOriginLabel(scan)}
-            {scan.community_provenance && <span className="community-source-author">Source author: {scan.community_provenance.author_id}</span>}
-          </label>;
-        })}
-      </div>
-      <div className="button-row">
-        <button type="button" className="btn-primary" onClick={() => void save()} disabled={saveDisabled}>
-          {busy ? "Saving…" : selected ? "Save Changes" : "Save Review"}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => {
-            setDraft(discardReviewDraft(draft));
-            setMetadataCandidates([]);
-            setApplyStatus(null);
-            setEditingReviewName(false);
-          }}
-          disabled={busy || !isReviewDraftDirty(draft)}
-        >Discard</button>
-        {exportable && <button type="button" className="btn-secondary" aria-haspopup="dialog"
-          disabled={busy || Boolean(conflict) || isReviewDraftDirty(draft)}
-          title={busy ? "Wait for the current review action to finish" : isReviewDraftDirty(draft) ? "Save or discard review changes before exporting" : undefined}
-          onClick={() => { setError(null); setDialog("export"); }}>Export</button>}
-      </div>
+      {!guided && memberships}
+      {!guided && saveControls}
+
     </div>
-    {hasCombinedMembership && <div className="saved-review-membership-roles">
-      <strong>Combined scan roles</strong>
-      {combinedScans.map((scan) => {
-        const membership = draft.memberships.find((item) => item.scan_id === scan.id);
-        return membership && <label className="field" key={scan.id}>
-          <span>{scanLabel(scan)}</span>
-          <select
-            aria-label={`Review role for ${scanLabel(scan)}`}
-            value={membership.role}
-            disabled={busy || !access.field("evidence")}
-            onChange={(event) => void changeScanMembership(scan, event.target.value as typeof membership.role)}
-          >
-            <option value="audio">Audio only</option>
-            <option value="video">Video only</option>
-            <option value="both">Audio and video</option>
-          </select>
-        </label>;
-      })}
-    </div>}
+    {!guided && roles}
     <div className="button-row">
       <button
         type="button"

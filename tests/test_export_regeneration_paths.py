@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from scanner.db import MediaItemExportRow, ScanRow
+from scanner.db import MediaItemExportRow, SavedReviewRow, ScanRow
 from scanner.persistence.repository.export_regeneration import retry_regeneration
+from scanner.persistence.repository.media_identity_store import bind_review_version, observe_version
+from scanner.runtime.media_fingerprints import content_digest
 from tests.multi_user_access_support import USER
 from tests.test_export_regeneration_boundaries import observe
 from tests.test_export_regeneration_convergence import job_state, nested_review, settle_due
@@ -86,6 +88,35 @@ def test_removed_media_with_retained_directory_converges(app, export_format):
     status, retained, destination = observe(app, published["id"])
     assert retained is None and not destination.exists() and not status["serving"]
     assert settle_due(app, 3) is None
+
+
+def test_regeneration_withdraws_instead_of_publishing_on_replacement_media(app):
+    review = seeded_review(app, USER, "pinned-regeneration")
+    with app.accounts.factory() as db:
+        row = db.get(SavedReviewRow, review.id)
+        scan = row.memberships[0].scan
+        media = Path(scan.resolved_local_path)
+        version = observe_version(
+            db,
+            media=row.media_item,
+            media_source_id=scan.media_source_id,
+            source_path=scan.source_path,
+            resolved_path=str(media),
+            content_sha256=content_digest(media),
+        )
+        bind_review_version(db, review.id, version)
+        db.commit()
+    published = publish(app, review, "edl")
+    assert published.status_code == 200, published.text
+    identifier = published.json()["id"]
+    with app.accounts.factory() as db:
+        row = db.get(MediaItemExportRow, identifier)
+        assert json.loads(row.snapshot_json)["media_version_id"] == version
+    media.write_bytes(b"replacement physical generation")
+    bump_policy(app.accounts)
+    assert settle_due(app, 0) == "failed"
+    status, retained, destination = observe(app, identifier)
+    assert retained is None and not status["serving"] and not destination.exists()
 
 
 @FORMATS

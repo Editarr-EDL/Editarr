@@ -65,7 +65,8 @@ EXPLICIT_FILTER_MODES_REVISION = "0031_explicit_filter_modes"
 MANUAL_FILTER_TRACKING_REVISION = "0032_manual_filter_tracking"
 SCAN_WORKER_TIMING_REVISION = "0033_scan_worker_timing"
 SCAN_READ_INDEXES_REVISION = "0034_scan_read_indexes"
-HEAD_REVISION = SCAN_READ_INDEXES_REVISION
+STABLE_MEDIA_IDENTITY_REVISION = "0035_stable_media_identity"
+HEAD_REVISION = STABLE_MEDIA_IDENTITY_REVISION
 JOURNAL_NAME = "migration-upgrade.json"
 
 
@@ -150,6 +151,7 @@ def _inspect_database(path: Path) -> str | None:
                 [(EXPLICIT_FILTER_MODES_REVISION,)],
                 [(MANUAL_FILTER_TRACKING_REVISION,)],
                 [(SCAN_WORKER_TIMING_REVISION,)],
+                [(SCAN_READ_INDEXES_REVISION,)],
                 [(HEAD_REVISION,)],
             ):
                 raise ValueError(f"Unsupported database revision: {revisions!r}")

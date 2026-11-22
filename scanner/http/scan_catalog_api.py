@@ -47,7 +47,7 @@ from scanner.settings.capabilities import (
     current_environment,
 )
 
-from .catalog_access import CatalogViewer, catalog_viewer
+from .catalog_access import CatalogViewer, catalog_viewer, not_found
 from .catalog_artwork import artwork_headers
 from .catalog_library_api import authorized_jellyfin_item
 from .operations_access import Operator, operation
@@ -63,11 +63,28 @@ def api_list_library_item_scans(
     item_id: str,
     db: Session = Depends(get_db),
     caller: ScanCaller = Depends(scan_caller),
+    *,
+    associated_only: bool = False,
 ):
-    # Scan history is owned locally and stays available even if Jellyfin is
-    # temporarily unavailable or its connection settings have been replaced.
-    """List scans associated with a Jellyfin item."""
-    return caller.visible(list_scans_for_library_item(db, jellyfin_item_id=item_id))
+    """List visible scans. Explicit links require access to the current target as well."""
+    server_id = None
+    if associated_only:
+        credentials = root.get_jellyfin_credentials(db)
+        if not credentials:
+            raise not_found()
+        viewer = CatalogViewer(caller.access, db, C.MEDIA_BROWSE, caller.now)
+        try:
+            authorized_jellyfin_item(viewer, credentials, item_id)
+        except JellyfinError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        finally:
+            viewer.close()
+        server_id = credentials[0]
+    return caller.visible(
+        list_scans_for_library_item(
+            db, jellyfin_item_id=item_id, server_id=server_id, associated_only=associated_only
+        )
+    )
 
 
 @router.get(

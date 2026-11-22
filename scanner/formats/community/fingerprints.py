@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import struct
+from collections.abc import Callable
 from typing import BinaryIO
 
 SAMPLED_ALGORITHM = "editarr-community-file-sha256-sampled-1"
@@ -31,7 +32,13 @@ def sample_ranges(size: int) -> tuple[tuple[int, int], ...]:
     return tuple(ranges)
 
 
-def digest_stream(stream: BinaryIO, size: int, algorithm: str) -> str:
+def digest_stream(
+    stream: BinaryIO,
+    size: int,
+    algorithm: str,
+    *,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> str:
     """Hash exact selected bytes; the caller must independently verify file stability."""
     ranges = sample_ranges(size)
     if algorithm not in (SAMPLED_ALGORITHM, FULL_ALGORITHM):
@@ -42,6 +49,10 @@ def digest_stream(stream: BinaryIO, size: int, algorithm: str) -> str:
         digest.update(struct.pack(">QI", size, len(ranges)))
     else:
         ranges = ((0, size),) if size else ()
+    total = sum(length for _, length in ranges)
+    done = reported = 0
+    if on_progress is not None:
+        on_progress(0, total)
     for offset, length in ranges:
         if algorithm == SAMPLED_ALGORITHM:
             digest.update(struct.pack(">QQ", offset, length))
@@ -53,4 +64,9 @@ def digest_stream(stream: BinaryIO, size: int, algorithm: str) -> str:
                 raise OSError("File shortened during fingerprint read")
             digest.update(chunk)
             remaining -= len(chunk)
+            if on_progress is not None:
+                done += len(chunk)
+                if done - reported >= 8 * SAMPLE_BYTES or done == total:
+                    on_progress(done, total)
+                    reported = done
     return digest.hexdigest()

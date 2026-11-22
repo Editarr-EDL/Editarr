@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import type { AudioTrack, AudioTrackSelection } from "../src/api/api-audio-tracks";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi } from "./app-fixtures";
@@ -63,8 +64,10 @@ for (const width of [320, 1440]) {
       await json(route, { id: "selected", scan_id: 9, status: "queued", ...request }, 201);
     });
     await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Scans");
     await expect(page.getByText(/Analyzed audio: Stream 2.*Commentary/)).toBeVisible();
-    await expect(page.getByText(/Analyzed audio track unknown/)).toBeVisible();
+    const ordinaryScan = page.getByRole("listitem").filter({ hasText: /Scan #2.*complete/ });
+    await expect(ordinaryScan.getByText(/Analyzed audio track unknown/)).toBeVisible();
     await page.getByRole("button", { name: "New Scan", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "New Scan" });
     const catalogSelect = dialog.getByLabel("Audio track", { exact: true });
@@ -99,6 +102,7 @@ for (const width of [320, 1440]) {
 
     const reopen = async () => {
       await page.reload();
+      await chooseWorkflowStep(page, "Scans");
       await page.getByRole("button", { name: "New Scan", exact: true }).click();
       await expect(dialog).toBeVisible();
     };

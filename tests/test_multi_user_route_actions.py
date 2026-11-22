@@ -47,8 +47,8 @@ def application_routes(application):
 
 
 def test_every_registered_method_and_route_is_inventoried(application_routes):
-    assert ROUTE_INVENTORY_VERSION == "editarr-route-actions-23"
-    assert len(application_routes) == len(ROUTE_RULES) == 216
+    assert ROUTE_INVENTORY_VERSION == "editarr-route-actions-24"
+    assert len(application_routes) == len(ROUTE_RULES) == 227
     gaps = inventory_gaps(application_routes, ROUTE_RULES)
     assert sorted(gaps.unclassified) == []
     assert sorted(gaps.stale) == []

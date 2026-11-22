@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CommunityApiError } from "../api/api-community";
 import { communityDownloadStatus, downloadCommunityFilter, type DownloadChoice, type DownloadOutcome } from "../api/api-community-downloads";
+import type { Scan } from "../api/api-scan-types";
 import type { LookupInput, RemoteFilterCandidate } from "../api/api-community-lookup";
 import { resultChannels, type RemoteSelection } from "./community-result-state";
 import { useCan } from "../auth/auth-gate";
@@ -16,7 +17,8 @@ const choiceFor = (candidate: RemoteFilterCandidate, channels = resultChannels(c
 const savedResult = (outcome: DownloadOutcome) => ({ scanId: outcome.scanId!, receiptState: outcome.receiptState!, reviewRequired: outcome.reviewRequired!, reviewed: outcome.reviewed });
 
 /** A sequential explicit queue; unknown outcomes are reconciled before any retry. */
-export function useCommunityDownloads(input: LookupInput | null, onImported: () => void) {
+export function useCommunityDownloads(input: LookupInput | null, onImported: () => void,
+  onStaged?: (scan: Scan) => void) {
   const allowed = useCan("community.download");
   const lifetime = useCommunityLifetime();
   const [entries, setEntries] = useState<DownloadEntry[]>([]);
@@ -25,6 +27,7 @@ export function useCommunityDownloads(input: LookupInput | null, onImported: () 
   const [statusError, setStatusError] = useState(false);
   const inputRef = useRef(input); inputRef.current = input;
   const notify = useRef(onImported); notify.current = onImported;
+  const notifyStaged = useRef(onStaged); notifyStaged.current = onStaged;
   const entriesRef = useRef(entries); entriesRef.current = entries;
   const pending = useRef<AbortController | null>(null);
   const generation = useRef(0);
@@ -58,9 +61,12 @@ export function useCommunityDownloads(input: LookupInput | null, onImported: () 
         }
         replace({ ...entry, status: "verifying", confirmed });
         try {
-          const result = await downloadCommunityFilter(current, entry.targetKey, entry.choice, confirmed, controller.signal);
+          const result = notifyStaged.current
+            ? await downloadCommunityFilter(current, entry.targetKey, entry.choice, confirmed, controller.signal, true)
+            : await downloadCommunityFilter(current, entry.targetKey, entry.choice, confirmed, controller.signal);
           if (!lifetime.current() || controller.signal.aborted || token !== generation.current) break;
           replace({ ...entry, status: result.status, confirmed, result: { scanId: result.scan.id, receiptState: result.receiptState, reviewRequired: result.reviewRequired, reviewed: result.reviewed } });
+          if (result.verificationPending) notifyStaged.current?.(result.scan);
           notify.current();
         } catch (error) {
           if (!lifetime.current() || controller.signal.aborted || token !== generation.current) break;

@@ -1,3 +1,4 @@
+import { openWorkflowStep } from "./review-workflow-test-helpers";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -57,9 +58,10 @@ describe("capability-aware application shell", () => {
     window.location.hash = "#/library/movies/item/movie-1";
     render(<AuthenticationGate><App /></AuthenticationGate>);
     expect(await screen.findByRole("heading", { name: "Example Movie" })).toBeVisible();
+    await openWorkflowStep("Scans");
     if (mayViewJobs) expect(await screen.findByText(/Active item job.*scanning/)).toBeVisible();
     else {
-      expect(await screen.findByText("No scans yet. Create a new scan to begin.")).toBeVisible();
+      expect(await screen.findByText("No scans yet.")).toBeVisible();
       expect(paths).not.toContain("/api/scans/queue");
     }
     expect(screen.queryByText(/Another item job.*scanning/)).not.toBeInTheDocument();
@@ -77,6 +79,7 @@ describe("capability-aware application shell", () => {
     window.location.hash = "#/library/movies/item/movie-1";
     render(<AuthenticationGate><App /></AuthenticationGate>);
     expect(await screen.findByRole("heading", { name: "Example Movie" })).toBeVisible();
+    await openWorkflowStep("Scans");
     expect(screen.queryByRole("button", { name: "New Scan" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open scans queue and history" })).not.toBeInTheDocument();
     expect(paths).not.toContain("/api/capabilities");
@@ -101,6 +104,7 @@ describe("capability-aware application shell", () => {
     }));
     window.location.hash = "#/library/movies/item/movie-1";
     render(<AuthenticationGate><App /></AuthenticationGate>);
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     await screen.findByText(/Revoked scan result.*complete/);
     await waitFor(() => expect(tracksRequested).toBe(true));

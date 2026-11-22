@@ -71,6 +71,11 @@ from scanner.runtime.process_control import (  # noqa: E402
     WorkerControlServer,
     assign_current_worker_job,
 )
+from scanner.runtime.scan_version import (  # noqa: E402
+    ScanVersionChanged,
+    prepare_scan_digest,
+    require_scan_digest,
+)
 from scanner.runtime.worker_quit import FullApplicationQuitRequested  # noqa: E402
 from scanner.security.scan_jobs.authority import (  # noqa: E402
     REFUSAL_MESSAGES,
@@ -198,6 +203,23 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
             logger.error("Scan %s cannot start because its source path is unavailable", scan_id)
             mark_scan_orphaned(db, scan_id, "Orphaned scan — source path is unavailable")
             return 1
+        digest = prepare_scan_digest(
+            db, scan_id, local_path, write=partial(gate.run, db),
+            on_hashing=lambda: gate.run(
+                db, update_scan_progress, scan_id,
+                {"stage": "hashing", "message": "Identifying media", "percent": 0},
+            ),
+        )
+
+        def update_status(session, item_id, status):
+            if status == "complete":
+                require_scan_digest(local_path, digest)
+            return gate.run(session, update_scan_status, item_id, status)
+
+        def save_credits(session, **result):
+            require_scan_digest(local_path, digest)
+            return gate.run(session, complete_credits_detection, **result)
+
         checkpoints = scan_checkpoint_stages(db, scan_id, require_provenance=True)
         logger.debug(
             "Scan %s resuming with completed checkpoints: %s", scan_id, sorted(checkpoints)
@@ -212,12 +234,9 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                     configuration=item.credits_detection.configuration,
                     video_duration_seconds=item.duration_seconds,
                     video_hash=item.video_hash,
-                    status_updater=lambda session, *args: gate.run(
-                        session, update_scan_status, *args
-                    ),
-                    result_writer=lambda session, **kwargs: gate.run(
-                        session, complete_credits_detection, **kwargs
-                    ),
+                    status_updater=update_status,
+                    result_writer=save_credits,
+                    content_sha256=digest,
                     scan_metadata_updater=lambda session, *args: gate.run(
                         session, update_scan_duration, *args
                     ),
@@ -264,19 +283,19 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                         if item.requested_audio_selection
                         else None
                     ),
-                    analyzed_audio_callback=lambda selection: gate.run(
+                    analyzed_audio_timing_callback=lambda selection, offset: gate.run(
                         db,
                         record_analyzed_audio_selection,
                         item.id,
                         AudioSelection.from_selection(selection),
+                        playback_offset_seconds=offset,
                     ),
                     scan_video=item.scan_video,
                     video_model=item.video_model,
                     video_id=item.id,
                     video_duration_seconds=item.duration_seconds,
-                    status_updater=lambda session, *args: gate.run(
-                        session, update_scan_status, *args
-                    ),
+                    status_updater=update_status,
+                    content_sha256=digest,
                     findings_writer=lambda session, video_id, findings: _write_findings(
                         gate, session, video_id, findings
                     ),
@@ -301,6 +320,10 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         db.rollback()
         fail_refused_scan_job(db, scan_id, refused.refusal.message)
         logger.info("Scan %s stopped: %s", scan_id, refused.refusal.reason.value)
+    except ScanVersionChanged as exc:
+        db.rollback()
+        fail_refused_scan_job(db, scan_id, str(exc))
+        logger.info("Scan %s stopped because its source changed", scan_id)
     except FullApplicationQuitRequested:
         # Full Quit retains the queue row and checkpoints so a future launch can
         # resume it.  Cancellation is intentionally a separate user request.

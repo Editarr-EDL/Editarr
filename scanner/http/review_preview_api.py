@@ -20,7 +20,10 @@ from scanner.persistence.repository.community_import_targets import (
     validate_target_role,
     verified_target,
 )
+from scanner.persistence.repository.media_identity_store import find_title_id, get_version
 from scanner.persistence.repository.review_access import PREVIEW, ReviewAccess, not_found
+from scanner.runtime.scan_version import ScanVersionChanged, file_generation, generation_token
+from scanner.runtime.version_reuse_audio import select_target_audio
 from scanner.security.access.api_shapes import AccessErrorCode
 from scanner.security.access.authorization import require
 from scanner.security.access.capability_ids import Capability as C
@@ -29,6 +32,7 @@ from scanner.security.access.targets import ActionPair, ResourceRef
 
 from .review_access import review_caller
 from .review_targets import ReviewTarget, capture_target
+from .stable_media_capture import file_digest
 
 router = APIRouter()
 CUES = ActionPair(C.REVIEWS_CUES_EDIT_OWN, C.REVIEWS_CUES_EDIT_OTHER)
@@ -36,6 +40,9 @@ CUES = ActionPair(C.REVIEWS_CUES_EDIT_OWN, C.REVIEWS_CUES_EDIT_OTHER)
 
 class DraftFilterPreview(ReviewWriteModel):
     media_source_id: str | None = None
+    stable_version_id: str | None = Field(default=None, min_length=1, max_length=128)
+    target_generation: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    audio_track_index: int | None = Field(default=None, ge=0, le=127, strict=True)
     review_id: str | None = Field(default=None, min_length=1)
     source_scan_id: str | None = Field(default=None, min_length=1)
     source_finding_id: int | None = Field(default=None, gt=0, le=MAX_PERSISTED_INTEGER, strict=True)
@@ -61,6 +68,7 @@ class PreviewClip:
     path: Path
     start: float
     end: float
+    content_sha256: str | None = None
 
 
 def _target_path(db: Session, target: ReviewTarget) -> Path:
@@ -126,6 +134,17 @@ def _preview_clip(
             raise not_found()
 
     path = _target_path(db, target)
+    expected_digest = None
+    if request.stable_version_id is not None:
+        version = get_version(db, request.stable_version_id)
+        if (
+            version is None
+            or not version.content_sha256
+            or find_title_id(db, server_id=source.server_id, jellyfin_id=source.item_id)
+            != version.title_id
+        ):
+            raise not_found()
+        expected_digest = version.content_sha256
     duration = source.duration_seconds
     edited = True
     if request.source_scan_id is not None:
@@ -169,7 +188,20 @@ def _preview_clip(
         end = min(end, duration)
     if end <= request.start_seconds:
         raise ValueError("The filter does not have a range within the media")
-    return PreviewClip(path, request.start_seconds, end)
+    return PreviewClip(path, request.start_seconds, end, expected_digest)
+
+
+def _verify_preview_file(clip: PreviewClip, target_generation: str | None) -> None:
+    """Keep the same file throughout playback, including lightweight alignment previews."""
+    if target_generation:
+        try:
+            matches = generation_token(file_generation(str(clip.path))) == target_generation
+        except ScanVersionChanged:
+            matches = False
+        if not matches:
+            raise root._review_http_error("target_changed", "The selected version has changed", 409)
+    if clip.content_sha256 and file_digest(str(clip.path)) != clip.content_sha256:
+        raise root._review_http_error("target_changed", "The selected version has changed", 409)
 
 
 @router.post("/api/library-items/{item_id}/reviews/preview")
@@ -210,7 +242,15 @@ def api_draft_filter_preview(
     mute = request.edit_action == EditAction.MUTE
     render = repository.render_mute_preview if mute else repository.render_video_preview
     try:
-        content = render(clip.path, clip.start, clip.end)
+        _verify_preview_file(clip, request.target_generation)
+        if request.audio_track_index is None:
+            content = render(clip.path, clip.start, clip.end)
+        else:
+            audio = select_target_audio(clip.path, request.audio_track_index)
+            content = render(
+                clip.path, clip.start, clip.end, audio_stream_index=audio.track.stream_index
+            )
+        _verify_preview_file(clip, request.target_generation)
     except (OSError, RuntimeError, ValueError) as exc:
         raise root._review_http_error(
             "review_preview_failed", "Unable to render the filter preview", 422

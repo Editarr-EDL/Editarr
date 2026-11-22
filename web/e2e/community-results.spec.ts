@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi } from "./app-fixtures";
 import { communityResponse, mixedCandidate } from "../src/test/community-lookup-fixtures";
@@ -25,7 +26,8 @@ for (const width of [320, 1440]) {
     });
     await page.goto("/#/library/movies");
     await page.getByRole("button", { name: "Open Example Movie" }).click();
-    await page.getByLabel("Review version").selectOption("source-2");
+    await page.getByLabel("Media version").selectOption("source-2");
+    await chooseWorkflowStep(page, "Scans");
     const trigger = page.getByRole("button", { name: "Find Filters", exact: true });
     await trigger.click();
     const dialog = page.getByRole("dialog", { name: "Found Filters" });
@@ -105,6 +107,7 @@ for (const width of [320, 1440]) {
     });
     await page.goto("/#/library/movies");
     await page.getByRole("button", { name: "Open Example Movie" }).click();
+    await chooseWorkflowStep(page, "Scans");
     await page.getByRole("button", { name: "Find Filters", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Found Filters" });
     await expect(dialog.getByLabel("Audio track")).toHaveValue("1");

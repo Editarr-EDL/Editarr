@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import { CAPABILITIES } from "../src/auth/capabilities";
 import { auditEvent, libraries, items, series, season, episode, json, mockApi, expectNoHorizontalPageOverflow, authenticationStatus } from "./app-fixtures";
@@ -99,6 +100,7 @@ test("creates a Editarr scan from the item detail without entering a path", asyn
   await page.route("**/api/media/audio-tracks/selection", (route) => json(route, route.request().postDataJSON().selection));
   await page.getByRole("button", { name: "Movies" }).click();
   await page.getByRole("button", { name: "Open Example Movie" }).click();
+  await chooseWorkflowStep(page, "Scans");
   await page.getByRole("button", { name: "New Scan" }).click();
   await expect(page.getByRole("dialog", { name: "New Scan" })).toBeVisible();
   await expect(page.getByLabel("Version", { exact: true })).toHaveValue("source-1");
@@ -112,17 +114,19 @@ test("keeps a long scan selector bounded and keyboard-scrollable", async ({ page
   const scan = (index: number) => ({
     id: index === 1 ? "scan-previous" : `scan-${index}`,
     scan_id: index, media_item_id: "media-1", jellyfin_item_id: "movie-1",
-    item_name: "Example Movie", item_type: "Movie", status: "complete", scan_audio: true,
+    item_name: "Example Movie", item_type: "Movie", library_id: "movies", media_source_id: "source-1", status: "complete", scan_audio: true,
     audio_model: "whisper", scan_video: true, video_model: "nudenet", frame_interval: 1,
     speed_up: false, error_message: null, created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z",
   });
   let scanHistoryRequests = 0;
-  await page.route(/\/api\/library-items\/movie-1\/scans(?:\?.*)?$/, async (route) => {
+  await page.route("**/api/scans/queue", (route) => json(route, []));
+  await page.route(/\/api\/scans\/history(?:\?.*)?$/, async (route) => {
     scanHistoryRequests += 1;
     await json(route, [1, 2, 3, 4, 5].map(scan));
   });
   await page.getByRole("button", { name: "Movies" }).click();
   await page.getByRole("button", { name: "Open Example Movie" }).click();
+  await chooseWorkflowStep(page, "Scans");
   const scanHistory = page.getByRole("list", { name: "Scan history" });
   await expect(scanHistory.getByRole("listitem")).toHaveCount(5);
   expect(scanHistoryRequests).toBeGreaterThan(0);

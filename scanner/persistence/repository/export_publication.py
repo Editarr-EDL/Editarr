@@ -226,8 +226,10 @@ def retained_review_snapshot(db, output):
     """Capture the same immutable evidence for publication and successful regeneration."""
     from scanner.repository import get_saved_review
 
+    from .media_identity_store import review_version_id
+
     review = output.review
-    return {
+    snapshot = {
         "source_review_id": review.id,
         "review_revision": review.revision,
         "media_path": str(output.media),
@@ -252,6 +254,10 @@ def retained_review_snapshot(db, output):
             for membership in output.memberships
         ],
     }
+    version_id = review_version_id(db, review.id)
+    if version_id is not None:
+        snapshot["media_version_id"] = version_id
+    return snapshot
 
 
 def _current(db, output, scope, target_user_id):

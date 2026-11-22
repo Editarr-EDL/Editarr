@@ -128,9 +128,10 @@ def atomic_write_json(path: Path, payload: object) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
-def transcription_cache_path(video_hash: str, model_name: str) -> Path:
+def transcription_cache_path(video_hash: str, model_name: str, *, create: bool = True) -> Path:
     """Return the transcription cache file path scoped by model."""
     cache_dir = _video_cache_dir(video_hash)
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    if create:
+        cache_dir.mkdir(parents=True, exist_ok=True)
     model_token = re.sub(r"[^a-z0-9._-]+", "_", model_name.strip().lower())
     return cache_dir / f"transcript_{model_token}.json"

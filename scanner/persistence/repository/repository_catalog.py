@@ -224,25 +224,26 @@ def list_scan_history(db: Session) -> list[Scan]:
 
 
 def list_scans_for_library_item(
-    db: Session, *, jellyfin_item_id: str, server_id: str | None = None
+    db: Session,
+    *,
+    jellyfin_item_id: str,
+    server_id: str | None = None,
+    associated_only: bool = False,
 ) -> list[Scan]:
-    """Find scans linked to the given media item and optional physical version."""
+    """Find locally stored scans and explicit links for a Jellyfin item."""
     items_query = db.query(MediaItemRow.id).filter(MediaItemRow.jellyfin_id == jellyfin_item_id)
     if server_id:
         items_query = items_query.filter(MediaItemRow.server_id == server_id)
     media_item_ids = [row[0] for row in items_query.all()]
     if not media_item_ids:
         return []
+    linked = ScanMediaItemAssociationRow.media_item_id.in_(media_item_ids)
+    owned = ScanRow.media_item_id.in_(media_item_ids)
     rows = (
         db.query(ScanRow)
         .options(*scan_list_loading())
         .outerjoin(ScanMediaItemAssociationRow)
-        .filter(
-            or_(
-                ScanRow.media_item_id.in_(media_item_ids),
-                ScanMediaItemAssociationRow.media_item_id.in_(media_item_ids),
-            )
-        )
+        .filter(linked & ~owned if associated_only else or_(owned, linked))
         .distinct()
         .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
         .all()

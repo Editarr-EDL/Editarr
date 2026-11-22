@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi, mockReview } from "./app-fixtures";
 import { pendingPublication, sharingContextFixture, sharingPreviewFixture } from "../src/scans/sharing-test-fixtures";
@@ -117,6 +118,9 @@ for (const width of [320, 1440]) {
     });
     await page.goto("/#/library/movies/item/movie-1");
     await page.getByRole("button", { name: "Open review Mixed community review" }).click();
+    await chooseWorkflowStep(page, "Publish");
+    const community = page.getByRole("button", { name: "Community", exact: true });
+    if (await community.count()) await community.click();
     await page.getByRole("button", { name: "Share Mixed community review" }).click();
     const dialog = page.getByRole("dialog", { name: "Share review" });
     await expect(dialog.getByRole("button", { name: "Share contribution" })).toBeDisabled();

@@ -1,0 +1,142 @@
+"""Exercise the actual embedded ASS extraction and reviewed audio transcript timing."""
+
+import shutil
+import subprocess
+from fractions import Fraction
+from types import SimpleNamespace
+
+import pytest
+
+from scanner.formats.subtitle_redaction import SubtitleMute, redact_subtitles
+from scanner.integrations.jellyfin_subtitles import JellyfinSubtitle
+from scanner.modeling.model_subtitles import ReviewAudioSource, SubtitleSource
+from scanner.pipeline.audio_tracks import AudioTrack, AudioTrackSelection
+from scanner.pipeline.subtitle_tracks import embedded_subtitle_streams
+from scanner.runtime import subtitle_transcript
+from scanner.runtime.subtitle_inputs import read_subtitle
+from scanner.runtime.subtitle_transcript import ReviewedAudio, transcript_document
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="the live embed fixture requires FFmpeg")
+def test_real_embedded_ass_preserves_style(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGEIO_FFMPEG_EXE", shutil.which("ffmpeg"))
+    subtitles = tmp_path / "original.ass"
+    subtitles.write_text(
+        "[Script Info]\nScriptType: v4.00+\n[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
+        "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
+        "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        "Style: KeepMe,Arial,20,&H00FFFFFF,&H000000FF,&H0,&H0,0,-1,0,0,100,100,0,0,1,2,2,2,"
+        "10,10,10,1\n[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        "Dialogue: 0,0:00:01.00,0:00:03.00,KeepMe,,0,0,0,,{\\an8}Damn, close the gate.\n"
+    )
+    target = tmp_path / "film.mkv"
+    subprocess.run(
+        [
+            shutil.which("ffmpeg"),
+            "-v",
+            "error",
+            "-nostdin",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=black:s=32x32:d=4",
+            "-i",
+            str(subtitles),
+            "-map",
+            "0:v",
+            "-map",
+            "1:s",
+            "-c:v",
+            "ffv1",
+            "-c:s",
+            "copy",
+            "-disposition:s:0",
+            "forced",
+            str(target),
+        ],
+        check=True,
+        timeout=15,
+    )
+    physical = embedded_subtitle_streams(target)
+    assert len(physical) == 1
+    assert physical[0]["Index"] == 1
+    assert physical[0]["IsForced"] is True
+    source = JellyfinSubtitle(
+        SubtitleSource(
+            id="track",
+            label="English Forced",
+            language="en",
+            format="ass",
+            kind="embedded",
+            forced=True,
+        ),
+        stream_index=1,
+        container="ass",
+        encoder="copy",
+    )
+    document = read_subtitle(target, source)
+    redaction = redact_subtitles(document, (SubtitleMute(1.1, 1.3, "damn"),))
+    output = document.render(redaction.replacements)
+    assert b"Style: KeepMe,Arial" in output
+    assert b"{\\an8}close the gate." in output
+
+
+def test_transcript_offsets_word_and_cue_times(monkeypatch, tmp_path):
+    track = AudioTrack(1, "en", None, "aac", 2, 0, 2, 50, "1/48000")
+    selection = AudioTrackSelection("a" * 64, track)
+    audio = ReviewedAudio(ReviewAudioSource(id="track", label="Audio"), selection, ("whisper",))
+    monkeypatch.setattr(
+        subtitle_transcript,
+        "probe_audio_tracks",
+        lambda _: SimpleNamespace(revalidate=lambda value: assert_selection(value)),
+    )
+
+    def assert_selection(value):
+        assert value is selection
+
+    monkeypatch.setattr(subtitle_transcript, "audio_playback_start", lambda *_a, **_kw: Fraction(2))
+    segments = [
+        {
+            "start_seconds": 1,
+            "end_seconds": 5,
+            "text": "Hell, hell no.",
+            "words": [
+                {"word": "Hell,", "start_seconds": 1.5, "end_seconds": 2},
+                {"word": "hell", "start_seconds": 3, "end_seconds": 3.5},
+                {"word": "no.", "start_seconds": 4, "end_seconds": 4.5},
+            ],
+        }
+    ]
+    document = transcript_document(tmp_path / "film.mkv", audio, segments)
+    redaction = redact_subtitles(document, (SubtitleMute(5, 5.5, "hell"),))
+    assert document.cues[0].start == 3
+    assert redaction.preview()[0]["filtered"] == "Hell, no."
+
+
+def test_dot_delimited_overlapping_stems_refuse_shared_attach(tmp_path, monkeypatch):
+    from scanner.modeling.model_catalog import JellyfinMediaItem, JellyfinMediaVersion
+    from scanner.persistence.repository import review_subtitles
+
+    short = tmp_path / "Movie.mkv"
+    edition = tmp_path / "Movie.Alternate.mkv"
+    item = JellyfinMediaItem(
+        id="movie",
+        item_type="Movie",
+        name="Movie",
+        versions=[
+            JellyfinMediaVersion(id="main", path=str(short)),
+            JellyfinMediaVersion(id="edition", path=str(edition)),
+        ],
+    )
+    monkeypatch.setattr(
+        review_subtitles, "resolve_local_path", lambda _db, value: SimpleNamespace(local_path=value)
+    )
+    for current, version in [(short, "main"), (edition, "edition")]:
+        target = SimpleNamespace(source=SimpleNamespace(catalog_item=item, media_source_id=version))
+        if current == short:
+            review_subtitles._require_unambiguous_name(None, target, current)
+        else:
+            with pytest.raises(review_subtitles.SubtitleError, match="more than one version"):
+                review_subtitles._require_unambiguous_name(None, target, current)

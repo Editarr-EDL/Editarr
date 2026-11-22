@@ -22,10 +22,12 @@ from scanner.modeling.model_community_lookup import LookupPage
 from scanner.persistence.repository.community_import_projection import LocalImportTarget
 from scanner.persistence.repository.community_import_targets import (
     approved_target_channels,
-    verified_target,
+    pending_target_channels,
+    stored_target,
 )
 from scanner.persistence.repository.community_imports import import_verified_download
 from scanner.repository import ReviewMembershipError, get_jellyfin_credentials
+from scanner.runtime.media_fingerprints import content_digest
 
 from .downloads import fetch_verified_download
 from .lookup import RESPONSE_BYTES, _validated
@@ -163,6 +165,13 @@ class CommunityDownloads:
             None,
         ):
             raise CommunityFailure("target_changed")
+        digest = None
+        if body.stage_for_verification:
+            try:
+                digest = await drained_thread(content_digest, captured.path)
+                captured.check(should_cancel)
+            except (OSError, ValueError) as exc:
+                raise CommunityFailure("target_changed") from exc
         target = LocalImportTarget(
             media.id,
             request.target.media_source_id,
@@ -170,6 +179,8 @@ class CommunityDownloads:
             captured.evidence,
             tuple(body.choice.channels),
             captured.key,
+            stage_for_verification=body.stage_for_verification,
+            content_sha256=digest,
         )
 
         def commit():
@@ -202,7 +213,7 @@ class CommunityDownloads:
         receipt_state = await acknowledge_committed_import(
             self.client, result.import_id, result.receipt_state
         )
-        return {
+        response = {
             "version": 1,
             "revisionId": selected.revisionId,
             "status": "reused" if result.reused else "imported",
@@ -211,6 +222,9 @@ class CommunityDownloads:
             "reviewRequired": result.review_required,
             "reviewed": reviewed,
         }
+        if result.verification_pending:
+            response["verificationPending"] = True
+        return response
 
 
 def used_in_review(db, scan_id, media_item_id, media_source_id, *, user_id=None):
@@ -248,7 +262,7 @@ def download_status(db, service_url, body: DownloadStatusRequest, *, user_id=Non
         outcome = {"revisionId": choice.revisionId, "status": "not_imported"}
         scan = db.get(ScanRow, imported.scan_id) if imported else None
         if scan is not None:
-            association = verified_target(db, scan, media.id, body.target.media_source_id)
+            association = stored_target(db, scan, media.id, body.target.media_source_id)
             if (
                 association
                 and json.loads(association.target_evidence_json).get("lookup_target_key")
@@ -259,6 +273,8 @@ def download_status(db, service_url, body: DownloadStatusRequest, *, user_id=Non
                 except ReviewMembershipError:
                     pass
                 else:
+                    pending = pending_target_channels(association)
+                    pending_here = bool(set(choice.channels) & pending)
                     operations = db.query(CommunityOperationRow).filter_by(
                         kind="receipt",
                         service_url=service_url,
@@ -270,7 +286,11 @@ def download_status(db, service_url, body: DownloadStatusRequest, *, user_id=Non
                         operations = operations.filter_by(owner_id=user_id)
                     operation = operations.first()
                     outcome.update(
-                        status="imported" if set(choice.channels) <= set(approved) else "partial",
+                        status=(
+                            "imported"
+                            if set(choice.channels) <= set(approved) | pending
+                            else "partial"
+                        ),
                         scanId=imported.scan_id,
                         approvedChannels=approved,
                         reviewed=used_in_review(
@@ -279,5 +299,7 @@ def download_status(db, service_url, body: DownloadStatusRequest, *, user_id=Non
                         receiptState=operation.state if operation else "unavailable",
                         reviewRequired=association.review_required,
                     )
+                    if pending_here:
+                        outcome["verificationPending"] = True
         outcomes.append(outcome)
     return {"version": 1, "outcomes": outcomes}

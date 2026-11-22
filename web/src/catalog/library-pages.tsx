@@ -133,7 +133,8 @@ export function LibraryViewPage({
       search: deferredSearch,
     };
     const cacheKey = libraryPageCacheKey(library.id, query);
-    if (!refresh) {
+    const isTitleSearch = Boolean(query.search?.trim());
+    if (!refresh && !isTitleSearch) {
       const cachedPage = cache.get(cacheKey);
       if (cachedPage) {
         setItems(cachedPage.items);
@@ -144,14 +145,14 @@ export function LibraryViewPage({
         setLoading(false);
         return;
       }
-    } else {
+    } else if (refresh) {
       clearLibraryPageCache(cache, library.id);
     }
     setLoading(true);
     try {
       const page = await fetchLibraryItems(library.id, { ...query, refresh });
       if (version !== requestVersion.current) return;
-      cache.set(cacheKey, page);
+      if (!isTitleSearch) cache.set(cacheKey, page);
       setItems(page.items); setTotalCount(page.total_count); setRatingValues(page.rating_values || []); setResolutionValues(page.resolution_values || []); setError(null);
     } catch (reason) {
       if (version !== requestVersion.current) return;

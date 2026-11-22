@@ -11,6 +11,7 @@ from scanner.db import (
     MediaItemRow,
     SavedReviewRow,
     ScanFindingRow,
+    ScanMediaVersionRow,
     ScanRow,
 )
 from scanner.models import (
@@ -27,6 +28,7 @@ from scanner.repository import (
 
 from .activity_ownership import new_review_owner_columns, new_scan_initiator_columns
 from .filter_preferences import base_filter_settings
+from .media_identity_store import bind_review_version, bind_scan_version, get_version
 from .repository_paths import (
     resolve_local_path,
 )
@@ -74,6 +76,7 @@ from .repository_review_metadata import (
 )
 from .review_policy import policy_write, prepare_review_policy
 from .review_policy_evidence import bind_review_evidence
+from .review_version_evidence import version_file_matches
 
 
 @policy_write
@@ -87,6 +90,7 @@ def create_saved_review(
     catalog_mcf_document: ReviewMcfDocument | None = None,
     target_source: str | None = None,
     target_item_id: str | None = None,
+    stable_version_id: str | None = None,
 ) -> SavedReview:
     """Create a review, rolling back every staged row on any failure."""
     try:
@@ -99,6 +103,7 @@ def create_saved_review(
             catalog_mcf_document=catalog_mcf_document,
             target_source=target_source,
             target_item_id=target_item_id,
+            stable_version_id=stable_version_id,
         )
     except Exception:
         db.rollback()
@@ -115,6 +120,7 @@ def _create_saved_review(
     catalog_mcf_document: ReviewMcfDocument | None = None,
     target_source: str | None = None,
     target_item_id: str | None = None,
+    stable_version_id: str | None = None,
 ) -> SavedReview:
     """Persist a new review and its initial scan, filter, and metadata state."""
     media = db.get(MediaItemRow, media_item_id)
@@ -128,6 +134,7 @@ def _create_saved_review(
         media_source_id=version,
         values=data.new_manual_filters,
         owner_id=new_review_owner_columns(db)["owner_id"],
+        stable_version_id=stable_version_id,
     )
     if manual_scan is not None:
         requested_memberships = _with_manual_membership(
@@ -181,6 +188,8 @@ def _create_saved_review(
     row.memberships = list(membership_rows.values())
     db.add(row)
     db.flush()
+    if stable_version_id is not None:
+        bind_review_version(db, row.id, stable_version_id)
     row.mcf_document = _review_mcf_document_row(row.id, review_document)
     row.synchronization = _review_synchronization_row(row.id, synchronization)
     if data.filters is None:
@@ -239,13 +248,18 @@ def _append_manual_review_filters(
     media_source_id: str,
     values: list[NewManualReviewFilter],
     owner_id: int | None = None,
+    stable_version_id: str | None = None,
 ) -> tuple[ScanRow | None, list[ReviewFilterInput]]:
     """Add manually selected filters to a draft review without duplication."""
     if not values:
         return None, []
     values = root.fill_manual_filter_defaults(values, base_filter_settings(db, owner_id))
     manual_scan = manual_review_scan(
-        db, media_item_id, media_source_id, {value.source for value in values}
+        db,
+        media_item_id,
+        media_source_id,
+        {value.source for value in values},
+        stable_version_id=stable_version_id,
     )
     inputs: list[ReviewFilterInput] = []
     for value in values:
@@ -272,24 +286,31 @@ def _append_manual_review_filters(
     return manual_scan, inputs
 
 
-def manual_review_scan(db, media_item_id, media_source_id, sources):
+def manual_review_scan(db, media_item_id, media_source_id, sources, *, stable_version_id=None):
     """Reuse or stage a target's manual scan without creating source findings."""
     media_item = db.get(MediaItemRow, media_item_id)
     if media_item is None:
         raise ReviewMembershipError("Media item is unavailable")
-    manual_scan = (
+    source_path = media_item.path
+    if stable_version_id is not None:
+        version = get_version(db, stable_version_id)
+        if not source_path or not version_file_matches(
+            version, resolve_local_path(db, source_path).local_path
+        ):
+            raise ReviewMembershipError("The original Editarr review version is unavailable")
+    query = (
         db.query(ScanRow)
+        .outerjoin(ScanMediaVersionRow, ScanMediaVersionRow.scan_id == ScanRow.id)
         .filter(
             ScanRow.media_item_id == media_item_id,
             ScanRow.media_source_id == (media_source_id or None),
             ScanRow.origin == ScanOrigin.MANUAL.value,
             ScanRow.status == "complete",
+            ScanMediaVersionRow.version_id == stable_version_id,
         )
-        .order_by(ScanRow.scan_number.desc())
-        .first()
     )
+    manual_scan = query.order_by(ScanRow.scan_number.desc()).first()
     if manual_scan is None:
-        source_path = media_item.path
         if not source_path:
             raise ReviewMembershipError("A Manual scan is required for new review filters")
         try:
@@ -331,6 +352,8 @@ def manual_review_scan(db, media_item_id, media_source_id, sources):
         )
         db.add(manual_scan)
         db.flush()
+        if stable_version_id is not None:
+            bind_scan_version(db, manual_scan.id, stable_version_id)
     manual_scan.scan_audio = manual_scan.scan_audio or "audio" in sources
     manual_scan.scan_video = manual_scan.scan_video or "visual" in sources
     return manual_scan

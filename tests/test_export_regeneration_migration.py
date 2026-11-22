@@ -10,6 +10,7 @@ import pytest
 from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _clone, _upgrade
 from tests.explicit_filter_modes_support import drop_0031_additions
+from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_review_policy_migration import _built
 
@@ -137,7 +138,8 @@ def test_every_json_job_moves_exactly_and_snapshot_keeps_other_evidence(tmp_path
     assert upgraded.pop("account_dispositions") == []
     assert upgraded.pop("account_transfer_moves") == []
     assert upgraded.pop("jellyfin_user_blocks") == []
-    unchanged = {name: rows for name, rows in upgraded.items() if name != "media_item_exports"}
+    unchanged = without_stable_media_identity(upgraded)
+    unchanged.pop("media_item_exports")
     assert unchanged == {name: rows for name, rows in original.items() if name in unchanged}
     assert len(upgraded["media_item_exports"]) == len(original["media_item_exports"])
     assert adoption.upgrade_existing_database(path, path.parent) is None
@@ -219,7 +221,7 @@ def test_older_supported_revision_reaches_head_with_an_empty_queue(tmp_path):
     assert upgraded.pop("jellyfin_user_blocks") == []
     assert all(row[-5:] == (None, None, None, 0, None) for row in upgraded["media_item_exports"])
     upgraded["media_item_exports"] = [row[:-5] for row in upgraded["media_item_exports"]]
-    assert upgraded == original
+    assert without_stable_media_identity(upgraded) == original
 
 
 @pytest.mark.parametrize(

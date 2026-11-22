@@ -6,11 +6,13 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy.orm import Session
 
-from scanner.db import ReviewFilterRow, SavedReviewRow, ScanRow, ScanStageCoverageRow
+from scanner.db import MediaItemRow, ReviewFilterRow, SavedReviewRow, ScanRow, ScanStageCoverageRow
 from scanner.formats.community.codec import ArtifactError
 from scanner.integrations.community.donation_sources import SourceRef, capture_source
 from scanner.integrations.community.donations import approve_donation, prepare_donation
 from scanner.modeling.community_work_refs import identity_from_reference
+from scanner.persistence.repository.media_identity_store import bind_review_version, observe_version
+from scanner.runtime.media_fingerprints import content_digest
 from tests.test_community_donations import (
     BOUNDS,
     audio_selection,
@@ -19,6 +21,32 @@ from tests.test_community_donations import (
     seed_mixed_review,
 )
 from tests.test_community_donations import source_database as source_database
+
+
+def test_pinned_review_cannot_claim_replacement_file_for_community(source_database, tmp_path):
+    seed_mixed_review(source_database)
+    path = tmp_path / "original.mkv"
+    path.write_bytes(b"original physical generation")
+    with Session(source_database) as db:
+        version_id = observe_version(
+            db,
+            media=db.get(MediaItemRow, "media"),
+            media_source_id=None,
+            source_path=str(path),
+            resolved_path=str(path),
+            content_sha256=content_digest(path),
+        )
+        bind_review_version(db, "review", version_id)
+        db.commit()
+    path.write_bytes(b"replacement physical generation")
+    with pytest.raises(ArtifactError, match="original review version is unavailable"):
+        prepare_donation(
+            source_database,
+            SourceRef("review", "review"),
+            options(duration_seconds=20, audio_source_scan_id="scan"),
+            bounds=BOUNDS,
+            source_limit=4,
+        )
 
 
 def test_mixed_review_exclusions_retiming_and_saved_source_unchanged(source_database):

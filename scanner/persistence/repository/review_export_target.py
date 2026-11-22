@@ -10,7 +10,10 @@ from scanner.db import ReviewScanMembershipRow, SavedReviewRow, ScanMediaItemAss
 from scanner.repository import ReviewMembershipError
 
 from .community_import_targets import matches_target, validate_target_role, verified_target
+from .media_identity_store import review_version_id, scan_version_id
 from .repository_paths import resolve_local_path
+from .review_version_evidence import review_file_matches
+from .version_reuse import source_pending_reuse
 
 
 def _review_export_scans(
@@ -28,9 +31,10 @@ def _review_export_scans(
             raise ReviewMembershipError("The review media file is unavailable") from exc
     scans: dict[str, ScanRow] = {}
     physical_path: Path | None = None
+    version_id = review_version_id(db, review.id)
     for membership in memberships:
         scan = db.get(ScanRow, membership.scan_id)
-        if scan is None or scan.status != "complete":
+        if scan is None or scan.status != "complete" or source_pending_reuse(scan):
             raise ReviewMembershipError("A review scan is unavailable")
         if scan.media_item_id != review.media_item_id:
             associated = (
@@ -53,6 +57,10 @@ def _review_export_scans(
             raise ReviewMembershipError("A community scan is not verified for this target")
         if association is None and (scan.media_source_id or "") != review.media_source_id:
             raise ReviewMembershipError("Review scans must resolve to one media version")
+        if association is None and version_id:
+            source_id = scan_version_id(db, scan.id)
+            if source_id is not None and source_id != version_id:
+                raise ReviewMembershipError("Review scans must match the original Editarr version")
         scan_path = (
             Path(association.resolved_local_path).resolve()
             if association
@@ -77,4 +85,6 @@ def _review_export_scans(
             raise ReviewMembershipError("Review scans must resolve to the same physical media file")
         scans[scan.id] = scan
     assert physical_path is not None
+    if review_file_matches(db, review.id, physical_path) is False:
+        raise ReviewMembershipError("The original Editarr review version is unavailable")
     return memberships, scans, physical_path

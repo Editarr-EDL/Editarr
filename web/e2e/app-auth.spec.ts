@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { libraries, items, json, authenticationStatus, expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, expectNoAuthenticationSecretsInBrowser, mockApi, signOutThroughMenu } from "./app-fixtures";
 
@@ -335,11 +336,12 @@ test("browses a library in both views and opens item metadata", async ({ page })
   await page.getByLabel("Rating filter").selectOption("PG-13");
   await page.getByLabel("Resolution filter").selectOption("4K");
   await page.getByRole("button", { name: "Example Movie" }).click();
+  await page.locator("summary").filter({ hasText: "Media files" }).click();
   await expect(page.getByText("A test movie.")).toBeVisible();
   await expect(page).toHaveTitle("Editarr — Media Editing — Example Movie");
-  await expect(page.getByText("2025 · Rating PG-13")).toBeVisible();
+  await expect(page.getByText(/^2025 · Rating PG-13/)).toBeVisible();
   await expect(page.getByText("EDL · Current").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Files" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Files", exact: true })).toBeVisible();
   await expect(page.getByText("Media sources reported by Jellyfin.")).toHaveCount(0);
   const files = page.getByRole("region", { name: "Media files" });
   await expect(files.getByRole("columnheader")).toHaveText([
@@ -350,11 +352,12 @@ test("browses a library in both views and opens item metadata", async ({ page })
   await expect(mainFile.getByText("EDL · Current")).toBeVisible();
   const alternateFile = files.getByRole("row").filter({ hasText: "example-1080p.mkv" });
   await expect(alternateFile.getByRole("cell", { name: "0", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Manage exports" }).click();
+  await page.getByRole("button", { name: "Manage legacy exports" }).click();
   await expect(page.getByRole("dialog", { name: "Manage exports" })).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Delete EDL" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Confirm Delete EDL" }).click();
   await expect(page.getByText("EDL deleted.")).toBeVisible();
+  await chooseWorkflowStep(page, "Scans");
   await expect(page.getByRole("list", { name: "Scan history" })).toContainText("#2");
   await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("button", { name: "Movies" }).click();
   await page.getByPlaceholder("Search titles").fill("missing");

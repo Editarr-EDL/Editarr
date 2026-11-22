@@ -54,6 +54,7 @@ from .review_filter_tracking import label_edits, load_source_findings, with_labe
 from .review_policy import prepare_review_policy
 from .review_policy_display import locked_severities
 from .review_repairs import repair_records_by_review
+from .version_reuse import bound_scan_file_matches, source_pending_reuse
 
 
 def _review_filter(row: ReviewFilterRow) -> ReviewFilter:
@@ -136,6 +137,8 @@ def _scan_is_available(
     db: Session, scan: ScanRow, *, media_item_id: str, media_source_id: str
 ) -> bool:
     """Check whether a completed scan belongs to the requested media version."""
+    if source_pending_reuse(scan):
+        return False
     if scan.community_import is not None and scan.community_import.artifact_bytes:
         return (
             scan.status == "complete"
@@ -174,6 +177,9 @@ def _scan_matches_physical_version(
     """Check whether a scan still belongs to the requested physical media version."""
     if _resolved_scan_path(scan) != target_path.resolve():
         return False
+    approval = bound_scan_file_matches(scan, target_path)
+    if approval is not None:
+        return approval
     if scan.video_hash is None:
         return not require_hash
     try:

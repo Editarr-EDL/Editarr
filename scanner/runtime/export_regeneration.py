@@ -37,6 +37,8 @@ from scanner.persistence.repository.export_regeneration import (
     sweep_regenerations,
 )
 from scanner.persistence.repository.export_retained import prepare_retained_export
+from scanner.persistence.repository.media_identity_store import get_version, review_version_id
+from scanner.persistence.repository.review_version_evidence import version_file_matches
 from scanner.persistence.rows.db_export_regenerations import (
     RegenerationFailure,
     RegenerationState,
@@ -57,8 +59,15 @@ WRITE_FAILED = "write_failed"
 
 
 def _destination(db, row, snapshot):
+    media = Path(snapshot["media_path"])
+    version_id = snapshot.get("media_version_id")
+    source_review_id = snapshot.get("source_review_id")
+    if version_id is None and source_review_id:
+        version_id = review_version_id(db, source_review_id)
+    if version_id and not version_file_matches(get_version(db, version_id), media):
+        raise ExportConflict("export_media_changed", "The original review version is unavailable")
     target = parse_export_id(row.target_export_id)
-    destination = safe_destination(Path(snapshot["media_path"]), row.format, target)
+    destination = safe_destination(media, row.format, target)
     _check_destination(db, row, destination)
     return destination
 

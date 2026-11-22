@@ -38,11 +38,12 @@ function saveBlob(blob: Blob, filename: string) {
  * discovery. Replacing another review's file needs the server's confirmation,
  * and a stale confirmation replaces nothing.
  */
-export function ExportDialog({ review, reviews, exports, allowed, edlAvailable, onMcfIssues, onConflict, onPublished, onClose }: {
+export function ExportDialog({ review, reviews, exports, allowed, formats = EXPORT_FORMATS, edlAvailable, onMcfIssues, onConflict, onPublished, onClose }: {
   review: SavedReview;
   reviews: SavedReviewSummary[];
   exports: VersionPublications;
   allowed: Allowed;
+  formats?: readonly ExportFormat[];
   edlAvailable: boolean;
   onMcfIssues: (issues: McfPreflightIssue[]) => void;
   onConflict: (reason: unknown) => Promise<void>;
@@ -130,7 +131,7 @@ export function ExportDialog({ review, reviews, exports, allowed, edlAvailable, 
     <p className="muted-copy">“{review.name}”, revision {review.revision}. Filters follow the review owner's enforced policy ({label(review.policy_owner_id)}, policy revision {review.policy_revision}) for every destination.</p>
     {canDownload(review.owner_id, me, allowed) && <section className="export-section" aria-labelledby="export-download-heading">
       <h3 id="export-download-heading">Download for yourself</h3>
-      <div className="button-row">{EXPORT_FORMATS.map((format) => <button key={format} type="button" className="btn-secondary compact-button"
+      <div className="button-row">{formats.map((format) => <button key={format} type="button" className="btn-secondary compact-button"
         disabled={busy || (format === "edl" && !edlAvailable)} title={format === "edl" && !edlAvailable ? "Include at least one scan before exporting EDL" : undefined}
         onClick={() => void download(format)}>Download {upper(format)}</button>)}</div>
     </section>}
@@ -146,7 +147,7 @@ export function ExportDialog({ review, reviews, exports, allowed, edlAvailable, 
       <p className="muted-copy">{destination.target === "item_default"
         ? "Jellyfin plays the item default for anyone without a personal file."
         : `Jellyfin plays these files only for ${label(destination.userId) === "You" ? "you" : label(destination.userId)}.`}</p>
-      <ul className="export-format-list">{EXPORT_FORMATS.map((format) => {
+      <ul className="export-format-list">{formats.map((format) => {
         const current = occupant(exports.publications, destination, format);
         return <li key={format} aria-label={`${upper(format)} at ${destinationName(destination)}`}>
           <div>

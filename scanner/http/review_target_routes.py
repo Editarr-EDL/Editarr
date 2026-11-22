@@ -8,26 +8,29 @@ from fastapi import APIRouter, Depends
 
 from scanner import api as root
 from scanner.api import _review_error_responses
-from scanner.db import MediaItemRow, SavedReviewRow
+from scanner.db import MediaItemRow, ReviewMediaVersionRow, SavedReviewRow
 from scanner.models import (
     LibraryReviewCreate,
     SavedReview,
     SavedReviewSummary,
 )
+from scanner.persistence.repository.media_identity_store import get_version, version_locators
 from scanner.persistence.repository.review_access import MissingReviewScan, ReviewAccess
+from scanner.persistence.repository.review_version_evidence import version_file_matches
 from scanner.security.access.authorization import require
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied
-from scanner.security.access.targets import MediaRef
+from scanner.security.access.targets import AccountRef, MediaRef, ResourceRef
 from scanner.security.scan_jobs.media import decide_scans
 
 from .review_access import review_caller
 from .review_targets import capture_target
+from .stable_media_capture import file_digest, observe_target_version
 
 router = APIRouter()
 
 
-def list_target(caller, target, sort, direction):
+def list_target(caller, target, sort, direction, stable_version_id=None):
     prepared = capture_target(caller, target)
     decision = decide_scans(
         caller.db, caller.access.principal.account, [prepared.media], datetime.now(UTC)
@@ -48,6 +51,19 @@ def list_target(caller, target, sort, direction):
         SavedReviewRow.media_item_id == media.id,
         SavedReviewRow.media_source_id == (prepared.source.media_source_id or ""),
     )
+    if stable_version_id is not None:
+        if not any(
+            locator.media_item_id == media.id
+            and locator.media_source_id == (prepared.source.media_source_id or "")
+            for locator in version_locators(caller.db, stable_version_id)
+        ) or not version_file_matches(
+            get_version(caller.db, stable_version_id), prepared.media.resolved_path
+        ):
+            return []
+        rows = rows.join(
+            ReviewMediaVersionRow, ReviewMediaVersionRow.review_id == SavedReviewRow.id
+        )
+        rows = rows.filter(ReviewMediaVersionRow.version_id == stable_version_id)
     for (review_id,) in rows:
         try:
             caller.visible(review_id)
@@ -69,8 +85,21 @@ def list_target(caller, target, sort, direction):
 
 def create_target(caller, target, data):
     prepared = capture_target(caller, target)
+    principal = caller.access.principal
+    require(
+        caller.access,
+        C.REVIEWS_CREATE_OWN,
+        ResourceRef(
+            AccountRef(principal.user_id, principal.account.role),
+            caller.media_decision(prepared.media),
+        ),
+    )
+    digest = file_digest(prepared.media.resolved_path)
 
     def persist(db):
+        version_id = observe_target_version(db, prepared, digest=digest)
+        if data.stable_version_id is not None and version_id != data.stable_version_id:
+            raise root._review_http_error("media_unavailable", "The selected media version changed")
         media = prepared.store(db)
         duration = prepared.source.duration_seconds
         if duration is None:
@@ -87,6 +116,7 @@ def create_target(caller, target, data):
             catalog_mcf_document=prepared.document,
             target_source=target.source,
             target_item_id=prepared.source.item_id,
+            stable_version_id=version_id,
         )
 
     try:
@@ -114,12 +144,14 @@ def api_list_jellyfin_reviews(
     sort: Literal["name", "updated_at"] = "updated_at",
     direction: Literal["asc", "desc"] = "desc",
     caller: ReviewAccess = Depends(review_caller),
+    stable_version_id: str | None = None,
 ):
     return list_target(
         caller,
         SimpleNamespace(source="jellyfin", item_id=item_id, media_source_id=media_source_id),
         sort,
         direction,
+        stable_version_id,
     )
 
 
