@@ -4,7 +4,7 @@ from math import isclose
 
 from scanner.db import ScanFindingRow
 from scanner.mcf import TimingInterval, map_affine_range
-from scanner.models import ReviewFilterInput
+from scanner.models import ReviewFilterInput, SavedReviewFilter
 from scanner.settings.filter_defaults import fill_filter_defaults
 
 from .community_import_targets import project_review_channel, verified_target
@@ -123,3 +123,44 @@ def track_manual_edits(db, review, replacement, synchronization, memberships) ->
                 if _same_retime(_timing(row), expected):
                     continue
         row.manually_edited = True
+
+
+# Source-finding ids per IN query, well below SQLite's bound-variable limit.
+_SOURCE_QUERY_CHUNK = 500
+
+
+def load_source_findings(db, review) -> dict[int, ScanFindingRow]:
+    """Load every stored filter's source finding in a few batched queries.
+
+    Keep the returned mapping alive while building a response: the session's identity
+    map then answers each later ``db.get(ScanFindingRow, ...)`` without another query.
+    """
+    finding_ids = sorted({row.source_finding_id for row in review.filters if row.source_finding_id})
+    loaded: dict[int, ScanFindingRow] = {}
+    for start in range(0, len(finding_ids), _SOURCE_QUERY_CHUNK):
+        chunk = finding_ids[start : start + _SOURCE_QUERY_CHUNK]
+        loaded.update(
+            (finding.id, finding)
+            for finding in db.query(ScanFindingRow).filter(ScanFindingRow.id.in_(chunk))
+        )
+    return loaded
+
+
+def label_edits(review, findings: dict[int, ScanFindingRow]) -> dict[str, bool]:
+    """Map each stored filter id to whether its label differs from its source finding's.
+
+    A filter whose source finding is unavailable reports False.
+    """
+    return {
+        row.id: row.source_finding_id in findings
+        and (row.label or None) != (findings[row.source_finding_id].label or None)
+        for row in review.filters
+    }
+
+
+def with_label_provenance(filters, edits: dict[str, bool]) -> list[SavedReviewFilter]:
+    """Attach precomputed label provenance (see :func:`label_edits`) to response filters."""
+    return [
+        SavedReviewFilter(**value.model_dump(), label_edited=edits.get(value.id, False))
+        for value in filters
+    ]

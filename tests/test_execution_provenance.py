@@ -279,3 +279,23 @@ def test_zero_finding_stage_completes_and_unavailable_model_does_not_run(
     assert [(stage, state) for stage, state, _effective in events] == [
         ("visual", "unsupported")
     ]
+
+
+def test_decision_video_models_resolve_their_pinned_artifacts():
+    qwen = stage_model_identity("visual", {"video_model": "qwen3-vl-4b"})
+    d1 = stage_model_identity("visual", {"video_model": "d1-3b"})
+    summary = stage_model_identity(
+        "visual_qwen", {"qwen_model_requested": "qwen3-vl-8b-instruct-4bit"}
+    )
+
+    assert qwen == {
+        "model_id": "qwen3-vl-4b",
+        "model_revision": "2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b",
+        "model_digest": None,
+        "quantization": "4bit",
+    }
+    assert (d1["model_revision"], d1["quantization"]) == (
+        "05b80faf55536582ad5ffb2da7456f6a653acf71",
+        None,
+    )
+    assert summary["model_revision"] == "defcdea7cc7a4b0858fea563cbbce171d328e457"

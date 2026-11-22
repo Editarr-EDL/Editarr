@@ -3,6 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from scanner.modeling.model_acquisition_manifest import artifact_ids_for_backend, manifest
+from scanner.settings.capabilities import SUPPORTED_QWEN_MODELS
 
 
 def effective_stage_settings(
@@ -70,7 +71,7 @@ def stage_model_identity(stage: str, settings: dict[str, object]) -> dict[str, s
         return {"model_id": None, "model_revision": None, "model_digest": None,
                 "quantization": None}
     artifact_ids = (
-        (backend,) if backend.startswith("qwen3-vl-")
+        (backend,) if backend in SUPPORTED_QWEN_MODELS
         else () if stage == "credits_detection" else artifact_ids_for_backend(backend)
     )
     artifacts = [manifest().artifact(artifact_id) for artifact_id in artifact_ids]
@@ -90,5 +91,9 @@ def stage_model_identity(stage: str, settings: dict[str, object]) -> dict[str, s
         "model_id": backend,
         "model_revision": revision,
         "model_digest": digest,
-        "quantization": "4bit" if backend.endswith("-4bit") else None,
+        "quantization": (
+            "4bit"
+            if backend.endswith("-4bit") or any(item.id.endswith("-4bit") for item in artifacts)
+            else None
+        ),
     }

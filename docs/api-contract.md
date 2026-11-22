@@ -900,6 +900,17 @@ unavailable capability is `unsupported`. Cache reuse has partial/unknown origina
 model provenance; queued options alone do not prove a stage ran. Versioned
 checkpoints may resume only when linked to completed attempt coverage.
 
+### Scan model choices
+
+`GET /api/capabilities` lists the selectable `audio_models`, `audio_filters`,
+`video_models`, and `qwen_models` (the Severity and Description model) available on
+this host, each as `{id, display_name, recommended}`. Only Qwen3-VL 8B is
+`recommended` in the video and description lists; clients label it "(recommended)".
+Video models are listed in selection order, so the first entry is the default:
+`qwen3-vl-8b` where MLX runs (Apple silicon), otherwise `nudenet`. A scan request that
+omits `video_model` uses the same default. The description model keeps the request
+field name `qwen_model` for compatibility with stored scan options.
+
 ### Audio track selection
 
 Protected `GET /api/media/audio-tracks?item_id=<Jellyfin item ID>&media_source_id=<optional version>`
@@ -1009,6 +1020,14 @@ UTC `imported_at` and have no execution duration; import creation is a separate 
   or reuses the target version's Manual evidence scan and returns assigned provenance;
   a failed or discarded draft creates no source finding. There are no immediate
   Manual-finding endpoints.
+- Label provenance: each `SavedReview.filters` and `base_filters` entry is a `SavedReviewFilter`, a
+  `ReviewFilter` plus read-only `label_edited: boolean`. It is `true` when the stored
+  label differs from the label of the scan finding the filter was copied from (a
+  person relabelled it), and `false` when it matches or the source finding is
+  unavailable. It does not reflect other edits such as severity, action, or timing, and
+  hand-added filters keep their Manual scan finding's label, so it is `false` for them
+  (identify those by their source scan's `manual` origin). Clients may echo the field
+  back in `ReviewFilterInput`; it is ignored, and the server recomputes it.
 - Review previews and export: review-filter preview routes live under
   `/api/reviews/{review_id}/filters/{filter_id}`. `POST
   /api/reviews/{review_id}/edl` takes the expected review `revision`, exports only

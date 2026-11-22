@@ -254,7 +254,7 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/settings/filters" && method === "GET") {
       await json(route, { revision: 0, selection_rules: [], severity_defaults: [] }); return;
     }
-    if (url.pathname === "/api/capabilities") { await json(route, { audio_models: [{ id: "whisper", display_name: "Whisper" }], audio_filters: [{ id: "better_profanity", display_name: "better-profanity" }], video_models: [{ id: "nudenet", display_name: "NudeNet" }], qwen_models: [] }); return; }
+    if (url.pathname === "/api/capabilities") { await json(route, { audio_models: [{ id: "whisper", display_name: "Whisper" }], audio_filters: [{ id: "better_profanity", display_name: "better-profanity" }], video_models: [{ id: "nudenet", display_name: "NudeNet", recommended: false }], qwen_models: [] }); return; }
     if (url.pathname === "/api/settings/models/scans") {
       await json(route, { audio_padding_seconds: 0.1 }); return;
     }

@@ -9,6 +9,11 @@ import scanner.api as scanner_api
 import scanner.security.auth_policy as auth_policy
 from scanner.http import scan_jobs_api
 from scanner.repository import update_scan_status
+from scanner.settings.capabilities import (
+    SUPPORTED_VIDEO_MODELS,
+    CapabilityEnvironment,
+    model_capabilities,
+)
 from scanner.settings.config import Settings
 from scanner.settings.deployment_config import DeploymentSnapshot, parse_base_url
 from scripts import jellyfin_stand_in
@@ -42,6 +47,22 @@ def test_real_matrix_covers_each_detector_and_audio_filter():
     assert {case["video_model"] for case in cases if case["scan_video"]} == smoke.DETECTORS
     assert {case["audio_filter"] for case in cases if case["scan_audio"]} == smoke.FILTERS
     assert all(case["audio_model"] == "whisper" for case in cases if case["scan_audio"])
+
+
+def test_real_matrix_matches_the_linux_package_detector_advertisement():
+    environment = CapabilityEnvironment(
+        system="Linux",
+        machine="x86_64",
+        package_available=lambda _package: True,
+        providers=frozenset({"CPUExecutionProvider"}),
+    )
+    declared = {item.id: item for item in model_capabilities(environment)}
+    advertised = {
+        backend
+        for backend in SUPPORTED_VIDEO_MODELS
+        if declared[backend].availability == "available"
+    }
+    assert advertised == smoke.DETECTORS
 
 
 @pytest.mark.parametrize("defect", ["unavailable", "cuda", "qwen", "extra_detector"])

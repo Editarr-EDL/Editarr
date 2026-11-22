@@ -152,10 +152,44 @@ export function CensoredAudioWord({ word, context }: { word: string; context?: s
   return <span className="censored-audio-word" tabIndex={0} onMouseEnter={showAfterHoverDelay} onMouseLeave={() => { clearHoverTimer(); setTooltipVisible(false); }} onFocus={() => setTooltipVisible(true)} onBlur={() => setTooltipVisible(false)}><strong>{censorAudioWord(word)}</strong>{tooltipVisible && <span className="audio-word-tooltip" role="tooltip">{tooltipWithHighlightedWord(word, context)}</span>}</span>;
 }
 
-export function savedReviewFilterDescription(filter: SavedReview["filters"][number]): string {
+/** Whether a visual filter is a machine finding: from a generated (or unknown) scan. */
+function isGeneratedFilter(sourceOrigin: Scan["origin"] | null | undefined): boolean {
+  return (sourceOrigin ?? "generated") === "generated";
+}
+
+/**
+ * Text describing a filter. Model findings from a generated (or unknown) scan show only their
+ * Severity and Description reply, so missing `details` hides machine detector labels; category
+ * chips still identify the row. A user-relabelled finding (`label_edited`) also shows its label.
+ * User-authored filters, whose source scan is a Manual or imported scan, fall back to their label
+ * and classification, as does audio.
+ * @param sourceOrigin Origin of the filter's source scan, when known.
+ */
+export function savedReviewFilterDescription(
+  filter: SavedReview["filters"][number],
+  sourceOrigin?: Scan["origin"] | null,
+): string {
+  if (filter.source === "visual" && isGeneratedFilter(sourceOrigin)) {
+    return filter.details || (filter.label_edited ? filter.label || "" : "");
+  }
   return filter.source === "visual"
     ? filter.details || filter.label || filter.subcategory || filter.category || "Unclassified"
     : filter.label || filter.details || filter.subcategory || filter.category || "Unclassified";
+}
+
+/** Name a visual filter in a plain list: model findings by description only, user-named filters by label first. */
+export function visualFilterListLabel(
+  filter: SavedReview["filters"][number],
+  index: number,
+  sourceOrigin?: Scan["origin"] | null,
+): string {
+  const named = isGeneratedFilter(sourceOrigin) && !filter.label_edited ? filter.details : filter.label || filter.details;
+  return named || `Video filter ${index + 1}`;
+}
+
+/** Look up the origin of a filter's source scan for {@link savedReviewFilterDescription}. */
+export function filterSourceOrigin(filter: SavedReview["filters"][number], scanById: Map<string, Scan>): Scan["origin"] | null {
+  return scanById.get(filter.source_scan_id)?.origin ?? null;
 }
 
 function isNoObjectionableContent(value: string | null | undefined): boolean {
@@ -163,9 +197,18 @@ function isNoObjectionableContent(value: string | null | undefined): boolean {
   return normalized === "no objectionable content" || normalized === "no objectionable content detected";
 }
 
-export function isNoObjectionableContentFilter(filter: SavedReview["filters"][number]): boolean {
-  return isNoObjectionableContent(savedReviewFilterDescription(filter))
-    || isNoObjectionableContent(filter.category);
+/**
+ * Whether a filter records a clean verdict. Clean visual replies store no details, so their
+ * verdict is read from `group_key` ("No objectionable content", possibly `|`-joined).
+ */
+export function isNoObjectionableContentFilter(
+  filter: SavedReview["filters"][number],
+  sourceOrigin?: Scan["origin"] | null,
+): boolean {
+  return isNoObjectionableContent(savedReviewFilterDescription(filter, sourceOrigin))
+    || isNoObjectionableContent(filter.category)
+    || (filter.source === "visual" && Boolean(filter.group_key)
+      && filter.group_key!.split("|").every((token) => isNoObjectionableContent(token.trim())));
 }
 
 /** Split a video filter group into its visible category labels. */
@@ -193,38 +236,41 @@ export function reviewAudioRoot(label: string | null, fallback: string): string 
   return normalized;
 }
 
-/** Merge equivalent review filters across scans into display results. */
+/**
+ * Merge overlapping review filters into display results. Each group accumulates its ids,
+ * descriptions (first appearance, empties dropped) and known scan ids in linear time, then
+ * materialises arrays once, ordering scan ids by scan number.
+ */
 export function mergeSavedReviewFilters(
   filters: SavedReview["filters"],
   scanById: Map<string, Scan>,
 ): SavedReviewResult[] {
-  const merged: SavedReviewResult[] = [];
+  type Group = { filters: SavedReview["filters"]; startSeconds: number; endSeconds: number; descriptions: Set<string>; scanIds: Set<string> };
+  const groups: Group[] = [];
   for (const filter of [...filters].sort((left, right) => left.start_seconds - right.start_seconds)) {
     const startSeconds = filter.start_seconds;
     const endSeconds = Math.max(startSeconds, filter.end_seconds ?? startSeconds + 1);
-    const current = merged[merged.length - 1];
+    let current = groups[groups.length - 1];
     if (!current || startSeconds > current.endSeconds) {
-      merged.push({
-        key: filter.id,
-        filters: [filter],
-        startSeconds,
-        endSeconds,
-        descriptions: [savedReviewFilterDescription(filter)],
-        scanIds: scanById.has(filter.source_scan_id) ? [filter.source_scan_id] : [],
-      });
-    } else {
-      current.filters.push(filter);
-      current.endSeconds = Math.max(current.endSeconds, endSeconds);
-      current.key = `${current.key}:${filter.id}`;
-      current.descriptions = [...new Set([...current.descriptions, savedReviewFilterDescription(filter)])];
-      if (scanById.has(filter.source_scan_id)) {
-        current.scanIds = [...new Set([...current.scanIds, filter.source_scan_id])].sort((left, right) => (
-          (scanById.get(left)?.scan_id ?? 0) - (scanById.get(right)?.scan_id ?? 0)
-        ));
-      }
+      current = { filters: [], startSeconds, endSeconds, descriptions: new Set(), scanIds: new Set() };
+      groups.push(current);
     }
+    current.filters.push(filter);
+    current.endSeconds = Math.max(current.endSeconds, endSeconds);
+    const description = savedReviewFilterDescription(filter, filterSourceOrigin(filter, scanById));
+    if (description) current.descriptions.add(description);
+    if (scanById.has(filter.source_scan_id)) current.scanIds.add(filter.source_scan_id);
   }
-  return merged;
+  return groups.map((group) => ({
+    key: group.filters.map((filter) => filter.id).join(":"),
+    filters: group.filters,
+    startSeconds: group.startSeconds,
+    endSeconds: group.endSeconds,
+    descriptions: [...group.descriptions],
+    scanIds: [...group.scanIds].sort((left, right) => (
+      (scanById.get(left)?.scan_id ?? 0) - (scanById.get(right)?.scan_id ?? 0)
+    )),
+  }));
 }
 
 /** Order display results by the selected review sort mode. */
@@ -297,15 +343,17 @@ export function sortTieredReviewResults(
   sort: { key: ReviewTableSortKey; direction: ReviewTableSortDirection },
 ): TieredReviewResult[] {
   const direction = sort.direction === "asc" ? 1 : -1;
+  const descriptions = new Map(items.map((item) => [item, item.result.descriptions.join(" ")]));
+  const severities = sort.key === "severity" ? new Map(items.map((item) => [item, severityRank(item.pathFilters)])) : null;
   return [...items].sort((left, right) => {
     const primary = sort.key === "time"
       ? left.result.startSeconds - right.result.startSeconds
-      : sort.key === "description"
-        ? left.result.descriptions.join(" ").localeCompare(right.result.descriptions.join(" "))
-        : severityRank(left.pathFilters) - severityRank(right.pathFilters);
+      : severities
+        ? severities.get(left)! - severities.get(right)!
+        : descriptions.get(left)!.localeCompare(descriptions.get(right)!);
     return primary * direction
       || left.result.startSeconds - right.result.startSeconds
-      || left.result.descriptions.join(" ").localeCompare(right.result.descriptions.join(" "))
+      || descriptions.get(left)!.localeCompare(descriptions.get(right)!)
       || left.result.key.localeCompare(right.result.key);
   });
 }
@@ -316,11 +364,13 @@ export function sortTieredReviewGroups(
   sort: { key: ReviewTableSortKey; direction: ReviewTableSortDirection },
 ): TieredReviewGroup[] {
   const direction = sort.direction === "asc" ? 1 : -1;
+  // The first row of a time-sorted group is its earliest start ascending, or its latest descending.
+  const firstStart = new Map(groups.map((group) => [group, group.results.reduce<number | null>((first, item) => (
+    first === null || (item.result.startSeconds - first) * direction < 0 ? item.result.startSeconds : first
+  ), null) ?? 0]));
   return [...groups].sort((left, right) => {
     if (sort.key === "time") {
-      const leftFirst = sortTieredReviewResults(left.results, sort)[0]?.result.startSeconds ?? 0;
-      const rightFirst = sortTieredReviewResults(right.results, sort)[0]?.result.startSeconds ?? 0;
-      return (leftFirst - rightFirst) * direction || left.name.localeCompare(right.name);
+      return (firstStart.get(left)! - firstStart.get(right)!) * direction || left.name.localeCompare(right.name);
     }
     if (sort.key === "description") return left.name.localeCompare(right.name) * direction;
     return left.name.localeCompare(right.name);

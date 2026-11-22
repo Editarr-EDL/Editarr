@@ -117,6 +117,7 @@ from scanner.modeling.model_reviews import (
     ReviewScanMembership,
     ReviewScanReference,
     SavedReview,
+    SavedReviewFilter,
     ScanReferences,
 )
 from scanner.modeling.model_scans import (

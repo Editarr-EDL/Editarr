@@ -236,7 +236,7 @@ describe("production saved-review UI authority", () => {
       filters: [
         { id: "visual-1", source_scan_id: "scan-1", source_finding_id: 1, source: "visual", category: "violence", subcategory: "violence", severity: "medium", mcf_channel: "video", mcf_comment: null, label: "Fight", details: "Fight in hallway", group_key: "violence", start_seconds: 10, end_seconds: 20, confidence: 0.9, edit_action: "skip", selected: true },
         { id: "visual-2", source_scan_id: "scan-1", source_finding_id: 2, source: "visual", category: "violence", subcategory: "violence", severity: "high", mcf_channel: "video", mcf_comment: null, label: "Weapon", details: "Weapon visible", group_key: "violence", start_seconds: 15, end_seconds: 25, confidence: 0.8, edit_action: "skip", selected: false },
-        { id: "visual-clean", source_scan_id: "scan-1", source_finding_id: 4, source: "visual", category: "violence", subcategory: "violence", severity: "low", mcf_channel: "video", mcf_comment: null, label: "Clean", details: "No objectionable content detected", group_key: "No objectionable content detected", start_seconds: 30, end_seconds: 35, confidence: 0.9, edit_action: "skip", selected: false },
+        { id: "visual-clean", source_scan_id: "scan-1", source_finding_id: 4, source: "visual", category: "violence", subcategory: "violence", severity: "low", mcf_channel: "video", mcf_comment: null, label: "d1_violence", details: null, group_key: "No objectionable content", start_seconds: 30, end_seconds: 35, confidence: 0.9, edit_action: "skip", selected: false },
         { id: "audio-1", source_scan_id: "scan-1", source_finding_id: 3, source: "audio", category: "language", subcategory: "swearing", severity: "low", mcf_channel: "audio", mcf_comment: null, label: "swearing", details: "A line with swearing", group_key: null, start_seconds: 40, end_seconds: 42, confidence: 0.95, edit_action: "mute", selected: true },
       ],
     };
@@ -269,6 +269,7 @@ describe("production saved-review UI authority", () => {
     expect(screen.queryByText("No objectionable content detected")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show No Objectionable Content" }));
     expect(await screen.findByText("1/3 results")).toBeVisible();
+    expect(screen.queryByText("d1_violence")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Hide No Objectionable Content" }));
     expect(await screen.findByText("1/2 results")).toBeVisible();
 

@@ -17,8 +17,11 @@ for (const width of [320, 1440]) {
         { id: "better_profanity", display_name: "better-profanity" },
         { id: "qwen", display_name: "Qwen (multilingual)" },
       ],
-      video_models: [{ id: "nudenet", display_name: "NudeNet" }],
-      qwen_models: [{ id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B" }],
+      video_models: [{ id: "nudenet", display_name: "NudeNet", recommended: false }, { id: "qwen3-vl-8b", display_name: "Qwen3-VL 8B", recommended: true }],
+      qwen_models: [
+        { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B", recommended: false },
+        { id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B", recommended: true },
+      ],
       model_capabilities: [],
     }));
     const memory = new Map<string, AudioTrackSelection>();
@@ -79,6 +82,10 @@ for (const width of [320, 1440]) {
     await expect(catalogFilter.getByRole("option", { name: "Qwen (multilingual)" })).toBeAttached();
     await catalogFilter.selectOption("qwen");
     await expect(catalogFilter).toHaveValue("qwen");
+    const severityModel = dialog.getByRole("combobox", { name: "Severity and Description model" });
+    await expect(severityModel).toHaveValue("qwen3-vl-8b-instruct-4bit");
+    await expect(severityModel.getByRole("option", { name: "Qwen3-VL 8B (recommended)" })).toBeAttached();
+    await expect(severityModel).toHaveAccessibleDescription("Describes flagged scenes and rates their severity when the video model doesn't.");
     await expect(dialog.getByRole("button", { name: "Add to Queue" })).toBeEnabled();
     await expectNoAccessibilityViolations(page); await expectNoHorizontalPageOverflow(page);
     await page.screenshot({ path: `test-results/css35c-catalog-${width}.png`, fullPage: true });
@@ -87,6 +94,7 @@ for (const width of [320, 1440]) {
     expect(submissions[0].audio_selection.track).toEqual(tracks[1]);
     expect(submissions[0].audio_selection.file_version).toBe("a".repeat(64));
     expect(submissions[0].audio_filter).toBe("qwen");
+    expect(submissions[0].qwen_model).toBe("qwen3-vl-8b-instruct-4bit");
     expect(selections.at(-1)).toEqual({ item_id: "movie-1", media_source_id: "source-1", selection: submissions[0].audio_selection });
 
     const reopen = async () => {

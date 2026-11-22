@@ -270,6 +270,7 @@ from scanner.settings.capabilities import (
 from scanner.settings.capabilities import QWEN_MODEL_DISPLAY_NAMES as QWEN_MODEL_DISPLAY_NAMES
 from scanner.settings.capabilities import SUPPORTED_AUDIO_FILTERS as SUPPORTED_AUDIO_FILTERS
 from scanner.settings.capabilities import current_environment as current_environment
+from scanner.settings.capabilities import default_video_model as default_video_model
 from scanner.settings.capabilities import model_capabilities as model_capabilities
 from scanner.settings.config import settings
 from scanner.settings.deployment_config import (

@@ -144,6 +144,30 @@ def _active_model_backends(db: Session) -> set[str]:
     return active
 
 
+def _active_description_artifacts(db: Session) -> set[str]:
+    """Severity and Description (Qwen) artifacts held by active content scans.
+
+    Every video scan runs the description step, and the audio Qwen filter uses the same
+    model, so the scan's ``qwen_model`` artifact is in use whatever the video model is,
+    including while deferred descriptions run after the detector has been released.
+    Queued scans, like queued detector use, are not protected: a removed artifact is
+    acquired again when the scan starts.
+    """
+
+    held: set[str] = set()
+    for scan in root.list_scan_queue(db):
+        if scan.status not in {"acquiring_model", "scanning", "cancelling"}:
+            continue
+        if scan.scan_mode == ScanMode.CREDITS_DETECTION:
+            continue
+        uses_qwen = scan.scan_video or (
+            scan.scan_audio and (scan.audio_filter or "").strip().lower() == "qwen"
+        )
+        if uses_qwen and scan.qwen_model:
+            held.add(scan.qwen_model)
+    return held
+
+
 def _action_result(caller: Operator, *, accepted: bool, removed: bool) -> dict[str, object]:
     status = _model_storage_status() if caller.may(C.MODELS_INVENTORY_VIEW) else None
     return {"status": status, "accepted": accepted, "removed": removed}
@@ -239,7 +263,10 @@ def api_remove_model(
             "acquisition_active",
             "Cancel the active download before removing this model.",
         )
-    if set(artifact.backend_ids) & _active_model_backends(db):
+    if (
+        set(artifact.backend_ids) & _active_model_backends(db)
+        or artifact_id in _active_description_artifacts(db)
+    ):
         return _model_code_error(
             409,
             "model_in_use",

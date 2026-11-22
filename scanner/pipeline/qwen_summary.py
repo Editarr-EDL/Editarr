@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import platform
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 
+from scanner.evaluation.severity_rubric import RUBRIC, extract_severities, rubric_prompt
 from scanner.evaluation.subcategorization import (
     QwenSubcategorization,
     SubcategorizationResult,
@@ -94,6 +95,8 @@ class QwenSummary:
     explanation: str
     subcategorization: tuple[SubcategorizationResult, ...] = ()
     valid_subcategorization_output: bool = False
+    # Rubric severity level (0-3) per family, when the model returned a usable one.
+    severities: dict[McfCategoryFamily, int] = field(default_factory=dict)
 
     @property
     def group_key(self) -> str:
@@ -111,6 +114,18 @@ def subcategorization_prompt(
         f"- {family.value}: {', '.join(token for token, _label in MCF_CATEGORY_REGISTRY[family])}"
         for family in requested_families
     )
+    rated = tuple(family for family in requested_families if family in RUBRIC)
+    keys = "family, subcategory, confidence, evidence"
+    if rated and rated == requested_families:
+        keys += ", severity"
+    elif rated:
+        keys += ", plus severity for " + ", ".join(family.value for family in rated)
+    severity = (
+        " Severity must be an integer level from the family's severity scale for the most "
+        f"severe visible content. Severity scales: {rubric_prompt(rated)}"
+        if rated
+        else ""
+    )
     return (
         f"{base_prompt}\n\n"
         "Return exactly one JSON object and no markdown or surrounding text. The object must "
@@ -118,10 +133,10 @@ def subcategorization_prompt(
         "version to 1, objectionable to a Boolean, and summary to a concise non-empty string. "
         "If objectionable is false, classifications must be an empty array. If objectionable "
         "is true, classifications must contain exactly one object for every family below. "
-        "Each classification object must have exactly these keys: family, subcategory, "
-        "confidence, evidence. Confidence must be a number from 0 through 1. Evidence must be "
-        "a concise non-empty description of visible evidence. Use only the exact family and "
-        f"subcategory tokens listed here:\n{allowed}"
+        f"Each classification object must have exactly these keys: {keys}. Confidence must "
+        "be a number from 0 through 1. Evidence must be a concise non-empty description of "
+        f"visible evidence.{severity} Use only the exact family and subcategory tokens listed "
+        f"here:\n{allowed}"
     )
 
 
@@ -133,7 +148,7 @@ def _load_model(qwen_model: str = DEFAULT_QWEN_MODEL):
     """Acquire and cache the selected Qwen model and processor for frame summaries."""
     require_available("qwen3_vl")
     if qwen_model not in SUPPORTED_QWEN_MODELS:
-        raise ValueError(f"Unsupported Qwen model: {qwen_model}")
+        raise ValueError(f"Unsupported Severity and Description model: {qwen_model}")
     if qwen_model in _CACHE:
         return _CACHE[qwen_model]
 
@@ -187,7 +202,7 @@ def _summarize(
     mlx_vlm = _require_dependency("mlx_vlm", "mlx-vlm")
     prompt_utils = _require_dependency("mlx_vlm.prompt_utils", "mlx-vlm")
     if qwen_model not in SUPPORTED_QWEN_MODELS:
-        raise ValueError(f"Unsupported Qwen model: {qwen_model}")
+        raise ValueError(f"Unsupported Severity and Description model: {qwen_model}")
     model, processor, config = _load_model(qwen_model)
     effective_prompt = subcategorization_prompt(families, base_prompt=prompt)
     formatted_prompt = prompt_utils.apply_chat_template(
@@ -197,7 +212,8 @@ def _summarize(
         num_images=len(image_paths),
     )
     generate_kwargs = {
-        "max_tokens": 160,
+        # Room for the per-family severity keys on top of the original 160-token budget.
+        "max_tokens": 192,
         "temperature": 0.0,
         "verbose": False,
     }
@@ -220,12 +236,17 @@ def _summarize(
             model_id=model_id,
             model_revision=model_revision,
         )
+    severities = extract_severities(response, families) if families else {}
     if parsed is None or not parsed.valid_output:
+        # A reply that fails the constrained schema is never shown: its description is
+        # left empty (only its leniently read severity is kept). Without families there
+        # is no schema, so the free-text reply is the description.
         return QwenSummary(
             categories=_categories_from_response(response),
-            explanation=response,
+            explanation="" if families else response,
             subcategorization=parsed.results if parsed else (),
             valid_subcategorization_output=False,
+            severities=severities,
         )
     categories = (
         ("no objectionable content",)
@@ -234,9 +255,11 @@ def _summarize(
     )
     return QwenSummary(
         categories=categories,
-        explanation=parsed.explanation,
+        # A "not objectionable" verdict describes nothing, so it leaves no description.
+        explanation=parsed.explanation if parsed.objectionable else "",
         subcategorization=parsed.results,
         valid_subcategorization_output=True,
+        severities=severities,
     )
 
 

@@ -17,6 +17,7 @@ import { captureScanState, deletedSharedScanDraft, mediaRevocation, privateDiagn
 import { foreignJobs } from "./lib/scan-foreign-jobs.mjs";
 import { verifyConnectionWritesAndRemovedRoutes } from "./lib/scan-connection-probes.mjs";
 import { prepareReviewMedia, verifySourceReviews } from "./lib/review-source-journey.mjs";
+import { verifyModelChoices } from "./lib/scan-model-choices.mjs";
 import { SIGN_IN_PATH, addJellyfinUser, fillSignIn } from "./lib/run-jellyfin.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -132,11 +133,20 @@ async function storedScan(context, name) {
   return imported.scan;
 }
 
+const videoModels = { video: "nudenet", combined: "d1-3b" };
+const changedModelSelects = new WeakMap();
+
 async function submit(actor, mode, name, width) {
   const { page, context } = actor;
   await page.getByRole("button", { name: "New Scan", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New Scan", exact: true });
   await dialog.getByLabel("Scan type", { exact: true }).selectOption(mode);
+  const capabilities = await (await send(context, "GET", "/api/capabilities")).json();
+  const changed = changedModelSelects.get(page) ?? new Set();
+  changedModelSelects.set(page, changed);
+  const fresh = new Set(["qwen", ...(mode === "audio" ? [] : ["video"])].filter(select => !changed.has(select)));
+  await verifyModelChoices({ dialog, capabilities, mode, fresh, expect });
+  for (const select of fresh) changed.add(select);
   if (mode !== "video") {
     await expect(dialog.getByRole("button", { name: "Add to Queue", exact: true })).toBeEnabled();
     await dialog.getByLabel("Audio track", { exact: true }).selectOption("2");
@@ -144,11 +154,11 @@ async function submit(actor, mode, name, width) {
     await dialog.getByLabel("Filter", { exact: true }).selectOption("better_profanity");
   }
   if (mode !== "audio") {
-    await dialog.getByLabel("Video model", { exact: true }).selectOption("nudenet");
+    await dialog.getByLabel("Video model", { exact: true }).selectOption(videoModels[mode]);
     await dialog.getByLabel("Representative frames per flagged segment", { exact: true }).fill("6");
     await dialog.getByLabel("Join flagged segments within (seconds)", { exact: true }).fill("2");
   }
-  await dialog.getByLabel("Qwen model", { exact: true }).selectOption("qwen3-vl-4b-instruct-4bit");
+  await dialog.getByLabel("Severity and Description model", { exact: true }).selectOption("qwen3-vl-4b-instruct-4bit");
   await dialog.getByLabel("Scan name (optional)", { exact: true }).fill(name);
   const submitButton = dialog.getByRole("button", { name: "Add to Queue", exact: true });
   await submitButton.scrollIntoViewIfNeeded();
@@ -165,7 +175,7 @@ async function submit(actor, mode, name, width) {
   assert.equal(scan.scan_audio, mode !== "video");
   assert.equal(scan.scan_video, mode !== "audio");
   if (mode !== "video") assert.equal(scan.requested_audio_selection.track.stream_index, 2);
-  if (mode !== "audio") assert.deepEqual([scan.video_model, scan.qwen_summaries_per_segment, scan.qwen_segment_join_gap_seconds], ["nudenet", 6, 2]);
+  if (mode !== "audio") assert.deepEqual([scan.video_model, scan.qwen_summaries_per_segment, scan.qwen_segment_join_gap_seconds], [videoModels[mode], 6, 2]);
   step("catalog submission persisted its exact options", { width, mode, scan: scan.id });
   return { ...scan, name };
 }

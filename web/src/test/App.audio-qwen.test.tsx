@@ -58,7 +58,7 @@ describe("Qwen language scan controls", () => {
       fireEvent.change(within(dialog).getByLabelText("Join flagged segments within (seconds)"), { target: { value: "2" } });
     }
     await within(dialog).findByRole("option", { name: "Qwen3-VL 4B" });
-    fireEvent.change(within(dialog).getByLabelText("Qwen model"), {
+    fireEvent.change(within(dialog).getByLabelText("Severity and Description model"), {
       target: { value: "qwen3-vl-4b-instruct-4bit" },
     });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Scan name (optional)" }), {
@@ -81,6 +81,50 @@ describe("Qwen language scan controls", () => {
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("path-mappings"))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.some(([input]) => /\/models(?:[/?]|$)|\/settings\//.test(String(input)))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("audio-tracks")).every(([input, init]) => !String(input).includes("video_path") && !String(init?.body).includes("video_path"))).toBe(true);
+  });
+
+  it("defaults to recommended models and explains the Severity and Description model", async () => {
+    let request: Record<string, unknown> | null = null;
+    const baseApi = installProductionApi();
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input), "http://editarr.test");
+      if (url.pathname === "/api/capabilities") return json({
+        ...audioCapabilities,
+        video_models: [
+          { id: "nudenet", display_name: "NudeNet", recommended: false },
+          { id: "qwen3-vl-8b", display_name: "Qwen3-VL 8B", recommended: true },
+          { id: "qwen3-vl-4b", display_name: "Qwen3-VL 4B", recommended: false },
+          { id: "d1-3b", display_name: "d1-3B", recommended: false },
+        ],
+        qwen_models: [
+          { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B", recommended: false },
+          { id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B", recommended: true },
+        ],
+      });
+      if (url.pathname === "/api/scans" && init?.method === "POST") {
+        request = JSON.parse(String(init.body));
+        return json({ ...completeScan(), id: "queued-video", scan_id: 10, status: "queued" }, 201);
+      }
+      return baseApi(input, init);
+    }));
+    window.location.hash = "#/library/movies";
+    render(<AuthenticationGate><App /></AuthenticationGate>);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
+    const dialog = screen.getByRole("dialog", { name: "New Scan" });
+    fireEvent.change(within(dialog).getByLabelText("Scan type"), { target: { value: "video" } });
+    const videoModel = within(dialog).getByLabelText("Video model");
+    await waitFor(() => expect(videoModel).toHaveValue("qwen3-vl-8b"));
+    expect(within(videoModel).getAllByRole("option").map((option) => option.textContent)).toEqual(["NudeNet", "Qwen3-VL 8B (recommended)", "Qwen3-VL 4B", "d1-3B"]);
+    const severityModel = within(dialog).getByRole("combobox", { name: "Severity and Description model" });
+    expect(severityModel).toHaveValue("qwen3-vl-8b-instruct-4bit");
+    expect(within(severityModel).getByRole("option", { name: "Qwen3-VL 8B (recommended)" })).toBeInTheDocument();
+    expect(severityModel).toHaveAccessibleDescription("Describes flagged scenes and rates their severity when the video model doesn't.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add to Queue" }));
+
+    await waitFor(() => expect(request).not.toBeNull());
+    expect(request).toMatchObject({ scan_video: true, video_model: "qwen3-vl-8b", qwen_model: "qwen3-vl-8b-instruct-4bit" });
   });
 
   it.each(["better_profanity", "qwen"])("submits the selected %s filter for a catalog audio scan", async (filter) => {
@@ -107,7 +151,7 @@ describe("Qwen language scan controls", () => {
     expect(within(dialog).getByLabelText("Filter")).toHaveValue("better_profanity");
     fireEvent.change(within(dialog).getByLabelText("Filter"), { target: { value: filter } });
     await within(dialog).findByRole("option", { name: "Qwen3-VL 4B" });
-    fireEvent.change(within(dialog).getByLabelText("Qwen model"), {
+    fireEvent.change(within(dialog).getByLabelText("Severity and Description model"), {
       target: { value: "qwen3-vl-4b-instruct-4bit" },
     });
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Add to Queue" })).toBeEnabled());

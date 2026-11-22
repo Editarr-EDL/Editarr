@@ -269,7 +269,7 @@ def run_scan(
     if qwen_segment_join_gap_seconds < 0:
         raise ValueError("Qwen segment join gap cannot be negative")
     if qwen_model not in SUPPORTED_QWEN_MODELS:
-        raise ValueError(f"Unsupported Qwen model: {qwen_model}")
+        raise ValueError(f"Unsupported Severity and Description model: {qwen_model}")
 
     audio_padding = settings.profanity_pad_seconds
     if scan_audio and "audio_scan" not in completed_stages:

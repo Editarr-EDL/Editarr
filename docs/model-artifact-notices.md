@@ -21,6 +21,7 @@ upstream sources, and license metadata.
 | Qwen3-VL 4B Instruct 4-bit | `mlx-community/Qwen3-VL-4B-Instruct-4bit@2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b` | 3,109,729,929 | Apache-2.0 declared |
 | Qwen3-VL 8B Instruct 4-bit | `mlx-community/Qwen3-VL-8B-Instruct-4bit@defcdea7cc7a4b0858fea563cbbce171d328e457` | 5,776,630,909 | Apache-2.0 declared |
 | Shieldstral 1.0 3B INT8 (MLX) | `sahilchachra/Shieldstral-1.0-3B-INT8@accac83025f1164a388e0d704840809a4d46bffd` | 4,500,914,339 | Apache-2.0 declared |
+| d1-3B (BF16, transformers) | `LiquidAI/d1-3B@05b80faf55536582ad5ffb2da7456f6a653acf71` | 6,265,040,453 | LFM Open License v1.0 declared (`LicenseRef-LFM-1.0`) |
 
 The pinned MLX Whisper and CompVis safety-checker repositories have undeclared
 licenses. Editarr downloads both artifacts on demand from their upstream
@@ -32,6 +33,18 @@ processor read, including `chat_template.jinja`; the repository's `tekken.json` 
 README are not downloaded. It needs about 5.3 GB of memory at the default 288 px
 frame height; see [model-development.md](model-development.md#shieldstral) for the
 evaluated prompts and thresholds.
+
+The Qwen3-VL 8B and 4B video detectors reuse the pinned Qwen3-VL artifacts above; they
+add no downloads.
+
+d1-3B is distributed by Liquid AI under the
+[LFM Open License v1.0](https://huggingface.co/LiquidAI/d1-3B/blob/05b80faf55536582ad5ffb2da7456f6a653acf71/LICENSE),
+which is not an OSI license: it does not license commercial use by organizations with
+annual revenue of US$10 million or more. Editarr pins the weights, tokenizer, configs,
+`LICENSE`, and the repository's Python model code (`modeling_d1.py`, `lfm2_vl.py`,
+`hybrid.py`, `runner.py`, `prompt.py`, `api.py`). transformers runs that code with
+`trust_remote_code` only from the hash-verified local artifact; it is never fetched at
+inference time. The README and `.gitattributes` are not downloaded.
 
 ## Package-supplied resources and helper binaries
 

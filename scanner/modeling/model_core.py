@@ -2,7 +2,7 @@
 
 import unicodedata
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -354,6 +354,8 @@ class FindingCreate(BaseModel):
     start_seconds: float
     end_seconds: float | None = None
     severity: Severity | None = None
+    # Where a visual severity came from; kept in scan caches and logs, not the database.
+    severity_source: Literal["detector", "description_model", "confidence"] | None = None
     mcf_channel: McfChannel | None = None
     mcf_comment: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)

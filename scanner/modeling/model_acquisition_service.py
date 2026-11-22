@@ -244,6 +244,22 @@ class ModelAcquisitionService:
         except (OSError, json.JSONDecodeError, AcquisitionError, TypeError):
             return False
 
+    def verified_local_artifact(self, artifact_id: str, *, verify_content: bool = True) -> Path:
+        """Return an installed artifact's directory without any acquisition or network use.
+
+        ``verify_content`` rehashes every file; without it only the completion record,
+        sizes and modification times are checked, which detects a later replacement.
+        Raises AcquisitionError ``not_ready`` when the artifact is missing or fails.
+        """
+        artifact = self.manifest.artifact(artifact_id)
+        if artifact.distribution != "huggingface" or not self._is_ready(
+            artifact, verify_content=verify_content
+        ):
+            raise AcquisitionError(
+                "not_ready", f"{artifact_id} is not a complete, verified local artifact."
+            )
+        return self._artifact_dir(artifact)
+
     def status(self, artifact_id: str) -> ArtifactStatus:
         """Report the current safe acquisition state for one manifest artifact."""
         artifact = self.manifest.artifact(artifact_id)

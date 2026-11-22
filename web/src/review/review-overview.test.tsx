@@ -1,8 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import type { SavedReview } from "../api";
+import type { SavedReview, Scan } from "../api";
+import { useState } from "react";
+
 import { SavedReviewOverview } from "./review-overview";
+import { updateReviewFilter, type ReviewDraft } from "./review-draft";
 
 afterEach(() => {
   cleanup();
@@ -104,4 +107,88 @@ it("shows a registry load failure in the filter editor instead of loading foreve
     onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
   expect(await screen.findByRole("alert")).toBeVisible();
   expect(screen.queryByText("Loading MCF categories…")).toBeNull();
+});
+
+it("renders a visual finding without a description by its category only", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const filters: SavedReview["filters"] = [{
+    id: "finding-1", source_scan_id: "scan-1", source_finding_id: 1,
+    source: "visual", category: "violence", subcategory: "violence",
+    severity: "medium", mcf_channel: "video", mcf_comment: null,
+    label: "d1_violence", details: null, group_key: "violence",
+    start_seconds: 10, end_seconds: 12, confidence: 0.9,
+    edit_action: "skip", selected: true,
+  }];
+  render(<SavedReviewOverview filters={filters} memberships={[]} scans={[]} busy={false} focusFilterId="finding-1"
+    onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+    onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
+
+  const section = screen.getByRole("region", { name: "Video review filters" });
+  const include = await within(section).findByRole("checkbox", { name: "Include violence at 0:10" });
+  const row = include.closest("tr") as HTMLElement;
+  expect(row.querySelector(".merged-descriptions")).toBeNull();
+  expect(row).not.toHaveTextContent(/d1_violence|Unclassified/);
+});
+
+it("names manual visual filters by their label beside undescribed model findings", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const base = {
+    source_finding_id: 1, source: "visual", category: "violence", subcategory: "violence",
+    severity: "medium", mcf_channel: "video", mcf_comment: null, details: null, group_key: "violence",
+    confidence: 0.9, edit_action: "skip", selected: true,
+  } as const;
+  const filters: SavedReview["filters"] = [
+    { ...base, id: "model", source_scan_id: "scan-generated", label: "d1_violence", start_seconds: 10, end_seconds: 12 },
+    { ...base, id: "manual-overlap", source_scan_id: "scan-manual", label: "Bar fight", start_seconds: 11, end_seconds: 13 },
+    { ...base, id: "manual-alone", source_scan_id: "scan-manual", label: "Car chase", start_seconds: 30, end_seconds: 32 },
+    { ...base, id: "model-alone", source_scan_id: "scan-generated", label: "d1_violence", start_seconds: 50, end_seconds: 52 },
+  ];
+  const scans = [
+    { id: "scan-generated", scan_id: 1, origin: "generated", name: "Scan" },
+    { id: "scan-manual", scan_id: 2, origin: "manual", name: "Manual" },
+  ] as Scan[];
+  render(<SavedReviewOverview filters={filters} memberships={[]} scans={scans} busy={false} focusFilterId="model-alone"
+    onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+    onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
+
+  const section = screen.getByRole("region", { name: "Video review filters" });
+  const mixed = await within(section).findByRole("checkbox", { name: "Include Bar fight at 0:10" });
+  expect(mixed.closest("tr")).toHaveTextContent("Bar fight");
+  const manual = within(section).getByRole("checkbox", { name: "Include Car chase at 0:30" });
+  expect(manual.closest("tr")).toHaveTextContent("Car chase");
+  const model = within(section).getByRole("checkbox", { name: "Include violence at 0:50" });
+  expect((model.closest("tr") as HTMLElement).querySelector(".merged-descriptions")).toBeNull();
+  for (const row of [mixed, manual, model]) expect(row.closest("tr")).not.toHaveTextContent("d1_violence");
+});
+
+it("shows a relabelled generated finding's label and follows a relabel in the editor", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const base = {
+    source_scan_id: "scan-generated", source_finding_id: 1, source: "visual", category: "violence", subcategory: "violence",
+    severity: "medium", mcf_channel: "video", mcf_comment: null, details: null, group_key: "violence",
+    confidence: 0.9, edit_action: "skip", selected: true, label: "d1_violence", label_edited: false,
+  } as const;
+  const initial: SavedReview["filters"] = [
+    { ...base, id: "relabelled", label: "Bar fight", label_edited: true, start_seconds: 10, end_seconds: 12 },
+    { ...base, id: "untouched", start_seconds: 30, end_seconds: 32 },
+  ];
+  const scans = [{ id: "scan-generated", scan_id: 1, origin: "generated", name: "Scan" }] as Scan[];
+  function Editable() {
+    const [draft, setDraft] = useState({ filters: initial, filterBases: {} } as unknown as ReviewDraft);
+    return <SavedReviewOverview filters={draft.filters} memberships={[]} scans={scans} busy={false} metadataEditable focusFilterId="untouched"
+      onToggleFilters={vi.fn()} onChangeFilter={(id, patch) => setDraft((current) => updateReviewFilter(current, id, patch))} onDeleteFilter={vi.fn()}
+      onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />;
+  }
+  render(<Editable />);
+
+  const section = screen.getByRole("region", { name: "Video review filters" });
+  const relabelled = await within(section).findByRole("checkbox", { name: "Include Bar fight at 0:10" });
+  expect(relabelled.closest("tr")).toHaveTextContent("Bar fight");
+  const untouched = within(section).getByRole("checkbox", { name: "Include violence at 0:30" });
+  expect((untouched.closest("tr") as HTMLElement).querySelector(".merged-descriptions")).toBeNull();
+  expect(untouched.closest("tr")).not.toHaveTextContent("d1_violence");
+
+  fireEvent.change(await screen.findByLabelText("Filter untouched label"), { target: { value: "Car chase" } });
+  const renamed = within(section).getByRole("checkbox", { name: "Include Car chase at 0:30" });
+  expect(renamed.closest("tr")).toHaveTextContent("Car chase");
 });

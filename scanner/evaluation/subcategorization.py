@@ -239,7 +239,8 @@ def subcategorize_qwen_response(
 
     candidates: dict[McfCategoryFamily, tuple[McfCategory, float, str]] = {}
     for candidate in classifications:
-        if not isinstance(candidate, dict) or set(candidate) != {
+        # Severity is optional here; severity_rubric.extract_severities reads it.
+        if not isinstance(candidate, dict) or set(candidate) - {"severity"} != {
             "family",
             "subcategory",
             "confidence",

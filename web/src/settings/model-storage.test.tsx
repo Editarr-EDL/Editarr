@@ -77,6 +77,19 @@ it("offers downloads with undeclared licenses and distinguishes unavailable and 
   expect(screen.queryByText(/Windows|Linux|CUDA|deferred gap/)).toBeNull();
 });
 
+it("explains a backend blocked by an outdated required library", async () => {
+  const outdated: ModelCapability = {
+    ...detector, id: "d1-3b", display_name: "d1-3B", stage: "detector",
+    availability: "unavailable", reason: "unsupported_dependency_version", device: "none",
+  };
+  renderInventory({ artifacts: [artifact("d1-3b", outdated.id, "not_downloaded")], model_capabilities: [outdated] });
+  fireEvent.click(await screen.findByText("Video Detection"));
+
+  const row = within(await screen.findByRole("article", { name: "d1-3b model" }));
+  expect(row.getByText("Needs a newer version of a required library (transformers 5.14 or later).")).toBeVisible();
+  expect(row.queryByText("This backend is unavailable in this build.")).toBeNull();
+});
+
 it("groups artifacts by stage and preserves open groups through refresh", async () => {
   const audio: ModelCapability = { ...detector, stage: "audio", id: "mlx_whisper", device: "mlx" };
   const enrichment: ModelCapability = { ...detector, stage: "enrichment", id: "qwen3_vl", device: "mlx" };

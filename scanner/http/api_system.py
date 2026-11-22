@@ -45,12 +45,19 @@ def api_get_version() -> VersionInformation:
     return version_information()
 
 
+def _default_video_model() -> str:
+    from scanner import api as root
+
+    return root.default_video_model()
+
+
 class ScanOptions(BaseModel):
     """The options persisted with every queued scan and completed video."""
 
     name: ScanName = None
     coarse_scan_enabled: bool = False
     coarse_scan_interval: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    # The Severity and Description model; the field keeps its original name.
     qwen_model: str = DEFAULT_QWEN_MODEL
     qwen_summaries_per_segment: int = Field(default=4, ge=1)
     qwen_segment_join_gap_seconds: float = Field(default=3.0, ge=0, allow_inf_nan=False)
@@ -59,7 +66,8 @@ class ScanOptions(BaseModel):
     audio_filter: str | None = DEFAULT_AUDIO_FILTER
     audio_selection: AudioSelection | None = None
     scan_video: bool = True
-    video_model: str | None = "nudenet"
+    # Qwen3-VL 8B where it can run, otherwise NudeNet.
+    video_model: str | None = Field(default_factory=lambda: _default_video_model())
 
     @model_validator(mode="after")
     def validate_scan_options(self):
@@ -83,7 +91,7 @@ class ScanOptions(BaseModel):
         if self.scan_video and self.video_model not in SUPPORTED_VIDEO_MODELS:
             raise ValueError(f"Unsupported video model: {self.video_model}")
         if self.qwen_model not in SUPPORTED_QWEN_MODELS:
-            raise ValueError(f"Unsupported Qwen model: {self.qwen_model}")
+            raise ValueError(f"Unsupported Severity and Description model: {self.qwen_model}")
         if self.scan_video and not fake_models:
             root.require_available(self.video_model)
             qwen = root.qwen_enrichment_capability()

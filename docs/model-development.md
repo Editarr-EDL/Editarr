@@ -6,9 +6,33 @@ For ordinary Editarr setup and use, see the project [README](../README.md).
 
 ## Qwen prompt replay
 
-Video scans can use either the pinned Qwen3-VL 8B or 4B Instruct 4-bit model. The 8B
-variant remains the default; 4B reduces download size and memory use. Each scan persists
-its choice, and only the selected artifact is acquired on demand.
+The **Severity and Description model** (API field `qwen_model`) describes flagged
+segments after detection, for every video model. Scans can use either the pinned
+Qwen3-VL 8B (recommended, default) or 4B Instruct 4-bit model; 4B reduces download size
+and memory use. Each scan persists its choice, and only the selected artifact is
+acquired on demand.
+
+The description prompt (`qwen_summary.PROMPT` plus the constrained JSON instructions)
+also asks for a `severity` level per classification on the rubric in
+[`scanner/evaluation/severity_rubric.py`](../scanner/evaluation/severity_rubric.py):
+violence 0 none / 1 non-graphic / 2 graphic / 3 gore; sex 0 none / 1 kissing / 2 sex
+without nudity / 3 sex with nudity or assault; nudity 0 none / 1 immodesty / 2 nudity /
+3 explicit; drugs 0 none / 1 legal use / 2 illegal use. Levels 1–3 map to MCF `low`,
+`medium`, and `high`. Severity is read leniently: a response whose subcategory token is
+invalid still contributes its severity, out-of-scale levels clamp to the family's top
+level, and unusable values are ignored. The description itself is unchanged.
+
+Each visual finding's severity follows this precedence, recorded in its in-memory
+`severity_source` (scan caches and debug logs only; not stored in the database):
+
+1. `detector`: a detector's own severity question (d1-3B);
+2. `description_model`: the description model's level, when it returns one of at least 1;
+3. `confidence`: the detector-confidence mapping (≥ 0.85 high, ≥ 0.65 medium, else low).
+
+Where the description model is unavailable (Windows and Linux), findings keep detector
+or confidence severity and have no description (`details` is null); the detector label
+and MCF category still identify them. The same holds wherever the description step
+returns nothing usable.
 
 Each flagged visual scene preserves the exact representative frames sent to
 Qwen and its detector metadata in `data/qwen-replays/<scan-id>/scene_*`. This
@@ -146,6 +170,60 @@ budget.
 The complete scanner/model configuration is defined in
 [`scanner/settings/config.py`](../scanner/settings/config.py).
 
+### Qwen3-VL and d1-3B video detectors
+
+`qwen3-vl-8b` (recommended and the default on Apple silicon), `qwen3-vl-4b`, and `d1-3b`
+ask one yes/no question per family about each frame, using the evaluation harness's
+wording: `Does this video frame show <subject>? Answer yes or no.` with subjects
+`drugs, alcohol, smoking, or gambling`, `nudity`, `sexual content`, and `violence`.
+Positive families become general-family findings (`drugs`, `nudity`, `sex`,
+`violence`) that the description model can refine. Thresholds are module constants in
+[`qwen_detector.py`](../scanner/pipeline/qwen_detector.py) and
+[`d1_detector.py`](../scanner/pipeline/d1_detector.py).
+
+The Qwen3-VL detectors (macOS Apple silicon only) run on MLX with the same pinned
+artifacts and loader as the description model. The questions are chained in one
+conversation per frame: the image is encoded once, each later question feeds only its
+new tokens into the KV cache, and the greedy answer token stays in the conversation.
+A family's score is P(yes) / (P(yes) + P(no)) from the first answer token's top 20
+log-probabilities at temperature 0, flagged at 0.5. When the detector and the
+description model are the same artifact, the scan worker loads it once.
+
+d1-3B is a decision model that answers typed questions in one forward pass without
+generating text. It runs through transformers (≥ 5.14) and torch, on MPS where the
+runtime verified Metal and otherwise on CPU in float32 (the Windows and Linux runtimes
+ship CPU-only torch; its 3.1B float32 weights need about 12.5 GB there and run much
+more slowly than on MPS), with `trust_remote_code` loading the model's own code from the pinned,
+hash-verified artifact only. A malformed answer never fails a scan: an unusable family
+decision leaves that family unflagged for the frame, and an unusable severity
+distribution gives no detector severity; each is logged once per scan. Each frame gets the four family `noul` questions
+plus four `score` severity questions whose levels are the rubric above. The argmax
+level sets the finding's severity (level 0 on a positive decision is reported as
+`low`). Families are flagged at 0.5 except violence at 0.25: with only the four family
+questions, 0.25 reproduces the decisions of the original question set (family plus
+specific tokens such as weapons, each at 0.5) on 1,592 of 1,603 evaluation frames and
+raises violence F1 from 0.57 to 0.65; the other families scored best at 0.5.
+
+Fine passes score one frame per `EDITARR_DECISION_FINE_SAMPLE_INTERVAL_SECONDS`
+(default 0.5) and bisect changes in the set of positive families, as Shieldstral does.
+
+A real-inference check on 12 film frames (8 positive d1-3B decisions, covering all four
+families) on an M4 Pro (24 GB):
+
+| Detector | Agreement with the evaluation | Warm time per frame | Memory |
+| --- | --- | ---: | ---: |
+| `qwen3-vl-8b` (MLX) | 48/48 decisions; scores identical to `qwen3vl-8b-mlx` | 1.37 s | 6.5 GB MLX peak |
+| `d1-3b` (transformers, BF16, MPS) | 48/48 decisions vs `d1-3b-full4` and `d1-3b-sev` (llama.cpp Q8_0); 47/48 severity levels; mean \|ΔP\| 0.009 | 0.71 s | 7.0 GB MPS |
+
+A resident detector (d1-3B, a Qwen3-VL detector, or Shieldstral) whose artifact differs
+from the description model is never loaded alongside it: the scan detects every scene
+first, spooling each scene's detections to its own file in the attempt's temporary
+`visual-results/pending/` directory, then releases the detector and describes one scene
+at a time, deleting each spooled file once its scene is described. On a 20 s clip with d1-3B and the 8B description model this cut the scan
+worker's peak footprint from 17.7 GB to 10.5 GB and wall time from 324 s to 235 s with
+identical findings. A Qwen3-VL detector that is the description model's artifact keeps
+the single shared instance and describes each scene as it is detected.
+
 ### Shieldstral
 
 Shieldstral (macOS Apple silicon only) answers yes/no policy questions about each frame.
@@ -186,9 +264,8 @@ system + instruct prefix shared by all prompts is computed once per process, eac
 question pre-fills only its remaining tokens, and the answer logits are computed in
 float32 from the final hidden state. Both screens take about 0.66 s per frame at 288 px
 on an M4 Pro; routing adds two questions (about 0.5 s) only on sexual-positive frames. Peak MLX
-memory is about 5.3 GB at 288 px. The scan worker can keep Shieldstral and the Qwen3-VL
-summary model (about 6 GB for 8B) loaded together, so 24 GB of unified memory is
-recommended.
+memory is about 5.3 GB at 288 px. Shieldstral is released before the Qwen3-VL
+description model loads (see above), so the two are not held together.
 
 A fine scene pass scores one frame per `EDITARR_SHIELDSTRAL_FINE_SAMPLE_INTERVAL_SECONDS`
 (default 0.5), plus the first and last frames. When two consecutive samples emit

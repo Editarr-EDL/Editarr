@@ -185,7 +185,7 @@ def test_isolated_worker_is_stopped_when_relaying_raises(
         ),
         (
             {"scan_audio": False, "scan_video": True, "qwen_model": "unknown-qwen"},
-            "Unsupported Qwen model",
+            "Unsupported Severity and Description model",
         ),
     ],
 )

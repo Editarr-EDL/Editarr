@@ -167,7 +167,7 @@ async function mockApi(page: Page) {
         filter: { id: "credits-filter", source_scan_id: creditsScan.id, source_finding_id: 6, source: "visual", category: "dispensable_scenes", subcategory: "dispensable", severity: "medium", mcf_channel: "video", mcf_comment: "End Credits", label: "End Credits", details: "End Credits", group_key: null, start_seconds: 91, end_seconds: 120, confidence: 0.42, edit_action: "skip", selected: true },
       });
     }
-    if (path === "/api/capabilities") return json(route, { audio_models: [], audio_filters: [], video_models: [], qwen_models: [{ id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B" }, { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B" }], model_capabilities: [] });
+    if (path === "/api/capabilities") return json(route, { audio_models: [], audio_filters: [], video_models: [], qwen_models: [{ id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B", recommended: true }, { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B", recommended: false }], model_capabilities: [] });
     if (path === "/api/scans/queue") return json(route, []);
     if (path === "/api/scans/history") return json(route, [scan, creditsScan]);
     return json(route, {});

@@ -139,7 +139,7 @@ def test_qwen_summary_uses_the_mlx_4bit_model_with_all_segment_frames(monkeypatc
                 str(Path("/tmp/flagged-frame-1.jpg").resolve()),
                 str(Path("/tmp/flagged-frame-2.jpg").resolve()),
             ],
-            "max_tokens": 160,
+            "max_tokens": 192,
             "temperature": 0.0,
             "verbose": False,
         },
@@ -261,3 +261,116 @@ def test_qwen_summary_selects_4b_model_and_records_its_provenance(monkeypatch):
     assert summary.subcategorization[0].model_revision == (
         "2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b"
     )
+
+
+def test_qwen_prompt_extends_the_json_schema_with_rubric_severity():
+    prompt = qwen_summary.subcategorization_prompt(
+        (McfCategoryFamily.VIOLENCE, McfCategoryFamily.DRUGS)
+    )
+
+    assert "exactly these keys: family, subcategory, confidence, evidence, severity." in prompt
+    assert "violence: 0 = no violence; 1 = non-graphic violence" in prompt
+    assert "3 = gore: severe injury, mutilation or a lot of blood." in prompt
+    assert "drugs: 0 = no drugs, alcohol or smoking;" in prompt
+    assert "2 = illegal drugs." in prompt
+    assert prompt.startswith(qwen_summary.PROMPT)
+
+    unrated = qwen_summary.subcategorization_prompt((McfCategoryFamily.FEAR,))
+    assert "severity" not in unrated.removeprefix(qwen_summary.PROMPT).lower()
+
+
+def _summarize_response(monkeypatch, payload, families):
+    dependencies = {
+        "mlx_vlm": SimpleNamespace(
+            generate=lambda *_args, **_kwargs: SimpleNamespace(text=json.dumps(payload))
+        ),
+        "mlx_vlm.prompt_utils": SimpleNamespace(
+            apply_chat_template=lambda *_args, **_kwargs: "formatted prompt"
+        ),
+    }
+    monkeypatch.setattr(qwen_summary, "_load_model", lambda _model: (object(),) * 3)
+    monkeypatch.setattr(
+        qwen_summary, "_require_dependency", lambda name, _hint: dependencies[name]
+    )
+    return qwen_summary.summarize_frames([Path("/tmp/frame.jpg")], families=families)
+
+
+def _classification(family, subcategory, severity):
+    return {
+        "family": family,
+        "subcategory": subcategory,
+        "confidence": 0.9,
+        "evidence": "Visible evidence.",
+        "severity": severity,
+    }
+
+
+def test_qwen_summary_returns_severity_without_changing_the_description(monkeypatch):
+    summary = _summarize_response(
+        monkeypatch,
+        {
+            "version": 1,
+            "objectionable": True,
+            "summary": "A fight with visible blood.",
+            "classifications": [
+                _classification("violence", "punching", 2),
+                _classification("nudity", "nudity", "not a level"),
+            ],
+        },
+        (McfCategoryFamily.VIOLENCE, McfCategoryFamily.NUDITY),
+    )
+
+    assert summary.valid_subcategorization_output is True
+    assert summary.explanation == "A fight with visible blood."
+    assert summary.severities == {McfCategoryFamily.VIOLENCE: 2}
+
+
+def test_qwen_summary_keeps_severity_when_a_subcategory_token_is_invalid(monkeypatch):
+    summary = _summarize_response(
+        monkeypatch,
+        {
+            "version": 1,
+            "objectionable": True,
+            "summary": "A person smokes.",
+            "classifications": [_classification("drugs", "tobacco", 5)],
+        },
+        (McfCategoryFamily.DRUGS,),
+    )
+
+    assert summary.valid_subcategorization_output is False
+    # Drugs has no level 3; out-of-scale values clamp to its top level.
+    assert summary.severities == {McfCategoryFamily.DRUGS: 2}
+    # The invalid reply is never used as the description.
+    assert summary.explanation == ""
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # Failed validation: an empty summary.
+        {"version": 1, "objectionable": True, "summary": "", "classifications": []},
+        # Failed validation: not objectionable but with classifications.
+        {
+            "version": 1,
+            "objectionable": False,
+            "summary": "Nothing objectionable.",
+            "classifications": [_classification("violence", "violence", 1)],
+        },
+        # Valid, but a "not objectionable" verdict describes nothing.
+        {"version": 1, "objectionable": False, "summary": "No objectionable content.",
+         "classifications": []},
+    ],
+)
+def test_qwen_summary_leaves_unusable_or_clean_replies_without_a_description(
+    monkeypatch, payload
+):
+    summary = _summarize_response(monkeypatch, payload, (McfCategoryFamily.VIOLENCE,))
+
+    assert summary.explanation == ""
+
+
+def test_qwen_summary_without_families_keeps_the_free_text_reply(monkeypatch):
+    # Credits assessment uses its own JSON prompt without MCF families and parses the reply.
+    summary = _summarize_response(monkeypatch, {"credits_visible": True}, ())
+
+    assert summary.explanation == '{"credits_visible": true}'

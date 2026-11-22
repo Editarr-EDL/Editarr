@@ -50,6 +50,7 @@ from .repository_rows import (
     _scan_from_row,
     _utc,
 )
+from .review_filter_tracking import label_edits, load_source_findings, with_label_provenance
 from .review_policy import prepare_review_policy
 from .review_policy_display import locked_severities
 from .review_repairs import repair_records_by_review
@@ -72,8 +73,11 @@ def _review_detail(
 
     require_repaired(db, row.id)
     summary = _review_summary(db, row, source=source, item_id=item_id)
+    # Batch-load source findings once; policy and lock evaluation then reuse them.
+    sources = load_source_findings(db, row)
     prepared = prepare_review_policy(db, row)
-    return SavedReview(
+    edits = label_edits(row, sources)
+    detail = SavedReview(
         **summary.model_dump(),
         memberships=[
             ReviewScanMembership(scan_id=membership.scan_id, role=membership.role)
@@ -83,8 +87,8 @@ def _review_detail(
             ReviewScanReference(scan=_scan_from_row(membership.scan), role=membership.role)
             for membership in row.memberships
         ],
-        filters=list(prepared.filters),
-        base_filters=list(prepared.base_filters),
+        filters=with_label_provenance(prepared.filters, edits),
+        base_filters=with_label_provenance(prepared.base_filters, edits),
         policy_owner_id=prepared.owner_id,
         policy_revision=prepared.policy_revision,
         policy_missing_evidence=list(prepared.missing_evidence),
@@ -100,6 +104,8 @@ def _review_detail(
         synchronization=_review_synchronization(row.synchronization),
         accepted_credits=_accepted_credits_provenance(row.accepted_credits),
     )
+    del sources  # held until here so the identity map keeps the batched findings
+    return detail
 
 
 def _review_synchronization(row: ReviewSynchronizationRow | None) -> ReviewSynchronization:

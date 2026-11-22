@@ -124,12 +124,14 @@ export interface ScanOptions {
   name?: string | null;
   coarse_scan_interval?: number;
   coarse_scan_enabled: boolean;
-  qwen_model: string;
+  /** Severity and Description model; omitted to use the server default. */
+  qwen_model?: string;
   qwen_summaries_per_segment: number;
   qwen_segment_join_gap_seconds: number;
   scan_audio: boolean;
   audio_model: string | null;
   audio_filter: string | null;
   scan_video: boolean;
-  video_model: string | null;
+  /** Omitted to use the server default when scanning video without a capabilities choice. */
+  video_model?: string | null;
 }

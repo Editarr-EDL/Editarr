@@ -42,12 +42,19 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+/** Drop derived, read-only provenance so it never marks a draft dirty. */
+function comparableFilter({ label_edited: _derived, ...filter }: ReviewFilter): Omit<ReviewFilter, "label_edited"> {
+  return filter;
+}
+
 function contentState(draft: ReviewContent): string {
   return JSON.stringify({
     name: draft.name,
     memberships: draft.memberships,
-    filters: draft.filters,
-    filterBases: draft.filterBases,
+    filters: draft.filters.map(comparableFilter),
+    filterBases: Object.fromEntries(Object.entries(draft.filterBases).map(([id, pair]) => [
+      id, { base: comparableFilter(pair.base), effective: comparableFilter(pair.effective) },
+    ])),
     mcfDocument: draft.mcfDocument,
     synchronization: draft.synchronization,
     acceptedCredits: draft.acceptedCredits,
@@ -79,8 +86,29 @@ export function reviewDraftFilters(draft: ReviewDraft): ReviewFilter[] {
   });
 }
 
+/**
+ * Clone server filters, keeping read-only `label_edited` from the matching previous filter.
+ * Write responses (defaults, retime, credits) omit the flag; it carries over only while the
+ * label is unchanged, and a value the response does include wins.
+ */
+function withLabelProvenance(next: ReviewFilter[], previous: ReviewFilter[]): ReviewFilter[] {
+  const previousById = new Map(previous.map((filter) => [filter.id, filter]));
+  return clone(next).map((filter) => {
+    const prior = previousById.get(filter.id);
+    return "label_edited" in filter || !prior || !("label_edited" in prior) || prior.label !== filter.label
+      ? filter : { ...filter, label_edited: prior.label_edited };
+  });
+}
+
+function previousBases(draft: ReviewDraft): ReviewFilter[] {
+  return Object.values(draft.filterBases).map((pair) => pair.base);
+}
+
+/** Adopt server-adjusted filters and bases, preserving their label provenance. */
 export function applyReviewFilterResult(draft: ReviewDraft, result: { filters: ReviewFilter[]; base_filters?: ReviewFilter[] }): ReviewDraft {
-  return { ...draft, filters: clone(result.filters), filterBases: filterBases(result.filters, result.base_filters) };
+  const filters = withLabelProvenance(result.filters, draft.filters);
+  const bases = result.base_filters && withLabelProvenance(result.base_filters, previousBases(draft));
+  return { ...draft, filters, filterBases: filterBases(filters, bases) };
 }
 
 /** Create an editable review snapshot with its saved baseline.
@@ -237,8 +265,19 @@ export function snapshotReviewFilters(draft: ReviewDraft, filters: ReviewFilter[
   };
 }
 
+/**
+ * Apply a local filter edit. A label change marks `label_edited` immediately so the display
+ * follows the relabel; restoring the loaded label restores its loaded flag (keeping the draft clean).
+ */
 export function updateReviewFilter(draft: ReviewDraft, filterId: string, patch: Partial<ReviewFilter>): ReviewDraft {
   const pair = draft.filterBases[filterId];
+  if ("label" in patch && !("label_edited" in patch)) {
+    const current = draft.filters.find((filter) => filter.id === filterId);
+    const loaded = pair?.effective;
+    if (current && patch.label !== current.label) {
+      patch = { ...patch, label_edited: loaded && patch.label === loaded.label ? loaded.label_edited : true };
+    }
+  }
   return {
     ...draft,
     filters: draft.filters.map((filter) => filter.id === filterId ? { ...filter, ...patch, id: filter.id } : filter),
@@ -266,7 +305,6 @@ export function applyReviewRetimeResult(draft: ReviewDraft, result: ReviewRetime
     policy_owner_id: result.policy_owner_id ?? draft.policy_owner_id,
     policy_revision: result.policy_revision ?? draft.policy_revision,
     mcfDocument: clone(result.mcf_document),
-    filters: clone(result.filters),
     acceptedCredits,
     newManualFilters: clone(result.new_manual_filters),
   };
@@ -291,15 +329,17 @@ export function applyCreditsAcceptance(draft: ReviewDraft, result: CreditsAccept
     filter.source_scan_id === result.filter.source_scan_id
     && filter.source_finding_id === result.filter.source_finding_id
   ));
+  const [acceptedFilter] = withLabelProvenance([result.filter], withMembership.filters);
+  const acceptedBase = result.base_filter ? withLabelProvenance([result.base_filter], previousBases(withMembership)) : undefined;
   return {
     ...withMembership,
-    filterBases: { ...withMembership.filterBases, ...filterBases([result.filter], result.base_filter ? [result.base_filter] : undefined) },
+    filterBases: { ...withMembership.filterBases, ...filterBases([acceptedFilter], acceptedBase) },
     policy_owner_id: result.policy_owner_id ?? draft.policy_owner_id,
     policy_revision: result.policy_revision ?? draft.policy_revision,
     acceptedCredits: clone(result.accepted_credits),
     filters: existingIndex < 0
-      ? [...withMembership.filters, clone(result.filter)]
-      : withMembership.filters.map((filter, index) => index === existingIndex ? clone(result.filter) : filter),
+      ? [...withMembership.filters, acceptedFilter]
+      : withMembership.filters.map((filter, index) => index === existingIndex ? acceptedFilter : filter),
   };
 }
 

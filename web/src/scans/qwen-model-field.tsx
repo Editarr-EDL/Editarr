@@ -1,6 +1,8 @@
+import { useId } from "react";
 import type { ScanCapabilities } from "../api/api-system-types";
+import { ModelOptions } from "./model-options";
 
-/** Select the Qwen model shared by visual summaries and language analysis. */
+/** Select the Severity and Description model (API field `qwen_model`) used for summaries and language analysis. */
 export function QwenModelField({
   capabilities,
   value,
@@ -10,19 +12,22 @@ export function QwenModelField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const helpId = useId();
   return (
-    <label className="field">
-      <span>Qwen model</span>
-      <select
-        aria-label="Qwen model"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {(capabilities?.qwen_models || []).map((model) => (
-          <option key={model.id} value={model.id}>{model.display_name}</option>
-        ))}
-      </select>
-    </label>
+    <>
+      <label className="field">
+        <span>Severity and Description model</span>
+        <select
+          aria-label="Severity and Description model"
+          aria-describedby={helpId}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <ModelOptions models={capabilities?.qwen_models} />
+        </select>
+      </label>
+      <p className="muted-copy" id={helpId}>Describes flagged scenes and rates their severity when the video model doesn't.</p>
+    </>
   );
 }
 

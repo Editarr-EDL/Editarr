@@ -18,6 +18,10 @@ from .model_runtime import (
 from .model_runtime import (
     current_environment as current_environment,
 )
+from .model_runtime import version_at_least
+
+# d1-3B's remote model code needs this transformers release or newer.
+D1_MIN_TRANSFORMERS = (5, 14)
 
 AvailabilityReason = Literal[
     "unsupported_platform",
@@ -25,6 +29,7 @@ AvailabilityReason = Literal[
     "missing_package",
     "missing_provider",
     "deferred_gap",
+    "unsupported_dependency_version",
 ]
 
 TARGET_IDS = ("macos-arm64", "windows-x64", "linux-x86_64")
@@ -39,14 +44,23 @@ SUPPORTED_AUDIO_FILTERS = (
     "qwen",
 )
 SUPPORTED_AUDIO_FILTER_SELECTIONS = SUPPORTED_AUDIO_FILTERS + ("alt-profanity-check",)
+FALLBACK_VIDEO_MODEL = "nudenet"
+RECOMMENDED_VIDEO_MODEL = "qwen3-vl-8b"
+# Listed in selection order: clients fall back to the first available entry, which is
+# Qwen3-VL 8B where MLX runs and NudeNet elsewhere.
 SUPPORTED_VIDEO_MODELS = (
-    "nudenet",
+    RECOMMENDED_VIDEO_MODEL,
+    "qwen3-vl-4b",
+    FALLBACK_VIDEO_MODEL,
     "image_safety_gate",
     "siglip2_moderation_nsfw",
     "siglip2_moderation_violence",
     "shieldstral",
+    "d1-3b",
 )
 SUPPORTED_QWEN_MODELS = (DEFAULT_QWEN_MODEL, "qwen3-vl-4b-instruct-4bit")
+RECOMMENDED_QWEN_MODEL = DEFAULT_QWEN_MODEL
+_MLX_VLM_PACKAGES = ("mlx_vlm", "mlx", "huggingface_hub", "PIL", "numpy")
 
 DISPLAY_NAMES = {
     "whisper": "Whisper (faster-whisper)",
@@ -60,6 +74,9 @@ DISPLAY_NAMES = {
     "siglip2_moderation_nsfw": "SigLIP2 Moderation — NSFW",
     "siglip2_moderation_violence": "SigLIP2 Moderation — Violence",
     "shieldstral": "Shieldstral",
+    "qwen3-vl-8b": "Qwen3-VL 8B",
+    "qwen3-vl-4b": "Qwen3-VL 4B",
+    "d1-3b": "d1-3B",
     "qwen3_vl": "Qwen3-VL enrichment",
 }
 QWEN_MODEL_DISPLAY_NAMES = {
@@ -97,6 +114,7 @@ def _capability(
     return ModelCapability(
         id=backend_id,
         display_name=DISPLAY_NAMES[backend_id],
+        recommended=backend_id == RECOMMENDED_VIDEO_MODEL,
         stage=stage,
         availability="available" if available else "unavailable",
         reason=None if available else reason,
@@ -247,19 +265,18 @@ def model_capabilities(
             device=environment.torch_device,
             provider="CPUExecutionProvider",
         ),
-        standard(
-            "shieldstral",
-            "detector",
-            ("mlx_vlm", "mlx", "huggingface_hub", "PIL", "numpy"),
-            device="mlx",
-        )
-        if environment.target_id == "macos-arm64"
-        else _capability(
-            "shieldstral",
-            "detector",
-            available=False,
-            reason=target_failure or "unsupported_platform",
+        *(
+            standard(backend_id, "detector", _MLX_VLM_PACKAGES, device="mlx")
+            if environment.target_id == "macos-arm64"
+            else _capability(
+                backend_id,
+                "detector",
+                available=False,
+                reason=target_failure or "unsupported_platform",
+            )
+            for backend_id in ("shieldstral", "qwen3-vl-8b", "qwen3-vl-4b")
         ),
+        _d1_capability(environment, standard),
     ]
 
     if target_failure:
@@ -298,6 +315,25 @@ def model_capabilities(
     return tuple(capabilities)
 
 
+def d1_transformers_supported(environment: CapabilityEnvironment | None = None) -> bool:
+    """Whether the installed transformers can run d1-3B's pinned remote code."""
+    environment = environment or current_environment()
+    return version_at_least(environment.package_version("transformers"), D1_MIN_TRANSFORMERS)
+
+
+def _d1_capability(environment: CapabilityEnvironment, standard) -> ModelCapability:
+    capability = standard(
+        "d1-3b",
+        "detector",
+        ("torch", "transformers", "PIL", "safetensors"),
+        device=environment.torch_device,
+    )
+    if capability.availability == "available" and not d1_transformers_supported(environment):
+        return _capability("d1-3b", "detector", available=False,
+                           reason="unsupported_dependency_version")
+    return capability
+
+
 def capability_for(
     backend_id: str,
     *,
@@ -320,6 +356,14 @@ def require_available(
         detail = capability.reason.replace("_", " ") if capability.reason else "unavailable"
         raise CapabilityUnavailableError(f"{capability.display_name} is unavailable: {detail}")
     return capability
+
+
+def default_video_model(environment: CapabilityEnvironment | None = None) -> str:
+    """The recommended video model where it can run, otherwise NudeNet."""
+    recommended = capability_for(RECOMMENDED_VIDEO_MODEL, environment=environment)
+    if recommended.availability == "available":
+        return RECOMMENDED_VIDEO_MODEL
+    return FALLBACK_VIDEO_MODEL
 
 
 def qwen_enrichment_capability(

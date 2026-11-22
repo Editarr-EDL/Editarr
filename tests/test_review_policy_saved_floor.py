@@ -276,7 +276,7 @@ def test_retime_there_and_back_without_saving_is_accepted(app, monkeypatch, seed
     )
     sync = original["synchronization"]
     draft = _retime_draft(app, route, draft, sync["start_seconds"], sync["end_seconds"])
-    assert draft["filters"][0] == original["filters"][0]
+    assert draft["filters"][0] == body(original)["filters"][0]
     saved = app.send("PUT", route, app.accounts.unsafe_cookie(USER), draft)
     assert saved.status_code == 200, saved.text
     detail = app.send("GET", route, app.accounts.cookie(USER)).json()

@@ -17751,6 +17751,11 @@
             "type": "string",
             "title": "Display Name"
           },
+          "recommended": {
+            "type": "boolean",
+            "title": "Recommended",
+            "default": false
+          },
           "stage": {
             "type": "string",
             "enum": [
@@ -17777,7 +17782,8 @@
                   "unsupported_architecture",
                   "missing_package",
                   "missing_provider",
-                  "deferred_gap"
+                  "deferred_gap",
+                  "unsupported_dependency_version"
                 ]
               },
               {
@@ -20765,14 +20771,14 @@
           },
           "filters": {
             "items": {
-              "$ref": "#/components/schemas/ReviewFilter"
+              "$ref": "#/components/schemas/SavedReviewFilter"
             },
             "type": "array",
             "title": "Filters"
           },
           "base_filters": {
             "items": {
-              "$ref": "#/components/schemas/ReviewFilter"
+              "$ref": "#/components/schemas/SavedReviewFilter"
             },
             "type": "array",
             "title": "Base Filters"
@@ -20870,6 +20876,179 @@
           "synchronization"
         ],
         "title": "SavedReview"
+      },
+      "SavedReviewFilter": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source_scan_id": {
+            "type": "string",
+            "title": "Source Scan Id"
+          },
+          "source_finding_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Finding Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "audio",
+              "visual"
+            ],
+            "title": "Source"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McfCategoryFamily"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subcategory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McfCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Severity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mcf_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McfChannel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mcf_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcf Comment"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "start_seconds": {
+            "type": "number",
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "edit_action": {
+            "$ref": "#/components/schemas/EditAction"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected"
+          },
+          "label_edited": {
+            "type": "boolean",
+            "title": "Label Edited",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_scan_id",
+          "source",
+          "category",
+          "subcategory",
+          "label",
+          "details",
+          "group_key",
+          "start_seconds",
+          "end_seconds",
+          "confidence",
+          "edit_action",
+          "selected"
+        ],
+        "title": "SavedReviewFilter",
+        "description": "A saved review's filter with read-only edit provenance."
       },
       "SavedReviewSummary": {
         "properties": {
@@ -21938,6 +22117,11 @@
           "display_name": {
             "type": "string",
             "title": "Display Name"
+          },
+          "recommended": {
+            "type": "boolean",
+            "title": "Recommended",
+            "default": false
           }
         },
         "type": "object",
@@ -22597,8 +22781,7 @@
                 "type": "null"
               }
             ],
-            "title": "Video Model",
-            "default": "nudenet"
+            "title": "Video Model"
           },
           "jellyfin_item_id": {
             "type": "string",
