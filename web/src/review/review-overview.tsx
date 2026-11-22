@@ -4,7 +4,7 @@ import type { Scan } from "../api/api-scan-types";
 import type { SavedReview } from "../api/api-review-types";
 import { formatTime, scanLabel, scanOriginLabel } from "../shared/display";
 import { McfClassificationFields, McfRegistryStatus } from "./review-mcf";
-import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, channelText, type SavedReviewSort, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
+import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, filterSourceOrigin, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, channelText, type SavedReviewSort, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
 
 /** Edit one review filter's classification and timing.
  * @param props Filter values, registry, and change callbacks.
@@ -109,7 +109,7 @@ export function SavedReviewOverview({
   const audioResults = sortSavedReviewResults(mergeSavedReviewFilters(filters.filter((filter) => filter.source === "audio"), scanById), sort);
   const visibleVideoResults = showNoObjectionableContent
     ? videoResults
-    : videoResults.filter((result) => !result.filters.every(isNoObjectionableContentFilter));
+    : videoResults.filter((result) => !result.filters.every((filter) => isNoObjectionableContentFilter(filter, filterSourceOrigin(filter, scanById))));
   const visibleResults = [...visibleVideoResults, ...audioResults];
   useEffect(() => {
     if (!focusFilterId) return;
@@ -188,7 +188,7 @@ export function SavedReviewOverview({
             const editingFilter = result.filters.find((filter) => filter.id === editingFilterId);
             const rowName = result.descriptions.join("; ") || group.name;
             const descriptionFilters = new Map<string, SavedReview["filters"][number]>();
-            for (const filter of result.filters) { const description = savedReviewFilterDescription(filter); if (!descriptionFilters.has(description)) descriptionFilters.set(description, filter); }
+            for (const filter of result.filters) { const description = savedReviewFilterDescription(filter, filterSourceOrigin(filter, scanById)); if (!descriptionFilters.has(description)) descriptionFilters.set(description, filter); }
             const linkedIndicator = item.linked && <span className="linked-result-indicator" role="img" aria-label="Linked result repeated in another category"> 🔗</span>;
             return <Fragment key={`${groupKey}:${result.key}`}>
               <tr><td><input type="checkbox" aria-label={`Include ${rowName} at ${formatTime(result.startSeconds)}`} aria-checked={rowMixed ? "mixed" : rowSelected} ref={node => { if (node) node.indeterminate = rowMixed; }} checked={rowSelected} disabled={busy || !filtersEditable || result.filters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(result.filters.filter(filter => !requiredIds.has(filter.id)).map(filter => filter.id), !rowSelected)} /></td>

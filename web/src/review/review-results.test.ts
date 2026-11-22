@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 
 import type { SavedReview, Scan } from "../api";
-import { buildReviewHierarchy, isNoObjectionableContentFilter, mergeSavedReviewFilters, savedReviewFilterDescription } from "./review-results";
+import { buildReviewHierarchy, isNoObjectionableContentFilter, mergeSavedReviewFilters, savedReviewFilterDescription, visualFilterListLabel } from "./review-results";
 
 type Filter = SavedReview["filters"][number];
 const visual = (id: string, details: string | null, start = 10): Filter => ({
@@ -21,6 +21,27 @@ it("leaves a visual description empty without a Severity and Description reply",
   expect(isNoObjectionableContentFilter({ ...visual("v", null), group_key: "violence|No objectionable content" })).toBe(false);
   expect(isNoObjectionableContentFilter({ ...visual("v", null), group_key: "No objectionable content" })).toBe(true);
   expect(isNoObjectionableContentFilter({ ...visual("v", null), group_key: "No objectionable content|No objectionable content" })).toBe(true);
+});
+
+it("keeps labels on user-authored visual filters but not on model findings", () => {
+  const manual = { ...visual("m", null), label: "Bar fight" };
+  expect(savedReviewFilterDescription(manual, "manual")).toBe("Bar fight");
+  expect(savedReviewFilterDescription(manual, "imported")).toBe("Bar fight");
+  expect(savedReviewFilterDescription({ ...manual, label: null }, "manual")).toBe("violence");
+  expect(savedReviewFilterDescription(visual("g", null), "generated")).toBe("");
+  expect(savedReviewFilterDescription(visual("g", null), null)).toBe("");
+
+  const scanById = new Map([
+    ["scan-1", { id: "scan-1", scan_id: 1, origin: "generated" } as Scan],
+    ["scan-manual", { id: "scan-manual", scan_id: 2, origin: "manual" } as Scan],
+  ]);
+  const [group] = mergeSavedReviewFilters([visual("g", null, 10), { ...manual, source_scan_id: "scan-manual", start_seconds: 11 }], scanById);
+  expect(group.filters).toHaveLength(2);
+  expect(group.descriptions).toEqual(["Bar fight"]);
+
+  expect(visualFilterListLabel(manual, 0, "manual")).toBe("Bar fight");
+  expect(visualFilterListLabel(visual("g", null), 1, "generated")).toBe("Video filter 2");
+  expect(visualFilterListLabel(visual("g", "A fistfight"), 1, "generated")).toBe("A fistfight");
 });
 
 it("keeps the audio description fallbacks", () => {
@@ -49,7 +70,7 @@ it("groups a shown clean verdict under No objectionable content without a descri
 /** The previous incremental merge, kept as a behavioural reference. */
 function previousMerge(filters: Filter[], scanById: Map<string, Scan>) {
   const merged: { key: string; filters: Filter[]; startSeconds: number; endSeconds: number; descriptions: string[]; scanIds: string[] }[] = [];
-  const describe = (items: Filter[]) => [...new Set(items.map(savedReviewFilterDescription).filter(Boolean))];
+  const describe = (items: Filter[]) => [...new Set(items.map((item) => savedReviewFilterDescription(item, scanById.get(item.source_scan_id)?.origin)).filter(Boolean))];
   for (const filter of [...filters].sort((left, right) => left.start_seconds - right.start_seconds)) {
     const startSeconds = filter.start_seconds;
     const endSeconds = Math.max(startSeconds, filter.end_seconds ?? startSeconds + 1);
@@ -73,7 +94,7 @@ function previousMerge(filters: Filter[], scanById: Map<string, Scan>) {
 
 function syntheticReview(count: number) {
   // Scan numbers repeat so ties exercise stable ordering; "scan-missing" is not a known scan.
-  const scanById = new Map(["scan-c", "scan-a", "scan-b", "scan-d"].map((id, index) => [id, { id, scan_id: [3, 1, 2, 1][index] } as Scan]));
+  const scanById = new Map(["scan-c", "scan-a", "scan-b", "scan-d"].map((id, index) => [id, { id, scan_id: [3, 1, 2, 1][index], origin: id === "scan-b" ? "manual" : "generated" } as Scan]));
   const scanIds = ["scan-c", "scan-missing", "scan-a", "scan-d", "scan-b"];
   const filters = Array.from({ length: count }, (_, index): Filter => ({
     ...visual(`f${index}`, index % 3 === 0 ? null : `Scene ${index % 97}`, index * 0.001),
@@ -95,7 +116,9 @@ it("merges a large group identically to the previous implementation", () => {
   const [large, late] = results;
   expect(large.filters).toHaveLength(5_000);
   expect(large.key).toBe(filters.slice(0, 5_000).map((filter) => filter.id).join(":"));
-  expect(large.descriptions).toEqual([...new Set(filters.slice(0, 5_000).map((filter) => filter.details).filter(Boolean))]);
+  expect(large.descriptions).toEqual([...new Set(filters.slice(0, 5_000).map((filter) => (
+    filter.source_scan_id === "scan-b" ? filter.details || filter.label : filter.details
+  )).filter(Boolean))]);
   expect(large.scanIds).toEqual(["scan-a", "scan-d", "scan-b", "scan-c"]);
   expect(late.descriptions).toEqual(["Late scene"]);
   expect(elapsed).toBeLessThan(2_000);

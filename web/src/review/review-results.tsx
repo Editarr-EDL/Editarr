@@ -153,16 +153,36 @@ export function CensoredAudioWord({ word, context }: { word: string; context?: s
 }
 
 /**
- * Text describing a filter. Visual filters show only their Severity and Description reply,
- * so missing `details` yields "" (category chips still identify the row); audio filters
- * fall back through label, details and category.
+ * Text describing a filter. Model findings from a generated (or unknown) scan show only their
+ * Severity and Description reply, so missing `details` yields "" and machine detector labels
+ * stay hidden; category chips still identify the row. User-authored filters, whose source
+ * scan is a Manual or imported scan, fall back to their label and classification, as does audio.
+ * @param sourceOrigin Origin of the filter's source scan, when known.
  */
-export function savedReviewFilterDescription(filter: SavedReview["filters"][number]): string {
+export function savedReviewFilterDescription(
+  filter: SavedReview["filters"][number],
+  sourceOrigin?: Scan["origin"] | null,
+): string {
+  if (filter.source === "visual" && (sourceOrigin ?? "generated") === "generated") return filter.details || "";
   return filter.source === "visual"
-    ? filter.details || ""
+    ? filter.details || filter.label || filter.subcategory || filter.category || "Unclassified"
     : filter.label || filter.details || filter.subcategory || filter.category || "Unclassified";
 }
 
+/** Name a visual filter in a plain list: model findings by description only, user filters by label first. */
+export function visualFilterListLabel(
+  filter: SavedReview["filters"][number],
+  index: number,
+  sourceOrigin?: Scan["origin"] | null,
+): string {
+  const named = (sourceOrigin ?? "generated") === "generated" ? filter.details : filter.label || filter.details;
+  return named || `Video filter ${index + 1}`;
+}
+
+/** Look up the origin of a filter's source scan for {@link savedReviewFilterDescription}. */
+export function filterSourceOrigin(filter: SavedReview["filters"][number], scanById: Map<string, Scan>): Scan["origin"] | null {
+  return scanById.get(filter.source_scan_id)?.origin ?? null;
+}
 
 function isNoObjectionableContent(value: string | null | undefined): boolean {
   const normalized = value?.trim().toLocaleLowerCase().replace(/[.!]+$/, "");
@@ -173,8 +193,11 @@ function isNoObjectionableContent(value: string | null | undefined): boolean {
  * Whether a filter records a clean verdict. Clean visual replies store no details, so their
  * verdict is read from `group_key` ("No objectionable content", possibly `|`-joined).
  */
-export function isNoObjectionableContentFilter(filter: SavedReview["filters"][number]): boolean {
-  return isNoObjectionableContent(savedReviewFilterDescription(filter))
+export function isNoObjectionableContentFilter(
+  filter: SavedReview["filters"][number],
+  sourceOrigin?: Scan["origin"] | null,
+): boolean {
+  return isNoObjectionableContent(savedReviewFilterDescription(filter, sourceOrigin))
     || isNoObjectionableContent(filter.category)
     || (filter.source === "visual" && Boolean(filter.group_key)
       && filter.group_key!.split("|").every((token) => isNoObjectionableContent(token.trim())));
@@ -226,7 +249,7 @@ export function mergeSavedReviewFilters(
     }
     current.filters.push(filter);
     current.endSeconds = Math.max(current.endSeconds, endSeconds);
-    const description = savedReviewFilterDescription(filter);
+    const description = savedReviewFilterDescription(filter, filterSourceOrigin(filter, scanById));
     if (description) current.descriptions.add(description);
     if (scanById.has(filter.source_scan_id)) current.scanIds.add(filter.source_scan_id);
   }
