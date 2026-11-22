@@ -353,7 +353,9 @@ def _findings_from_detections(
                 severity_source=det.severity_source,
                 confidence=det.confidence,
                 label=det.label,
-                details=f"Detected {det.label} at {det.timestamp:.1f}s",
+                # No description until the description step writes one; the detector
+                # label and category already identify the finding.
+                details=None,
                 group_key=det.category.value,
                 source="visual",
             )

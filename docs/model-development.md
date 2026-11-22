@@ -30,7 +30,9 @@ Each visual finding's severity follows this precedence, recorded in its in-memor
 3. `confidence`: the detector-confidence mapping (≥ 0.85 high, ≥ 0.65 medium, else low).
 
 Where the description model is unavailable (Windows and Linux), findings keep detector
-or confidence severity and no prose.
+or confidence severity and have no description (`details` is null); the detector label
+and MCF category still identify them. The same holds wherever the description step
+returns nothing usable.
 
 Each flagged visual scene preserves the exact representative frames sent to
 Qwen and its detector metadata in `data/qwen-replays/<scan-id>/scene_*`. This

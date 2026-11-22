@@ -339,7 +339,9 @@ def test_scan_frames_caps_a_final_visual_finding_at_the_video_end(monkeypatch, t
 
     assert findings[0].start_seconds == 9.5
     assert findings[0].end_seconds == 10
-    assert findings[0].details == "Detected Visual content at 9.5s"
+    # Detector findings carry no description; label and category identify them.
+    assert findings[0].details is None
+    assert findings[0].label == "Visual content"
     assert findings[0].group_key == "nudity"
 
 
