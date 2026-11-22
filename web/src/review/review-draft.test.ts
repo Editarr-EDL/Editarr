@@ -20,6 +20,7 @@ import {
 } from "./review-draft";
 import type { ReviewDraft } from "./review-draft";
 import type { SavedReview } from "../api";
+import { savedReviewFilterDescription } from "./review-results";
 
 const review: SavedReview = {
   id: "review-1",
@@ -338,5 +339,44 @@ describe("review draft state", () => {
     expect(duplicate.mcfContentRevision).toBe(0);
     expect(duplicate.mcfDocument.title).toBe("Metadata variant");
     expect(duplicate.mcfMetadataSeed).toBeNull();
+  });
+
+  describe("label provenance from server responses", () => {
+    const strip = ({ label_edited: _flag, ...filter }: SavedReview["filters"][number]) => filter;
+    const relabelled = { ...review.filters[0], id: "relabelled", source: "visual" as const, category: "violence" as const, subcategory: "violence" as const,
+      mcf_channel: "video" as const, edit_action: "skip" as const, label: "Bar fight", label_edited: true };
+    const untouched = { ...relabelled, id: "untouched", label: "d1_violence", label_edited: false, start_seconds: 5, end_seconds: 6 };
+    const saved = { ...review, filters: [relabelled, untouched], base_filters: [relabelled, untouched] };
+
+    it("keeps a relabelled label through a retime that omits the flag", () => {
+      const initial = createReviewDraft(saved);
+      const retimed = applyReviewRetimeResult(initial, {
+        synchronization: initial.synchronization, mcf_document: initial.mcfDocument, accepted_credits: null, new_manual_filters: [],
+        filters: [{ ...strip(relabelled), start_seconds: 3, end_seconds: 4 }, strip(untouched)],
+        base_filters: [{ ...strip(relabelled), start_seconds: 3, end_seconds: 4 }, strip(untouched)],
+      });
+      expect(retimed.filters.map((filter) => [filter.id, filter.label_edited, filter.start_seconds])).toEqual([["relabelled", true, 3], ["untouched", false, 5]]);
+      expect(retimed.filterBases.relabelled.base.label_edited).toBe(true);
+      expect(retimed.filters.map((filter) => savedReviewFilterDescription(filter, "generated"))).toEqual(["Bar fight", ""]);
+      expect(retimed.filterBases.untouched.base.label_edited).toBe(false);
+    });
+
+    it("leaves a draft clean when defaults change nothing and dirty when they do", () => {
+      const initial = createReviewDraft(saved);
+      const echo = (filters: SavedReview["filters"]) => filters.map(strip);
+      const unchanged = applyReviewFilterResult(initial, { filters: echo(saved.filters), base_filters: echo(saved.base_filters) });
+      expect(unchanged.filters.map((filter) => filter.label_edited)).toEqual([true, false]);
+      expect(Object.values(unchanged.filterBases).map((pair) => pair.base.label_edited)).toEqual([true, false]);
+      expect(isReviewDraftDirty(unchanged)).toBe(false);
+
+      const severities = echo(saved.filters).map((filter) => filter.id === "untouched" ? { ...filter, severity: "high" as const } : filter);
+      const changed = applyReviewFilterResult(initial, { filters: severities, base_filters: severities });
+      expect(isReviewDraftDirty(changed)).toBe(true);
+    });
+
+    it("ignores label_edited alone when comparing drafts", () => {
+      const initial = createReviewDraft(saved);
+      expect(isReviewDraftDirty({ ...initial, filters: initial.filters.map(strip) })).toBe(false);
+    });
   });
 });
