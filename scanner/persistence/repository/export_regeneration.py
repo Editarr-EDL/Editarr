@@ -312,7 +312,7 @@ def sweep_regenerations(db: Session) -> None:
 
 
 def current_job(db: Session, job: RegenerationJob):
-    """Decide against fresh queue, publication, and policy state under the writer lock."""
+    """Read fresh queue, publication and policy state. Recheck under the lock before writing."""
     db.expire_all()
     row = db.get(MediaItemExportRow, job.export_id)
     if row is None or row.scope != ExportScope.PERSONAL or row.snapshot_json is None:

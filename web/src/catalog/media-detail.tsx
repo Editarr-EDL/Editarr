@@ -126,6 +126,11 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const openVerification = (scan: Scan | null) => {
     verificationSession.current++;
     verificationAudio.reset();
+    if (scan?.finding_count === 0) {
+      setScanToVerify(null);
+      setMessage("This scan has no filters to verify.");
+      return;
+    }
     setScanToVerify(scan);
   };
   const activeVerificationSession = verificationSession.current;
@@ -404,8 +409,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       onDirtyChange={handleReviewDirtyChange} onSaved={() => void loadScans()}
       onImported={(result) => {
         setImportedReview(result.review);
-        if (!result.review && stableIdentity) openVerification(result.scan);
         setMessage(importStatusMessage(result));
+        if (!result.review && stableIdentity) openVerification(result.scan);
         void loadScans();
       }}
       guided={{

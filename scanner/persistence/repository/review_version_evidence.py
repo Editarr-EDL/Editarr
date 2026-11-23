@@ -12,10 +12,15 @@ from .media_identity_store import get_version, review_version_id
 
 def version_file_matches(version: MediaVersionRow | None, path: str | Path) -> bool:
     """Require strong evidence before treating any file as a pinned version."""
-    if version is None or version.content_sha256 is None:
+    return version is not None and file_digest_matches(path, version.content_sha256)
+
+
+def file_digest_matches(path: str | Path, expected: str | None) -> bool:
+    """Compare a file to an independently captured SHA-256 digest."""
+    if expected is None:
         return False
     try:
-        return content_digest(path) == version.content_sha256
+        return content_digest(path) == expected
     except (OSError, ValueError):
         return False
 

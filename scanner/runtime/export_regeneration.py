@@ -4,6 +4,7 @@ import logging
 import sqlite3
 import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -38,7 +39,7 @@ from scanner.persistence.repository.export_regeneration import (
 )
 from scanner.persistence.repository.export_retained import prepare_retained_export
 from scanner.persistence.repository.media_identity_store import get_version, review_version_id
-from scanner.persistence.repository.review_version_evidence import version_file_matches
+from scanner.persistence.repository.review_version_evidence import file_digest_matches
 from scanner.persistence.rows.db_export_regenerations import (
     RegenerationFailure,
     RegenerationState,
@@ -50,6 +51,7 @@ from scanner.security.audit.actions import ActorKind, AuditAction
 from scanner.security.audit.store import stage_event
 
 from .maintenance import MaintenanceUnavailable
+from .scan_version import ScanVersionChanged, file_generation
 
 logger = logging.getLogger(__name__)
 TRANSIENT_ERRORS = (sqlite3.OperationalError, OperationalError, MaintenanceUnavailable)
@@ -58,16 +60,34 @@ SWEEP_RETRY_SECONDS = 60
 WRITE_FAILED = "write_failed"
 
 
-def _destination(db, row, snapshot):
+@dataclass(frozen=True)
+class _MediaPin:
+    path: Path
+    version_id: str | None
+    digest: str | None
+
+    def generation(self) -> tuple[int, ...] | None:
+        if self.digest is None:
+            return None
+        try:
+            return file_generation(str(self.path))
+        except ScanVersionChanged:
+            return None
+
+
+def _media_pin(db, snapshot) -> _MediaPin:
     media = Path(snapshot["media_path"])
     version_id = snapshot.get("media_version_id")
     source_review_id = snapshot.get("source_review_id")
     if version_id is None and source_review_id:
         version_id = review_version_id(db, source_review_id)
-    if version_id and not version_file_matches(get_version(db, version_id), media):
-        raise ExportConflict("export_media_changed", "The original review version is unavailable")
+    version = get_version(db, version_id) if version_id else None
+    return _MediaPin(media, version_id, version.content_sha256 if version is not None else None)
+
+
+def _destination(db, row, snapshot):
     target = parse_export_id(row.target_export_id)
-    destination = safe_destination(media, row.format, target)
+    destination = safe_destination(Path(snapshot["media_path"]), row.format, target)
     _check_destination(db, row, destination)
     return destination
 
@@ -205,13 +225,28 @@ def _withdraw(db, job, cancelled):
 def settle_regeneration(db, job: RegenerationJob, *, cancelled=None) -> str:
     """Settle one pinned claim; infrastructure failures retain its delayed retry."""
     try:
+        admitted = current_job(db, job)
+        if admitted is None or (cancelled is not None and cancelled.is_set()):
+            db.rollback()
+            return "stale"
+        media = _media_pin(db, admitted[1])
+        db.rollback()
+        generation = media.generation()
+        matches = generation is not None and file_digest_matches(media.path, media.digest)
         with publication_lock(db), write_lock(db):
             admitted = current_job(db, job)
             if admitted is None or (cancelled is not None and cancelled.is_set()):
                 db.rollback()
                 return "stale"
             row, snapshot = admitted
+            if _media_pin(db, snapshot) != media or media.generation() != generation:
+                db.rollback()
+                return "retry"
             try:
+                if media.version_id and not matches:
+                    raise ExportConflict(
+                        "export_media_changed", "The original review version is unavailable"
+                    )
                 destination = _destination(db, row, snapshot)
                 row.policy_owner_id = job.policy_owner_id
                 content = prepare_retained_export(db, row, snapshot)
@@ -222,6 +257,9 @@ def settle_regeneration(db, job: RegenerationJob, *, cancelled=None) -> str:
             if cancelled is not None and cancelled.is_set():
                 db.rollback()
                 return "stale"
+            if media.generation() != generation:
+                db.rollback()
+                return "retry"
             try:
                 prepare_export_directory(
                     Path(snapshot["media_path"]),

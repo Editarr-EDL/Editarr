@@ -194,6 +194,17 @@ def list_scan_queue(db: Session) -> list[ScanQueueItem]:
     return [_scan_queue_from_row(row) for row in rows]
 
 
+def _finding_counts(db: Session, scans: list[ScanRow]) -> dict[str, int]:
+    if not scans:
+        return {}
+    return dict(
+        db.query(ScanFindingRow.scan_id, func.count(ScanFindingRow.id))
+        .filter(ScanFindingRow.scan_id.in_([scan.id for scan in scans]))
+        .group_by(ScanFindingRow.scan_id)
+        .all()
+    )
+
+
 def list_scan_history(db: Session) -> list[Scan]:
     """Return persisted scans in history order with their finding counts."""
     rows = (
@@ -206,16 +217,7 @@ def list_scan_history(db: Session) -> list[Scan]:
     approvals = scan_target_approvals_by_scan(db, rows)
     pending = scan_pending_targets_by_scan(db, rows)
     coverage = verification_coverage_by_scan(db, rows)
-    finding_counts = (
-        dict(
-            db.query(ScanFindingRow.scan_id, func.count(ScanFindingRow.id))
-            .filter(ScanFindingRow.scan_id.in_([row.id for row in rows]))
-            .group_by(ScanFindingRow.scan_id)
-            .all()
-        )
-        if rows
-        else {}
-    )
+    finding_counts = _finding_counts(db, rows)
     return [
         _scan_from_row(
             row,
@@ -256,9 +258,11 @@ def list_scans_for_library_item(
     approvals = scan_target_approvals_by_scan(db, rows)
     pending = scan_pending_targets_by_scan(db, rows)
     coverage = verification_coverage_by_scan(db, rows)
+    finding_counts = _finding_counts(db, rows)
     return [
         _scan_from_row(
             row,
+            finding_count=finding_counts.get(row.id, 0),
             community_approvals=approvals[row.id],
             community_pending=pending.get(row.id, []),
             verification_coverage=coverage,

@@ -41,21 +41,22 @@ export function PreviousVersionScans({ versions, imports = [], linkedScans = [],
     && scan.scan_mode !== "credits_detection" && (scan.scan_audio || scan.scan_video))
     .map((scan) => ({ scan, label: scan.media_source_name || "Linked scan" }));
   const coverage = coverageBySource(verifiedCopies);
-  const needsVerification = [...entries, ...pending, ...linked].flatMap((entry) => {
+  const displayed = [...entries, ...pending, ...linked].flatMap((entry) => {
     const { scan } = entry;
     const source = coverage.get(scan.id);
     const audio = scan.scan_audio && (!source || source.findings.audio.size < source.totals.audio);
     const video = scan.scan_video && (!source || source.findings.video.size < source.totals.video);
-    return audio || video ? [{ ...entry, audio, video }] : [];
+    const clean = scan.finding_count === 0;
+    return clean || audio || video ? [{ ...entry, audio, video, clean }] : [];
   });
-  if (!needsVerification.length) return null;
+  if (!displayed.length) return null;
   return <section className="previous-version-scans" aria-label="Previous version scans">
-    <h3>Scans that need verification</h3>
-    <ul>{needsVerification.map(({ scan, label, audio, video }) => <li key={scan.id}>
-      <div><strong>{scanLabel(scan)}</strong><div>{label} · {scan.scan_audio && !audio
+    <h3>{displayed.some(({ clean }) => clean) ? "Previous version scans" : "Scans that need verification"}</h3>
+    <ul>{displayed.map(({ scan, label, audio, video, clean }) => <li key={scan.id}>
+      <div><strong>{scanLabel(scan)}</strong><div>{label} · {clean ? "No filters to verify" : scan.scan_audio && !audio
         ? "Video needs verification for this version" : scan.scan_video && !video
           ? "Audio needs verification for this version" : "Needs verification for this version"}</div></div>
-      {canVerify && <button type="button" className="btn-secondary compact-button"
+      {canVerify && !clean && <button type="button" className="btn-secondary compact-button"
         onClick={() => onVerify(scan)}>Verify for this version</button>}
     </li>)}</ul>
   </section>;
