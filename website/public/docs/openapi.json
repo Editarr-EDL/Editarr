@@ -3,7 +3,7 @@
   "info": {
     "title": "Editarr",
     "description": "Local Editarr API. X-Api-Key grants administrator access. Browser sessions require same-origin CSRF protection for mutations.",
-    "version": "0.1.3"
+    "version": "0.1.10"
   },
   "paths": {
     "/api/auth/api-key": {
