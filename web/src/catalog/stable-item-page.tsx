@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { JellyfinLibrary } from "../api/api-media-types";
+import type { JellyfinLibrary, JellyfinMediaItem } from "../api/api-media-types";
 import { fetchSavedReview } from "../api/api-reviews";
 import type { SavedReview } from "../api/api-review-types";
 import { fetchEditarrItem, resolveLegacyItem, type EditarrItem, type HistoricalVersion } from "../api/api-stable-media";
@@ -12,6 +12,8 @@ import { MediaDetailPage, SeriesSeasonsPage } from "./library-pages";
 import { LibraryBreadcrumbs, MediaDetail } from "./media-detail";
 
 type ItemRoute = Extract<Route, { kind: "library" | "title" }>;
+type ExplicitVersion = { historical: HistoricalVersion }
+  | { item: JellyfinMediaItem; sourceId: string | null };
 
 interface PageProps {
   route: ItemRoute;
@@ -56,13 +58,35 @@ function HistoricalMedia({ title, version }: { title: string; version: Historica
   </>;
 }
 
+function explicitVersion(identity: EditarrItem, versionId: string): ExplicitVersion | null {
+  const recorded = identity.versions.find((version) => version.id === versionId);
+  if (recorded && !recorded.available) return { historical: recorded };
+
+  const matches = identity.current_versions?.filter((version) => version.version_id === versionId) ?? [];
+  const recordedTarget = recorded?.active_item_id
+    ? { item_id: recorded.active_item_id, media_source_id: recorded.active_media_source_id ?? null }
+    : null;
+  const target = matches.length === 1 ? matches[0] : recordedTarget;
+  if (!target) return null;
+  const item = identity.active_items.find((candidate) => candidate.id === target.item_id);
+  if (!item) return null;
+  const sourceId = target.media_source_id;
+  const sourceAvailable = sourceId === null
+    ? !item.versions.some((source) => source.id)
+    : item.versions.some((source) => source.id === sourceId);
+  return sourceAvailable ? { item, sourceId } : null;
+}
+
 export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirtyChange, onUnavailable }: PageProps) {
-  const [state, setState] = useState<{ identity?: EditarrItem; failed?: boolean }>({});
   const legacyLibrary = route.kind === "library" ? route.libraryId : null;
   const requestedVersion = route.kind === "title" ? route.versionId : undefined;
   const titleId = route.kind === "title" ? route.titleId : null;
   const itemId = route.itemId || (route.kind === "library" ? route.seriesId : undefined);
-  const { identity, failed } = state;
+  const routeKey = JSON.stringify([titleId, itemId, legacyLibrary, requestedVersion]);
+  const [state, setState] = useState<{
+    routeKey: string; identity?: EditarrItem; exactVersion?: ExplicitVersion | null; failed?: boolean;
+  }>();
+  const { identity, exactVersion, failed } = state?.routeKey === routeKey ? state : {};
   usePageTitle(identity?.name || "Library");
   useEffect(() => {
     let active = true;
@@ -70,7 +94,12 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
       : itemId && legacyLibrary ? resolveLegacyItem(itemId, legacyLibrary) : null;
     void request?.then((result) => {
       if (!active) return;
-      setState({ identity: result });
+      const exactVersion = requestedVersion ? explicitVersion(result, requestedVersion) : null;
+      if (requestedVersion && !exactVersion) {
+        setState({ routeKey, failed: true });
+        return;
+      }
+      setState({ routeKey, identity: result, exactVersion });
       const library = result.active_item?.library_id || legacyLibrary;
       if (library) writeUserValue(`library-last-route.${library}`, editarrItemRoute(
         result.title_id, requestedVersion || result.selected_version_id || undefined,
@@ -79,9 +108,9 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
         const liveItem = result.active_items.length > 1 ? result.active_item?.id : undefined;
         onReplace(editarrItemRoute(result.title_id, result.selected_version_id || undefined, liveItem));
       }
-    }).catch(() => { if (active) setState({ failed: true }); });
+    }).catch(() => { if (active) setState({ routeKey, failed: true }); });
     return () => { active = false; };
-  }, [titleId, itemId, legacyLibrary, requestedVersion, onReplace]);
+  }, [titleId, itemId, legacyLibrary, requestedVersion, routeKey, onReplace]);
 
   if (failed && route.kind === "library" && itemId) {
     const library = libraries.find((entry) => entry.id === legacyLibrary);
@@ -94,11 +123,15 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
   if (failed) return <div className="content-page"><p role="alert">This library item is unavailable.</p></div>;
   if (!identity) return <div className="content-page"><p role="status">Loading item…</p></div>;
 
-  const historicalId = route.kind === "title" ? route.versionId : identity.selected_version_id;
-  const recorded = identity.versions.find((version) => version.id === historicalId);
-  const historical = recorded && !recorded.available ? recorded : null;
+  const recorded = route.kind === "library"
+    ? identity.versions.find((version) => version.id === identity.selected_version_id) : undefined;
+  const historical = exactVersion && "historical" in exactVersion ? exactVersion.historical
+    : recorded && !recorded.available ? recorded : null;
+  const exactLive = exactVersion && "item" in exactVersion ? exactVersion : null;
   const activeId = recorded?.active_item_id || (route.kind === "title" ? route.itemId : undefined);
-  const activeItem = identity.active_items.find((item) => item.id === activeId) || identity.active_item;
+  const activeItem = exactLive?.item
+    ?? (identity.active_items.find((item) => item.id === activeId) || identity.active_item);
+  const initialSourceId = exactLive ? exactLive.sourceId : recorded?.active_media_source_id;
   const library = libraries.find((entry) => entry.id === activeItem?.library_id);
   const libraryCrumb = library ? { label: library.name, route: `library/${encodeURIComponent(library.id)}` } : null;
   const crumbs = [...(libraryCrumb ? [libraryCrumb] : []), { label: identity.name }];
@@ -107,9 +140,9 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
   }
   if (activeItem && !historical && !(route.kind === "library" && identity.choose_version)) {
     return <CatalogItemBoundary source="jellyfin" itemId={activeItem.id} onUnavailable={onUnavailable}>
-      <MediaDetail key={`${activeItem.id}:${recorded?.active_media_source_id || ""}`} item={activeItem} breadcrumbs={crumbs}
+      <MediaDetail key={`${activeItem.id}:${initialSourceId || ""}`} item={activeItem} breadcrumbs={crumbs}
         seasonNumber={activeItem.season_number} onNavigate={onNavigate} onDirtyChange={onDirtyChange}
-        stableIdentity={identity} initialSourceId={recorded?.active_media_source_id} />
+        stableIdentity={identity} initialSourceId={initialSourceId} />
     </CatalogItemBoundary>;
   }
   return <div className="content-page media-detail">

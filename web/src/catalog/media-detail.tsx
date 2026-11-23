@@ -114,13 +114,10 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const [qwenModel, setQwenModel] = useState("");
   const [qwenSummariesPerSegment, setQwenSummariesPerSegment] = useState(4);
   const [qwenSegmentJoinGapSeconds, setQwenSegmentJoinGapSeconds] = useState(3);
+  const initialMediaSourceId = initialSourceId ?? item.versions.find((version) => version.id)?.id ?? null;
   const [versions, setVersions] = useState(() => item.versions.map((version) => ({ ...version, exports: normalizedExportStatus(version) })));
-  const [mediaSourceId, setMediaSourceId] = useState<string | null>(
-    () => initialSourceId ?? item.versions.find((version) => version.id)?.id ?? null,
-  );
-  const [selectedReviewMediaSourceId, setSelectedReviewMediaSourceId] = useState<string | null>(
-    () => initialSourceId ?? item.versions.find((version) => version.id)?.id ?? null,
-  );
+  const [mediaSourceId, setMediaSourceId] = useState(initialMediaSourceId);
+  const [selectedReviewMediaSourceId, setSelectedReviewMediaSourceId] = useState(initialMediaSourceId);
   const audioTracks = useAudioTracks({ item_id: item.id, media_source_id: mediaSourceId }, mayScan && showNewScan && scanAudio);
   const verificationAudio = useVerificationAudioScan(audioTracks);
   const verificationSession = useRef(0);
@@ -288,9 +285,11 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   }, [mayScan, showNewScan]);
   useEffect(() => {
     setVersions(item.versions.map((version) => ({ ...version, exports: normalizedExportStatus(version) })));
-    setMediaSourceId(item.versions.find((version) => version.id)?.id || null);
-    setSelectedReviewMediaSourceId(item.versions.find((version) => version.id)?.id || null);
-  }, [item.id, item.versions]);
+    const keepAvailableSource = (sourceId: string | null) =>
+      sourceId && item.versions.some((version) => version.id === sourceId) ? sourceId : initialMediaSourceId;
+    setMediaSourceId(keepAvailableSource);
+    setSelectedReviewMediaSourceId(keepAvailableSource);
+  }, [item.versions, initialMediaSourceId]);
   useEffect(() => {
     const wasOpen = wasNewScanOpen.current;
     wasNewScanOpen.current = showNewScan;
