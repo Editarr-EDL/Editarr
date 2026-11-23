@@ -22,14 +22,20 @@ from tests.test_review_policy_binding import body, import_review
 @pytest.fixture
 def moved_review(app, monkeypatch):
     item_id = app.jellyfin_item(guid("renamed-source"), LIBRARY_A)
-    imported = import_review(app, monkeypatch, item_id, b"## swearing: Cut\n1.000 2.000 1\n")
+    imported = import_review(
+        app,
+        monkeypatch,
+        item_id,
+        b"## swearing: Cut\n1.000 2.000 1\n## violence: Scene\n3.000 4.000 3\n",
+    )
     headers = app.accounts.unsafe_cookie(USER)
     route = f"/api/reviews/{imported['id']}"
     with app.accounts.factory() as db:
         row = db.get(SavedReviewRow, imported["id"])
         scan = row.memberships[0].scan
         original = Path(scan.resolved_local_path)
-        row.filters[0].severity = "low"
+        for review_filter in row.filters:
+            review_filter.severity = "low"
         row.mcf_document.material_end_seconds = 60
         version = identity.observe_sampled_version(
             db,
@@ -109,10 +115,18 @@ def test_a_different_file_at_the_renamed_path_is_rejected(app, moved_review):
 
 
 @pytest.mark.parametrize("matches", [False, True])
-def test_renamed_saved_preview_keeps_the_analyzed_audio_track(
-    app, moved_review, monkeypatch, matches
+@pytest.mark.parametrize("relocated", [False, True])
+@pytest.mark.parametrize("kind", ["mute", "video"])
+def test_saved_preview_keeps_the_analyzed_audio_track(
+    app, moved_review, monkeypatch, matches, relocated, kind
 ):
-    route, review, headers, _, moved = moved_review
+    route, review, headers, initial, moved = moved_review
+    if relocated:
+        path = moved
+    else:
+        path = moved.rename(initial)
+        item_id = review["target"]["item_id"]
+        app.items[item_id] = app.items[item_id].model_copy(update={"path": str(path)})
     track = AudioTrack(4, "eng", None, "aac", 2, 0, 0.0, 60.0, "1/48000")
     original = AudioTrackSelection("a" * 64, track)
     with app.accounts.factory() as db:
@@ -123,8 +137,8 @@ def test_renamed_saved_preview_keeps_the_analyzed_audio_track(
         db.commit()
     rendered = []
 
-    def select(path, stream_index):
-        assert (path, stream_index) == (moved, track.stream_index)
+    def select(current_path, stream_index):
+        assert (current_path, stream_index) == (path, track.stream_index)
         return AudioTrackSelection("b" * 64, track if matches else replace(track, language="fra"))
 
     def render(path, *_args, audio_stream_index=None):
@@ -132,12 +146,12 @@ def test_renamed_saved_preview_keeps_the_analyzed_audio_track(
         return b"audio"
 
     monkeypatch.setattr(repository_review_operations, "select_target_audio", select)
-    monkeypatch.setattr(repository, "render_mute_preview", render)
-    response = app.send(
-        "GET", f"{route}/filters/{review['filters'][0]['id']}/mute-preview", headers
-    )
+    monkeypatch.setattr(repository, f"render_{kind}_preview", render)
+    wanted_source = "audio" if kind == "mute" else "visual"
+    cue = next(value for value in review["filters"] if value["source"] == wanted_source)
+    response = app.send("GET", f"{route}/filters/{cue['id']}/{kind}-preview", headers)
     assert response.status_code == (200 if matches else 409), response.text
-    assert rendered == ([(moved, track.stream_index)] if matches else [])
+    assert rendered == ([(path, track.stream_index)] if matches else [])
 
 
 def test_renamed_preview_discards_output_if_file_changes_during_decode(

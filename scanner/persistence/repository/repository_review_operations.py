@@ -190,18 +190,23 @@ def render_saved_review_filter_preview(
         )
     ):
         raise ValueError("The review filter source scan is unavailable")
+    audio = analyzed_selection(scan)
+    if scan.analyzed_audio_selection_json is not None and audio is None:
+        raise ValueError("The analyzed audio track is unavailable")
     original_path = root._resolved_scan_path(scan)
     scan_path = original_path
     generation = None
     if row.media_item.path:
         target_path = Path(resolve_local_path(db, row.media_item.path).local_path).resolve()
-        if target_path != original_path:
+        if target_path != original_path or audio is not None:
             generation = file_generation(str(target_path))
         association = verified_target(db, scan, row.media_item_id, row.media_source_id)
         validate_target_role(association, membership.role)
         scan_path, matches = review_scan_location(scan, target_path, association)
         if not matches:
             raise ValueError("The review filter source media is unavailable")
+    elif audio is not None:
+        generation = file_generation(str(scan_path))
     if review_file_matches(db, review_id, scan_path) is False:
         raise ReviewMembershipError("The original Editarr review version is unavailable")
     if preview_kind == "mute":
@@ -216,7 +221,6 @@ def render_saved_review_filter_preview(
     end_seconds = max(start_seconds, review_filter.end_seconds or (start_seconds + 1.0))
     if scan.duration_seconds is not None:
         end_seconds = min(end_seconds, scan.duration_seconds)
-    audio = analyzed_selection(scan) if generation is not None and preview_kind == "mute" else None
     options = {}
     if audio is not None:
         current = select_target_audio(scan_path, audio.track.stream_index)
@@ -226,7 +230,10 @@ def render_saved_review_filter_preview(
     renderer = root.render_mute_preview if preview_kind == "mute" else root.render_video_preview
     content = renderer(str(scan_path), start_seconds, end_seconds, **options)
     if generation is not None:
-        current_path = Path(resolve_local_path(db, row.media_item.path).local_path).resolve()
+        current_path = (
+            Path(resolve_local_path(db, row.media_item.path).local_path).resolve()
+            if row.media_item.path else scan_path
+        )
         if current_path != scan_path or file_generation(str(scan_path)) != generation:
             raise ReviewMembershipError("The review filter source media has changed")
     return content
