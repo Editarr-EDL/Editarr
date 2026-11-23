@@ -5,13 +5,13 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from scanner import repository as root
 from scanner.db import ReviewScanMembershipRow, SavedReviewRow, ScanMediaItemAssociationRow, ScanRow
 from scanner.repository import ReviewMembershipError
 
-from .community_import_targets import matches_target, validate_target_role, verified_target
+from .community_import_targets import validate_target_role, verified_target
 from .media_identity_store import review_version_id, scan_version_id
 from .repository_paths import resolve_local_path
+from .review_scan_paths import review_scan_location
 from .review_version_evidence import review_file_matches
 from .version_reuse import source_pending_reuse
 
@@ -61,22 +61,13 @@ def _review_export_scans(
             source_id = scan_version_id(db, scan.id)
             if source_id is not None and source_id != version_id:
                 raise ReviewMembershipError("Review scans must match the original Editarr version")
-        scan_path = (
-            Path(association.resolved_local_path).resolve()
-            if association
-            else root._resolved_scan_path(scan)
-        )
+        scan_path, matches = review_scan_location(scan, target_path, association)
         if not scan_path.is_file() or not os.access(scan_path, os.R_OK):
             raise ReviewMembershipError("The review media file is unavailable")
         if target_path is not None and scan_path != target_path:
             raise ReviewMembershipError(
                 "Review scans must resolve to the target physical media file"
             )
-        matches = (
-            matches_target(association, target_path or scan_path)
-            if association
-            else root._scan_matches_physical_version(scan, target_path or scan_path)
-        )
         if not matches:
             raise ReviewMembershipError("Review scans must match the target physical media version")
         if physical_path is None:
