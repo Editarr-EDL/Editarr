@@ -1,5 +1,5 @@
 import { openWorkflowStep } from "./review-workflow-test-helpers";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
@@ -83,6 +83,55 @@ describe("Qwen language scan controls", () => {
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("path-mappings"))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.some(([input]) => /\/models(?:[/?]|$)|\/settings\//.test(String(input)))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("audio-tracks")).every(([input, init]) => !String(input).includes("video_path") && !String(init?.body).includes("video_path"))).toBe(true);
+  });
+
+  it("submits the observed audio track directly and keeps queue errors in the New Scan dialog", async () => {
+    const baseApi = installProductionApi();
+    const submit = vi.fn();
+    const confirm = vi.fn();
+    let finishFirstSubmit: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input), "http://editarr.test");
+      if (url.pathname === "/api/capabilities") return json(audioCapabilities);
+      if (url.pathname === "/api/media/audio-tracks/selection") {
+        confirm();
+        throw new Error("Audio selection confirmation response was interrupted");
+      }
+      if (url.pathname === "/api/scans" && init?.method === "POST") {
+        submit(JSON.parse(String(init.body)));
+        return submit.mock.calls.length === 1
+          ? new Promise<Response>((resolve) => { finishFirstSubmit = resolve; })
+          : json({ ...completeScan(), id: "queued-audio", scan_id: 9, status: "queued" }, 201);
+      }
+      return baseApi(input, init);
+    }));
+    window.location.hash = "#/library/movies";
+    render(<AuthenticationGate><App /></AuthenticationGate>);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
+    fireEvent.click(screen.getByRole("button", { name: "New Scan" }));
+    const dialog = screen.getByRole("dialog", { name: "New Scan" });
+    const add = within(dialog).getByRole("button", { name: "Add to Queue" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    await waitFor(() => expect(submit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      media_source_id: "source-1",
+      audio_selection: expect.objectContaining({ file_version: "a".repeat(64), track: expect.objectContaining({ stream_index: 1 }) }),
+    })));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(within(dialog).getByLabelText("Version")).toBeDisabled();
+    expect(within(dialog).getByLabelText("Scan type")).toBeDisabled();
+    await act(async () => { finishFirstSubmit?.(json({ detail: "Scan queue is temporarily unavailable." }, 503)); });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Scan queue is temporarily unavailable.");
+    expect(dialog).toBeVisible();
+    expect(screen.queryByText("Scan 9 added to the queue.")).not.toBeInTheDocument();
+
+    fireEvent.click(add);
+    expect(await screen.findByText("Scan 9 added to the queue.")).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "New Scan" })).not.toBeInTheDocument();
+    expect(submit).toHaveBeenCalledTimes(2);
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it("defaults to recommended models and explains the Severity and Description model", async () => {
