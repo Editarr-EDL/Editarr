@@ -218,10 +218,19 @@ class ScanCaller:
     def visible(self, scans: Sequence[ScanT], *, jobs_only: bool = False) -> list[ScanT]:
         """The scans this caller may see, in order, presented for this caller."""
 
-        seen = self.seen([scan.id for scan in scans])
+        wanted = {scan.id for scan in scans}
+        wanted.update(
+            scan.verified_from_scan_id
+            for scan in scans
+            if isinstance(scan, Scan) and scan.verified_from_scan_id
+        )
+        seen = self.seen(list(wanted))
         shown = [scan for scan in scans if scan.id in seen and (seen[scan.id].job or not jobs_only)]
         jobs = self._job_keys() if any(isinstance(s, ScanQueueItem) for s in shown) else None
-        return [self.present(scan, seen[scan.id], jobs=jobs) for scan in shown]
+        return [
+            self.present(scan, seen[scan.id], jobs=jobs, verification_sources=seen)
+            for scan in shown
+        ]
 
     def _job_keys(self) -> list[tuple[int, int]]:
         """The sorted queue keys of every job this caller may view."""
@@ -240,12 +249,14 @@ class ScanCaller:
         seen: SeenScan | None = None,
         *,
         jobs: list[tuple[int, int]] | None = None,
+        verification_sources: dict[str, SeenScan] | None = None,
     ) -> ScanT:
         """Project an already-authorized scan response for this caller.
 
         A queue entry's `sort_order` becomes the number of jobs ahead of it that
         this caller may view, so hidden jobs cannot be counted. `jobs` reuses
-        `_job_keys()` across one response.
+        `_job_keys()` across one response. Lists can also supply the authorized
+        verification sources.
         """
 
         if seen is None:
@@ -255,7 +266,10 @@ class ScanCaller:
             "is_own": seen.facts.initiator_id == int(self.access.principal.user_id)
         }
         if isinstance(scan, Scan) and scan.verified_from_scan_id:
-            source = self.seen([scan.verified_from_scan_id]).get(scan.verified_from_scan_id)
+            sources = verification_sources
+            if sources is None:
+                sources = self.seen([scan.verified_from_scan_id])
+            source = sources.get(scan.verified_from_scan_id)
             if source is None:
                 update["verified_from_scan_id"] = None
             if source is None or not self.allowed(

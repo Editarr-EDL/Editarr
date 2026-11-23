@@ -274,7 +274,10 @@ def download_status(db, service_url, body: DownloadStatusRequest, *, user_id=Non
                     pass
                 else:
                     pending = pending_target_channels(association)
-                    pending_here = bool(set(choice.channels) & pending)
+                    pending_here = set(choice.channels) & pending
+                    if not approved and not pending_here:
+                        outcomes.append(outcome)
+                        continue
                     operations = db.query(CommunityOperationRow).filter_by(
                         kind="receipt",
                         service_url=service_url,
@@ -301,5 +304,6 @@ def download_status(db, service_url, body: DownloadStatusRequest, *, user_id=Non
                     )
                     if pending_here:
                         outcome["verificationPending"] = True
+                        outcome["pendingChannels"] = sorted(pending_here)
         outcomes.append(outcome)
     return {"version": 1, "outcomes": outcomes}

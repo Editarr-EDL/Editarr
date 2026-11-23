@@ -260,9 +260,10 @@ required to send; unset means `downloads_not_configured`, not a production defau
 `POST /api/community/downloads/status` accepts `{target,target_key,choices}`
 (at most 96) and returns `{version:1,outcomes}` in request order. Each outcome has
 `revisionId,status:"not_imported"|"partial"|"imported"`; committed outcomes also
-have `scanId,approvedChannels,receiptState,reviewRequired,reviewed`. It reads local
-persisted exact-target imports without service access or download limits. A partial
-channel approval is not success for unapproved channels. Both endpoints require
+have `scanId,approvedChannels,receiptState,reviewRequired,reviewed`. A staged outcome
+also includes `verificationPending:true` and the requested `pendingChannels` that
+were committed for verification. It reads local persisted exact-target imports
+without service access or download limits. Both endpoints require
 real administrator/same-origin/CSRF and return no-store.
 
 Local `Scan.community_approvals` exposes target source/item/version/channel records

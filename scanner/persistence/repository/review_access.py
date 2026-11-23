@@ -322,7 +322,7 @@ class ReviewAccess:
     def present(self, value):
         """Project host paths without changing stored review or scan evidence."""
         from .export_discovery import project_publications
-        from .review_projection import project_review
+        from .review_projection import project_review, verification_source_ids
 
         def visible(review_id):
             try:
@@ -331,21 +331,28 @@ class ReviewAccess:
                 return False
             return True
 
-        def scan_visible(scan_id):
-            facts = scan_job_facts(self.db, [scan_id]).get(scan_id)
-            if not facts:
-                return False
-            try:
-                self.require_scan(facts, self.media_decision(facts.media))
-            except AccessDenied:
-                return False
-            return True
+        projected = project_publications(self, value)
+        sources = list(scan_job_facts(self.db, verification_source_ids(projected)).values())
+        visible_sources = set()
+        if sources:
+            decisions = decide_scans(
+                self.db,
+                self.access.principal.account,
+                [source.media for source in sources],
+                datetime.now(UTC),
+            )
+            for source, decision in zip(sources, decisions, strict=True):
+                try:
+                    self.require_scan(source, decision)
+                except AccessDenied:
+                    continue
+                visible_sources.add(source.scan_id)
 
         return project_review(
-            project_publications(self, value),
+            projected,
             paths=C.MEDIA_PATHS_VIEW in self.access.capabilities,
             visible=visible,
-            scan_visible=scan_visible,
+            scan_visible=visible_sources.__contains__,
         )
 
     def create(

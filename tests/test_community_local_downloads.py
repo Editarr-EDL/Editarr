@@ -102,14 +102,14 @@ def scenario(import_database, tmp_path, monkeypatch):
         )
 
 
-def status(scenario):
+def status(scenario, choices=None):
     return module.download_status(
         scenario.db,
         SERVICE,
         DownloadStatusRequest(
             target=scenario.body.lookup.target,
             target_key=scenario.captured.key,
-            choices=[scenario.body.choice],
+            choices=choices or [scenario.body.choice],
         ),
     )
 
@@ -163,6 +163,14 @@ def test_staged_download_is_reconcilable_without_approving_raw_cues(scenario):
     assert outcome["status"] == "imported"
     assert outcome["approvedChannels"] == []
     assert outcome["verificationPending"] is True
+    assert outcome["pendingChannels"] == ["video"]
+    audio = scenario.body.choice.model_copy(update={"channels": ["audio"]})
+    mixed = scenario.body.choice.model_copy(update={"channels": ["audio", "video"]})
+    audio_outcome, mixed_outcome = status(scenario, [audio, mixed])["outcomes"]
+    assert audio_outcome == {"revisionId": audio.revisionId, "status": "not_imported"}
+    assert mixed_outcome["status"] == "partial"
+    assert mixed_outcome["approvedChannels"] == []
+    assert mixed_outcome["pendingChannels"] == ["video"]
     legacy_retry = asyncio.run(scenario.service.run(scenario.body))
     assert legacy_retry["verificationPending"] is True
     assert legacy_retry["scan"]["id"] == scan.id

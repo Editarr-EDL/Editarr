@@ -62,3 +62,38 @@ it("cancelled in-flight outcomes remain unknown and reconcile to committed truth
   expect(result.current.entries[0].status).toBe("imported");
   expect(downloadCommunityFilter).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  { status: "imported" as const, approvedChannels: ["audio" as const], expected: ["audio", "video"], retry: [] },
+  { status: "partial" as const, approvedChannels: [], expected: ["video"], retry: ["audio"] },
+])("recovers a $status staged download after its reply is lost", async ({ status, approvedChannels, expected, retry }) => {
+  vi.mocked(downloadCommunityFilter).mockRejectedValueOnce(new Error("response lost"));
+  const onStaged = vi.fn();
+  const { result } = renderHook(() => useCommunityDownloads(input, vi.fn(), onStaged));
+  const mixed = { ...selection("mixed", mixedCandidate.artifactDigest), channels: ["audio" as const, "video" as const] };
+  await act(() => result.current.start([mixedCandidate], [mixed], false));
+  expect(result.current.entries[0].status).toBe("unknown");
+  vi.mocked(communityDownloadStatus).mockResolvedValueOnce([{
+    revisionId: "mixed", status, approvedChannels, pendingChannels: ["video"],
+    verificationPending: true, scanId: "saved", receiptState: "pending", reviewRequired: false, reviewed: false,
+  }]);
+
+  await act(() => result.current.reconcile([mixedCandidate], mixed.targetKey));
+
+  const committed = result.current.entries.find((entry) => entry.status === "imported");
+  expect([...committed!.choice.channels].sort()).toEqual(expected);
+  expect(committed!.result?.pendingChannels).toEqual(["video"]);
+  expect(result.current.entries.find((entry) => entry.status === "cancelled")?.choice.channels ?? []).toEqual(retry);
+  expect(downloadCommunityFilter).toHaveBeenCalledTimes(1);
+  expect(onStaged).not.toHaveBeenCalled();
+});
+
+it("does not infer staged channels from a legacy partial status", async () => {
+  const { result } = renderHook(() => useCommunityDownloads(input, vi.fn()));
+  vi.mocked(communityDownloadStatus).mockResolvedValueOnce([{
+    revisionId: "mixed", status: "partial", approvedChannels: [], verificationPending: true,
+    scanId: "saved", receiptState: "pending", reviewRequired: false, reviewed: false,
+  }]);
+  await act(() => result.current.reconcile([mixedCandidate], "a".repeat(64)));
+  expect(result.current.entries).toEqual([]);
+});

@@ -228,4 +228,33 @@ for (const width of [320, 1440]) {
     await expectNoHorizontalPageOverflow(page);
     await page.screenshot({ path: `test-results/css50-reconciled-${width}.png` });
   });
+
+  test(`${width}px a lost staged reply blocks repeat download only for the staged channel`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const state = await setup(page);
+    let staged = false;
+    await page.route("**/api/community/downloads", (route) => {
+      state.downloads.push(route.request().postDataJSON());
+      staged = true;
+      return json(route, { code: "network_unavailable" }, 503);
+    });
+    await page.route("**/api/community/downloads/status", (route) => json(route, {
+      version: 1, outcomes: route.request().postDataJSON().choices.map((choice: { revisionId: string; channels: string[] }) =>
+        staged && choice.revisionId === "mixed" && choice.channels.includes("video") ? {
+          revisionId: choice.revisionId, status: choice.channels.length === 1 ? "imported" : "partial",
+          scanId: "saved-mixed", receiptState: "pending", reviewRequired: false, reviewed: false,
+          approvedChannels: [], pendingChannels: ["video"], verificationPending: true,
+        } : { revisionId: choice.revisionId, status: "not_imported" }),
+    }));
+    const dialog = await state.open();
+    await dialog.getByLabel("Channel").selectOption("video");
+    await dialog.getByRole("button", { name: "Download Mixed review" }).click();
+    await expect(dialog.getByText("Outcome unknown; check download status.")).toBeVisible();
+    await dialog.getByRole("button", { name: "Check download status" }).click();
+    await expect(dialog.getByText(/Needs verification \(video\)/)).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Downloaded Mixed review" })).toBeDisabled();
+    await dialog.getByLabel("Channel").selectOption("audio");
+    await expect(dialog.getByRole("button", { name: "Download Mixed review" })).toBeEnabled();
+    expect(state.downloads).toHaveLength(1);
+  });
 }

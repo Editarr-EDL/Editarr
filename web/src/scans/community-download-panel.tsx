@@ -47,6 +47,7 @@ export function CommunityDownloadPanel({ downloads, candidates, targetKey, disab
             : entry.status === "queued" ? "Queued." : entry.status === "cancelled" ? "Not imported by this attempt."
               : errors[entry.error || ""] || "Download failed."}</span>
         {entry.result && <span>Receipt {entry.result.receiptState}.{entry.result.reviewRequired && " Review required."}
+          {entry.result.pendingChannels.length > 0 && ` Needs verification (${entry.result.pendingChannels.join(", ")}).`}
           {entry.result.reviewed && " Used in a saved review."}</span>}
         {entry.targetKey !== targetKey && <span>Previous target snapshot.</span>}
         {(entry.status === "failed" || entry.status === "cancelled") && <>

@@ -6,7 +6,8 @@ import { runtimeApiBasePath } from "../shared/runtime-urls";
 
 export type DownloadChoice = { contributionId: string; revisionId: string; artifactDigest: string; channels: ("audio" | "video")[] };
 export type DownloadOutcome = { revisionId: string; status: "imported" | "partial" | "not_imported";
-  scanId?: string; approvedChannels?: ("audio" | "video")[]; receiptState?: string; reviewRequired?: boolean; reviewed?: boolean; verificationPending?: boolean };
+  scanId?: string; approvedChannels?: DownloadChoice["channels"]; pendingChannels?: DownloadChoice["channels"];
+  receiptState?: string; reviewRequired?: boolean; reviewed?: boolean; verificationPending?: boolean };
 export type DownloadResult = { version: 1; revisionId: string; status: "imported" | "reused";
   scan: Scan; receiptState: string; reviewRequired: boolean; reviewed: boolean; verificationPending?: boolean };
 
@@ -41,6 +42,12 @@ export async function communityDownloadStatus(target: LookupTarget, targetKey: s
   if (!Array.isArray(result.outcomes) || result.outcomes.length !== choices.length
     || result.outcomes.some((entry: DownloadOutcome, index: number) => entry.revisionId !== choices[index].revisionId
       || !["imported", "partial", "not_imported"].includes(entry.status)
+      || (entry.verificationPending !== undefined && typeof entry.verificationPending !== "boolean")
+      || (entry.pendingChannels !== undefined && (!Array.isArray(entry.pendingChannels) || !entry.verificationPending
+        || entry.status === "not_imported"
+        || !entry.pendingChannels.length || new Set(entry.pendingChannels).size !== entry.pendingChannels.length
+        || entry.pendingChannels.some((channel) => !choices[index].channels.includes(channel)
+          || (Array.isArray(entry.approvedChannels) && entry.approvedChannels.includes(channel)))))
       || (entry.status !== "not_imported" && (typeof entry.scanId !== "string" || typeof entry.receiptState !== "string"
         || typeof entry.reviewRequired !== "boolean" || typeof entry.reviewed !== "boolean" || !Array.isArray(entry.approvedChannels)
         || (!entry.approvedChannels.length && !entry.verificationPending) || entry.approvedChannels.some((channel) => channel !== "audio" && channel !== "video"))))) {

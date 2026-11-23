@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 import pytest
 
 from scanner.db import ScanRow
+from scanner.http import scan_access
 from scanner.http.scan_access import ScanCaller, SeenScan
 from scanner.modeling.model_scans import ScanVerificationCoverage
 from scanner.models import ScanQueueItem
+from scanner.persistence.repository import review_access
 from scanner.persistence.repository.repository_catalog import get_scan
 from scanner.persistence.repository.scan_jobs import scan_job_facts
 from scanner.security.access.capability_ids import Capability as C
@@ -46,6 +48,50 @@ def test_copy_coverage_requires_access_to_original_findings(app, monkeypatch):
         monkeypatch.setattr(caller, "seen", lambda _ids: {source_id: source})
         assert caller.present(scan, copy).verified_from_scan_id == source_id
         assert caller.present(scan, copy).verification_coverage is None
+
+
+@pytest.mark.parametrize("review_response", [False, True])
+def test_verification_source_authorization_is_batched(app, monkeypatch, review_response):
+    source = app.seed_scan(USER, "batch-visible-original", status="complete")[0]
+    missing = "missing-source"
+    copies = [
+        app.seed_scan(USER, f"batch-copy-{index}", status="complete")[0] for index in range(3)
+    ]
+    sources = [source, source, missing]
+    coverage = ScanVerificationCoverage(
+        source_counts={"audio": 1, "video": 0},
+        covered_finding_ids={"audio": [1], "video": []},
+    )
+    with app.accounts.factory() as db:
+        rows = [
+            get_scan(db, copy).model_copy(
+                update={
+                    "verified_from_scan_id": source_id,
+                    "verification_coverage": coverage,
+                }
+            )
+            for copy, source_id in zip(copies, sources, strict=True)
+        ]
+        queries = []
+
+        def captured_facts(session, ids):
+            wanted = set(ids)
+            queries.append(wanted)
+            return scan_job_facts(session, wanted)
+
+        access = build_access(Role.OWNER)
+        if review_response:
+            monkeypatch.setattr(review_access, "scan_job_facts", captured_facts)
+            presented = review_access.ReviewAccess(db, access).present(rows)
+            assert queries == [{source, missing}]
+        else:
+            monkeypatch.setattr(scan_access, "scan_job_facts", captured_facts)
+            presented = ScanCaller(access, db, datetime.now(UTC)).visible(rows)
+            assert queries == [{*copies, source, missing}]
+
+        assert [scan.verified_from_scan_id for scan in presented] == [source, source, None]
+        if not review_response:
+            assert [scan.verification_coverage for scan in presented] == [coverage, coverage, None]
 
 
 @pytest.mark.parametrize("credential", ["session", "key"])

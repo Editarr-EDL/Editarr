@@ -1,6 +1,23 @@
 """Path-free projections of already authorized saved-review results."""
 
+from collections.abc import Iterator
+
 from pydantic import BaseModel
+
+
+def verification_source_ids(value) -> Iterator[str]:
+    """Find original scan IDs in a review response before applying its projection."""
+    if isinstance(value, BaseModel):
+        value = value.__dict__
+    if isinstance(value, list):
+        for item in value:
+            yield from verification_source_ids(item)
+    elif isinstance(value, dict):
+        source = value.get("verified_from_scan_id")
+        if isinstance(source, str) and source:
+            yield source
+        for item in value.values():
+            yield from verification_source_ids(item)
 
 
 def project_review(value, *, paths=False, visible=None, scan_visible=None):
