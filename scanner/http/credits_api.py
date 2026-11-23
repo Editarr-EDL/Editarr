@@ -38,6 +38,7 @@ from scanner.repository import (
     update_credits_detection_configuration,
     upsert_media_item,
 )
+from scanner.runtime.scan_version import ScanVersionChanged, file_generation
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied
 from scanner.security.access.targets import INSTANCE
@@ -49,7 +50,7 @@ from .review_access import review_caller, run_review
 from .review_import_helpers_api import _import_target_media
 from .review_targets import capture_target
 from .scan_access import JOB_RESUME, ScanCaller, scan_caller
-from .stable_media_capture import file_digest
+from .stable_media_capture import file_digest, require_media_generation
 
 router = APIRouter()
 
@@ -160,12 +161,14 @@ def api_start_credits_detection(
         target = ScanMedia(media.server_id, media.jellyfin_id, media.library_id, resolved)
         caller.require_start(C.SCANS_START, target)
         try:
+            generation = file_generation(resolved)
             checksum = file_digest(resolved)
-        except HTTPException as exc:
+        except (HTTPException, ScanVersionChanged) as exc:
             raise root._review_http_error(
                 "credits_media_unavailable", "The selected media file could not be verified", 409
             ) from exc
         with caller.starting(C.SCANS_START, target):
+            require_media_generation(db, media.path, local_path, generation)
             media = upsert_media_item(
                 db,
                 server_id=media.server_id,
@@ -215,11 +218,16 @@ def api_start_credits_detection(
                 )
                 if version_id is not None:
                     bind_scan_version(db, scan.id, version_id)
+                require_media_generation(db, media.path, local_path, generation)
                 queue = enqueue_scan(db, scan.id)
                 queue_id = queue.queue_id
             else:
+                require_media_generation(db, media.path, local_path, generation)
                 queue, queue_id = active
                 db.commit()
+    except ScanVersionChanged as exc:
+        db.rollback()
+        raise root._review_http_error("credits_media_unavailable", str(exc), 409) from exc
     except HTTPException:
         db.rollback()
         raise

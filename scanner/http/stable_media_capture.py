@@ -12,8 +12,9 @@ from scanner.persistence.repository.media_identity_store import (
     observe_title,
     observe_version,
 )
+from scanner.repository import resolve_local_path
 from scanner.runtime.media_fingerprints import cached_content_digest, content_digest
-from scanner.runtime.scan_version import completed_scan_digest
+from scanner.runtime.scan_version import ScanVersionChanged, completed_scan_digest, file_generation
 
 
 def file_digest(path: str, *, on_progress: Callable[[int, int], None] | None = None) -> str:
@@ -24,6 +25,19 @@ def file_digest(path: str, *, on_progress: Callable[[int, int], None] | None = N
         )
     except (FileChangedError, OSError, ValueError) as exc:
         raise HTTPException(409, "The selected media file could not be verified") from exc
+
+
+def require_media_generation(
+    db, source_path: str, resolved: Path, generation: tuple[int, ...]
+) -> None:
+    """Require the captured generation at the current mapped Jellyfin path."""
+    try:
+        current = Path(resolve_local_path(db, source_path).local_path).resolve(strict=True)
+        if current == resolved and file_generation(str(current)) == generation:
+            return
+    except (OSError, RuntimeError, ValueError):
+        pass
+    raise ScanVersionChanged("The selected media file changed while preparing the scan")
 
 
 def cached_target_digest(db, prepared, *, audio_evidence=None) -> str | None:
