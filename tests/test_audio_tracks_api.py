@@ -115,3 +115,29 @@ def test_stale_memory_never_preselects_a_new_default(audio_api, monkeypatch):
     response = client.get("/api/media/audio-tracks", params=item, headers=headers)
     assert response.json()["selection"] is None
     assert response.json()["selection_stale"] is True
+
+
+def test_expired_token_requires_reselection_even_when_tracks_match(audio_api, monkeypatch):
+    from dataclasses import replace
+
+    client, issued, _, previous, item = audio_api
+    headers = {**_session_headers(issued), "X-CSRF-Token": issued.csrf_token}
+    legacy = item | {"selection": asdict(previous.select(2))}
+    url = "/api/media/audio-tracks/selection"
+    assert client.post(url, json=legacy, headers=headers).status_code == 200
+
+    current = replace(previous, file_version="b" * 64)
+    monkeypatch.setattr(audio_tracks_api, "probe_audio_tracks", lambda _path: current)
+    monkeypatch.setattr(audio_tracks_api, "cached_content_digest", lambda _path: None)
+    inventory = client.get("/api/media/audio-tracks", params=item, headers=headers).json()
+    assert inventory["selection"] is None
+    assert inventory["selection_stale"] is True
+    refused = client.post(url, json=legacy, headers=headers)
+    assert refused.status_code == 409
+    assert "Choose the audio track again" in refused.json()["detail"]
+
+    selected = asdict(current.select(2))
+    assert client.post(url, json=item | {"selection": selected}, headers=headers).status_code == 200
+    inventory = client.get("/api/media/audio-tracks", params=item, headers=headers).json()
+    assert inventory["selection"] == selected
+    assert inventory["selection_stale"] is False

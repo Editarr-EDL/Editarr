@@ -12,12 +12,25 @@ from scanner.models import ScanQueueItem
 from scanner.persistence.repository import review_access
 from scanner.persistence.repository.repository_catalog import get_scan
 from scanner.persistence.repository.scan_jobs import scan_job_facts
+from scanner.runtime.scan_version import STALE_AUDIO_SELECTION
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from scanner.security.access.vocabulary import Role
 from tests.multi_user_access_support import ALLOWED_MEDIA, OWNER, USER, build_access
 from tests.scan_access_http import guid
 from tests.test_scan_access_http import app as app
+
+
+def test_audio_reselection_guidance_is_visible_without_server_paths(app):
+    scan_id, _ = app.seed_scan(USER, "expired selection", status="failed")
+    with app.accounts.factory() as db:
+        db.get(ScanRow, scan_id).error_message = STALE_AUDIO_SELECTION
+        db.commit()
+    app.accounts.set_override(USER, C.MEDIA_PATHS_VIEW, OverrideEffect.DENY)
+    response = app.send("GET", "/api/scans/history", app.accounts.cookie(USER))
+    assert response.status_code == 200, response.text
+    [scan] = response.json()
+    assert scan["error_message"] == STALE_AUDIO_SELECTION
 
 
 def test_copy_coverage_requires_access_to_original_findings(app, monkeypatch):

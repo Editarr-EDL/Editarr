@@ -22,6 +22,9 @@ class ScanVersionChanged(ValueError):
 
 
 _FAILURE = "The media file changed after this scan was queued. Start a new scan."
+STALE_AUDIO_SELECTION = (
+    "The queued audio selection expired. Start a new scan and choose the audio track."
+)
 
 
 def expected_scan_digest(db: Session, scan_id: str) -> str | None:

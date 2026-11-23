@@ -22,6 +22,10 @@ class AudioSelectionError(ValueError):
     """The requested audio input cannot be selected without confirmation."""
 
 
+class StaleAudioSelectionError(AudioSelectionError):
+    """The selection token cannot verify the current file inventory."""
+
+
 @dataclass(frozen=True)
 class AudioTrack:
     stream_index: int
@@ -84,7 +88,9 @@ class AudioTrackInventory:
     def revalidate(self, selection: AudioTrackSelection) -> AudioTrack:
         """Reject changed file versions or stream metadata without substituting tracks."""
         if selection.file_version != self.file_version:
-            raise AudioSelectionError("The file changed; choose an audio track again")
+            raise StaleAudioSelectionError(
+                "The audio selection expired or the file changed. Choose the audio track again."
+            )
         actual = self.select(selection.track.stream_index).track
         if actual != selection.track:
             raise AudioSelectionError("The audio track changed; choose it again")

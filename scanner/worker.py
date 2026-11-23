@@ -72,6 +72,7 @@ from scanner.runtime.process_control import (  # noqa: E402
     assign_current_worker_job,
 )
 from scanner.runtime.scan_version import (  # noqa: E402
+    STALE_AUDIO_SELECTION,
     ScanVersionChanged,
     prepare_scan_digest,
     require_scan_digest,
@@ -89,9 +90,13 @@ logger = logging.getLogger(__name__)
 
 def run_scan(*args, **kwargs):
     """Load the pipeline only after worker identity and heartbeat are available."""
+    from scanner.pipeline.audio_tracks import StaleAudioSelectionError
     from scanner.pipeline.runner import run_scan as run_pipeline
 
-    return run_pipeline(*args, **kwargs)
+    try:
+        return run_pipeline(*args, **kwargs)
+    except StaleAudioSelectionError as exc:
+        raise ScanVersionChanged(STALE_AUDIO_SELECTION) from exc
 
 
 def run_credits_scan(*args, **kwargs):
@@ -323,7 +328,7 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
     except ScanVersionChanged as exc:
         db.rollback()
         fail_refused_scan_job(db, scan_id, str(exc))
-        logger.info("Scan %s stopped because its source changed", scan_id)
+        logger.info("Scan %s stopped because its source could not be verified", scan_id)
     except FullApplicationQuitRequested:
         # Full Quit retains the queue row and checkpoints so a future launch can
         # resume it.  Cancellation is intentionally a separate user request.

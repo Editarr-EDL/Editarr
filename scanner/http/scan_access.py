@@ -26,6 +26,7 @@ from scanner.persistence.repository.activity_ownership import ActivityOwner
 from scanner.persistence.repository.repository_catalog import list_scan_queue
 from scanner.persistence.repository.scan_jobs import ScanJobFacts, ScanMedia, scan_job_facts
 from scanner.persistence.write_lock import write_lock
+from scanner.runtime.scan_version import STALE_AUDIO_SELECTION
 from scanner.security.access.api_shapes import AccessErrorCode
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied, Allowed
@@ -289,7 +290,7 @@ class ScanCaller:
             if not progress:
                 update.update(progress_percent=None, progress_message=None)
         if not self.sees_paths():
-            if scan.error_message:
+            if scan.error_message and scan.error_message != STALE_AUDIO_SELECTION:
                 update["error_message"] = (
                     "Scan interrupted" if scan.status == "orphaned" else "Scan could not complete"
                 )

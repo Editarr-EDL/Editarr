@@ -921,10 +921,11 @@ Protected `GET /api/media/audio-tracks?item_id=<Jellyfin item ID>&media_source_i
 returns `{file_version, tracks, selection, selection_stale}`. Each track contains
 physical `stream_index`, observed nullable `language`, `title`, `codec`, `channels`,
 integer `disposition`, nullable `start_seconds`, `duration_seconds`, and rational
-`time_base`. Unknown values are not inferred. The 64-hex file version is local
-state, not portable content identity. Only the sole track or one unambiguous
-flagged default is preselected. A stale remembered choice returns null selection
-and `selection_stale=true`, without falling back to a new default.
+`time_base`. Unknown values are not inferred. The 64-hex file version describes
+the resolved local path, file metadata, and audio inventory without device IDs.
+Only the sole track or one unambiguous flagged default is preselected. A stale
+remembered choice returns null selection and `selection_stale=true` unless a
+completed scan independently confirms the same exact file and audio track.
 
 Protected/CSRF-checked `POST /api/media/audio-tracks/selection` takes
 `{item_id, media_source_id?, selection: {file_version, track}}` and rejects other
@@ -939,6 +940,8 @@ nullable `requested_audio_selection` and `analyzed_audio_selection`. Actual inpu
 is immutable and recorded only after successful analysis; requested input alone
 does not prove analysis. Historical/imported unknown input stays null. Stale or
 missing queued inputs and unverifiable audio checkpoints stop without substitution.
+Device-bound audio selection tokens expire. Start a new scan and choose the audio
+track again if a queued selection can no longer be verified.
 See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts)
 for how selected tracks affect community matching.
 

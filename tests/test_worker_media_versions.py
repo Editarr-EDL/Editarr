@@ -67,6 +67,43 @@ def test_worker_refuses_a_changed_pinned_media_file(monkeypatch, tmp_path, repla
         engine.dispose()
 
 
+def test_worker_fails_expired_audio_selection_and_requires_a_new_scan(monkeypatch, tmp_path):
+    from scanner.pipeline import audio_tracks
+    from scanner.runtime.scan_version import STALE_AUDIO_SELECTION
+
+    path = tmp_path / "audio.mkv"
+    path.write_bytes(b"original media")
+    engine = create_engine(f"sqlite:///{tmp_path / 'scanner.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    try:
+        with factory() as db:
+            scan, queued = _scan_with_queue(db)
+            row = db.get(ScanRow, scan.id)
+            row.resolved_local_path = str(path)
+            db.commit()
+            assert repository.reserve_scan_worker(db, scan.id, token="worker-token")
+
+        track = queued.requested_audio_selection.selection().track
+        inventory = audio_tracks.AudioTrackInventory("b" * 64, (track,))
+        monkeypatch.setattr(audio_tracks, "probe_audio_tracks", lambda _path: inventory)
+        monkeypatch.setattr(
+            worker,
+            "WorkerControlServer",
+            lambda *_args: SimpleNamespace(start=lambda: None, close=lambda: None),
+        )
+        monkeypatch.setattr(worker, "get_session_factory", lambda: factory)
+        assert worker.run_scan_worker(scan.id, "worker-token") == 0
+        with factory() as db:
+            row = db.get(ScanRow, scan.id)
+            assert row.status == "failed"
+            assert row.error_message == STALE_AUDIO_SELECTION
+            assert row.analyzed_audio_selection_json is None
+            assert repository.get_scan_queue_item_by_scan_id(db, scan.id) is None
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize("changed", [False, True])
 def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, changed):
     from scanner.persistence.repository.media_identity_store import scan_version_id
