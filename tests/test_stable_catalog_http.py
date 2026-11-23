@@ -13,6 +13,8 @@ from scanner.modeling.media_identity import normalize_jellyfin
 from scanner.models import JellyfinLibrary
 from scanner.persistence.repository import media_identity_store
 from scanner.persistence.repository.review_export_target import _review_export_scans
+from scanner.runtime.media_fingerprints import remember_content_digest
+from scanner.runtime.scan_version import file_generation
 from tests.multi_user_access_support import OWNER, USER, live_accounts
 from tests.scan_access_http import LIBRARY_A, LIBRARY_B, guid, serve_scans
 
@@ -140,13 +142,15 @@ def test_modified_middle_in_the_same_jellyfin_slot_blocks_previous_review_public
         fingerprint = repository.compute_video_md5(str(path))
         scan.video_hash = fingerprint
         title_id = media_identity_store.observe_title(db, scan.media_item)
+        old_digest = sha256(path.read_bytes()).hexdigest()
+        remember_content_digest(path, file_generation(str(path)), old_digest)
         original = media_identity_store.observe_version(
             db,
             media=scan.media_item,
             media_source_id=None,
             source_path=scan.source_path,
             resolved_path=scan.resolved_local_path,
-            content_sha256=sha256(path.read_bytes()).hexdigest(),
+            content_sha256=old_digest,
         )
         media_identity_store.bind_scan_version(db, scan_id, original)
         media_identity_store.bind_review_version(db, review_id, original)
@@ -180,6 +184,37 @@ def test_modified_middle_in_the_same_jellyfin_slot_blocks_previous_review_public
         pytest.raises(repository.ReviewMembershipError, match="target physical media version"),
     ):
         _review_export_scans(db, db.get(SavedReviewRow, review_id))
+
+
+def test_sampled_stable_bookmark_recognizes_a_renamed_file_without_full_hash(catalog, monkeypatch):
+    from scanner.runtime import media_fingerprints
+
+    def unexpected_hash(*args, **kwargs):
+        pytest.fail("Catalog sampled identity started a full media digest")
+
+    monkeypatch.setattr(media_fingerprints, "content_digest", unexpected_hash)
+    item_id = catalog.jellyfin_item(guid("sampled-move"), LIBRARY_A)
+    item = catalog.items[item_id]
+    owner = catalog.accounts.cookie(OWNER)
+    resolved = catalog.send("GET", f"/api/editarr-items/legacy/{item_id}", owner)
+    assert resolved.status_code == 200, resolved.text
+    path = f"/api/editarr-items/{resolved.json()['title_id']}"
+    captured = catalog.send(
+        "POST", f"{path}/versions", catalog.accounts.unsafe_cookie(OWNER), {"item_id": item_id}
+    )
+    assert captured.status_code == 200, captured.text
+    version_id = captured.json()["version_id"]
+    old_path = Path(item.path)
+    moved = old_path.rename(old_path.with_suffix(".renamed.mkv"))
+    catalog.items[item_id] = item.model_copy(update={"path": str(moved)})
+    with api.LIBRARY_ITEMS_CACHE_LOCK:
+        api.JELLYFIN_ITEM_CACHE.clear()
+    response = catalog.send("GET", f"{path}?version_id={version_id}", owner)
+    assert response.status_code == 200, response.text
+    assert response.json()["current_versions"] == [{
+        "item_id": item_id, "media_source_id": None, "version_id": version_id,
+    }]
+    assert response.json()["versions"][0]["available"] is True
 
 
 def test_item_listing_returns_explicit_links_after_association(catalog):

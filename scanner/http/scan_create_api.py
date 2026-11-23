@@ -114,6 +114,7 @@ def api_enqueue_scan(req: ScanRequest, caller: ScanCaller = Depends(scan_caller)
             qwen_segment_join_gap_seconds=req.qwen_segment_join_gap_seconds,
             initiator=caller.initiator,
             commit=False,
+            defer_video_hash=True,
         )
         try:
             stage_scan_generation(db, scan.id, resolved, generation)

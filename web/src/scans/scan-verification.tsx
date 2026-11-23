@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
+import type { AudioTrackSelection } from "../api/api-audio-tracks";
 import { fetchDraftFilterPreview } from "../api/api-reviews";
 import type { Scan, ScanQueueItem } from "../api/api-scan-types";
 import {
@@ -30,7 +31,7 @@ interface Props {
   submittedAudioScan: ScanQueueItem | null;
   initialChannels?: VerificationRequest["channels"];
   mayStartAudioScan: boolean;
-  onStartAudioScan: (channels: VerificationRequest["channels"], trackIndex: number | undefined) => void;
+  onStartAudioScan: (channels: VerificationRequest["channels"], selection: AudioTrackSelection | null) => void;
   onClose: () => void;
   onApproved: (approved: Scan) => void;
   onApprovalError: (message: string) => void;
@@ -224,11 +225,11 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
         <h3>Save cues for this version</h3>
         <p>{mapped} aligned {mapped === 1 ? "cue will" : "cues will"} be available in Review.
           {pending > 0 && ` ${pending} ${pending === 1 ? "cue stays" : "cues stay"} pending.`}</p>
-        <p className="muted-copy">Editarr verifies the full-file fingerprint before saving. Follow its progress in Queue.</p>
+        <p className="muted-copy">Editarr checks the target file before saving. For large files, it reads sampled blocks. Follow the check in Queue.</p>
       </section>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {activity && <p className="form-status" role="status">{approving
-        ? "Reading the full file to verify this version before saving. Large files can take several minutes."
+        ? "Checking the target file’s fingerprint before saving…"
         : activity === "verify" ? "Checking the file before reusing the saved transcript…"
           : activity === "clip" ? "Loading the cue preview…" : "Calculating proposed cue times…"}</p>}
     </div>
@@ -241,7 +242,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
       {step === "align" && (transcriptActive
         ? <button type="button" className="btn-primary" onClick={() => setShowQueue(true)}>View audio scan in Queue</button>
         : <button type="button" className="btn-primary" disabled={busy || !channels.length || (needsAudioTrack && !tracks.ready) || transcriptPending}
-            onClick={() => transcriptMissing ? onStartAudioScan(channels, tracks.selection?.track.stream_index) : void prepare()}>
+            onClick={() => transcriptMissing ? onStartAudioScan(channels, tracks.selection) : void prepare()}>
             {transcriptMissing ? "Run audio scan" : "Preview alignment"}
           </button>)}
       {step === "review" && mapped > 0 && <button type="button" className="btn-primary" disabled={busy || !canApprove}

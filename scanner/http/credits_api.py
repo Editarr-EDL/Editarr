@@ -21,7 +21,11 @@ from scanner.models import (
     Scan,
     ScanMode,
 )
-from scanner.persistence.repository.media_identity_store import bind_scan_version, observe_version
+from scanner.persistence.repository.media_identity_store import (
+    bind_scan_version,
+    get_version,
+    observe_sampled_version,
+)
 from scanner.persistence.repository.review_access import CREDITS, ReviewAccess, not_found
 from scanner.persistence.repository.scan_jobs import ScanMedia, scan_job_facts
 from scanner.repository import (
@@ -38,7 +42,8 @@ from scanner.repository import (
     update_credits_detection_configuration,
     upsert_media_item,
 )
-from scanner.runtime.scan_version import ScanVersionChanged, file_generation
+from scanner.runtime.media_fingerprints import cached_content_digest, sampled_media_fingerprint
+from scanner.runtime.scan_version import ScanVersionChanged, file_generation, stage_scan_generation
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied
 from scanner.security.access.targets import INSTANCE
@@ -50,7 +55,7 @@ from .review_access import review_caller, run_review
 from .review_import_helpers_api import _import_target_media
 from .review_targets import capture_target
 from .scan_access import JOB_RESUME, ScanCaller, scan_caller
-from .stable_media_capture import file_digest, require_media_generation
+from .stable_media_capture import require_media_generation
 
 router = APIRouter()
 
@@ -162,13 +167,16 @@ def api_start_credits_detection(
         caller.require_start(C.SCANS_START, target)
         try:
             generation = file_generation(resolved)
-            checksum = file_digest(resolved)
-        except (HTTPException, ScanVersionChanged) as exc:
+            fingerprint = sampled_media_fingerprint(local_path)
+            known_sha256 = cached_content_digest(local_path)
+        except (OSError, ValueError) as exc:
             raise root._review_http_error(
                 "credits_media_unavailable", "The selected media file could not be verified", 409
             ) from exc
         with caller.starting(C.SCANS_START, target):
             require_media_generation(db, media.path, local_path, generation)
+            if fingerprint.generation != generation:
+                raise ScanVersionChanged("The selected media file changed while preparing the scan")
             media = upsert_media_item(
                 db,
                 server_id=media.server_id,
@@ -179,13 +187,16 @@ def api_start_credits_detection(
                 path=media.path,
                 commit=False,
             )
-            version_id = observe_version(
+            version_id = observe_sampled_version(
                 db,
                 media=media,
                 media_source_id=media_source_id,
                 source_path=media.path,
-                resolved_path=resolved,
-                content_sha256=checksum,
+                fingerprint=fingerprint,
+                known_content_sha256=known_sha256,
+            )
+            legacy_generation_proven = bool(
+                known_sha256 and get_version(db, version_id).content_sha256 == known_sha256
             )
             active = find_active_credits_detection(
                 db,
@@ -195,6 +206,8 @@ def api_start_credits_detection(
                 configuration=configuration,
                 initiator_id=caller.initiator.user_id,
                 version_id=version_id,
+                generation=generation,
+                legacy_generation_proven=legacy_generation_proven,
             )
             if active is None:
                 scan = create_scan(
@@ -215,9 +228,10 @@ def api_start_credits_detection(
                     initial_status=("awaiting_model_consent" if consent is not None else "queued"),
                     commit=False,
                     initiator=caller.initiator,
+                    known_video_hash=fingerprint.digest,
                 )
-                if version_id is not None:
-                    bind_scan_version(db, scan.id, version_id)
+                bind_scan_version(db, scan.id, version_id)
+                stage_scan_generation(db, scan.id, resolved, generation)
                 require_media_generation(db, media.path, local_path, generation)
                 queue = enqueue_scan(db, scan.id)
                 queue_id = queue.queue_id

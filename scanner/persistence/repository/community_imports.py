@@ -23,6 +23,7 @@ from scanner.integrations.community.downloads import VerifiedDownload
 from scanner.integrations.community.transport import CommunityFailure
 from scanner.modeling.community_matching import Compatibility
 from scanner.models import Scan
+from scanner.runtime.scan_version import ScanVersionChanged, file_generation
 from scanner.security.community_artifact_signatures import verify_artifact_signature
 from scanner.security.community_download_receipts import DownloadReceipt, verify_download_receipt
 from scanner.server_paths import UnresolvablePath
@@ -37,7 +38,7 @@ from .community_import_projection import (
 )
 from .community_import_targets import pending_target_channels
 from .import_transaction import rollback_on_import_error, stage_imported_scan
-from .media_identity_store import observe_title, observe_version
+from .media_identity_store import observe_sampled_version, observe_title
 from .repository_community import attach_import, enqueue_operation, identity_connection
 from .repository_rows import _scan_from_row
 
@@ -154,6 +155,18 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
     local_path = str(Path(target.resolved_local_path).resolve())
     if media.path and _stored_local_path(db, media.path) != local_path:
         raise CommunityFailure("invalid_target")
+    fingerprint = target.fingerprint
+    if target.stage_for_verification:
+        if fingerprint is None:
+            raise CommunityFailure("invalid_target")
+        try:
+            same_file = fingerprint.path == Path(local_path) and (
+                fingerprint.generation == file_generation(local_path)
+            )
+        except (OSError, RuntimeError, ScanVersionChanged) as exc:
+            raise CommunityFailure("target_changed") from exc
+        if not same_file:
+            raise CommunityFailure("target_changed")
     imported = (
         db.query(CommunityImportRow)
         .filter(
@@ -196,6 +209,7 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
             has_video=not channels or bool(channels & {"video", "both"}),
             progress_message="Imported community evidence",
             imported_at=datetime.now(timezone.utc),
+            video_hash=fingerprint.digest if fingerprint else None,
         )
         findings = project_findings(downloaded, scan.id)
         project_execution(downloaded, scan)
@@ -232,17 +246,15 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
             {str(row.id): item.event_id for row, item in zip(findings, artifact.findings)}
         )
         imported.receipt_json = canonical(downloaded.receipt.model_dump(by_alias=True))
-        if target.stage_for_verification:
-            if not target.content_sha256:
-                raise CommunityFailure("invalid_target")
+        if target.stage_for_verification and fingerprint is not None:
             observe_title(db, media, target.evidence.media)
-            observe_version(
+            observe_sampled_version(
                 db,
                 media=media,
                 media_source_id=target.media_source_id,
                 source_path=media.path or local_path,
-                resolved_path=local_path,
-                content_sha256=target.content_sha256,
+                fingerprint=fingerprint,
+                known_content_sha256=target.known_content_sha256,
                 scan_id=scan.id,
             )
     target_key = (imported.id, media.id, target.media_source_id or "")
@@ -260,7 +272,9 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
                 media_item_id=media.id,
                 media_source_id=target.media_source_id or "",
                 resolved_local_path=local_path,
-                video_hash=root._compute_video_hash(local_path),
+                video_hash=fingerprint.digest
+                if fingerprint
+                else root._compute_video_hash(local_path),
                 target_evidence_json=canonical(evidence_value),
                 review_required=review_required,
             )

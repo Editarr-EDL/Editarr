@@ -37,6 +37,7 @@ from scanner.repository import (
     import_mcf_as_saved_review,
     resolve_local_path,
 )
+from scanner.runtime.media_fingerprints import SampledMediaFingerprint, sampled_media_fingerprint
 from scanner.runtime.scan_version import ScanVersionChanged, file_generation
 from scanner.security.access.capability_ids import Capability as C
 
@@ -51,7 +52,7 @@ from .review_import_helpers_api import (
     _safe_mcf_import_basename,
 )
 from .review_targets import capture_target
-from .stable_media_capture import file_digest, observe_target_version
+from .stable_media_capture import cached_target_digest, observe_sampled_target_version
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -59,8 +60,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class _StagedVersion:
-    digest: str
-    generation: tuple[int, ...]
+    fingerprint: SampledMediaFingerprint
+    known_content_sha256: str | None
 
 
 def _target_generation(path: str) -> tuple[int, ...]:
@@ -82,17 +83,37 @@ def _capture_staged_version(caller, prepared, *, capabilities=CONTENT_EDITS, sca
     )
     path = prepared.media.resolved_path
     generation = _target_generation(path)
-    return _StagedVersion(digest=file_digest(path), generation=generation)
+    try:
+        fingerprint = sampled_media_fingerprint(path)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        ) from exc
+    if fingerprint.generation != generation:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        )
+    return _StagedVersion(fingerprint, cached_target_digest(caller.db, prepared))
 
 
 def _store_staged_version(db, prepared, staged_version: _StagedVersion | None):
     if staged_version is None:
         return None
-    if _target_generation(prepared.media.resolved_path) != staged_version.generation:
+    if _target_generation(prepared.media.resolved_path) != staged_version.fingerprint.generation:
         raise root._review_http_error(
             "target_changed", "The selected media file changed during import", 409
         )
-    return observe_target_version(db, prepared, digest=staged_version.digest)
+    try:
+        return observe_sampled_target_version(
+            db,
+            prepared,
+            fingerprint=staged_version.fingerprint,
+            known_content_sha256=staged_version.known_content_sha256,
+        )
+    except ScanVersionChanged as exc:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        ) from exc
 
 
 def _run_edl_import(

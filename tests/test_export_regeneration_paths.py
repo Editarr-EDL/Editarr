@@ -11,8 +11,11 @@ import pytest
 from scanner.db import MediaItemExportRow, SavedReviewRow, ScanRow
 from scanner.persistence.repository import review_version_evidence
 from scanner.persistence.repository.export_regeneration import retry_regeneration
-from scanner.persistence.repository.media_identity_store import bind_review_version, observe_version
-from scanner.runtime.media_fingerprints import content_digest
+from scanner.persistence.repository.media_identity_store import (
+    bind_review_version,
+    observe_sampled_version,
+)
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from tests.multi_user_access_support import USER
 from tests.test_export_regeneration_boundaries import observe
 from tests.test_export_regeneration_convergence import (
@@ -104,13 +107,12 @@ def _publish_pinned_review(app, name):
         row = db.get(SavedReviewRow, review.id)
         scan = row.memberships[0].scan
         media = Path(scan.resolved_local_path)
-        version = observe_version(
+        version = observe_sampled_version(
             db,
             media=row.media_item,
             media_source_id=scan.media_source_id,
             source_path=scan.source_path,
-            resolved_path=str(media),
-            content_sha256=content_digest(media),
+            fingerprint=sampled_media_fingerprint(media),
         )
         bind_review_version(db, review.id, version)
         db.commit()
@@ -142,9 +144,9 @@ def test_regeneration_fingerprinting_leaves_other_writers_unblocked(app, monkeyp
         with closing(sqlite3.connect(app.accounts.path, timeout=0.1)) as other:
             other.execute("BEGIN IMMEDIATE")
             hashed.append(Path(path))
-        return content_digest(path)
+        return sampled_media_fingerprint(path)
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", fingerprint)
+    monkeypatch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
     assert settle_due(app, 0) == "succeeded"
     assert hashed == [media]
     assert observe(app, identifier)[0]["regeneration_state"] == "succeeded"
@@ -156,12 +158,12 @@ def test_regeneration_rechecks_generation_after_fingerprinting(app, monkeypatch)
     bump_policy(app.accounts)
 
     def fingerprint(path):
-        checksum = content_digest(path)
+        checksum = sampled_media_fingerprint(path)
         media.write_bytes(b"replacement after fingerprint capture")
         return checksum
 
     with monkeypatch.context() as patch:
-        patch.setattr(review_version_evidence, "content_digest", fingerprint)
+        patch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
         assert settle_due(app, 0) == "retry"
     assert destination.read_bytes() == original
     assert settle_due(app, 1) == "failed"
@@ -174,12 +176,12 @@ def test_regeneration_rechecks_claim_after_fingerprinting(app, monkeypatch):
     bump_policy(app.accounts)
 
     def fingerprint(path):
-        checksum = content_digest(path)
+        checksum = sampled_media_fingerprint(path)
         set_policy_revision(app, 2)
         return checksum
 
     with monkeypatch.context() as patch:
-        patch.setattr(review_version_evidence, "content_digest", fingerprint)
+        patch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
         assert settle_due(app, 0) == "stale"
     assert destination.read_bytes() == original
     assert settle_due(app, 1) == "succeeded"

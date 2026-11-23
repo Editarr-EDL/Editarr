@@ -11,14 +11,12 @@ from fastapi import APIRouter, Depends
 from scanner import api as root
 from scanner.db import MediaItemRow, ScanRow
 from scanner.modeling.model_version_reuse import (
-    ReuseAnchor,
     VersionReuseApproval,
     VersionReusePreview,
     VersionReuseRequest,
     VersionReuseResult,
     VersionReuseTranscriptStatus,
 )
-from scanner.modeling.version_alignment import Alignment
 from scanner.persistence.repository import media_identity_store as identity
 from scanner.persistence.repository import version_reuse as reuse
 from scanner.persistence.repository.repository_catalog import get_scan
@@ -29,21 +27,27 @@ from scanner.runtime.fingerprint_activity import (
     active_fingerprints,
     track_fingerprint,
 )
+from scanner.runtime.media_fingerprints import (
+    SampledMediaFingerprint,
+    cached_sampled_media_fingerprint,
+    sampled_media_fingerprint,
+    sampled_media_read_size,
+)
 from scanner.runtime.scan_version import (
     ScanVersionChanged,
     file_generation,
     generation_token,
 )
-from scanner.runtime.version_reuse_audio import analyzed_selection, select_target_audio
+from scanner.runtime.version_reuse_audio import select_target_audio
 from scanner.security.access.authorization import require
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.targets import AccountRef, ResourceRef
 
-from .reuse_alignment import align_from_transcript, alignment_transcript_status
+from .reuse_alignment import align_reuse, alignment_transcript_status
 from .review_access import review_caller
 from .review_targets import ReviewTarget, capture_target
 from .scan_access import ScanCaller
-from .stable_media_capture import cached_target_digest, file_digest, observe_target_version
+from .stable_media_capture import cached_target_digest, observe_sampled_target_version
 
 router = APIRouter()
 
@@ -110,7 +114,11 @@ def _target(caller, request, version_id):
     if version_id == CURRENT_VERSION:
         return target, UnpinnedTarget(title_id)
     version = identity.get_version(caller.db, version_id)
-    if version is None or not version.content_sha256 or title_id != version.title_id:
+    if (
+        version is None
+        or not (version.sampled_md5 or version.content_sha256)
+        or title_id != version.title_id
+    ):
         raise not_found()
     return target, version
 
@@ -127,74 +135,35 @@ def _target_runtime(target: ReviewTarget) -> float:
     return seconds
 
 
-def _identity_anchors(source_start, source_end):
-    if source_end <= source_start:
-        return []
-    return [
-        ReuseAnchor(source_seconds=point, target_seconds=point)
-        for point in (source_start, source_end)
-    ]
-
-
-def _alignment(
-    caller, request, source, source_version, target, version, path, duration, audio, digest
-):
-    include_audio = "audio" in request.channels
-    same_content = (
-        source.origin == "generated"
-        and version.content_sha256 is not None
-        and source_version.content_sha256 == version.content_sha256
-    )
-    original_audio = analyzed_selection(source) if include_audio else None
-    same_track = not include_audio or (
-        original_audio is not None and original_audio.track == audio.track
-    )
-    if same_content and same_track:
-        return Alignment.from_anchors(_identity_anchors(0, duration)), True, [], None
-    if request.method == "transcript":
-        alignment, issues, evidence_id = align_from_transcript(
-            caller, source, source_version, target, path, audio, duration, digest
-        )
-        return alignment, False, issues, evidence_id
-    if request.method == "original":
-        document = source.mcf_document
-        start = document.material_start_seconds if document else 0
-        end = document.material_end_seconds if document else source.duration_seconds
-        limit = min(duration, end) if end is not None else duration
-        return (
-            Alignment.from_anchors(_identity_anchors(start, limit)),
-            False,
-            [
-                "Check cue times on the target before approving the original timestamps",
-            ],
-            None,
-        )
-    if not request.anchors:
-        return (
-            Alignment.from_anchors([]),
-            False,
-            ["Add matched timing points and preview the cues on this version"],
-            None,
-        )
-    if any(anchor.target_seconds > duration for anchor in request.anchors):
-        raise ValueError("Target timing points must be within the target playback duration")
-    if source.origin == "generated" and source.duration_seconds is not None:
-        if any(anchor.source_seconds > source.duration_seconds for anchor in request.anchors):
-            raise ValueError("Original timing points must be within the original playback duration")
-    return Alignment.from_anchors(request.anchors), False, [], None
-
-
 @dataclass(frozen=True)
 class CapturedReuse:
     target: ReviewTarget
     source_version_id: str
     path: Path
     stamp: tuple
-    digest: str | None
+    fingerprint: SampledMediaFingerprint | None
+    known_content_sha256: str | None
     duration: float
     source_stamp: str
     audio: object
     preview: VersionReusePreview
+
+
+def _matched_version_id(db, version, fingerprint, known_content_sha256):
+    if fingerprint is None:
+        return None
+    if isinstance(version, UnpinnedTarget):
+        return identity.find_sampled_version(
+            db,
+            title_id=version.title_id,
+            fingerprint=fingerprint,
+            known_content_sha256=known_content_sha256,
+        )
+    if not identity.matches_sampled_version(
+        db, version, fingerprint, known_content_sha256=known_content_sha256
+    ):
+        raise root._review_http_error("target_changed", "The selected version has changed", 409)
+    return version.id
 
 
 def _capture(caller, version_id, request, *, verify_existing=False) -> CapturedReuse:
@@ -207,36 +176,39 @@ def _capture(caller, version_id, request, *, verify_existing=False) -> CapturedR
         if "audio" in request.channels or request.method == "transcript"
         else None
     )
-    digest = cached_target_digest(
+    fingerprint = cached_sampled_media_fingerprint(path)
+    known_content_sha256 = cached_target_digest(
         caller.db,
         target,
         audio_evidence=(before, audio.file_version) if audio else None,
     )
     check_transcript = (
         verify_existing
-        and digest is None
+        and fingerprint is None
         and request.method == "transcript"
-        and alignment_transcript_status(caller, source, target, audio, None)[1]
+        and alignment_transcript_status(
+            caller, source, target, audio, None, known_content_sha256=known_content_sha256
+        )[1]
     )
-    if digest is None and (check_transcript or version.content_sha256):
-        digest = _tracked_digest(caller, target, path, before, request.source_scan_id)
-    if version.content_sha256 and digest != version.content_sha256:
+    if fingerprint is None and (check_transcript or version_id != CURRENT_VERSION):
+        fingerprint = _tracked_fingerprint(caller, target, path, before, request.source_scan_id)
+    if fingerprint is not None and fingerprint.generation != before:
         raise root._review_http_error("target_changed", "The selected version has changed", 409)
-    digest = digest or version.content_sha256
+    matched = _matched_version_id(caller.db, version, fingerprint, known_content_sha256)
     duration = _target_runtime(target)
     findings = reuse.source_findings(caller.db, source.id)
     signature = reuse.source_signature(source, findings)
-    alignment, exact, issues, alignment_scan = _alignment(
+    alignment, exact, issues, alignment_scan = align_reuse(
         caller,
         request,
         source,
         source_version,
         target,
-        version,
+        matched,
         path,
         duration,
         audio,
-        digest,
+        allow_exact=version_id != CURRENT_VERSION,
     )
     anchors = alignment.anchors
     cues = reuse.project_cues(findings, request.channels, alignment, duration)
@@ -275,7 +247,8 @@ def _capture(caller, version_id, request, *, verify_existing=False) -> CapturedR
         source_version.id,
         path,
         before,
-        digest,
+        fingerprint,
+        known_content_sha256,
         duration,
         signature,
         audio,
@@ -318,10 +291,20 @@ def transcript_status(
     stamp = _file_stamp(path)
     try:
         audio = select_target_audio(path, request.audio_track_index)
-        digest = cached_target_digest(caller.db, target, audio_evidence=(stamp, audio.file_version))
-        if digest and version.content_sha256 and digest != version.content_sha256:
-            raise root._review_http_error("target_changed", "The selected version has changed", 409)
-        ready, verify_existing = alignment_transcript_status(caller, source, target, audio, digest)
+        fingerprint = cached_sampled_media_fingerprint(path)
+        known_content_sha256 = cached_target_digest(
+            caller.db, target, audio_evidence=(stamp, audio.file_version)
+        )
+        matched = _matched_version_id(caller.db, version, fingerprint, known_content_sha256)
+        ready, verify_existing = alignment_transcript_status(
+            caller,
+            source,
+            target,
+            audio,
+            matched,
+            sampled=fingerprint is not None,
+            known_content_sha256=known_content_sha256,
+        )
     except ValueError as exc:
         raise root._review_http_error("invalid_reuse_alignment", str(exc), 422) from exc
     if _file_stamp(path) != stamp:
@@ -339,7 +322,7 @@ def preview_version_reuse(
     return _capture_request(caller, version_id, request, verify_existing=True).preview
 
 
-def _tracked_digest(caller, target, path, stamp, source_scan_id):
+def _tracked_fingerprint(caller, target, path, stamp, source_scan_id):
     source = target.source
     with track_fingerprint(
         actor=_fingerprint_actor(caller),
@@ -349,8 +332,17 @@ def _tracked_digest(caller, target, path, stamp, source_scan_id):
         item_id=source.item_id,
         media_source_id=source.media_source_id,
         source_scan_id=source_scan_id,
+        sampled_total=sampled_media_read_size(stamp[2]),
     ) as report:
-        return file_digest(str(path), on_progress=report)
+        try:
+            result = sampled_media_fingerprint(path, on_progress=report)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise root._review_http_error(
+                "target_changed", "The selected media file could not be verified", 409
+            ) from exc
+    if result.generation != stamp:
+        raise root._review_http_error("target_changed", "The selected version has changed", 409)
+    return result
 
 
 @router.post("/api/media-versions/{version_id}/reuse/approve", response_model=VersionReuseResult)
@@ -366,10 +358,10 @@ def approve_version_reuse(
             "reuse_preview_changed", "Preview the current alignment again", 409
         )
 
-    # Read the entire file only after validating the actor, preview, and confirmation.
-    digest = captured.digest
-    if digest is None:
-        digest = _tracked_digest(
+    # Identify an unpinned target after validating its actor and confirmation.
+    fingerprint = captured.fingerprint
+    if fingerprint is None:
+        fingerprint = _tracked_fingerprint(
             caller, captured.target, captured.path, captured.stamp, request.source_scan_id
         )
     if _file_stamp(captured.path) != captured.stamp:
@@ -389,7 +381,17 @@ def approve_version_reuse(
                 "Preview the current alignment again",
                 409,
             )
-        observed_id = observe_target_version(db, captured.target, digest=digest)
+        try:
+            observed_id = observe_sampled_target_version(
+                db,
+                captured.target,
+                fingerprint=fingerprint,
+                known_content_sha256=captured.known_content_sha256,
+            )
+        except ScanVersionChanged as exc:
+            raise root._review_http_error(
+                "target_changed", "The selected version has changed", 409
+            ) from exc
         if version_id != CURRENT_VERSION and observed_id != version_id:
             raise root._review_http_error("target_changed", "The selected version has changed", 409)
         media = (
@@ -412,7 +414,7 @@ def approve_version_reuse(
             request=request,
             audio_selection=captured.audio,
             duration=captured.duration,
-            target_sha256=digest,
+            fingerprint=fingerprint,
         )
         if _file_stamp(captured.path) != captured.stamp:
             raise root._review_http_error("target_changed", "The selected version has changed", 409)

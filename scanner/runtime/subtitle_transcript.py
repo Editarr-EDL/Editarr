@@ -17,7 +17,7 @@ from scanner.pipeline.audio_timing import audio_playback_start
 from scanner.pipeline.audio_tracks import AudioTrackSelection, probe_audio_tracks
 from scanner.pipeline.cache import transcription_cache_path
 
-from .media_fingerprints import cached_content_digest
+from .scan_version import file_generation
 from .subtitle_sidecars import read_local_bytes
 
 _MAX_TRANSCRIPT_BYTES = 24 * 1024 * 1024
@@ -28,12 +28,13 @@ class ReviewedAudio:
     source: ReviewAudioSource
     selection: AudioTrackSelection
     models: tuple[str | None, ...]
-    content_sha256: str | None = None
+    verified_generation: tuple[int, ...] | None = None
 
 
-def reviewed_audio_sources(db, memberships, scans) -> list[ReviewedAudio]:
+def reviewed_audio_sources(db, memberships, scans, media: Path) -> list[ReviewedAudio]:
     """Deduplicate completed, explicitly analyzed audio tracks in the saved review."""
     from scanner.persistence.repository.media_identity_store import get_version, scan_version_id
+    from scanner.persistence.repository.review_version_evidence import version_file_matches
 
     audio = {}
     for membership in memberships:
@@ -59,11 +60,17 @@ def reviewed_audio_sources(db, memberships, scans) -> list[ReviewedAudio]:
             label = f"{title} · Track {selection.track.stream_index}"
             version_id = scan_version_id(db, scan.id)
             version = get_version(db, version_id) if version_id else None
+            generation = file_generation(str(media)) if version is not None else None
+            if generation is not None and (
+                not version_file_matches(version, media, db=db)
+                or file_generation(str(media)) != generation
+            ):
+                generation = None
             audio[identity] = ReviewedAudio(
                 ReviewAudioSource(id=identity, label=label, language=language),
                 selection,
                 (),
-                version.content_sha256 if version else None,
+                generation,
             )
         entry = audio[identity]
         if scan.audio_model not in entry.models:
@@ -151,9 +158,9 @@ def transcript_document(
         inventory = probe_audio_tracks(media)
         selection = audio.selection
         if (
-            audio.content_sha256
+            audio.verified_generation is not None
             and selection.file_version != inventory.file_version
-            and cached_content_digest(media) == audio.content_sha256
+            and file_generation(str(media)) == audio.verified_generation
         ):
             selection = replace(selection, file_version=inventory.file_version)
         inventory.revalidate(selection)

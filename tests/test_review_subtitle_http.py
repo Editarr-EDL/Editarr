@@ -17,8 +17,11 @@ from scanner.models import (
     ReviewScanMembership,
 )
 from scanner.persistence.repository import review_version_evidence
-from scanner.persistence.repository.media_identity_store import bind_review_version, observe_version
-from scanner.runtime.media_fingerprints import content_digest
+from scanner.persistence.repository.media_identity_store import (
+    bind_review_version,
+    observe_sampled_version,
+)
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import PEER_USER, USER
@@ -119,13 +122,12 @@ def _pin_review_file(app, review):
         row = db.get(SavedReviewRow, review.id)
         scan = row.memberships[0].scan
         path = Path(scan.resolved_local_path)
-        version_id = observe_version(
+        version_id = observe_sampled_version(
             db,
             media=row.media_item,
             media_source_id=scan.media_source_id,
             source_path=scan.source_path,
-            resolved_path=str(path),
-            content_sha256=content_digest(path),
+            fingerprint=sampled_media_fingerprint(path),
             scan_id=scan.id,
         )
         bind_review_version(db, row.id, version_id)
@@ -164,9 +166,9 @@ def test_subtitle_fingerprint_leaves_other_database_writers_unblocked(app, monke
         with closing(sqlite3.connect(app.accounts.path, timeout=0.1)) as other:
             other.execute("BEGIN IMMEDIATE")
             hashed.append(Path(path))
-        return content_digest(path)
+        return sampled_media_fingerprint(path)
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", fingerprint)
+    monkeypatch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
     response = _request(app, review, endpoint, payload)
     assert response.status_code == 200, response.text
     assert hashed and set(hashed) == {media}
@@ -178,19 +180,19 @@ def test_subtitle_publish_refuses_replacement_after_fingerprint(app, monkeypatch
     media = _pin_review_file(app, review)
     payload = _preview_for_publication(app, review)
     names = {path.name for path in media.parent.iterdir()}
-    current_digest = review_version_evidence.ReviewMediaProof.current_digest
+    current_fingerprint = review_version_evidence.ReviewMediaProof.current_fingerprint
     replaced = False
 
     def replace_after_capture(proof, path):
         nonlocal replaced
-        checksum = current_digest(proof, path)
+        checksum = current_fingerprint(proof, path)
         if checksum is not None and not replaced:
             media.write_bytes(b"replacement after fingerprint capture")
             replaced = True
         return checksum
 
     monkeypatch.setattr(
-        review_version_evidence.ReviewMediaProof, "current_digest", replace_after_capture
+        review_version_evidence.ReviewMediaProof, "current_fingerprint", replace_after_capture
     )
     response = _request(app, review, "publish", payload)
     assert response.status_code == 409, response.text
@@ -212,7 +214,7 @@ def test_subtitle_export_denial_does_not_fingerprint_media(app, monkeypatch):
         app.accounts.set_override(USER, capability, OverrideEffect.DENY)
     monkeypatch.setattr(
         review_version_evidence,
-        "content_digest",
+        "sampled_media_fingerprint",
         lambda _path: pytest.fail("An unauthorized subtitle request tried to hash the media"),
     )
     denied = _request(app, review, "sources", {})

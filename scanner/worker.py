@@ -74,8 +74,8 @@ from scanner.runtime.process_control import (  # noqa: E402
 from scanner.runtime.scan_version import (  # noqa: E402
     STALE_AUDIO_SELECTION,
     ScanVersionChanged,
-    prepare_scan_digest,
-    require_scan_digest,
+    prepare_scan_fingerprint,
+    require_scan_generation,
     scan_digest_progress,
 )
 from scanner.runtime.worker_quit import FullApplicationQuitRequested  # noqa: E402
@@ -209,7 +209,7 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
             logger.error("Scan %s cannot start because its source path is unavailable", scan_id)
             mark_scan_orphaned(db, scan_id, "Orphaned scan — source path is unavailable")
             return 1
-        digest = prepare_scan_digest(
+        media_proof = prepare_scan_fingerprint(
             db,
             scan_id,
             local_path,
@@ -219,19 +219,27 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
             ),
         )
 
-        def update_status(session, item_id, status):
+        def commit_status(session, item_id, status):
             if status == "complete":
-                require_scan_digest(local_path, digest)
-            return gate.run(session, update_scan_status, item_id, status)
+                require_scan_generation(local_path, media_proof)
+            return update_scan_status(session, item_id, status)
+
+        def update_status(session, item_id, status):
+            return gate.run(session, commit_status, item_id, status)
+
+        def commit_credits(session, **result):
+            require_scan_generation(local_path, media_proof)
+            return complete_credits_detection(session, **result)
 
         def save_credits(session, **result):
-            require_scan_digest(local_path, digest)
-            return gate.run(session, complete_credits_detection, **result)
+            return gate.run(session, commit_credits, **result)
 
         checkpoints = scan_checkpoint_stages(db, scan_id, require_provenance=True)
         logger.debug(
             "Scan %s resuming with completed checkpoints: %s", scan_id, sorted(checkpoints)
         )
+        require_scan_generation(local_path, media_proof)
+        media_cache_key = media_proof.cache_key if media_proof is not None else None
         with _prevent_idle_system_sleep():
             if item.scan_mode == "credits_detection":
                 assert item.credits_detection is not None
@@ -244,7 +252,7 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                     video_hash=item.video_hash,
                     status_updater=update_status,
                     result_writer=save_credits,
-                    content_sha256=digest,
+                    media_cache_key=media_cache_key,
                     scan_metadata_updater=lambda session, *args: gate.run(
                         session, update_scan_duration, *args
                     ),
@@ -303,7 +311,7 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                     video_id=item.id,
                     video_duration_seconds=item.duration_seconds,
                     status_updater=update_status,
-                    content_sha256=digest,
+                    media_cache_key=media_cache_key,
                     findings_writer=lambda session, video_id, findings: _write_findings(
                         gate, session, video_id, findings
                     ),

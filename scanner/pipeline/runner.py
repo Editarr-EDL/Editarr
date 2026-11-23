@@ -235,7 +235,7 @@ def run_scan(
     audio_selection=None,
     analyzed_audio_callback=None,
     analyzed_audio_timing_callback=None,
-    content_sha256: str | None = None,
+    media_cache_key: str | None = None,
 ) -> str:
     """
     Run the full analysis pipeline on a video file.
@@ -387,8 +387,10 @@ def run_scan(
 
     emit("setup", 0.7, "Initialized scan")
 
-    emit("setup", 0.8, "Computing video hash")
-    video_hash = content_sha256 or compute_video_md5(str(path))
+    video_hash = media_cache_key
+    if video_hash is None:
+        emit("setup", 0.8, "Computing video hash")
+        video_hash = compute_video_md5(str(path))
     logger.info("Using video content hash for cache key: %s", video_hash)
     emit("setup", 1.0, "Video hash computed")
 

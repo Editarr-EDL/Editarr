@@ -63,7 +63,7 @@ def test_hard_exit_rollback_leaves_an_empty_installation(tmp_path, monkeypatch, 
     assert recover_restore(target / "scanner.db", target)
     _empty_again(target, database=database)
     if database:
-        assert require_supported_schema() == "0035_stable_media_identity"
+        assert require_supported_schema() == "0036_sampled_media_identity"
     _restore(archive, target)
     with pytest.raises(RuntimeError, match="reconciliation before worker admission"):
         require_supported_schema()

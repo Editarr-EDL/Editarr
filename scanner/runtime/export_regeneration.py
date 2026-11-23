@@ -40,7 +40,11 @@ from scanner.persistence.repository.export_regeneration import (
 )
 from scanner.persistence.repository.export_retained import prepare_retained_export
 from scanner.persistence.repository.media_identity_store import get_version, review_version_id
-from scanner.persistence.repository.review_version_evidence import file_digest_matches
+from scanner.persistence.repository.review_version_evidence import (
+    capture_media_proof,
+    use_review_media_proof,
+    version_file_matches,
+)
 from scanner.persistence.rows.db_export_regenerations import (
     RegenerationFailure,
     RegenerationState,
@@ -66,9 +70,10 @@ class _MediaPin:
     path: Path
     version_id: str | None
     digest: str | None
+    sample: tuple[str, int] | None
 
     def generation(self) -> tuple[int, ...] | None:
-        if self.digest is None:
+        if self.digest is None and self.sample is None:
             return None
         try:
             return file_generation(str(self.path))
@@ -83,7 +88,14 @@ def _media_pin(db, snapshot) -> _MediaPin:
     if version_id is None and source_review_id:
         version_id = review_version_id(db, source_review_id)
     version = get_version(db, version_id) if version_id else None
-    return _MediaPin(media, version_id, version.content_sha256 if version is not None else None)
+    return _MediaPin(
+        media,
+        version_id,
+        version.content_sha256 if version is not None else None,
+        (version.sampled_md5, version.sample_size_bytes)
+        if version is not None and version.sampled_md5 is not None
+        else None,
+    )
 
 
 def _destination(db, row, snapshot):
@@ -234,7 +246,7 @@ def settle_regeneration(db, job: RegenerationJob, *, cancelled=None) -> str:
         media = _media_pin(db, admitted[1])
         db.rollback()
         generation = media.generation()
-        matches = generation is not None and file_digest_matches(media.path, media.digest)
+        proof = capture_media_proof(media.path) if generation is not None else None
         with publication_lock(db), write_lock(db):
             admitted = current_job(db, job)
             if admitted is None or (cancelled is not None and cancelled.is_set()):
@@ -245,10 +257,14 @@ def settle_regeneration(db, job: RegenerationJob, *, cancelled=None) -> str:
                 db.rollback()
                 return "retry"
             try:
-                if media.version_id and not matches:
-                    raise ExportConflict(
-                        "export_media_changed", "The original review version is unavailable"
-                    )
+                if media.version_id:
+                    with use_review_media_proof(db, proof):
+                        if not version_file_matches(
+                            get_version(db, media.version_id), media.path, db=db
+                        ):
+                            raise ExportConflict(
+                                "export_media_changed", "The original review version is unavailable"
+                            )
                 destination = _destination(db, row, snapshot)
                 row.policy_owner_id = job.policy_owner_id
                 content = prepare_retained_export(db, row, snapshot)

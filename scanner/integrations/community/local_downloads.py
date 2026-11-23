@@ -27,7 +27,7 @@ from scanner.persistence.repository.community_import_targets import (
 )
 from scanner.persistence.repository.community_imports import import_verified_download
 from scanner.repository import ReviewMembershipError, get_jellyfin_credentials
-from scanner.runtime.media_fingerprints import content_digest
+from scanner.runtime.media_fingerprints import cached_content_digest, sampled_media_fingerprint
 
 from .downloads import fetch_verified_download
 from .lookup import RESPONSE_BYTES, _validated
@@ -165,13 +165,14 @@ class CommunityDownloads:
             None,
         ):
             raise CommunityFailure("target_changed")
-        digest = None
+        fingerprint = known_content_sha256 = None
         if body.stage_for_verification:
             try:
-                digest = await drained_thread(content_digest, captured.path)
-                captured.check(should_cancel)
-            except (OSError, ValueError) as exc:
+                fingerprint = await drained_thread(sampled_media_fingerprint, captured.path)
+                known_content_sha256 = await drained_thread(cached_content_digest, captured.path)
+            except (OSError, RuntimeError, ValueError) as exc:
                 raise CommunityFailure("target_changed") from exc
+            captured.check(should_cancel)
         target = LocalImportTarget(
             media.id,
             request.target.media_source_id,
@@ -180,7 +181,8 @@ class CommunityDownloads:
             tuple(body.choice.channels),
             captured.key,
             stage_for_verification=body.stage_for_verification,
-            content_sha256=digest,
+            fingerprint=fingerprint,
+            known_content_sha256=known_content_sha256,
         )
 
         def commit():

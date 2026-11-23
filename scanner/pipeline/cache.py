@@ -2,32 +2,18 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 from pathlib import Path
 
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.settings.config import settings
-
-_LARGE_FILE_THRESHOLD_BYTES = 50 * 1024 * 1024
-_EDGE_SAMPLE_BYTES = 10 * 1024 * 1024
 
 
 def compute_video_md5(video_path: str) -> str:
-    """Return the MD5 hash for the selected video file."""
-    file_path = Path(video_path)
-    file_size = file_path.stat().st_size
-    digest = hashlib.md5(usedforsecurity=False)
-    with file_path.open("rb") as file_obj:
-        if file_size > _LARGE_FILE_THRESHOLD_BYTES:
-            digest.update(file_obj.read(_EDGE_SAMPLE_BYTES))
-            file_obj.seek(max(file_size - _EDGE_SAMPLE_BYTES, 0))
-            digest.update(file_obj.read(_EDGE_SAMPLE_BYTES))
-        else:
-            for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
-                digest.update(chunk)
-    return digest.hexdigest()
+    """Return the legacy MD5 sample used by pipeline cache keys."""
+    return sampled_media_fingerprint(video_path).digest
 
 
 def _video_cache_root() -> Path:

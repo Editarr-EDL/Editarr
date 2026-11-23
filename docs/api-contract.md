@@ -493,6 +493,19 @@ Supported identity providers are only TMDB and TVDB, never IMDb. The existing
 local discovery fields remain unchanged. Upstream episode aliases are conservative,
 and a linked series record must match the explicit source series ID.
 
+Editarr title IDs are independent of Jellyfin item IDs. An Editarr version records
+the legacy sampled MD5 and file size for the identified media. The fingerprint reads
+files through 50 MiB in full and reads the first and last 10 MiB of larger files.
+A unique sample and size match within a title can follow a file move. Distinct
+known version IDs with the same sample remain separate. The sample offers no
+comparison for bytes outside the selected ranges.
+
+The migration preserves existing version IDs, scans, reviews, and published files.
+Older whole-file pins use a surviving verified observation of the current file
+generation. When that evidence is unavailable, the original version stays in
+history and can be used in the existing verification flow. Signed Community
+artifacts keep their existing fingerprint and signature formats.
+
 See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts).
 
 ## Named review API

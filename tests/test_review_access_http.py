@@ -1,6 +1,7 @@
 """Private review IDs must not reveal whether another account's review exists."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -20,7 +21,9 @@ from scanner.models import (
     ReviewCreate,
     ReviewScanMembership,
 )
+from scanner.persistence.repository.media_identity_store import observe_sampled_version
 from scanner.persistence.repository.review_access import RENAME, ReviewAccess
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import ADMIN, PEER_USER, USER, live_accounts
@@ -439,3 +442,40 @@ def test_draft_preview_uses_unsaved_timing_without_storing_it(app, monkeypatch):
         assert db.query(SavedReviewRow).count() == 1
         assert db.query(ScanRow).count() == 1
         assert db.get(SavedReviewRow, review.id).revision == review.revision
+
+
+def test_draft_preview_rechecks_sampled_version_after_rendering(app, monkeypatch):
+    review = seeded_review(app, USER, "sampled-version-preview")
+    with app.accounts.factory() as db:
+        scan = db.get(SavedReviewRow, review.id).memberships[0].scan
+        media = Path(scan.resolved_local_path)
+        version = observe_sampled_version(
+            db,
+            media=scan.media_item,
+            media_source_id=scan.media_source_id,
+            source_path=scan.source_path,
+            fingerprint=sampled_media_fingerprint(media),
+        )
+        db.commit()
+    route = f"/api/library-items/{review.target.item_id}/reviews/preview"
+    headers = app.accounts.unsafe_cookie(USER)
+    body = {
+        "stable_version_id": version,
+        "source": "visual",
+        "edit_action": "skip",
+        "start_seconds": 5,
+        "end_seconds": 7,
+    }
+    monkeypatch.setattr(repository, "render_video_preview", lambda *_: b"clip")
+    response = app.send("POST", route, headers, body)
+    assert response.status_code == 200, response.text
+    assert response.content == b"clip"
+
+    def replace_during_render(path, *_):
+        path.write_bytes(b"replaced during rendering")
+        return b"stale clip"
+
+    monkeypatch.setattr(repository, "render_video_preview", replace_during_render)
+    response = app.send("POST", route, headers, body)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "target_changed"

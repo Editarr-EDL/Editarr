@@ -1,6 +1,11 @@
-"""Resolve stable title IDs and prove media version IDs from exact content digests."""
+"""Resolve stable title IDs and keep version identity separate from catalog locators."""
 
+from __future__ import annotations
+
+import json
 import re
+from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -21,8 +26,12 @@ from scanner.db import (
 from scanner.modeling.media_identity import MediaIdentity, ProviderIdentifier
 from scanner.persistence.write_lock import write_lock
 
+if TYPE_CHECKING:
+    from scanner.runtime.media_fingerprints import SampledMediaFingerprint
+
 Alias = tuple[str, str, str]
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_MD5 = re.compile(r"[0-9a-f]{32}")
 
 
 def _alias(identifier: ProviderIdentifier, entity_type: str) -> Alias | None:
@@ -246,6 +255,132 @@ def observe_version(
                 )
             )
             db.flush()
+        if scan_id is not None:
+            bind_scan_version(db, scan_id, version.id)
+        return version.id
+
+
+def _generation_key(generation: tuple[int, ...]) -> str:
+    return json.dumps(generation, separators=(",", ":"))
+
+
+def find_observed_version(
+    db: Session,
+    *,
+    title_id: str,
+    path: str | Path,
+    generation: tuple[int, ...],
+    known_content_sha256: str | None = None,
+) -> str | None:
+    """Use an existing observation for this generation without reading media bytes."""
+    if known_content_sha256 and _SHA256.fullmatch(known_content_sha256):
+        known = db.scalar(
+            select(MediaVersionRow.id).where(
+                MediaVersionRow.title_id == title_id,
+                MediaVersionRow.content_sha256 == known_content_sha256,
+            )
+        )
+        if known is not None:
+            return known
+    versions = list(db.scalars(
+        select(MediaVersionRow.id)
+        .join(MediaVersionLocatorRow)
+        .where(
+            MediaVersionRow.title_id == title_id,
+            MediaVersionLocatorRow.resolved_path == str(path),
+            MediaVersionLocatorRow.sample_generation == _generation_key(generation),
+        )
+        .distinct()
+        .limit(2)
+    ))
+    return versions[0] if len(versions) == 1 else None
+
+
+def find_sampled_version(
+    db: Session,
+    *,
+    title_id: str,
+    fingerprint: SampledMediaFingerprint,
+    known_content_sha256: str | None = None,
+) -> str | None:
+    """Match a current witness or a unique same-title sample and size, even after a move."""
+    observed = find_observed_version(
+        db, title_id=title_id, path=fingerprint.path, generation=fingerprint.generation,
+        known_content_sha256=known_content_sha256,
+    )
+    if observed is not None:
+        version = db.get(MediaVersionRow, observed)
+        if version is not None and (
+            version.sampled_md5 is None
+            or (version.sampled_md5, version.sample_size_bytes)
+            == (fingerprint.digest, fingerprint.size_bytes)
+        ):
+            return observed
+        return None
+
+    versions = list(db.scalars(
+        select(MediaVersionRow.id)
+        .where(
+            MediaVersionRow.title_id == title_id,
+            MediaVersionRow.sampled_md5 == fingerprint.digest,
+            MediaVersionRow.sample_size_bytes == fingerprint.size_bytes,
+        )
+        .limit(2)
+    ))
+    return versions[0] if len(versions) == 1 else None
+
+
+def matches_sampled_version(
+    db: Session,
+    version: MediaVersionRow | None,
+    fingerprint: SampledMediaFingerprint,
+    *,
+    known_content_sha256: str | None = None,
+) -> bool:
+    """Check a version without promoting a legacy hash or choosing between collisions."""
+    return version is not None and find_sampled_version(
+        db, title_id=version.title_id, fingerprint=fingerprint,
+        known_content_sha256=known_content_sha256,
+    ) == version.id
+
+
+def observe_sampled_version(
+    db: Session,
+    *,
+    media: MediaItemRow,
+    media_source_id: str | None,
+    source_path: str,
+    fingerprint: SampledMediaFingerprint,
+    known_content_sha256: str | None = None,
+    scan_id: str | None = None,
+) -> str:
+    """Add a sampled locator, preserving all existing full and weak historical identities."""
+    if not _MD5.fullmatch(fingerprint.digest) or fingerprint.size_bytes < 0:
+        raise ValueError("Invalid sampled media fingerprint")
+    with write_lock(db):
+        title_id = observe_title(db, media)
+        version_id = find_sampled_version(
+            db, title_id=title_id, fingerprint=fingerprint,
+            known_content_sha256=known_content_sha256,
+        )
+        version = db.get(MediaVersionRow, version_id) if version_id is not None else None
+        if version is None:
+            version = MediaVersionRow(id=str(uuid4()), title_id=title_id)
+            db.add(version)
+        version.sampled_md5 = fingerprint.digest
+        version.sample_size_bytes = fingerprint.size_bytes
+        db.flush()
+
+        locators = (version.id, media.id, media_source_id or "", source_path, str(fingerprint.path))
+        locator = db.get(MediaVersionLocatorRow, locators)
+        if locator is None:
+            locator = MediaVersionLocatorRow(
+                version_id=locators[0], media_item_id=locators[1], media_source_id=locators[2],
+                source_path=locators[3], resolved_path=locators[4],
+            )
+            db.add(locator)
+        locator.sample_generation = _generation_key(fingerprint.generation)
+        db.flush()
         if scan_id is not None:
             bind_scan_version(db, scan_id, version.id)
         return version.id

@@ -28,7 +28,7 @@ from scanner.persistence.repository.media_identity_store import (
     version_locators,
 )
 from scanner.pipeline.audio_tracks import AudioTrack, AudioTrackInventory
-from scanner.runtime.scan_version import prepare_scan_digest
+from scanner.runtime.scan_version import prepare_scan_fingerprint
 from scanner.security.api_key_crypto import load_api_key_wrap_key
 from scanner.security.api_keys import rotate_api_key
 from scanner.security.auth_repository import owner_id
@@ -134,7 +134,7 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
     assert [item.id for item in api.api_list_scan_queue(owner_caller(db))] == [first.id, second.id]
     for item, path in ((first, video), (second, alternate_video)):
         assert scan_version_id(db, item.id) is None
-        prepare_scan_digest(
+        prepare_scan_fingerprint(
             db,
             item.id,
             str(path),

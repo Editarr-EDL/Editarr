@@ -118,8 +118,9 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const [versions, setVersions] = useState(() => item.versions.map((version) => ({ ...version, exports: normalizedExportStatus(version) })));
   const [mediaSourceId, setMediaSourceId] = useState(initialMediaSourceId);
   const [selectedReviewMediaSourceId, setSelectedReviewMediaSourceId] = useState(initialMediaSourceId);
-  const audioTracks = useAudioTracks({ item_id: item.id, media_source_id: mediaSourceId }, mayScan && showNewScan && scanAudio);
-  const verificationAudio = useVerificationAudioScan(audioTracks);
+  const verificationAudio = useVerificationAudioScan();
+  const audioTracks = useAudioTracks({ item_id: item.id, media_source_id: mediaSourceId },
+    mayScan && showNewScan && scanAudio, verificationAudio.requestedSelection);
   const verificationSession = useRef(0);
   const openVerification = (scan: Scan | null) => {
     verificationSession.current++;
@@ -460,8 +461,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       targetName={[selectedReviewVersion?.name || item.name, selectedReviewVersion?.resolution].filter(Boolean).join(" · ")}
       mayStartAudioScan={mayScan}
       currentScans={scans} submittedAudioScan={verificationAudio.submitted} initialChannels={verificationAudio.channels}
-      onStartAudioScan={(channels, trackIndex) => {
-        verificationAudio.start(channels, trackIndex);
+      onStartAudioScan={(channels, selection) => {
+        verificationAudio.start(channels, selection);
         openNewScan(true);
       }}
       onClose={() => openVerification(null)}

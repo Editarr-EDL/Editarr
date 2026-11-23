@@ -11,9 +11,16 @@ import pytest
 from scanner.formats.subtitle_redaction import SubtitleMute, redact_subtitles
 from scanner.integrations.jellyfin_subtitles import JellyfinSubtitle
 from scanner.modeling.model_subtitles import ReviewAudioSource, SubtitleSource
-from scanner.pipeline.audio_tracks import AudioTrack, AudioTrackSelection
+from scanner.pipeline.audio_tracks import (
+    AudioSelectionError,
+    AudioTrack,
+    AudioTrackInventory,
+    AudioTrackSelection,
+    StaleAudioSelectionError,
+)
 from scanner.pipeline.subtitle_tracks import embedded_subtitle_streams
 from scanner.runtime import subtitle_transcript
+from scanner.runtime.scan_version import file_generation
 from scanner.runtime.subtitle_inputs import read_subtitle
 from scanner.runtime.subtitle_transcript import ReviewedAudio, transcript_document
 
@@ -135,6 +142,34 @@ def test_transcript_offsets_word_and_cue_times(monkeypatch, tmp_path):
     redaction = redact_subtitles(document, (SubtitleMute(5, 5.5, "hell"),))
     assert document.cues[0].start == 3
     assert redaction.preview()[0]["filtered"] == "Hell, no."
+
+
+def test_cached_transcript_rebinds_only_verified_generation_and_track(monkeypatch, tmp_path):
+    media = tmp_path / "film.mkv"
+    media.write_bytes(b"same content at new path")
+    current = str(media)
+    track = AudioTrack(1, "en", None, "aac", 2, 0, 2, 50, "1/48000")
+    selection = AudioTrackSelection("a" * 64, track)
+    audio = ReviewedAudio(
+        ReviewAudioSource(id="track", label="Audio"),
+        selection,
+        ("whisper",),
+        file_generation(current),
+    )
+    inventory = AudioTrackInventory("b" * 64, (track,))
+    monkeypatch.setattr(subtitle_transcript, "probe_audio_tracks", lambda _: inventory)
+    monkeypatch.setattr(subtitle_transcript, "audio_playback_start", lambda *_a, **_kw: 0)
+    segments = [{"text": "hello", "start_seconds": 1, "end_seconds": 2}]
+    assert len(transcript_document(media, audio, segments).cues) == 1
+
+    changed_track = AudioTrack(1, "fr", None, "aac", 2, 0, 2, 50, "1/48000")
+    inventory = AudioTrackInventory("b" * 64, (changed_track,))
+    with pytest.raises(AudioSelectionError, match="audio track changed"):
+        transcript_document(media, audio, segments)
+
+    media.write_bytes(b"changed after version proof")
+    with pytest.raises(StaleAudioSelectionError, match="file changed"):
+        transcript_document(media, audio, segments)
 
 
 def test_dot_delimited_overlapping_stems_refuse_shared_attach(tmp_path, monkeypatch):

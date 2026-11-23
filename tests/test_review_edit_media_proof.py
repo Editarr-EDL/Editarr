@@ -1,6 +1,5 @@
 """Saved review edits and previews verify strong media pins outside the writer lock."""
 
-import hashlib
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -10,7 +9,11 @@ import pytest
 from scanner import repository
 from scanner.db import SavedReviewRow, ScanRow
 from scanner.persistence.repository import review_access, review_version_evidence
-from scanner.persistence.repository.media_identity_store import bind_review_version, observe_version
+from scanner.persistence.repository.media_identity_store import (
+    bind_review_version,
+    observe_sampled_version,
+)
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import USER
@@ -29,13 +32,12 @@ def pinned_review(app, monkeypatch):
         row = db.get(SavedReviewRow, review_id)
         scan = row.memberships[0].scan
         path = Path(scan.resolved_local_path)
-        version = observe_version(
+        version = observe_sampled_version(
             db,
             media=row.media_item,
             media_source_id=scan.media_source_id,
             source_path=scan.source_path,
-            resolved_path=str(path),
-            content_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            fingerprint=sampled_media_fingerprint(path),
             scan_id=scan.id,
         )
         bind_review_version(db, review_id, version)
@@ -104,9 +106,9 @@ def test_saved_review_hashes_once_before_sqlite_writer_lock(
         with closing(sqlite3.connect(app.accounts.path, timeout=0.03)) as writer:
             writer.execute("BEGIN IMMEDIATE")
         observed.append(Path(path))
-        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        return sampled_media_fingerprint(path)
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", fingerprint)
+    monkeypatch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
     if operation == "draft-preview":
         from scanner.http.review_targets import ReviewTarget
 
@@ -134,7 +136,7 @@ def test_saved_review_rechecks_its_file_generation_at_write_admission(
 
     def fingerprint(path):
         reads.append(Path(path))
-        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        return sampled_media_fingerprint(path)
 
     def capture_then_replace(*args):
         proof = capture(*args)
@@ -143,7 +145,7 @@ def test_saved_review_rechecks_its_file_generation_at_write_admission(
         replacement.replace(media)
         return proof
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", fingerprint)
+    monkeypatch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
     monkeypatch.setattr(review_access, "capture_review_media_proof", capture_then_replace)
     response = _request(app, pinned_review, operation)
     assert response.status_code == (404 if operation == "draft-preview" else 409), response.text
@@ -161,7 +163,9 @@ def test_saved_review_rejects_unapproved_changes_before_reading_media(
     def unexpected_fingerprint(_path):
         pytest.fail("Media was read before the target and action were authorized")
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", unexpected_fingerprint)
+    monkeypatch.setattr(
+        review_version_evidence, "sampled_media_fingerprint", unexpected_fingerprint
+    )
     target = None
     if operation == "save":
         app.accounts.set_override(USER, C.REVIEWS_RENAME_OWN, OverrideEffect.DENY)

@@ -57,7 +57,7 @@ for (const width of [320, 1440]) {
     await page.route("**/api/media-fingerprints/queue", (route) => json(route, approvals.length ? [{
       id: "chuck-fingerprint", item_name: movie.name, version_name: "1080p SDR",
       item_id: "movie-1", media_source_id: "source-2", source_scan_id: oldScan.id,
-      bytes_read: 150, bytes_total: 300, reading: true,
+      bytes_read: 10 * 1024 * 1024, bytes_total: 20 * 1024 * 1024, reading: true,
     }] : []));
     await page.route("**/api/media-versions/current/reuse/approve", async (route) => {
       approvals.push(route.request().postDataJSON());
@@ -102,12 +102,14 @@ for (const width of [320, 1440]) {
     })]);
     await expectNoHorizontalPageOverflow(page);
     await dialog.getByRole("button", { name: "Continue to approval" }).click();
+    await expect(dialog.getByText(/For large files, it reads sampled blocks/)).toBeVisible();
     const approve = dialog.getByRole("button", { name: "Approve for this version" });
     await expect(approve).toBeEnabled();
     await expect(dialog.getByRole("checkbox")).toHaveCount(0);
     expect(approvals).toHaveLength(0);
     await approve.press("Enter");
     try {
+      await expect(dialog.getByText("Checking the target file’s fingerprint before saving…")).toBeVisible();
       const queueButton = dialog.getByRole("button", { name: "Queue", exact: true });
       if (await queueButton.getAttribute("aria-expanded") !== "true") await queueButton.click();
       await expect(dialog.getByRole("progressbar", { name: "File fingerprint progress" })).toHaveAttribute("value", "50");

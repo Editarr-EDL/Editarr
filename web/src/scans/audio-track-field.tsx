@@ -1,4 +1,4 @@
-import type { AudioTrack, AudioTrackInventory, AudioTrackSelection } from "../api/api-audio-tracks";
+import { findSelectedAudioTrack, type AudioTrack, type AudioTrackInventory, type AudioTrackSelection } from "../api/api-audio-tracks";
 export type { AudioTrack, AudioTrackInventory, AudioTrackSelection } from "../api/api-audio-tracks";
 
 export function audioTrackLabel(track: AudioTrack): string {
@@ -28,10 +28,7 @@ export function AudioTrackField({
   onChange: (selection: AudioTrackSelection) => void;
   onRetry: () => void;
 }) {
-  const selected = selection && inventory?.file_version === selection.file_version
-    ? inventory.tracks.find((track) => Object.keys(track).every(
-      (key) => track[key as keyof AudioTrack] === selection.track[key as keyof AudioTrack],
-    )) : null;
+  const selected = findSelectedAudioTrack(inventory, selection);
   return (
     <div>
       <label className="field">

@@ -12,8 +12,9 @@ from scanner.db import ScanFindingRow, ScanRow
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.modeling.model_version_reuse import Channel, VersionReuseCue, VersionReuseRequest
 from scanner.modeling.version_alignment import Alignment
+from scanner.runtime.media_fingerprints import SampledMediaFingerprint
 
-from .review_version_evidence import file_digest_matches
+from .review_version_evidence import file_digest_matches, version_file_matches
 
 _COPIED_FIELDS = (
     "category",
@@ -65,16 +66,22 @@ def bound_scan_file_matches(scan, path: Path) -> bool | None:
     db = object_session(scan)
     version_id = scan_version_id(db, scan.id) if db is not None else None
     version = get_version(db, version_id) if version_id else None
-    digest = approval.get("target_sha256") if approval is not None else None
-    if version is not None and version.content_sha256:
-        if digest and digest != version.content_sha256:
+    legacy_digest = approval.get("target_sha256") if approval is not None else None
+    sampled_digest = approval.get("target_sampled_md5") if approval is not None else None
+    if version is not None:
+        if legacy_digest and legacy_digest != version.content_sha256:
             return False
-        digest = version.content_sha256
-    if version_id is not None and not digest:
+        if sampled_digest and (
+            sampled_digest != version.sampled_md5
+            or approval.get("target_sample_size_bytes") != version.sample_size_bytes
+        ):
+            return False
+        return version_file_matches(version, path, db=db)
+    if version_id is not None or sampled_digest is not None:
         return False
-    if not digest and approval is None:
+    if approval is None:
         return None
-    return file_digest_matches(path, digest, db=db)
+    return file_digest_matches(path, legacy_digest, db=db)
 
 
 def source_findings(db, scan_id: str) -> list[ScanFindingRow]:
@@ -212,7 +219,7 @@ def stage_verified_reuse(
     request,
     audio_selection,
     duration: float,
-    target_sha256: str,
+    fingerprint: SampledMediaFingerprint,
 ) -> tuple[ScanRow, bool]:
     """Stage target-bound copies and original finding references under the caller's write lock."""
     from .import_transaction import stage_imported_scan
@@ -225,7 +232,8 @@ def stage_verified_reuse(
                 "source_scan_id": source.id,
                 "source_version_id": source_version_id,
                 "target_version_id": version_id,
-                "target_sha256": target_sha256,
+                "target_sampled_md5": fingerprint.digest,
+                "target_sample_size_bytes": fingerprint.size_bytes,
                 "token": preview.token,
                 "method": request.method,
                 "exact": preview.exact,
@@ -262,6 +270,7 @@ def stage_verified_reuse(
         has_video="video" in preview.verified_channels,
         progress_message="Verified previous scan cues",
         imported_at=datetime.now(UTC),
+        video_hash=fingerprint.digest,
     )
     scan.checkpoint_state = state
     if audio_selection is not None and scan.scan_audio:

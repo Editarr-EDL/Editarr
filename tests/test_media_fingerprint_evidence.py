@@ -10,13 +10,13 @@ from sqlalchemy import select
 from scanner.db import MediaItemRow, ScanRow
 from scanner.integrations.community.fingerprints import FingerprintCache
 from scanner.modeling.model_audio_tracks import AudioSelection
+from scanner.persistence.repository import media_identity_store as identity
 from scanner.persistence.repository.repository_audio_tracks import record_analyzed_audio_selection
 from scanner.pipeline import audio_tracks
 from scanner.runtime import media_fingerprints
 from scanner.runtime.file_generation import file_generation
 from tests.multi_user_access_support import USER
 from tests.test_version_reuse import _register_http_reuse_target
-from tests.test_version_reuse import api as identity_verification_api
 from tests.test_version_reuse import app as app
 
 
@@ -102,7 +102,9 @@ def test_verified_legacy_probe_survives_restart_and_temporarily_unavailable_inve
     monkeypatch,
     fresh_fingerprint_process,
 ):
-    source_id, target_id, _ = _register_http_reuse_target(app, monkeypatch)
+    source_id, target_id, target_version_id = _register_http_reuse_target(
+        app, monkeypatch, legacy_target=True
+    )
     with app.accounts.factory() as db:
         target = db.scalar(
             select(ScanRow).join(MediaItemRow).where(MediaItemRow.jellyfin_id == target_id)
@@ -130,7 +132,7 @@ def test_verified_legacy_probe_survives_restart_and_temporarily_unavailable_inve
         pytest.fail("A verified generation triggered a full-file read")
 
     monkeypatch.setattr(audio_tracks, "probe_audio_tracks", transient_probe)
-    monkeypatch.setattr(identity_verification_api, "file_digest", unexpected_read)
+    monkeypatch.setattr(media_fingerprints._fingerprints, "_read_digest", unexpected_read)
     request = {
         "source_scan_id": source_id,
         "target": {"source": "jellyfin", "item_id": target_id},
@@ -149,8 +151,51 @@ def test_verified_legacy_probe_survives_restart_and_temporarily_unavailable_inve
     confirmed = app.send("POST", f"{route}/approve", headers, approval)
     assert confirmed.status_code == 200, confirmed.text
     assert confirmed.json()["scan"]["finding_count"] == 1
+    assert confirmed.json()["scan"]["stable_version_id"] == target_version_id
     assert probes == [path]
 
     path.write_bytes(b"replacement generation")
     stale = app.send("POST", f"{route}/approve", headers, approval)
     assert stale.status_code == 409, stale.text
+
+
+@pytest.mark.parametrize("legacy_witness", [False, True])
+def test_sha_only_target_keeps_id_only_with_unchanged_verified_witness(
+    app, monkeypatch, legacy_witness
+):
+    source, item, previous_id = _register_http_reuse_target(app, monkeypatch, legacy_target=True)
+    if legacy_witness:
+        media_fingerprints.content_digest(app.items[item].path)
+    def unexpected_read(*_args, **_kwargs):
+        pytest.fail("Historical identity triggered a full-file hash")
+
+    monkeypatch.setattr(media_fingerprints._fingerprints, "_read_digest", unexpected_read)
+    request = {
+        "source_scan_id": source,
+        "target": {"source": "jellyfin", "item_id": item},
+        "channels": ["video"],
+        "method": "original",
+    }
+    headers = app.accounts.unsafe_cookie(USER)
+    old_endpoint = f"/api/media-versions/{previous_id}/reuse"
+    old_preview = app.send("POST", f"{old_endpoint}/preview", headers, request)
+    assert old_preview.status_code == (200 if legacy_witness else 409), old_preview.text
+    endpoint = old_endpoint if legacy_witness else "/api/media-versions/current/reuse"
+    preview = app.send("POST", f"{endpoint}/preview", headers, request)
+    assert preview.status_code == 200, preview.text
+    approval = app.send(
+        "POST",
+        f"{endpoint}/approve",
+        headers,
+        {
+            **request,
+            "token": preview.json()["token"],
+            "confirmed": True,
+        },
+    )
+    assert approval.status_code == 200, approval.text
+    resolved_id = approval.json()["scan"]["stable_version_id"]
+    assert (resolved_id == previous_id) is legacy_witness
+    with app.accounts.factory() as db:
+        assert identity.get_version(db, previous_id).content_sha256
+        assert identity.get_version(db, resolved_id).sampled_md5

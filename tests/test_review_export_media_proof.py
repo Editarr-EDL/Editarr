@@ -1,6 +1,5 @@
 """Interactive exports consume current exact-media evidence under the SQLite writer lock."""
 
-import hashlib
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -9,7 +8,11 @@ import pytest
 
 from scanner.db import MediaItemExportRow, SavedReviewRow
 from scanner.persistence.repository import review_access, review_version_evidence
-from scanner.persistence.repository.media_identity_store import bind_review_version, observe_version
+from scanner.persistence.repository.media_identity_store import (
+    bind_review_version,
+    observe_sampled_version,
+)
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import USER
@@ -24,13 +27,12 @@ def _pinned_review(app):
         row = db.get(SavedReviewRow, review.id)
         scan = row.memberships[0].scan
         path = Path(scan.resolved_local_path)
-        version = observe_version(
+        version = observe_sampled_version(
             db,
             media=row.media_item,
             media_source_id=scan.media_source_id,
             source_path=scan.source_path,
-            resolved_path=str(path),
-            content_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            fingerprint=sampled_media_fingerprint(path),
             scan_id=scan.id,
         )
         bind_review_version(db, review.id, version)
@@ -57,11 +59,10 @@ def test_interactive_exports_fingerprint_once_before_the_writer_lock(
     def fingerprint(path):
         with closing(sqlite3.connect(app.accounts.path, timeout=0.1)) as writer:
             writer.execute("BEGIN IMMEDIATE")
-        with Path(path).open("rb") as stream:
-            observed.append(Path(path))
-            return hashlib.file_digest(stream, "sha256").hexdigest()
+        observed.append(Path(path))
+        return sampled_media_fingerprint(path)
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", fingerprint)
+    monkeypatch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
     headers = app.accounts.unsafe_cookie(USER)
     url = f"/api/reviews/{review.id}/{endpoint}"
     response = (
@@ -81,7 +82,9 @@ def test_interactive_export_checks_authority_before_fingerprinting(app, monkeypa
     def unexpected_fingerprint(_path):
         pytest.fail("Media was read before authorization was checked")
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", unexpected_fingerprint)
+    monkeypatch.setattr(
+        review_version_evidence, "sampled_media_fingerprint", unexpected_fingerprint
+    )
     assert publish(app, review, "edl").status_code == 403
 
 
@@ -93,8 +96,8 @@ def test_interactive_export_refuses_replacement_after_fingerprint_without_rehash
     reads = []
 
     def fingerprint(path):
-        reads.append(path)
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        reads.append(Path(path))
+        return sampled_media_fingerprint(path)
 
     def capture_before_replacement(*args):
         proof = capture(*args)
@@ -103,7 +106,7 @@ def test_interactive_export_refuses_replacement_after_fingerprint_without_rehash
         replacement.replace(media)
         return proof
 
-    monkeypatch.setattr(review_version_evidence, "content_digest", fingerprint)
+    monkeypatch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
     monkeypatch.setattr(review_access, "capture_review_media_proof", capture_before_replacement)
     response = publish(app, review, "edl")
     assert response.status_code == 409, response.text

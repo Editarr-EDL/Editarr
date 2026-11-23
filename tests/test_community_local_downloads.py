@@ -17,6 +17,7 @@ from scanner.integrations.community.transport import CommunityFailure
 from scanner.modeling.community_matching import POLICY_VERSION, classify
 from scanner.modeling.model_community_downloads import DownloadRequest, DownloadStatusRequest
 from scanner.modeling.model_community_lookup import LookupSummary
+from scanner.persistence.repository.media_identity_store import get_version
 from scanner.persistence.repository.repository_review_core import _scan_is_available
 from scanner.pipeline.audio_tracks import _file_state
 from scanner.security.private_identity_files import IdentityHome
@@ -150,6 +151,9 @@ def test_staged_download_is_reconcilable_without_approving_raw_cues(scenario):
     first = asyncio.run(scenario.service.run(body))
     assert first["verificationPending"] is True
     assert first["scan"]["stable_version_id"]
+    version = get_version(scenario.db, first["scan"]["stable_version_id"])
+    assert version.sampled_md5 == first["scan"]["video_hash"]
+    assert version.content_sha256 is None
     assert first["scan"]["community_approvals"] == []
     assert first["scan"]["community_pending_targets"][0]["channels"] == ["video"]
     scan = scenario.db.get(ScanRow, first["scan"]["id"])

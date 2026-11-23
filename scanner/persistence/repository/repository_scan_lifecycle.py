@@ -84,6 +84,8 @@ def create_scan(
     commit: bool = True,
     audio_selection: AudioSelection | dict | None = None,
     initiator: ActivityOwner | None = None,
+    known_video_hash: str | None = None,
+    defer_video_hash: bool = False,
 ) -> Scan:
     """Create a scan for the supplied media version and scanning configuration.
 
@@ -100,7 +102,9 @@ def create_scan(
             raise ValueError("Audio selection requires audio scanning")
         probe_audio_tracks(resolved_local_path).revalidate(audio_selection.selection())
     name = normalize_scan_name(name)
-    video_hash = root._compute_video_hash(resolved_local_path)
+    video_hash = known_video_hash
+    if video_hash is None and not defer_video_hash:
+        video_hash = root._compute_video_hash(resolved_local_path)
     try:
         video_duration_seconds = root.get_video_duration(resolved_local_path)
     except (OSError, RuntimeError, ValueError):
@@ -358,6 +362,8 @@ def find_active_credits_detection(
     configuration: CreditsDetectionConfiguration,
     initiator_id: int,
     version_id: str | None = None,
+    generation: tuple[int, ...] | None = None,
+    legacy_generation_proven: bool = False,
 ) -> tuple[Scan, int] | None:
     """Find this initiator's matching queued or running credits scan for a media version."""
     configuration_json = json.dumps(
@@ -389,7 +395,22 @@ def find_active_credits_detection(
     if version_id is not None:
         matching = matching.join(ScanMediaVersionRow, ScanMediaVersionRow.scan_id == ScanRow.id)
         matching = matching.filter(ScanMediaVersionRow.version_id == version_id)
-    row = matching.order_by(ScanQueueRow.id).first()
+    matching = matching.order_by(ScanQueueRow.id)
+    if generation is None:
+        row = matching.first()
+    else:
+        from scanner.runtime.file_generation import generation_matches
+        from scanner.runtime.scan_version import recorded_scan_generation
+
+        row = next(
+            (
+                candidate
+                for candidate in matching
+                if generation_matches(stamp := recorded_scan_generation(candidate.scan), generation)
+                or (stamp is None and legacy_generation_proven)
+            ),
+            None,
+        )
     if row is None:
         return None
     if version_id is None and not root._scan_matches_physical_version(

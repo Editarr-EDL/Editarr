@@ -139,7 +139,7 @@ def review_subtitle_evidence(
         media,
         file_fingerprint(media),
         mutes,
-        tuple(reviewed_audio_sources(db, memberships, scans)),
+        tuple(reviewed_audio_sources(db, memberships, scans, media)),
     )
 
 

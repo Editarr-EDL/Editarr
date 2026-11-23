@@ -14,8 +14,12 @@ from scanner.persistence.repository import media_identity_store as identity
 from scanner.persistence.repository.repository_catalog import get_scan, upsert_media_item
 from scanner.persistence.repository.review_access import ReviewAccess
 from scanner.persistence.write_lock import write_lock
-from scanner.runtime.media_fingerprints import cached_content_digest
-from scanner.runtime.scan_version import completed_scan_digest
+from scanner.runtime.media_fingerprints import (
+    cached_content_digest,
+    cached_sampled_media_fingerprint,
+    sampled_media_fingerprint,
+)
+from scanner.runtime.scan_version import ScanVersionChanged, completed_scan_digest, file_generation
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied
 
@@ -27,7 +31,11 @@ from .catalog_library_api import (
 )
 from .review_targets import capture_target
 from .scan_access import ScanCaller
-from .stable_media_capture import cached_target_digest, file_digest, observe_target_version
+from .stable_media_capture import (
+    cached_target_digest,
+    observe_sampled_target_version,
+    require_media_generation,
+)
 
 router = APIRouter()
 _browse = catalog_viewer(C.MEDIA_BROWSE)
@@ -163,36 +171,48 @@ def _history(db, viewer, versions, media_by_id):
     return scan_lists, review_lists
 
 
-def _source_generations(db, server_id, live, requested):
-    """Find verified live versions without putting full file reads on ordinary title loads."""
+def _source_versions(db, server_id, title_id, live, versions):
+    """Match live sources using retained observations or bounded samples for known sizes."""
     current = {}
+    sampled_sizes = {version.sample_size_bytes for version in versions if version.sampled_md5}
+    has_full_history = any(version.content_sha256 for version in versions)
     for item in live:
         sources = [(entry.id, entry.path) for entry in item.versions if entry.path]
         if not sources and item.path:
             sources = [(None, item.path)]
         for source_id, source_path in sources:
             try:
-                path = root.resolve_local_path(db, source_path).local_path
-                digest = cached_content_digest(path)
-                if digest is None:
-                    digest = completed_scan_digest(
+                local_path = root.resolve_local_path(db, source_path).local_path
+                path = Path(local_path).resolve(strict=True)
+                generation = file_generation(str(path))
+                known = cached_content_digest(path) if has_full_history else None
+                if known is None and has_full_history:
+                    known = completed_scan_digest(
                         db,
                         server_id=server_id,
                         item_id=item.id,
                         media_source_id=source_id,
-                        path=Path(path),
+                        path=path,
                     )
-                if digest is None and requested and requested.content_sha256:
-                    # An explicit version bookmark may need its physical file revalidated.
-                    digest = file_digest(path)
-            except (ValueError, HTTPException):
+                version_id = identity.find_observed_version(
+                    db, title_id=title_id, path=path, generation=generation,
+                    known_content_sha256=known,
+                )
+                if version_id is None and generation[2] in sampled_sizes:
+                    sample = sampled_media_fingerprint(path)
+                    if sample.generation == generation:
+                        version_id = identity.find_sampled_version(
+                            db, title_id=title_id, fingerprint=sample, known_content_sha256=known,
+                        )
+                if version_id is not None:
+                    require_media_generation(db, source_path, path, generation)
+                    current[(item.id, source_id)] = version_id
+            except (OSError, RuntimeError, ValueError, HTTPException):
                 continue
-            if digest:
-                current[(item.id, source_id)] = digest
     return current
 
 
-def _resolve(db, viewer, credentials, title_id, *, preferred=None, original=None, version_id=None):
+def _resolve(db, viewer, credentials, title_id, *, preferred=None, original=None):
     records = identity.title_media_items(db, title_id)
     live = []
     if preferred is not None and identity.identity_conflicts_title(
@@ -232,14 +252,7 @@ def _resolve(db, viewer, credentials, title_id, *, preferred=None, original=None
     versions = identity.title_versions(db, title_id)
     scan_lists, review_lists = _history(db, viewer, versions, media_by_id)
     active_ids = {item.id for item in live}
-    requested = next((version for version in versions if version.id == version_id), None)
-    digests = _source_generations(db, credentials[0], live, requested)
-    current_versions = {}
-    for version in versions:
-        if version.content_sha256:
-            for target, checksum in digests.items():
-                if version.content_sha256 == checksum:
-                    current_versions[target] = version.id
+    current_versions = _source_versions(db, credentials[0], title_id, live, versions)
     historical = []
     original_choices = []
     for version in versions:
@@ -345,7 +358,7 @@ def stable_item(
     viewer: CatalogViewer = Depends(_browse),
 ):
     """Look up a stable title, projecting only the viewer's reachable bindings."""
-    return _resolve(db, viewer, _credentials(db), title_id, version_id=version_id)
+    return _resolve(db, viewer, _credentials(db), title_id)
 
 
 @router.post("/api/editarr-items/{title_id}/versions")
@@ -363,9 +376,29 @@ def stable_version(
     prepared = capture_target(caller, target)
     if prepared.source.media_source_id != target.media_source_id:
         raise not_found()
-    digest = cached_target_digest(db, prepared) if target.cached_only else None
-    if target.cached_only and digest is None:
-        return {"version_id": None}
-    version_id = observe_target_version(db, prepared, digest=digest)
+    try:
+        path = Path(prepared.media.resolved_path).resolve(strict=True)
+        generation = file_generation(str(path))
+        known = cached_target_digest(db, prepared)
+        fingerprint = (
+            cached_sampled_media_fingerprint(path) if target.cached_only
+            else sampled_media_fingerprint(path)
+        )
+        require_media_generation(db, prepared.source.path, path, generation)
+        if fingerprint is not None and fingerprint.generation != generation:
+            raise ScanVersionChanged("The selected version has changed")
+        if fingerprint is None:
+            version_id = identity.find_observed_version(
+                db, title_id=title_id, path=path, generation=generation,
+                known_content_sha256=known,
+            )
+            return {"version_id": version_id}
+        version_id = observe_sampled_target_version(
+            db, prepared, fingerprint=fingerprint, known_content_sha256=known,
+        )
+    except (OSError, RuntimeError, ScanVersionChanged) as exc:
+        raise root._review_http_error(
+            "target_changed", "The selected version has changed", 409
+        ) from exc
     db.commit()
     return {"version_id": version_id}

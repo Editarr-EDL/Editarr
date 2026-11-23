@@ -1,4 +1,4 @@
-"""Expose active full-file verification reads without creating scan records."""
+"""Expose active verification reads without creating scan records."""
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -23,7 +23,7 @@ class FingerprintActivity:
 
 
 _lock = Lock()
-_activities: dict[str, tuple[tuple[int, int], tuple[int, ...], FingerprintActivity]] = {}
+_activities: dict[str, tuple[tuple[int, int], tuple[int, ...] | None, FingerprintActivity]] = {}
 
 
 @contextmanager
@@ -36,6 +36,7 @@ def track_fingerprint(
     item_id: str,
     media_source_id: str | None,
     source_scan_id: str,
+    sampled_total: int | None = None,
 ) -> Iterator[Callable[[int, int], None]]:
     """Publish one authorized read until it finishes or fails."""
     item = FingerprintActivity(
@@ -43,18 +44,19 @@ def track_fingerprint(
         item_name,
         version_name,
         0,
-        generation[2],
+        generation[2] if sampled_total is None else sampled_total,
         item_id,
         media_source_id,
         source_scan_id,
     )
+    shared_generation = generation if sampled_total is None else None
     with _lock:
-        _activities[item.id] = (actor, generation, item)
+        _activities[item.id] = (actor, shared_generation, item)
 
     def report(done: int, total: int) -> None:
         current = replace(item, bytes_read=done, bytes_total=total, reading=True)
         with _lock:
-            _activities[item.id] = (actor, generation, current)
+            _activities[item.id] = (actor, shared_generation, current)
 
     try:
         yield report
@@ -71,7 +73,7 @@ def active_fingerprints(actor: tuple[int, int]) -> list[FingerprintActivity]:
         ]
     results = []
     for generation, item in activities:
-        progress = active_digest_progress(generation) if not item.reading else None
+        progress = active_digest_progress(generation) if generation and not item.reading else None
         if progress is not None:
             item = replace(item, bytes_read=progress[0], bytes_total=progress[1], reading=True)
         results.append(item)

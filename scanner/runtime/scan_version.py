@@ -3,6 +3,7 @@
 import logging
 import stat
 from collections.abc import Callable
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from time import monotonic
@@ -14,7 +15,12 @@ from scanner.persistence.repository.media_identity_store import get_version, sca
 
 from .file_generation import file_generation as stat_generation
 from .file_generation import generation_matches
-from .media_fingerprints import content_digest, remember_content_digest
+from .media_fingerprints import (
+    SampledMediaFingerprint,
+    cached_content_digest,
+    remember_content_digest,
+    sampled_media_fingerprint,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,33 +35,30 @@ STALE_AUDIO_SELECTION = (
 )
 
 
-def expected_scan_digest(db: Session, scan_id: str) -> str | None:
-    """Read the pinned digest, if this scan has verified version evidence."""
-    version_id = scan_version_id(db, scan_id)
-    if version_id is None:
-        return None
-    version = get_version(db, version_id)
-    if version is None:
-        raise ScanVersionChanged(_FAILURE)
-    return version.content_sha256
+@dataclass(frozen=True)
+class ScanMediaProof:
+    """The file generation this attempt must keep, and its pipeline cache key."""
+
+    fingerprint: SampledMediaFingerprint
+    cache_key: str
 
 
-def require_scan_digest(
-    path: str, expected: str | None, *, on_progress: Callable[[int, int], None] | None = None
-) -> None:
-    """Check exact file bytes for new scans, retaining legacy worker behavior."""
-    if expected is None:
-        return
-    try:
-        actual = content_digest(path, on_progress=on_progress)
-    except (OSError, ValueError) as exc:
-        raise ScanVersionChanged(_FAILURE) from exc
-    if actual != expected:
+def require_scan_generation(path: str, proof: ScanMediaProof | None) -> None:
+    """Refuse to commit scan results after the admitted file generation changes."""
+    if proof is not None and file_generation(path) != proof.fingerprint.generation:
         raise ScanVersionChanged(_FAILURE)
 
 
 _GENERATION = "queued_media_generation"
 _VERIFIED_GENERATION = "verified_media_generation"
+
+
+def recorded_scan_generation(scan) -> object:
+    """Return the local generation held by a queued or previously started attempt."""
+    from scanner.persistence.repository.repository_checkpoints import _checkpoint_state
+
+    state = _checkpoint_state(scan)
+    return state.get(_GENERATION) or state.get(_VERIFIED_GENERATION)
 
 
 def file_generation(path: str) -> tuple[int, ...]:
@@ -170,34 +173,50 @@ def stage_scan_generation(
 
 
 def _pin_queued_scan(
-    db: Session, scan_id: str, path: str, generation: tuple[int, ...], digest: str
-):
+    db: Session,
+    scan_id: str,
+    fingerprint: SampledMediaFingerprint,
+    known_sha256: str | None,
+) -> None:
     import json
 
     from scanner.db import ScanRow
-    from scanner.persistence.repository.media_identity_store import observe_version
+    from scanner.persistence.repository.media_identity_store import (
+        bind_scan_version,
+        matches_sampled_version,
+        observe_sampled_version,
+    )
     from scanner.persistence.repository.repository_checkpoints import _checkpoint_state
 
     row = db.get(ScanRow, scan_id)
     state = _checkpoint_state(row)
-    if (
-        not generation_matches(state.get(_GENERATION), generation)
-        or file_generation(path) != generation
+    captured = state.get(_GENERATION) or state.get(_VERIFIED_GENERATION)
+    generation = fingerprint.generation
+    path = row.resolved_local_path
+    if (captured is not None and not generation_matches(captured, generation)) or (
+        file_generation(path) != generation
     ):
         raise ScanVersionChanged(_FAILURE)
-    observe_version(
+    current_id = scan_version_id(db, scan_id)
+    if current_id and not matches_sampled_version(
+        db, get_version(db, current_id), fingerprint, known_content_sha256=known_sha256
+    ):
+        raise ScanVersionChanged(_FAILURE)
+    observed_id = observe_sampled_version(
         db,
         media=row.media_item,
         media_source_id=row.media_source_id,
         source_path=row.source_path or path,
-        resolved_path=path,
-        content_sha256=digest,
-        video_hash=row.video_hash,
-        scan_id=scan_id,
+        fingerprint=fingerprint,
+        known_content_sha256=known_sha256,
     )
-    state.pop(_GENERATION)
+    if current_id is not None and current_id != observed_id:
+        raise ScanVersionChanged(_FAILURE)
+    bind_scan_version(db, scan_id, observed_id)
+    state.pop(_GENERATION, None)
     state[_VERIFIED_GENERATION] = list(generation)
     row.checkpoint_state = json.dumps(state)
+    row.video_hash = fingerprint.digest
     db.commit()
 
 
@@ -216,32 +235,37 @@ def scan_digest_progress(write: Callable[[dict[str, object]], None]) -> Callable
     return report
 
 
-def prepare_scan_digest(
+def prepare_scan_fingerprint(
     db: Session,
     scan_id: str,
     path: str,
     *,
     write,
     on_progress: Callable[[int, int], None] | None = None,
-) -> str | None:
-    """Pin deferred evidence before any analysis, or verify an existing pin."""
+) -> ScanMediaProof | None:
+    """Measure bounded media evidence and admit a stable generation for analysis."""
     from scanner.db import ScanRow
     from scanner.persistence.repository.repository_checkpoints import _checkpoint_state
 
-    known = expected_scan_digest(db, scan_id)
-    if known is not None:
-        require_scan_digest(path, known, on_progress=on_progress)
-        return known
     state = _checkpoint_state(db.get(ScanRow, scan_id))
-    captured = state.get(_GENERATION)
-    if captured is None:
+    current_id = scan_version_id(db, scan_id)
+    captured = state.get(_GENERATION) or state.get(_VERIFIED_GENERATION)
+    if captured is None and current_id is None:
         return None
     generation = file_generation(path)
-    if not generation_matches(captured, generation):
+    if captured is not None and not generation_matches(captured, generation):
         raise ScanVersionChanged(_FAILURE)
+    version = get_version(db, current_id) if current_id is not None else None
+    old_digest = version.content_sha256 if version is not None else None
+    known_sha256 = cached_content_digest(path)
+    if old_digest and generation_matches(state.get(_VERIFIED_GENERATION), generation):
+        known_sha256 = old_digest
     try:
-        digest = content_digest(path, on_progress=on_progress)
+        fingerprint = sampled_media_fingerprint(path, on_progress=on_progress)
     except (OSError, ValueError) as exc:
         raise ScanVersionChanged(_FAILURE) from exc
-    write(_pin_queued_scan, scan_id, path, generation, digest)
-    return digest
+    if fingerprint.generation != generation:
+        raise ScanVersionChanged(_FAILURE)
+    write(_pin_queued_scan, scan_id, fingerprint, known_sha256)
+    cache_key = old_digest if old_digest and old_digest == known_sha256 else fingerprint.digest
+    return ScanMediaProof(fingerprint, cache_key)

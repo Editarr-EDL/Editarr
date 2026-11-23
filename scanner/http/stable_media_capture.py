@@ -1,30 +1,19 @@
 """Identify and capture an authorized Jellyfin file at the physical version boundary."""
 
-from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import HTTPException
 
-from scanner.integrations.community.fingerprints import FileChangedError
 from scanner.persistence.repository.media_identity_store import (
     find_title_id,
     identity_conflicts_title,
+    observe_sampled_version,
     observe_title,
-    observe_version,
 )
+from scanner.persistence.write_lock import write_lock
 from scanner.repository import resolve_local_path
-from scanner.runtime.media_fingerprints import cached_content_digest, content_digest
+from scanner.runtime.media_fingerprints import SampledMediaFingerprint, cached_content_digest
 from scanner.runtime.scan_version import ScanVersionChanged, completed_scan_digest, file_generation
-
-
-def file_digest(path: str, *, on_progress: Callable[[int, int], None] | None = None) -> str:
-    """Read full content identity, reusing verified fingerprints for unchanged file state."""
-    try:
-        return (
-            content_digest(path, on_progress=on_progress) if on_progress else content_digest(path)
-        )
-    except (FileChangedError, OSError, ValueError) as exc:
-        raise HTTPException(409, "The selected media file could not be verified") from exc
 
 
 def require_media_generation(
@@ -37,7 +26,7 @@ def require_media_generation(
             return
     except (OSError, RuntimeError, ValueError):
         pass
-    raise ScanVersionChanged("The selected media file changed while preparing the scan")
+    raise ScanVersionChanged("The selected media file changed")
 
 
 def cached_target_digest(db, prepared, *, audio_evidence=None) -> str | None:
@@ -53,8 +42,7 @@ def cached_target_digest(db, prepared, *, audio_evidence=None) -> str | None:
     )
 
 
-def observe_target_version(db, prepared, *, digest: str | None = None) -> str:
-    """Store the selected catalog binding and a strongly identified file version."""
+def _target_metadata(db, prepared):
     item = prepared.source.catalog_item
     metadata = item.media_identity if item else None
     known = find_title_id(
@@ -64,16 +52,27 @@ def observe_target_version(db, prepared, *, digest: str | None = None) -> str:
     )
     if known and identity_conflicts_title(db, known, metadata):
         raise HTTPException(409, "Jellyfin's provider IDs conflict with this Editarr title")
-    checksum = (
-        digest or cached_target_digest(db, prepared) or file_digest(prepared.media.resolved_path)
-    )
-    media = prepared.store(db)
-    observe_title(db, media, metadata)
-    return observe_version(
-        db,
-        media=media,
-        media_source_id=prepared.source.media_source_id,
-        source_path=prepared.source.path,
-        resolved_path=prepared.media.resolved_path,
-        content_sha256=checksum,
-    )
+    return metadata
+
+
+def observe_sampled_target_version(
+    db,
+    prepared,
+    *,
+    fingerprint: SampledMediaFingerprint,
+    known_content_sha256: str | None = None,
+) -> str:
+    """Store one sampled version only while its authorized mapping and generation match."""
+    with write_lock(db):
+        require_media_generation(db, prepared.source.path, fingerprint.path, fingerprint.generation)
+        metadata = _target_metadata(db, prepared)
+        media = prepared.store(db)
+        observe_title(db, media, metadata)
+        return observe_sampled_version(
+            db,
+            media=media,
+            media_source_id=prepared.source.media_source_id,
+            source_path=prepared.source.path,
+            fingerprint=fingerprint,
+            known_content_sha256=known_content_sha256,
+        )

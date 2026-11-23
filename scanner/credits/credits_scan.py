@@ -51,7 +51,7 @@ def run_credits_scan(
     stage_callback: Callable[[str, str, dict[str, object]], None] | None = None,
     result_writer: Callable = complete_credits_detection,
     scan_metadata_updater: Callable = update_scan_duration,
-    content_sha256: str | None = None,
+    media_cache_key: str | None = None,
 ) -> CreditsDetectionResult:
     """Run one detector configuration and atomically persist its evidence."""
     status_updater(db, scan_id, "scanning")
@@ -63,10 +63,10 @@ def run_credits_scan(
     if duration is None or not math.isfinite(duration) or duration <= 0:
         duration = get_video_duration(video_path)
         scan_metadata_updater(db, scan_id, duration)
-    resolved_hash = content_sha256 or compute_video_md5(video_path)
+    resolved_hash = media_cache_key or compute_video_md5(video_path)
     if should_cancel and should_cancel():
         raise ScanCancelledError("Scan cancelled")
-    if content_sha256 is None and video_hash is not None and resolved_hash != video_hash:
+    if media_cache_key is None and video_hash is not None and resolved_hash != video_hash:
         raise ValueError("Credits detection media changed after the scan was queued")
     cache_key = credits_cache_key(
         video_hash=resolved_hash,

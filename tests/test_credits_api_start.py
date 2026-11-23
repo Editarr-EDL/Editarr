@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from fastapi import HTTPException
 
@@ -59,12 +61,32 @@ def test_start_credits_detection_queues_once_and_reconnects(monkeypatch, tmp_pat
     db.close()
 
 
+def test_credits_reuses_the_sampled_version_without_reusing_an_older_attempt(monkeypatch, tmp_path):
+    db = _database()
+    media = tmp_path / "movie.mkv"
+    media.write_bytes(b"unchanged test media")
+    monkeypatch.setattr(api, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(repository, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
+    request = CreditsDetectionStartRequest(target=jellyfin_target(monkeypatch, db, media))
+
+    initial = api.api_start_credits_detection(request, owner_caller(db))
+    stats = media.stat()
+    os.utime(media, ns=(stats.st_atime_ns, stats.st_mtime_ns + 3_000_000_000))
+    current = api.api_start_credits_detection(request, owner_caller(db))
+    assert current.queue_id != initial.queue_id
+    assert scan_version_id(db, initial.scan.id) == scan_version_id(db, current.scan.id)
+    assert db.query(MediaVersionRow).count() == 1
+    assert api.api_start_credits_detection(request, owner_caller(db)).queue_id == current.queue_id
+    db.close()
+
+
 @pytest.mark.parametrize(
     ("operation", "existing", "remap"),
     [
-        ("file_digest", False, False),
-        ("file_digest", True, False),
-        ("file_digest", False, True),
+        ("sampled_media_fingerprint", False, False),
+        ("sampled_media_fingerprint", True, False),
+        ("sampled_media_fingerprint", False, True),
         ("create_scan", False, False),
         ("find_active_credits_detection", True, False),
     ],

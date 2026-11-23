@@ -10,6 +10,7 @@ from scanner import api
 from scanner.db import SavedReviewRow, ScanRow
 from scanner.http import review_import_routes_api
 from scanner.http.identity_verification_api import router as verification_router
+from scanner.persistence.repository.media_identity_store import get_version
 from scanner.persistence.repository.review_access import ReviewAccess
 from scanner.persistence.repository.version_reuse import source_pending_reuse
 from scanner.security.access.capability_ids import Capability as C
@@ -63,14 +64,14 @@ def test_staged_upload_authorizes_before_hashing(app, monkeypatch, kind, denied)
             "accepted_boundary_seconds": 50,
         }
     app.accounts.set_override(USER, denied, OverrideEffect.DENY)
-    digest = review_import_routes_api.file_digest
+    fingerprint = review_import_routes_api.sampled_media_fingerprint
     reads = []
 
     def observed_digest(path):
         reads.append(path)
-        return digest(path)
+        return fingerprint(path)
 
-    monkeypatch.setattr(review_import_routes_api, "file_digest", observed_digest)
+    monkeypatch.setattr(review_import_routes_api, "sampled_media_fingerprint", observed_digest)
     response = _send_staged(app, kind, options, USER)
     assert response.status_code in {403, 404}, response.text
     assert reads == []
@@ -130,7 +131,7 @@ def test_staged_upload_needs_verification_before_creating_a_review(app, monkeypa
     monkeypatch.setattr(api, "get_video_duration", lambda _path: 60)
     options = _staged_import_options(kind, item_id)
     target = options["target"]
-    digest = review_import_routes_api.file_digest
+    fingerprint = review_import_routes_api.sampled_media_fingerprint
     hashed = False
 
     def offloaded_digest(path):
@@ -138,9 +139,9 @@ def test_staged_upload_needs_verification_before_creating_a_review(app, monkeypa
         with pytest.raises(RuntimeError, match="no running event loop"):
             asyncio.get_running_loop()
         hashed = True
-        return digest(path)
+        return fingerprint(path)
 
-    monkeypatch.setattr(review_import_routes_api, "file_digest", offloaded_digest)
+    monkeypatch.setattr(review_import_routes_api, "sampled_media_fingerprint", offloaded_digest)
     headers = app.accounts.unsafe_cookie(OWNER)
     response = _send_staged(app, kind, options)
     assert response.status_code == 201, response.text
@@ -152,6 +153,8 @@ def test_staged_upload_needs_verification_before_creating_a_review(app, monkeypa
     version = staged["scan"]["stable_version_id"]
     assert version
     with app.accounts.factory() as db:
+        saved_version = get_version(db, version)
+        assert saved_version.sampled_md5 and saved_version.content_sha256 is None
         assert source_pending_reuse(db.get(ScanRow, scan_id))
         assert db.query(SavedReviewRow).count() == 0
 

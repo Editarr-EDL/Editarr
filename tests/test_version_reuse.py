@@ -1,6 +1,6 @@
 """Version-bound cue projection, transcript gaps, and verified target writes."""
 
-from hashlib import sha256
+from hashlib import md5, sha256
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,12 +29,24 @@ from scanner.persistence.repository.repository_review_core import _scan_is_avail
 from scanner.persistence.repository.version_reuse import approved_reuse, bound_scan_file_matches
 from scanner.persistence.rows.db_media_identity import MediaVersionLocatorRow, MediaVersionRow
 from scanner.runtime import version_reuse_audio
-from scanner.runtime.media_fingerprints import content_digest
+from scanner.runtime.media_fingerprints import (
+    SampledMediaFingerprint,
+    content_digest,
+    sampled_media_fingerprint,
+)
+from scanner.runtime.scan_version import file_generation
 from scanner.security.access.capability_ids import Capability
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import USER
 from tests.review_repository_support import review_db
 from tests.test_review_access_http import app as app
+
+
+def _fixture_fingerprint(path: Path) -> SampledMediaFingerprint:
+    data = path.read_bytes()
+    return SampledMediaFingerprint(
+        path, md5(data, usedforsecurity=False).hexdigest(), len(data), file_generation(str(path))
+    )
 
 
 def test_piecewise_alignment_maps_only_continuous_covered_cues():
@@ -206,13 +218,12 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
         db.add(movie)
         db.flush()
         identity.observe_title(db, movie, input_identity)
-        new_version = identity.observe_version(
+        new_version = identity.observe_sampled_version(
             db,
             media=movie,
             media_source_id=None,
             source_path=str(new_path),
-            resolved_path=str(new_path),
-            content_sha256=sha256(new_path.read_bytes()).hexdigest(),
+            fingerprint=_fixture_fingerprint(new_path),
         )
         for start in (2, 20):
             db.add(
@@ -268,10 +279,12 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
                     10,
                     True,
                 )
-            return content_digest(path)
+            return sampled_media_fingerprint(path)
 
-        monkeypatch.setattr(api, "file_digest", fingerprint)
-        monkeypatch.setattr(api, "observe_target_version", lambda *_args, **_kw: new_version)
+        monkeypatch.setattr(api, "sampled_media_fingerprint", fingerprint)
+        monkeypatch.setattr(
+            api, "observe_sampled_target_version", lambda *_args, **_kw: new_version
+        )
         monkeypatch.setattr(root, "get_video_duration", lambda _path: 100)
         monkeypatch.setattr(api.ScanCaller, "present", lambda _self, scan: scan)
         request = VersionReuseRequest(
@@ -284,14 +297,14 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
             ],
         )
         result = api.preview_version_reuse(route_version, request, caller)
-        assert reads == ([] if deferred else [str(new_path)])
+        assert reads == ([] if deferred else [new_path])
         assert result.target_generation
         assert not result.exact
         assert [cue.target_start for cue in result.cues] == [5, None]
         assert db.query(ScanRow).count() == 1
         approval = VersionReuseApproval(**request.model_dump(), token=result.token, confirmed=True)
         approved = api.approve_version_reuse(route_version, approval, caller)
-        assert reads[-1] == str(new_path)
+        assert reads[-1] == new_path
         assert api.fingerprint_queue(caller) == []
         assert not approved.reused
         assert approved.scan.stable_version_id == new_version
@@ -320,7 +333,7 @@ def test_approval_copies_only_mapped_cues_and_reuses_the_same_result(
         assert error.value.status_code == 409
 
 
-def _register_http_reuse_target(app, monkeypatch):
+def _register_http_reuse_target(app, monkeypatch, *, legacy_target=False):
     """Register two files for one stable title and return its reuse request fields."""
     app.client.app.include_router(api.router)
     monkeypatch.setattr(root, "get_video_duration", lambda _path: 100)
@@ -346,15 +359,25 @@ def _register_http_reuse_target(app, monkeypatch):
             )
             identity.observe_title(db, media, input_identity)
             row.duration_seconds = 100
-            version_id = identity.observe_version(
-                db,
-                media=media,
-                media_source_id=None,
-                source_path=str(path),
-                resolved_path=str(path),
-                content_sha256=sha256(path.read_bytes()).hexdigest(),
-                scan_id=row.id,
-            )
+            if legacy_target and row is new:
+                version_id = identity.observe_version(
+                    db,
+                    media=media,
+                    media_source_id=None,
+                    source_path=str(path),
+                    resolved_path=str(path),
+                    content_sha256=sha256(path.read_bytes()).hexdigest(),
+                    scan_id=row.id,
+                )
+            else:
+                version_id = identity.observe_sampled_version(
+                    db,
+                    media=media,
+                    media_source_id=None,
+                    source_path=str(path),
+                    fingerprint=_fixture_fingerprint(path),
+                    scan_id=row.id,
+                )
         db.add(
             ScanFindingRow(
                 scan_id=original_id,
@@ -440,7 +463,7 @@ def test_transcript_status_is_scoped_to_an_authorized_target_track(app, monkeypa
     assert read_tracks == [4, 1]
 
 
-def test_verification_reuses_legacy_transcript_only_after_matching_file_bytes(app, monkeypatch):
+def test_verification_reuses_moved_transcript_only_after_matching_sample(app, monkeypatch):
     original_id, target_item, _ = _register_http_reuse_target(app, monkeypatch)
     requested = AudioSelection.model_validate(
         {"file_version": "1" * 64, "track": {"stream_index": 1, "disposition": 1}}
@@ -470,11 +493,11 @@ def test_verification_reuses_legacy_transcript_only_after_matching_file_bytes(ap
     )
     reads = []
 
-    def get_digest(selected, **_):
+    def read_sample(selected, **kwargs):
         reads.append(selected)
-        return content_digest(selected)
+        return sampled_media_fingerprint(selected, **kwargs)
 
-    monkeypatch.setattr(api, "file_digest", get_digest)
+    monkeypatch.setattr(api, "sampled_media_fingerprint", read_sample)
     route = "/api/media-versions/current/reuse"
     body = {
         "source_scan_id": original_id,
@@ -491,11 +514,11 @@ def test_verification_reuses_legacy_transcript_only_after_matching_file_bytes(ap
     preview = app.send("POST", f"{route}/preview", headers, body)
     assert preview.status_code == 200, preview.text
     assert "Couldn’t align automatically" in preview.json()["issues"][0]
-    assert reads == [str(path)]
+    assert reads == [path]
     ready = app.send("POST", f"{route}/transcript-status", headers, body)
     assert ready.json() == {"ready": True}, ready.text
 
     path.write_bytes(b"replacement cut")
-    content_digest(path)
+    sampled_media_fingerprint(path)
     unavailable = app.send("POST", f"{route}/transcript-status", headers, body)
     assert unavailable.json() == {"ready": False}, unavailable.text

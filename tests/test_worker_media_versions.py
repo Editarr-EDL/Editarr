@@ -1,5 +1,6 @@
 """Workers refuse replacement bytes before analysis and before committing results."""
 
+from hashlib import sha256
 from types import SimpleNamespace
 
 import pytest
@@ -8,13 +9,14 @@ from sqlalchemy.orm import sessionmaker
 
 from scanner import repository, worker
 from scanner.db import Base, MediaItemRow, ScanRow
-from scanner.persistence.repository.media_identity_store import observe_version
-from scanner.runtime.media_fingerprints import content_digest
+from scanner.persistence.repository.media_identity_store import get_version, observe_version
+from scanner.runtime import media_fingerprints
+from scanner.runtime.media_fingerprints import content_digest, sampled_media_fingerprint
 from tests.test_dedicated_worker import _scan_with_queue
 from tests.test_dedicated_worker import isolated_worker_paths as isolated_worker_paths
 
 
-@pytest.mark.parametrize("replacement", ["before", "during"])
+@pytest.mark.parametrize("replacement", ["before", "during", "unwitnessed"])
 def test_worker_refuses_a_changed_pinned_media_file(monkeypatch, tmp_path, replacement):
     path = tmp_path / "video.mkv"
     path.write_bytes(b"original media")
@@ -27,7 +29,11 @@ def test_worker_refuses_a_changed_pinned_media_file(monkeypatch, tmp_path, repla
             row = db.get(ScanRow, scan.id)
             row.resolved_local_path = str(path)
             media = db.get(MediaItemRow, row.media_item_id)
-            expected = content_digest(str(path))
+            expected = (
+                sha256(path.read_bytes()).hexdigest()
+                if replacement == "unwitnessed"
+                else content_digest(str(path))
+            )
             observe_version(
                 db,
                 media=media,
@@ -41,15 +47,20 @@ def test_worker_refuses_a_changed_pinned_media_file(monkeypatch, tmp_path, repla
             assert repository.reserve_scan_worker(db, scan.id, token="worker-token")
 
         def fake_scan(db, _path, **callbacks):
-            if replacement == "before":
-                pytest.fail("The worker analyzed a replacement file")
-            assert callbacks["content_sha256"] == expected
+            if replacement != "during":
+                pytest.fail("The worker analyzed unverified media")
+            assert callbacks["media_cache_key"] == expected
             path.write_bytes(b"replacement video")
             callbacks["status_updater"](db, scan.id, "complete")
             pytest.fail("The worker committed a result after its input changed")
 
         if replacement == "before":
             path.write_bytes(b"replacement video")
+
+        def unexpected_full_read(*args, **kwargs):
+            pytest.fail("A worker tried to recover a SHA-only version with a full-file read")
+
+        monkeypatch.setattr(media_fingerprints, "content_digest", unexpected_full_read)
         monkeypatch.setattr(
             worker,
             "WorkerControlServer",
@@ -110,7 +121,6 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
     from scanner.persistence.repository.media_identity_store import scan_version_id
     from scanner.runtime import scan_version
     from scanner.runtime.scan_version import (
-        completed_scan_digest,
         file_generation,
         stage_scan_generation,
     )
@@ -119,10 +129,9 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
     with path.open("wb") as media:
         media.truncate(24 * SAMPLE_BYTES)
     if cached:
-        content_digest(path)
-    # The digest reads at 0, 8, 16, and 24 MiB. Only the first and third
-    # reports should reach the queue while a long read is running.
-    ticks = iter([0.0, 0.4, 1.1, 1.5])
+        sampled_media_fingerprint(path)
+    # The sample reads in MiB increments. Report at 0 and 16 MiB due to throttling.
+    ticks = iter([0.0, *([0.4] * 15), 1.1, *([1.5] * 8)])
     monkeypatch.setattr(scan_version, "monotonic", lambda: next(ticks))
     engine = create_engine(f"sqlite:///{tmp_path / 'scanner.db'}")
     Base.metadata.create_all(engine)
@@ -157,7 +166,7 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
             saved_percent = row.progress_percent
             update_progress(db, scan.id, {"stage": "hashing", "percent": 95}, worker_token="old")
             assert db.get(ScanRow, scan.id).progress_percent == saved_percent
-            assert callbacks["content_sha256"] == content_digest(path)
+            assert callbacks["media_cache_key"] == sampled_media_fingerprint(path).digest
             callbacks["status_updater"](db, scan.id, "complete")
             update_progress(
                 db, scan.id, {"stage": "hashing", "percent": 99}, worker_token="worker-token"
@@ -177,19 +186,13 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
         with factory() as db:
             row = db.get(ScanRow, scan.id)
             assert row.status == ("failed" if changed else "complete")
-            assert bool(scan_version_id(db, scan.id)) is not changed
-            target = {
-                "server_id": row.media_item.server_id,
-                "item_id": row.media_item.jellyfin_id,
-                "media_source_id": row.media_source_id,
-                "path": path,
-            }
-            expected = None if changed else content_digest(path)
-            assert completed_scan_digest(db, **target) == expected
-            assert completed_scan_digest(db, **{**target, "media_source_id": "another-cut"}) is None
+            version_id = scan_version_id(db, scan.id)
+            assert bool(version_id) is not changed
             if not changed:
-                path.write_bytes(b"changed! media")
-                assert completed_scan_digest(db, **target) is None
+                version = get_version(db, version_id)
+                assert version.content_sha256 is None
+                sample = sampled_media_fingerprint(path)
+                assert version.sampled_md5 == row.video_hash == sample.digest
     finally:
         engine.dispose()
 

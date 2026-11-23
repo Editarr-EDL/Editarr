@@ -270,7 +270,7 @@ it("checks a saved transcript for imported cues and offers manual timing if conf
   expect(within(dialog).getByLabelText("Original time 1")).toBeVisible();
 });
 
-it("uses the completed transcript for alignment even when a stale Queue row still exists", async () => {
+it.each(["unchanged", "new file generation", "changed track metadata"])("queues an exact verification audio selection after %s", async (change) => {
   const scan = completeScan({
     id: "original-scan", name: "Original Scan", scan_video: false,
     jellyfin_item_id: "earlier-item", media_source_id: "earlier-source",
@@ -287,12 +287,14 @@ it("uses the completed transcript for alignment even when a stale Queue row stil
     start_seconds: 0, duration_seconds: 120, time_base: "1/48000",
   };
   const alternate = { ...primary, stream_index: 4, title: "Alternate", disposition: 0 };
-  const fileVersion = "b".repeat(64);
+  let fileVersion = "b".repeat(64);
+  let currentAlternate = alternate;
   let selection: AudioTrackSelection = { file_version: fileVersion, track: primary };
   let job: "none" | "scanning" | "complete" = "none";
   const targetScope = { item_id: "movie-1", media_source_id: "source-1" };
   const jobScan = completeScan({ id: "target-audio", scan_id: 19, scan_video: false, name: "Target audio" });
   const enqueueRequests: unknown[] = [];
+  const remembered: AudioTrackSelection[] = [];
   const previewRequests: VerificationRequest[] = [];
   const fallback = installProductionApi();
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -300,12 +302,13 @@ it("uses the completed transcript for alignment even when a stale Queue row stil
     if (url.pathname === "/api/editarr-items/audio-alignment-item") return json(record);
     if (url.pathname === "/api/media/audio-tracks") {
       expect(Object.fromEntries(url.searchParams)).toMatchObject(targetScope);
-      return json({ file_version: fileVersion, tracks: [primary, alternate], selection, selection_stale: false });
+      return json({ file_version: fileVersion, tracks: [primary, currentAlternate], selection, selection_stale: false });
     }
     if (url.pathname === "/api/media/audio-tracks/selection") {
       const payload = JSON.parse(String(init?.body));
       expect(payload).toMatchObject(targetScope);
       selection = payload.selection;
+      remembered.push(selection);
       return json(selection);
     }
     if (url.pathname === "/api/media-versions/current/reuse/transcript-status") {
@@ -315,7 +318,7 @@ it("uses the completed transcript for alignment even when a stale Queue row stil
     }
     const activeJob = {
       ...jobScan, status: "scanning", queue_id: 3, sort_order: 0,
-      requested_audio_selection: { file_version: fileVersion, track: alternate },
+      requested_audio_selection: { file_version: fileVersion, track: currentAlternate },
       progress_percent: 42, progress_stage: "transcription", progress_message: "Transcribing audio",
     };
     if (url.pathname === "/api/scans" && init?.method === "POST") {
@@ -350,15 +353,32 @@ it("uses the completed transcript for alignment even when a stale Queue row stil
   await waitFor(() => expect(trackPicker).toHaveValue("4"));
   const run = await dialog.findByRole("button", { name: "Run audio scan" });
   await waitFor(() => expect(run).toBeEnabled());
+  if (change !== "unchanged") {
+    if (change === "new file generation") fileVersion = "c".repeat(64);
+    else currentAlternate = { ...alternate, title: "Replacement audio" };
+    selection = { file_version: fileVersion, track: primary };
+  }
   fireEvent.click(run);
 
   const newScan = within(await screen.findByRole("dialog", { name: "New Scan" }));
-  await waitFor(() => expect(newScan.getByRole("combobox", { name: "Audio track" })).toHaveValue("4"));
-  fireEvent.click(newScan.getByRole("button", { name: "Add to Queue" }));
+  const queueScan = newScan.getByRole("button", { name: "Add to Queue" });
+  const currentTrack = newScan.getByRole("combobox", { name: "Audio track" });
+  if (change !== "unchanged") {
+    expect(await newScan.findByRole("alert")).toHaveTextContent("Audio selection changed. Choose a track again.");
+    expect(currentTrack).toHaveValue("");
+    expect(queueScan).toBeDisabled();
+    expect(remembered).toHaveLength(1);
+    expect(enqueueRequests).toEqual([]);
+    fireEvent.change(currentTrack, { target: { value: "4" } });
+    await waitFor(() => expect(remembered).toHaveLength(2));
+  }
+  await waitFor(() => expect(currentTrack).toHaveValue("4"));
+  await waitFor(() => expect(queueScan).toBeEnabled());
+  fireEvent.click(queueScan);
   const activeVerification = within(await screen.findByRole("dialog", { name: dialogName }));
   expect(enqueueRequests).toEqual([expect.objectContaining({
     jellyfin_item_id: targetScope.item_id, media_source_id: targetScope.media_source_id,
-    scan_audio: true, scan_video: false, audio_selection: { file_version: fileVersion, track: alternate },
+    scan_audio: true, scan_video: false, audio_selection: { file_version: fileVersion, track: currentAlternate },
   })]);
   expect(previewRequests).toEqual([]);
   const queue = activeVerification.getByRole("button", { name: /^Queue\b/i });
