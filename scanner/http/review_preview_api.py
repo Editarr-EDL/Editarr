@@ -38,6 +38,7 @@ from scanner.security.access.targets import ActionPair, ResourceRef
 
 from .review_access import review_caller
 from .review_targets import ReviewTarget, capture_target
+from .stable_media_capture import require_media_generation
 
 router = APIRouter()
 CUES = ActionPair(C.REVIEWS_CUES_EDIT_OWN, C.REVIEWS_CUES_EDIT_OTHER)
@@ -71,9 +72,11 @@ class DraftFilterPreview(ReviewWriteModel):
 @dataclass(frozen=True)
 class PreviewClip:
     path: Path
+    source_path: str
     start: float
     end: float
     version_id: str | None = None
+    generation: tuple[int, ...] | None = None
 
 
 def _target_path(db: Session, target: ReviewTarget) -> Path:
@@ -162,6 +165,7 @@ def _preview_clip(
             raise not_found()
     duration = source.duration_seconds
     edited = True
+    generation = None
     if request.source_scan_id is not None:
         scan = db.get(ScanRow, request.source_scan_id)
         if (
@@ -177,6 +181,8 @@ def _preview_clip(
             raise not_found()
         association = verified_target(db, scan, media.id, source.media_source_id)
         validate_target_role(association, role)
+        if association is None and repository._resolved_scan_path(scan) != path:
+            generation = file_generation(str(path))
         matches = (
             matches_target(association, path)
             if association is not None
@@ -203,13 +209,22 @@ def _preview_clip(
         end = min(end, duration)
     if end <= request.start_seconds:
         raise ValueError("The filter does not have a range within the media")
-    return PreviewClip(path, request.start_seconds, end, request.stable_version_id)
+    return PreviewClip(
+        path, source.path, request.start_seconds, end, request.stable_version_id, generation
+    )
 
 
 def _verify_preview_file(
     db: Session, clip: PreviewClip, target_generation: str | None, proof: ReviewMediaProof | None
 ) -> None:
     """Keep the same file throughout playback, including lightweight alignment previews."""
+    if clip.generation is not None:
+        try:
+            require_media_generation(db, clip.source_path, clip.path, clip.generation)
+        except ScanVersionChanged as exc:
+            raise root._review_http_error(
+                "target_changed", "The selected version has changed", 409
+            ) from exc
     if target_generation:
         try:
             matches = generation_token(file_generation(str(clip.path))) == target_generation

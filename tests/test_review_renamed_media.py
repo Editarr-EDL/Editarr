@@ -154,3 +154,34 @@ def test_renamed_preview_discards_output_if_file_changes_during_decode(
         "GET", f"{route}/filters/{review['filters'][0]['id']}/mute-preview", headers
     )
     assert response.status_code == 409, response.text
+
+
+def test_renamed_draft_preview_rechecks_generation_without_explicit_version(
+    app, moved_review, monkeypatch
+):
+    _, review, headers, _, moved = moved_review
+    cue = review["filters"][0]
+    item_id = review["target"]["item_id"]
+
+    def replace_while_decoding(path, *_args, **_kwargs):
+        assert Path(path) == moved
+        moved.write_bytes(b"new generation during draft preview")
+        return b"audio"
+
+    monkeypatch.setattr(repository, "render_mute_preview", replace_while_decoding)
+    response = app.send(
+        "POST",
+        f"/api/library-items/{item_id}/reviews/preview",
+        headers,
+        {
+            "review_id": review["id"],
+            "source_scan_id": cue["source_scan_id"],
+            "source_finding_id": cue["source_finding_id"],
+            "source": cue["source"],
+            "edit_action": cue["edit_action"],
+            "start_seconds": cue["start_seconds"],
+            "end_seconds": cue["end_seconds"],
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "target_changed"
