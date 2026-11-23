@@ -38,7 +38,8 @@ it("requires playback of the video for a cue that affects audio and video", asyn
     const clip = await screen.findByLabelText("Target cue preview");
     expect(clip.tagName).toBe("VIDEO");
     expect(fetchDraftFilterPreview).toHaveBeenCalledWith(expect.anything(),
-      expect.objectContaining({ source: "visual", edit_action: "skip", start_seconds: 11 }), expect.anything());
+      expect.objectContaining({ source: "visual", edit_action: "skip", start_seconds: 11, audio_track_index: 1 }),
+      expect.anything());
     fireEvent.play(clip);
     expect(approve).toBeDisabled();
     fireEvent.playing(clip);

@@ -132,7 +132,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
       const blob = await fetchDraftFilterPreview(target, {
         start_seconds: cue.target_start, end_seconds: cue.target_end,
         target_generation: preview?.result.target_generation ?? undefined,
-        audio_track_index: audioOnly ? preview?.request.audio_track_index : undefined,
+        audio_track_index: cue.channel !== "video" ? preview?.request.audio_track_index : undefined,
         source: audioOnly ? "audio" : "visual",
         edit_action: audioOnly ? "mute" : "skip",
       }, controller.signal);
