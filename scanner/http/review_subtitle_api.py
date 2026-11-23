@@ -89,6 +89,7 @@ def _run(caller: ReviewAccess, review_id: str, target, operation):
         operation,
         prepared=target,
         authorize=lambda ref: _require_review_export(caller.access, ref),
+        capture_review_media=True,
     )
 
 

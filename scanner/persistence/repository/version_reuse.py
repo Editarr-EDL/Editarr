@@ -12,7 +12,8 @@ from scanner.db import ScanFindingRow, ScanRow
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.modeling.model_version_reuse import Channel, VersionReuseCue, VersionReuseRequest
 from scanner.modeling.version_alignment import Alignment
-from scanner.runtime.media_fingerprints import content_digest
+
+from .review_version_evidence import file_digest_matches
 
 _COPIED_FIELDS = (
     "category",
@@ -73,10 +74,7 @@ def bound_scan_file_matches(scan, path: Path) -> bool | None:
         return False
     if not digest and approval is None:
         return None
-    try:
-        return content_digest(path) == digest
-    except (OSError, ValueError):
-        return False
+    return file_digest_matches(path, digest, db=db)
 
 
 def source_findings(db, scan_id: str) -> list[ScanFindingRow]:

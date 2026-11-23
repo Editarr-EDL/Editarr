@@ -1,6 +1,10 @@
 """Real review admission and filesystem sidecar publication for subtitles."""
 
+import sqlite3
+from contextlib import closing
 from pathlib import Path
+
+import pytest
 
 import scanner.api as root
 from scanner.db import SavedReviewRow, ScanFindingRow, ScanRow
@@ -12,6 +16,9 @@ from scanner.models import (
     ReviewCreate,
     ReviewScanMembership,
 )
+from scanner.persistence.repository import review_version_evidence
+from scanner.persistence.repository.media_identity_store import bind_review_version, observe_version
+from scanner.runtime.media_fingerprints import content_digest
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import PEER_USER, USER
@@ -105,6 +112,111 @@ def _request(app, review, endpoint, body, *, user=USER):
         app.accounts.unsafe_cookie(user),
         {"revision": review.revision} | body,
     )
+
+
+def _pin_review_file(app, review):
+    with app.accounts.factory() as db:
+        row = db.get(SavedReviewRow, review.id)
+        scan = row.memberships[0].scan
+        path = Path(scan.resolved_local_path)
+        version_id = observe_version(
+            db,
+            media=row.media_item,
+            media_source_id=scan.media_source_id,
+            source_path=scan.source_path,
+            resolved_path=str(path),
+            content_sha256=content_digest(path),
+            scan_id=scan.id,
+        )
+        bind_review_version(db, row.id, version_id)
+        db.commit()
+    return path
+
+
+def _selected_source(app, review):
+    listed = _request(app, review, "sources", {})
+    assert listed.status_code == 200, listed.text
+    return {"source_id": listed.json()["sources"][0]["id"]}
+
+
+def _preview_for_publication(app, review):
+    selected = _selected_source(app, review)
+    preview = _request(app, review, "preview", selected)
+    assert preview.status_code == 200, preview.text
+    return selected | {"preview_token": preview.json()["preview_token"]}
+
+
+@pytest.mark.parametrize("endpoint", ["sources", "preview", "publish"])
+def test_subtitle_fingerprint_leaves_other_database_writers_unblocked(app, monkeypatch, endpoint):
+    app.client.app.include_router(review_subtitle_api.router)
+    monkeypatch.setattr(review_subtitle_api, "_refresh", lambda *_: True)
+    review, _source = _seed(app)
+    media = _pin_review_file(app, review)
+    if endpoint == "publish":
+        payload = _preview_for_publication(app, review)
+    elif endpoint == "preview":
+        payload = _selected_source(app, review)
+    else:
+        payload = {}
+    hashed = []
+
+    def fingerprint(path):
+        with closing(sqlite3.connect(app.accounts.path, timeout=0.1)) as other:
+            other.execute("BEGIN IMMEDIATE")
+            hashed.append(Path(path))
+        return content_digest(path)
+
+    monkeypatch.setattr(review_version_evidence, "content_digest", fingerprint)
+    response = _request(app, review, endpoint, payload)
+    assert response.status_code == 200, response.text
+    assert hashed and set(hashed) == {media}
+
+
+def test_subtitle_publish_refuses_replacement_after_fingerprint(app, monkeypatch):
+    app.client.app.include_router(review_subtitle_api.router)
+    review, source = _seed(app)
+    media = _pin_review_file(app, review)
+    payload = _preview_for_publication(app, review)
+    names = {path.name for path in media.parent.iterdir()}
+    current_digest = review_version_evidence.ReviewMediaProof.current_digest
+    replaced = False
+
+    def replace_after_capture(proof, path):
+        nonlocal replaced
+        checksum = current_digest(proof, path)
+        if checksum is not None and not replaced:
+            media.write_bytes(b"replacement after fingerprint capture")
+            replaced = True
+        return checksum
+
+    monkeypatch.setattr(
+        review_version_evidence.ReviewMediaProof, "current_digest", replace_after_capture
+    )
+    response = _request(app, review, "publish", payload)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "subtitle_media_changed"
+    assert replaced
+    assert {path.name for path in media.parent.iterdir()} == names
+    assert source.read_bytes() == _TEXT
+
+
+def test_subtitle_export_denial_does_not_fingerprint_media(app, monkeypatch):
+    app.client.app.include_router(review_subtitle_api.router)
+    review, _source = _seed(app)
+    _pin_review_file(app, review)
+    for capability in (
+        C.EXPORTS_PERSONAL_DOWNLOAD_OWN,
+        C.EXPORTS_PERSONAL_PUBLISH_OWN,
+        C.EXPORTS_DEFAULT_PUBLISH,
+    ):
+        app.accounts.set_override(USER, capability, OverrideEffect.DENY)
+    monkeypatch.setattr(
+        review_version_evidence,
+        "content_digest",
+        lambda _path: pytest.fail("An unauthorized subtitle request tried to hash the media"),
+    )
+    denied = _request(app, review, "sources", {})
+    assert denied.status_code in {403, 404}, denied.text
 
 
 def test_exact_version_forced_preview_and_safe_repeat_publication(app, monkeypatch):

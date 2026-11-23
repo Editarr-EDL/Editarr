@@ -270,7 +270,9 @@ def api_export_saved_review(
 def api_preflight_saved_review_mcf(review_id: str, caller: ReviewAccess = Depends(review_caller)):
     """Report issues that must be resolved before exporting a review as MCF."""
     try:
-        preflight = run_review(caller, review_id, VIEW, preflight_saved_review_mcf)
+        preflight = run_review(
+            caller, review_id, VIEW, preflight_saved_review_mcf, capture_review_media=True
+        )
     except ReviewMembershipError as exc:
         raise root._review_http_error("invalid_membership", str(exc)) from exc
     if preflight is None:
