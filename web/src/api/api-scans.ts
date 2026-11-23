@@ -8,8 +8,17 @@ import type {
 } from "./api-types";
 import { runtimeApiBasePath } from "../shared/runtime-urls";
 import { notifyScansChanged } from "../shared/scan-events";
-import { apiRequest, responseError } from "./api-transport";
+import { ApiError, apiRequest, responseError } from "./api-transport";
 const fetch = apiRequest;
+
+/** Identify scan admission conflicts that need a fresh audio track inventory. */
+export function requiresAudioTrackRefresh(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && (
+    error.code === "audio_selection_stale"
+    || error.message === "Audio selection is stale; refresh and choose a track again"
+    || error.message === "Choose an audio track before starting the scan"
+  );
+}
 
 export async function enqueueScan(
   jellyfinItemId: string,

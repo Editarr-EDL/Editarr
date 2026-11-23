@@ -122,9 +122,10 @@ describe("Qwen language scan controls", () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(within(dialog).getByLabelText("Version")).toBeDisabled();
     expect(within(dialog).getByLabelText("Scan type")).toBeDisabled();
-    await act(async () => { finishFirstSubmit?.(json({ detail: "Scan queue is temporarily unavailable." }, 503)); });
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Scan queue is temporarily unavailable.");
+    await act(async () => { finishFirstSubmit?.(json({ detail: "Configure Jellyfin before creating a scan" }, 409)); });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Configure Jellyfin before creating a scan");
     expect(dialog).toBeVisible();
+    expect(within(dialog).queryByRole("button", { name: "Refresh audio tracks" })).not.toBeInTheDocument();
     expect(screen.queryByText("Scan 9 added to the queue.")).not.toBeInTheDocument();
 
     fireEvent.click(add);
@@ -132,6 +133,55 @@ describe("Qwen language scan controls", () => {
     expect(screen.queryByRole("dialog", { name: "New Scan" })).not.toBeInTheDocument();
     expect(submit).toHaveBeenCalledTimes(2);
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "Audio selection is stale; refresh and choose a track again",
+    "Choose an audio track before starting the scan",
+  ])("allows an inventory refresh after a scan track conflict: %s", async (detail) => {
+    const baseApi = installProductionApi();
+    const originalVersion = "a".repeat(64);
+    const newVersion = "b".repeat(64);
+    const attempts: string[] = [];
+    const inventoryReads = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input), "http://editarr.test");
+      if (url.pathname === "/api/media/audio-tracks") {
+        inventoryReads();
+        const response = await baseApi(input, init);
+        const inventory = await response.json();
+        const version = attempts.length ? newVersion : originalVersion;
+        return json({ ...inventory, file_version: version, selection: { ...inventory.selection, file_version: version } });
+      }
+      if (url.pathname === "/api/scans" && init?.method === "POST") {
+        const selection = JSON.parse(String(init.body)).audio_selection;
+        attempts.push(selection.file_version);
+        return selection.file_version === originalVersion
+          ? json({ detail }, 409)
+          : json({ ...completeScan(), id: "queued-refresh", scan_id: 9, status: "queued" }, 201);
+      }
+      return baseApi(input, init);
+    }));
+    window.location.hash = "#/library/movies";
+    render(<AuthenticationGate><App /></AuthenticationGate>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
+    fireEvent.click(screen.getByRole("button", { name: "New Scan" }));
+    const dialog = screen.getByRole("dialog", { name: "New Scan" });
+    const add = within(dialog).getByRole("button", { name: "Add to Queue" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(detail);
+    expect(add).toBeDisabled();
+    expect(attempts).toEqual([originalVersion]);
+    expect(inventoryReads).toHaveBeenCalledOnce();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Refresh audio tracks" }));
+    await waitFor(() => expect(add).toBeEnabled());
+    expect(inventoryReads).toHaveBeenCalledTimes(2);
+    fireEvent.click(add);
+    expect(await screen.findByText("Scan 9 added to the queue.")).toBeVisible();
+    expect(attempts).toEqual([originalVersion, newVersion]);
   });
 
   it("defaults to recommended models and explains the Severity and Description model", async () => {

@@ -15,6 +15,7 @@ import {
   fetchAssociatedScans,
   fetchScanHistory,
   fetchScanQueue,
+  requiresAudioTrackRefresh,
 } from "../api/api-scans";
 import { deleteExport, startCreditsDetection } from "../api/api-reviews";
 import type { ScanCapabilities } from "../api/api-system-types";
@@ -142,7 +143,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   }, [onDirtyChange]);
   const [capabilities, setCapabilities] = useState<ScanCapabilities | null>(null);
   const [adding, setAdding] = useState(false);
-  const [scanSubmitError, setScanSubmitError] = useState<string | null>(null);
+  const [scanSubmitError, setScanSubmitError] = useState<{ message: string; refreshTracks?: boolean } | null>(null);
+  const needsAudioTrackRefresh = scanAudio && scanSubmitError?.refreshTracks;
   const [deletingExport, setDeletingExport] = useState<ExportFormat | null>(null);
   const [showManageExports, setShowManageExports] = useState(false);
   const [fallbackExportStatus, setFallbackExportStatus] = useState<ExportStatus>(() => normalizedExportStatus(item));
@@ -301,9 +303,9 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   }, [showNewScan, scanToVerify]);
   const closeNewScan = () => { setShowNewScan(false); verificationAudio.finish(); };
   const addToQueue = async () => {
-    if (!mayScan || adding || (scanAudio && !audioTracks.ready)) return;
+    if (!mayScan || adding || (scanAudio && !audioTracks.ready) || needsAudioTrackRefresh) return;
     const scanName = validateDisplayName(scanPopoverRef.current?.querySelector<HTMLInputElement>('input[aria-label="Scan name (optional)"]')?.value || "", false);
-    if (scanName.error) { setScanSubmitError(scanName.error); return; }
+    if (scanName.error) { setScanSubmitError({ message: scanName.error }); return; }
     setAdding(true); setScanSubmitError(null); setMessage(null);
     if (scanType === "credits") {
       try {
@@ -315,7 +317,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
         setMessage(`Credits scan ${result.scan.scan_id} added to the queue.`);
         await loadScans();
       } catch (error) {
-        setScanSubmitError(error instanceof Error ? error.message : "Unable to add credits scan to queue.");
+        setScanSubmitError({ message: error instanceof Error ? error.message : "Unable to add credits scan to queue." });
       } finally {
         setAdding(false);
       }
@@ -341,8 +343,10 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       setShowNewScan(false);
       setMessage(`Scan ${scan.scan_id} added to the queue.`);
       await loadScans();
-    } catch (error) { setScanSubmitError(error instanceof Error ? error.message : "Unable to add scan to queue."); }
-    finally { setAdding(false); }
+    } catch (error) {
+      setScanSubmitError({ message: error instanceof Error ? error.message : "Unable to add scan to queue.",
+        refreshTracks: requiresAudioTrackRefresh(error) });
+    } finally { setAdding(false); }
   };
   const deleteManagedExport = async (format: ExportFormat) => {
     setDeletingExport(format); setMessage(null);
@@ -438,15 +442,17 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       }} />
     {mayScan && showNewScan && <div className="modal-backdrop" role="presentation"><section className="scan-popover catalog-scan-dialog" ref={scanPopoverRef} onKeyDown={trapNewScanFocus} role="dialog" aria-modal="true" aria-labelledby="new-scan-heading">
       <h2 id="new-scan-heading">New Scan</h2>
-      {versions.length > 0 && <label className="field"><span>Version</span><select aria-label="Version" disabled={adding || verificationAudio.setup} value={mediaSourceId || ""} onChange={(event) => setMediaSourceId(event.target.value || null)}>{versions.map((version, index) => <option key={version.id || `${version.name || "version"}-${index}`} value={version.id || ""} disabled={!version.id}>{version.name || `Version ${index + 1}`}{version.resolution ? ` · ${version.resolution}` : ""}{version.media_format ? ` · ${version.media_format}` : ""}</option>)}</select></label>}
-      <label className="field"><span>Scan type</span><select aria-label="Scan type" disabled={adding || verificationAudio.setup} value={scanType} onChange={(event) => setScanType(event.target.value as typeof scanType)}><option value="audio">Audio</option><option value="video">Video</option><option value="combined">Audio and video</option><option value="credits">Credits</option></select></label>
+      {versions.length > 0 && <label className="field"><span>Version</span><select aria-label="Version" disabled={adding || verificationAudio.setup} value={mediaSourceId || ""} onChange={(event) => { setScanSubmitError(null); setMediaSourceId(event.target.value || null); }}>{versions.map((version, index) => <option key={version.id || `${version.name || "version"}-${index}`} value={version.id || ""} disabled={!version.id}>{version.name || `Version ${index + 1}`}{version.resolution ? ` · ${version.resolution}` : ""}{version.media_format ? ` · ${version.media_format}` : ""}</option>)}</select></label>}
+      <label className="field"><span>Scan type</span><select aria-label="Scan type" disabled={adding || verificationAudio.setup} value={scanType} onChange={(event) => { setScanSubmitError(null); setScanType(event.target.value as typeof scanType); }}><option value="audio">Audio</option><option value="video">Video</option><option value="combined">Audio and video</option><option value="credits">Credits</option></select></label>
       {scanAudio && <><AudioTrackField {...audioTracks} disabled={adding} /><label className="field"><span>Transcriber</span><select aria-label="Transcriber" value={audioModel} onChange={(event) => setAudioModel(event.target.value)}>{(capabilities?.audio_models || []).map((model) => <option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label><label className="field"><span>Filter</span><select aria-label="Filter" value={audioFilter} onChange={(event) => setAudioFilter(event.target.value)}>{(capabilities?.audio_filters || []).map((filter) => <option key={filter.id} value={filter.id}>{filter.display_name}</option>)}</select></label><AudioLanguageHelp /></>}
       {scanVideo && <><label className="field"><span>Video model</span><select aria-label="Video model" value={videoModel} onChange={(event) => setVideoModel(event.target.value)}><ModelOptions models={capabilities?.video_models} /></select></label><label><input type="checkbox" checked={coarseScanEnabled} onChange={(event) => setCoarseScanEnabled(event.target.checked)} /> Enable coarse scan</label>{coarseScanEnabled && <label className="field"><span>Coarse scan interval (seconds)</span><input type="number" min="0.1" step="0.1" value={coarseScanInterval} onChange={(event) => setCoarseScanInterval(Number(event.target.value))} /></label>}<label className="field"><span>Representative frames per flagged segment</span><input aria-label="Representative frames per flagged segment" type="number" min="1" step="1" value={qwenSummariesPerSegment} onChange={(event) => setQwenSummariesPerSegment(Number(event.target.value))} /></label><label className="field"><span>Join flagged segments within (seconds)</span><input aria-label="Join flagged segments within (seconds)" type="number" min="0" step="0.1" value={qwenSegmentJoinGapSeconds} onChange={(event) => setQwenSegmentJoinGapSeconds(Number(event.target.value))} /></label><p className="muted-copy">Fine scans analyze every source frame. Qwen receives evenly spaced representative flagged frames together after the scene scan; short clean gaps can be joined into one segment.</p></>}
       {scanType === "credits" ? <p className="muted-copy">Detect the start of closing credits using local chapter and visual analysis.</p> : <QwenModelField capabilities={capabilities} value={qwenModel} onChange={setQwenModel} />}
       {scanAudio && <ScanCapabilityDisclosure capabilities={capabilities} backendId={audioModel} scanType="audio" />}
       {scanVideo && <ScanCapabilityDisclosure capabilities={capabilities} backendId={videoModel} scanType="video" includeScanName={!scanAudio} />}
-      {scanSubmitError && <p className="form-error" role="alert">{scanSubmitError}</p>}
-      <div className="button-row"><button className="btn-secondary" onClick={closeNewScan} disabled={adding}>Cancel</button><button className="btn-primary" onClick={() => void addToQueue()} disabled={adding || (scanAudio && !audioTracks.ready) || (scanVideo && (coarseScanEnabled && coarseScanInterval <= 0 || qwenSummariesPerSegment < 1 || qwenSegmentJoinGapSeconds < 0))}>{adding ? "Adding…" : "Add to Queue"}</button></div>
+      {scanSubmitError && <p className="form-error" role="alert">{scanSubmitError.message}</p>}
+      <div className="button-row"><button className="btn-secondary" onClick={closeNewScan} disabled={adding}>Cancel</button>
+        {needsAudioTrackRefresh && <button className="btn-secondary" onClick={() => { setScanSubmitError(null); audioTracks.onRetry(); }}>Refresh audio tracks</button>}
+        <button className="btn-primary" onClick={() => void addToQueue()} disabled={adding || needsAudioTrackRefresh || (scanAudio && !audioTracks.ready) || (scanVideo && (coarseScanEnabled && coarseScanInterval <= 0 || qwenSummariesPerSegment < 1 || qwenSegmentJoinGapSeconds < 0))}>{adding ? "Adding…" : "Add to Queue"}</button></div>
     </section></div>}
     {stableIdentity && scanToVerify && mayVerify && !showNewScan && <ScanVerificationDialog
       key={`${scanContext}/${scanToVerify.id}`} scan={scanToVerify} itemName={item.name}
