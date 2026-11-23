@@ -162,7 +162,6 @@ def test_delayed_selected_audio_findings_persist_and_export_on_playback_timeline
     cached_audio = tmp_path / "cache" / "selected.wav"
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
     monkeypatch.setattr(runner, "get_video_duration", lambda _path: 5.0)
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _path: "synthetic-container")
     monkeypatch.setattr(runner, "cached_audio_path", lambda _identity: cached_audio)
     monkeypatch.setattr(
         runner,
@@ -240,7 +239,6 @@ def test_runner_scopes_cache_to_track_and_records_actual_only_after_success(
     monkeypatch.setattr(audio, "audio_playback_offset", lambda _path, _selection, **_kwargs: 0.0)
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
     monkeypatch.setattr(runner, "get_video_duration", lambda _path: 2.0)
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _path: "same-container")
     seen = []
     actual = []
 

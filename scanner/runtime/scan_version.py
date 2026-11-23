@@ -177,7 +177,7 @@ def _pin_queued_scan(
     scan_id: str,
     fingerprint: SampledMediaFingerprint,
     known_sha256: str | None,
-) -> None:
+) -> str:
     import json
 
     from scanner.db import ScanRow
@@ -212,12 +212,17 @@ def _pin_queued_scan(
     )
     if current_id is not None and current_id != observed_id:
         raise ScanVersionChanged(_FAILURE)
+    version = get_version(db, observed_id)
+    cache_key = f"{fingerprint.artifact_cache_key}-{observed_id}"
+    if known_sha256 is not None and version is not None and version.content_sha256 == known_sha256:
+        cache_key = known_sha256
     bind_scan_version(db, scan_id, observed_id)
     state.pop(_GENERATION, None)
     state[_VERIFIED_GENERATION] = list(generation)
     row.checkpoint_state = json.dumps(state)
     row.video_hash = fingerprint.digest
     db.commit()
+    return cache_key
 
 
 def scan_digest_progress(write: Callable[[dict[str, object]], None]) -> Callable[[int, int], None]:
@@ -266,6 +271,5 @@ def prepare_scan_fingerprint(
         raise ScanVersionChanged(_FAILURE) from exc
     if fingerprint.generation != generation:
         raise ScanVersionChanged(_FAILURE)
-    write(_pin_queued_scan, scan_id, fingerprint, known_sha256)
-    cache_key = old_digest if old_digest and old_digest == known_sha256 else fingerprint.digest
+    cache_key = write(_pin_queued_scan, scan_id, fingerprint, known_sha256)
     return ScanMediaProof(fingerprint, cache_key)

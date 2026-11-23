@@ -257,7 +257,6 @@ def test_run_scan_reuses_cached_audio_and_model_scoped_transcript(monkeypatch, t
 
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
     monkeypatch.setattr(runner, "get_video_duration", lambda _video: 120.0)
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _video: "hash123")
     monkeypatch.setattr(runner, "cached_audio_path", lambda _hash: cache_audio)
     monkeypatch.setattr(
         runner,
@@ -282,6 +281,7 @@ def test_run_scan_reuses_cached_audio_and_model_scoped_transcript(monkeypatch, t
         audio_model="whisper",
         audio_filter="better_profanity",
         qwen_model="qwen3-vl-4b-instruct-4bit",
+        media_cache_key="hash123",
         scan_video=False,
         video_id="scan-1",
         status_updater=lambda _db, _video_id, status: statuses.append(status),
@@ -310,7 +310,6 @@ def test_run_scan_isolates_scene_based_visual_scan_for_qwen_summaries(monkeypatc
 
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
     monkeypatch.setattr(runner, "get_video_duration", lambda _video: 120.0)
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _video: "hash123")
     monkeypatch.setattr(runner, "_scan_visual_isolated", fake_visual_isolated)
 
     statuses: list[str] = []
@@ -321,6 +320,7 @@ def test_run_scan_isolates_scene_based_visual_scan_for_qwen_summaries(monkeypatc
         scan_video=True,
         coarse_scan_enabled=True,
         coarse_scan_interval_seconds=6,
+        media_cache_key="hash123",
         video_id="scan-1",
         status_updater=lambda _db, _video_id, status: statuses.append(status),
         findings_writer=lambda _db, _video_id, _findings: None,
@@ -346,7 +346,6 @@ def test_run_scan_isolates_image_safety_gate_before_audio(monkeypatch, tmp_path:
 
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
     monkeypatch.setattr(runner, "get_video_duration", lambda _video: 120.0)
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _video: "hash123")
     monkeypatch.setattr(runner, "_scan_visual_isolated", fake_visual_isolated)
     monkeypatch.setattr(
         runner,
@@ -370,7 +369,7 @@ def test_run_scan_isolates_image_safety_gate_before_audio(monkeypatch, tmp_path:
     )
 
     assert seen["coarse_scan_enabled"] is True
-    assert seen["video_hash"] == "hash123"
+    assert seen["video_hash"] == runner.sampled_media_fingerprint(video_path).artifact_cache_key
     assert seen["video_model"] == "image_safety_gate"
 
 
@@ -407,7 +406,6 @@ def test_run_scan_does_not_apply_review_time_defaults_to_audio_findings(
 
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
     monkeypatch.setattr(runner, "get_video_duration", lambda _video: 120.0)
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _video: "hash123")
     monkeypatch.setattr(
         runner,
         "cached_audio_path",

@@ -79,7 +79,6 @@ def test_new_scan_does_not_apply_review_time_audio_defaults(
     )
 
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _video: "hash123")
     monkeypatch.setattr(runner, "cached_audio_path", lambda _hash: cached_audio)
     monkeypatch.setattr(
         runner,

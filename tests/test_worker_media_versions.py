@@ -160,13 +160,15 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
 
         def fake_scan(db, _path, **callbacks):
             assert not changed, "The worker analyzed a replacement"
-            assert scan_version_id(db, scan.id)
+            version_id = scan_version_id(db, scan.id)
+            assert version_id
             row = db.get(ScanRow, scan.id)
             assert row.progress_stage == ("setup" if cached else "hashing")
             saved_percent = row.progress_percent
             update_progress(db, scan.id, {"stage": "hashing", "percent": 95}, worker_token="old")
             assert db.get(ScanRow, scan.id).progress_percent == saved_percent
-            assert callbacks["media_cache_key"] == sampled_media_fingerprint(path).digest
+            sample = sampled_media_fingerprint(path)
+            assert callbacks["media_cache_key"] == f"{sample.artifact_cache_key}-{version_id}"
             callbacks["status_updater"](db, scan.id, "complete")
             update_progress(
                 db, scan.id, {"stage": "hashing", "percent": 99}, worker_token="worker-token"
@@ -193,6 +195,85 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
                 assert version.content_sha256 is None
                 sample = sampled_media_fingerprint(path)
                 assert version.sampled_md5 == row.video_hash == sample.digest
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("equal_size", [False, True])
+def test_distinct_versions_with_matching_sample_edges_use_separate_artifacts(
+    monkeypatch, tmp_path, equal_size
+):
+    from scanner.credits.credits_detector import credits_cache_key, default_configuration
+    from scanner.persistence.repository.media_identity_store import (
+        observe_sampled_version,
+        scan_version_id,
+    )
+    from scanner.pipeline import cache
+    from scanner.runtime.scan_version import (
+        file_generation,
+        prepare_scan_fingerprint,
+        stage_scan_generation,
+    )
+
+    monkeypatch.setattr(media_fingerprints.settings, "data_dir", tmp_path / "data")
+    monkeypatch.setattr(cache.settings, "cache_dir", tmp_path / "cache")
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    try:
+        with factory() as db:
+            scan_ids, versions, proofs = [], [], []
+            for index, size_mib in enumerate((51, 51 if equal_size else 52)):
+                path = tmp_path / f"cut-{index}.mkv"
+                with path.open("wb") as stream:
+                    stream.truncate(size_mib * 1024 * 1024)
+                    stream.seek(30 * 1024 * 1024)
+                    stream.write(bytes([index + 1]))
+                sample = sampled_media_fingerprint(path)
+                scan, _ = _scan_with_queue(db)
+                row = db.get(ScanRow, scan.id)
+                row.source_path = row.resolved_local_path = str(path)
+                if equal_size:
+                    legacy_digest = str(index + 1) * 64
+                    observation = {
+                        "media": row.media_item,
+                        "media_source_id": row.media_source_id,
+                        "source_path": str(path),
+                    }
+                    observe_version(
+                        db, **observation, resolved_path=str(path), content_sha256=legacy_digest
+                    )
+                    observe_sampled_version(
+                        db, **observation, fingerprint=sample, known_content_sha256=legacy_digest
+                    )
+                stage_scan_generation(db, scan.id, str(path), file_generation(str(path)))
+                db.commit()
+                proof = prepare_scan_fingerprint(
+                    db, scan.id, str(path), write=lambda operation, *args: operation(db, *args)
+                )
+                assert proof is not None
+                scan_ids.append(scan.id)
+                versions.append(scan_version_id(db, scan.id))
+                proofs.append(proof)
+
+            first, second = proofs
+            assert first.fingerprint.digest == second.fingerprint.digest
+            assert versions[0] != versions[1]
+            for scan_id in scan_ids:
+                assert db.get(ScanRow, scan_id).video_hash == first.fingerprint.digest
+
+            scenes = [{"start_seconds": 1.0, "end_seconds": 2.0, "index": 0}]
+            cache.save_cached_scenes(first.cache_key, 20.0, scenes)
+            assert cache.load_cached_scenes(first.cache_key, 20.0) == scenes
+            assert cache.load_cached_scenes(second.cache_key, 20.0) is None
+
+            credits_keys = [
+                credits_cache_key(video_hash=proof.cache_key, configuration=default_configuration())
+                for proof in proofs
+            ]
+            cache.save_cached_credits_result(credits_keys[0], {"fixture": "first cut"})
+            assert cache.load_cached_credits_result(credits_keys[0]) == {"fixture": "first cut"}
+            assert cache.load_cached_credits_result(credits_keys[1]) is None
     finally:
         engine.dispose()
 

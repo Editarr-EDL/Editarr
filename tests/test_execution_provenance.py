@@ -242,7 +242,6 @@ def test_zero_finding_stage_completes_and_unavailable_model_does_not_run(
     media = tmp_path / "synthetic.mkv"
     media.write_bytes(b"synthetic")
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _path: "hash")
     monkeypatch.setattr(runner, "require_available", lambda _model: None)
     monkeypatch.setattr(runner, "qwen_enrichment_capability", lambda: SimpleNamespace(
         availability="available", enrichment_behavior="qwen_summary",

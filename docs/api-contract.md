@@ -498,7 +498,8 @@ the legacy sampled MD5 and file size for the identified media. The fingerprint r
 files through 50 MiB in full and reads the first and last 10 MiB of larger files.
 A unique sample and size match within a title can follow a file move. Distinct
 known version IDs with the same sample remain separate. The sample offers no
-comparison for bytes outside the selected ranges.
+comparison for bytes outside the selected ranges. Scene and credits cache entries
+include the sample, file size, and saved version ID when a scan has a version pin.
 
 The migration preserves existing version IDs, scans, reviews, and published files.
 Older whole-file pins use a surviving verified observation of the current file

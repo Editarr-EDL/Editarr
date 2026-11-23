@@ -36,6 +36,11 @@ class SampledMediaFingerprint:
     size_bytes: int
     generation: tuple[int, ...]
 
+    @property
+    def artifact_cache_key(self) -> str:
+        """Separate artifact caches when different file sizes have identical edges."""
+        return f"md5-{self.digest}-{self.size_bytes}"
+
 
 def sampled_media_read_size(size: int) -> int:
     """Return the number of media bytes the legacy MD5 scheme needs."""
