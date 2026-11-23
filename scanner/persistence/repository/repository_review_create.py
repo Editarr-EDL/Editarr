@@ -295,7 +295,7 @@ def manual_review_scan(db, media_item_id, media_source_id, sources, *, stable_ve
     if stable_version_id is not None:
         version = get_version(db, stable_version_id)
         if not source_path or not version_file_matches(
-            version, resolve_local_path(db, source_path).local_path
+            version, resolve_local_path(db, source_path).local_path, db=db
         ):
             raise ReviewMembershipError("The original Editarr review version is unavailable")
     query = (

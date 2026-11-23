@@ -102,15 +102,30 @@ def _matches_finding(finding: ScanFindingRow | None, request: DraftFilterPreview
 
 
 def _authorize_saved_draft(
-    caller: ReviewAccess, request: DraftFilterPreview, target: ResourceRef
+    caller: ReviewAccess,
+    request: DraftFilterPreview,
+    target: ReviewTarget,
+    resource: ResourceRef,
 ) -> None:
+    _saved_preview_media(caller.db, request.review_id, target)
     finding = (
         caller.db.get(ScanFindingRow, request.source_finding_id)
         if (request.source_finding_id is not None)
         else None
     )
     if not _matches_finding(finding, request):
-        require(caller.access, CUES, target)
+        require(caller.access, CUES, resource)
+
+
+def _saved_preview_media(db, review_id, target):
+    """Require the draft target to match its saved review before reading any media bytes."""
+    row = db.get(SavedReviewRow, review_id)
+    source = target.source
+    if row is None or (
+        row.media_item.server_id, row.media_item.jellyfin_id, row.media_source_id
+    ) != (source.server_id, source.item_id, source.media_source_id or ""):
+        raise not_found()
+    return row.media_item
 
 
 def _preview_clip(
@@ -119,19 +134,14 @@ def _preview_clip(
     """Validate request evidence against the current target under the authority transaction."""
     db = caller.db
     source = target.source
-    media = (
-        db.query(MediaItemRow)
-        .filter_by(server_id=source.server_id, jellyfin_id=source.item_id)
-        .one_or_none()
-    )
     if review_id is not None:
-        row = db.get(SavedReviewRow, review_id)
-        if (
-            media is None
-            or row.media_item_id != media.id
-            or (row.media_source_id != (source.media_source_id or ""))
-        ):
-            raise not_found()
+        media = _saved_preview_media(db, review_id, target)
+    else:
+        media = (
+            db.query(MediaItemRow)
+            .filter_by(server_id=source.server_id, jellyfin_id=source.item_id)
+            .one_or_none()
+        )
 
     path = _target_path(db, target)
     expected_digest = None
@@ -233,7 +243,12 @@ def api_draft_filter_preview(
                 PREVIEW,
                 lambda _db, review_id: _preview_clip(caller, target, request, review_id),
                 scan_ids=scan_ids,
-                authorize=lambda resource: _authorize_saved_draft(caller, request, resource),
+                authorize=lambda resource: _authorize_saved_draft(
+                    caller, request, target, resource
+                ),
+                prepared=target if scan_ids else None,
+                capture_review_media=bool(scan_ids),
+                store_prepared=False,
             )
     except ValueError as exc:
         raise root._review_mutation_error(exc) from exc

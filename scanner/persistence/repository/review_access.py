@@ -167,9 +167,13 @@ class ReviewAccess:
         extra_capabilities=(),
         authorize: Callable[[ResourceRef], None] | None = None,
         capture_review_media: bool = False,
+        store_prepared: bool = True,
         **kwargs,
     ):
-        """Gather evidence first, then decide and execute against locked stored authority."""
+        """Run under live locked authority, optionally proving the prepared file before locking.
+
+        Read-only previews can authorize a prepared target without storing its catalog mapping.
+        """
         facts = self.visible(review_id)
         if action != DELETE and not repair:
             from .review_repairs import require_repaired
@@ -199,6 +203,8 @@ class ReviewAccess:
                 )
                 if authorize is not None:
                     authorize(target)
+                if draft is not None:
+                    self.require_changes(review_id, draft, target)
                 path = (
                     prepared.media.resolved_path
                     if prepared is not None
@@ -235,7 +241,7 @@ class ReviewAccess:
                 authorize(target)
             if draft is not None:
                 self.require_changes(review_id, draft, target)
-            if prepared is not None:
+            if prepared is not None and store_prepared:
                 prepared.store(self.db)
             actor = ActivityOwner(
                 int(self.access.principal.user_id), int(self.access.principal.permission_revision)
