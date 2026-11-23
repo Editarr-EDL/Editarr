@@ -21,7 +21,7 @@ from cryptography.x509.oid import NameOID
 from scanner.integrations.jellyfin import JellyfinClient, JellyfinError, media_browser_authorization
 from scanner.integrations.jellyfin_user_snapshot import Unverified, UnverifiedReason
 from scanner.integrations.jellyfin_users import JellyfinUserAdapter
-from tests.jellyfin_user_boundary import FIXTURE, free_port, local_server
+from tests.jellyfin_user_boundary import FIXTURE, local_server, reserved_url
 
 SETTINGS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR")
 SERVER_INFO = json.dumps(FIXTURE["servers"]["primary"]).encode()
@@ -112,9 +112,8 @@ def authority_for_localhost(directory: Path) -> tuple[Path, ssl.SSLContext]:
 @pytest.mark.parametrize("variable", ["HTTP_PROXY", "http_proxy", "ALL_PROXY"])
 def test_an_environment_proxy_carries_provider_requests(environment, variable):
     seen = []
-    target = f"http://127.0.0.1:{free_port()}"
 
-    with local_server(jellyfin, seen=seen) as proxy:
+    with reserved_url() as target, local_server(jellyfin, seen=seen) as proxy:
         environment.setenv(variable, proxy)
         catalog_error, server = both_clients(target)
 

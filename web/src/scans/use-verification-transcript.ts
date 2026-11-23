@@ -5,6 +5,7 @@ import { fetchVerificationTranscriptStatus, type VerificationRequest } from "../
 import type { Scan, ScanQueueItem } from "../api/api-scan-types";
 
 export type TranscriptStatus = "checking" | "ready" | "verify" | "missing" | "unknown";
+const waitingStatuses = new Set(["queued", "scanning", "cancelling", "acquiring_model", "orphaned"]);
 
 /** Scope queued audio work and readiness to the selected physical version and stream. */
 export function useVerificationTranscript({ source, target, selection, channels, scans, submittedScan }: {
@@ -24,7 +25,8 @@ export function useVerificationTranscript({ source, target, selection, channels,
       audio?.track.stream_index === trackIndex && audio.file_version === selection?.file_version;
   };
   const submitted = submittedScan && (scans.find((scan) => scan.id === submittedScan.id) ?? submittedScan);
-  const queuedForTrack = (scan: Scan): scan is ScanQueueItem => "queue_id" in scan && matching(scan);
+  const queuedForTrack = (scan: Scan): scan is ScanQueueItem =>
+    "queue_id" in scan && waitingStatuses.has(scan.status) && matching(scan);
   const active = submitted && queuedForTrack(submitted) ? submitted : scans.find(queuedForTrack);
   const completed = scans.filter((scan) => scan.status === "complete" && matching(scan)).map((scan) => scan.id).join(",");
   const selectedChannels = channels.join(",");

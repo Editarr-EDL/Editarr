@@ -41,7 +41,7 @@ and `verify.mjs auth --identity` ([Identity isolation](./identity-isolation.md))
 
 ## Deterministic checks
 
-The boundary is a local HTTP server on 127.0.0.1, ports 8640 to 8659, serving
+The boundary is a local HTTP server on 127.0.0.1 with an OS-assigned port, serving
 fixture `editarr-jellyfin-users-1` from
 `tests/fixtures/multi-user/jellyfin-users-v1/manifest.json`. It is a SYNTHETIC
 EXTERNAL BOUNDARY shaped after Jellyfin 12.0.0. It does not prove live
@@ -61,7 +61,8 @@ rm -rf "$T"
   replacement, restricted item access, library and parental policy, the user
   list, avatars, and the absence of email and timezone.
 - `test_jellyfin_user_outages.py` runs every recorded fault against every
-  operation. It also covers a proxy 404, a 404 for a listed user, a rejected
+  operation. It injects connection refusal at the transport boundary. It also
+  covers a proxy 404, a 404 for a listed user, a rejected
   API key, an outage after a success, and a secret sweep over outcomes,
   errors, logs, and recorded requests.
 - `test_jellyfin_user_transport.py` covers the transport-only injection,

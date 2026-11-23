@@ -355,6 +355,32 @@ class ReviewAccess:
             scan_visible=visible_sources.__contains__,
         )
 
+    def _require_creation(self, decision, *, capability, capabilities, creating):
+        principal = self.access.principal
+        target = ResourceRef(AccountRef(principal.user_id, principal.account.role), decision)
+        if creating:
+            require(self.access, C.REVIEWS_CREATE_OWN, target)
+        require(self.access, capability, target)
+        for required in capabilities:
+            require(self.access, required, target)
+
+    def authorize_create(self, media: ScanMedia, *, capability, capabilities, scan_ids=()):
+        """Check upload authority before reading media. Creation checks again under lock."""
+        scans = scan_job_facts(self.db, scan_ids)
+        decision, *source_decisions = decide_scans(
+            self.db,
+            self.access.principal.account,
+            [media, *(item.media for item in scans.values())],
+            datetime.now(UTC),
+        )
+        self._require_creation(
+            decision, capability=capability, capabilities=capabilities, creating=True
+        )
+        if set(scans) != set(scan_ids):
+            raise not_found()
+        for item, source_decision in zip(scans.values(), source_decisions, strict=True):
+            self.require_scan(item, source_decision)
+
     def create(
         self,
         media: ScanMedia,
@@ -378,12 +404,9 @@ class ReviewAccess:
             decision = decide_scans(
                 self.db, principal.account, [media], datetime.now(UTC), evidence=evidence
             )[0]
-            target = ResourceRef(AccountRef(principal.user_id, principal.account.role), decision)
-            if creating:
-                require(self.access, C.REVIEWS_CREATE_OWN, target)
-            require(self.access, capability, target)
-            for required in capabilities:
-                require(self.access, required, target)
+            self._require_creation(
+                decision, capability=capability, capabilities=capabilities, creating=creating
+            )
             if set(scans) != set(scan_ids):
                 raise missing_scan_error()
             if scan_job_facts(self.db, list(scan_ids)) != scans:

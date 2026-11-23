@@ -30,7 +30,6 @@ FIXTURE_PATH = (
     Path(__file__).parent / "fixtures" / "multi-user" / "jellyfin-users-v1" / "manifest.json"
 )
 FIXTURE = json.loads(FIXTURE_PATH.read_text())
-PORTS = range(8640, 8660)
 AVATAR_BYTES = b"\x89PNG\r\n\x1a\nsynthetic-avatar"
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)
 PRIMARY = JellyfinServerId(FIXTURE["servers"]["primary"]["Id"])
@@ -75,18 +74,12 @@ def scripted_transport(
     return httpx.MockTransport(handler)
 
 
-def free_port() -> int:
-    """Return a port in the assigned range with nothing listening on it."""
-    for port in PORTS:
-        with socket.socket() as probe:
-            # Match the server's SO_REUSEADDR so closed connections in TIME_WAIT do not hold ports.
-            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                probe.bind(("127.0.0.1", port))
-            except OSError:
-                continue
-            return port
-    raise RuntimeError("No free port in 8640-8659")
+@contextmanager
+def reserved_url() -> Iterator[str]:
+    """Reserve a loopback URL without starting an HTTP server."""
+    with socket.socket() as reserved:
+        reserved.bind(("127.0.0.1", 0))
+        yield f"http://127.0.0.1:{reserved.getsockname()[1]}"
 
 
 @contextmanager
@@ -123,7 +116,7 @@ def local_server(
 
         do_GET = do_POST = respond
 
-    server = ThreadingHTTPServer(("127.0.0.1", free_port()), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     if tls is not None:
         server.socket = tls.wrap_socket(server.socket, server_side=True)
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
@@ -164,7 +157,7 @@ class JellyfinBoundary:
         """Requests by secret: `code`, and `user` once approved. Like Jellyfin 12, sign-in
         does not spend a secret."""
         self._release = threading.Event()
-        self._server = ThreadingHTTPServer(("127.0.0.1", free_port()), self._handler())
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self._server.daemon_threads = True
         self._thread = threading.Thread(
             target=self._server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True

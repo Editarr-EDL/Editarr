@@ -270,7 +270,7 @@ it("checks a saved transcript for imported cues and offers manual timing if conf
   expect(within(dialog).getByLabelText("Original time 1")).toBeVisible();
 });
 
-it("queues target audio on the chosen track and uses the completed transcript for alignment", async () => {
+it("uses the completed transcript for alignment even when a stale Queue row still exists", async () => {
   const scan = completeScan({
     id: "original-scan", name: "Original Scan", scan_video: false,
     jellyfin_item_id: "earlier-item", media_source_id: "earlier-source",
@@ -323,7 +323,8 @@ it("queues target audio on the chosen track and uses the completed transcript fo
       job = "scanning";
       return json(activeJob);
     }
-    if (url.pathname === "/api/scans/queue") return json(job === "scanning" ? [activeJob] : []);
+    if (url.pathname === "/api/scans/queue") return json(job === "scanning" ? [activeJob]
+      : job === "complete" ? [{ ...activeJob, status: "complete" }] : []);
     if (url.pathname === "/api/scans/history") return json(job === "complete"
       ? [{ ...jobScan, analyzed_audio_selection: activeJob.requested_audio_selection }] : []);
     if (url.pathname === "/api/media-versions/current/reuse/preview") {

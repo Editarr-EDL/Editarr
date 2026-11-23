@@ -34,7 +34,6 @@ from tests.jellyfin_user_boundary import (
     IDS,
     NOW,
     JellyfinBoundary,
-    free_port,
     identity,
     scripted_transport,
     sign_in_result,
@@ -69,8 +68,15 @@ def boundary(passwords):
         yield server
 
 
-def adapter_for(url: str, api_key: str, clock=lambda: NOW) -> JellyfinUserAdapter:
-    return JellyfinUserAdapter(url, api_key, clock=clock, limits=ResponseLimits(seconds=0.3))
+def _refuse_connection(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("Connection refused", request=request)
+
+
+def adapter_for(url: str, api_key: str, clock=lambda: NOW, *, refused=False) -> JellyfinUserAdapter:
+    transport = httpx.MockTransport(_refuse_connection) if refused else None
+    return JellyfinUserAdapter(
+        url, api_key, clock=clock, limits=ResponseLimits(seconds=0.3), transport=transport
+    )
 
 
 def test_every_recorded_fault_has_an_expected_outcome():
@@ -80,11 +86,11 @@ def test_every_recorded_fault_has_an_expected_outcome():
 @pytest.mark.parametrize("operation", OPERATIONS)
 @pytest.mark.parametrize("fault", FAULT_REASONS)
 def test_an_outage_is_unverified_with_no_timestamp(boundary, passwords, fault, operation):
-    url = f"http://127.0.0.1:{free_port()}" if fault == "refused" else boundary.url
     boundary.fault = fault
     boundary.state = "changed"
 
-    outcome = OPERATIONS[operation](adapter_for(url, boundary.api_key), passwords[IDS["Casey"]])
+    adapter = adapter_for(boundary.url, boundary.api_key, refused=fault == "refused")
+    outcome = OPERATIONS[operation](adapter, passwords[IDS["Casey"]])
 
     assert outcome == Unverified(FAULT_REASONS[fault])
 
@@ -142,9 +148,8 @@ def test_secrets_never_reach_outcomes_errors_or_logs(boundary, passwords, caplog
         # The timeout fault returns no content and only slows this sweep.
         for fault in (None, *(name for name in FAULT_REASONS if name != "timeout")):
             boundary.state, boundary.fault = state, fault
-            url = f"http://127.0.0.1:{free_port()}" if fault == "refused" else boundary.url
             for key in (boundary.api_key, wrong_key):
-                adapter = adapter_for(url, key)
+                adapter = adapter_for(boundary.url, key, refused=fault == "refused")
                 for operation in OPERATIONS.values():
                     for password in (passwords[IDS["Casey"]], wrong_password):
                         seen.append(repr(operation(adapter, password)))
