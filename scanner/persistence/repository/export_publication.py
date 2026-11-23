@@ -40,6 +40,7 @@ from .review_export_content import PreparedReviewExport, prepare_review_export
 from .review_policy import policy_write
 
 SNAPSHOT_VERSION = "editarr-export-snapshot-1"
+POLICY_CHANNEL_EVALUATION = "inferred-source-channel"
 
 
 class ExportConflict(ValueError):
@@ -205,6 +206,7 @@ class Publication:
         row.snapshot_json = json.dumps(
             {
                 "version": SNAPSHOT_VERSION,
+                "policy_channel_evaluation": POLICY_CHANNEL_EVALUATION,
                 "publication_id": str(uuid4()),
                 **retained_review_snapshot(db, self.output),
                 "actor_id": row.actor_id,

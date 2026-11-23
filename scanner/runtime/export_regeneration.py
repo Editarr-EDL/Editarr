@@ -13,6 +13,7 @@ from sqlalchemy.exc import OperationalError
 
 from scanner.formats.export_layout import parse_export_id
 from scanner.persistence.repository.export_publication import (
+    POLICY_CHANNEL_EVALUATION,
     ExportConflict,
     _check_destination,
     prepare_export_directory,
@@ -153,6 +154,7 @@ def _stage_result(db, row, snapshot, job, content, *, reason=None):
         )
     else:
         snapshot.pop(OWNED_DIGEST, None)
+        snapshot["policy_channel_evaluation"] = POLICY_CHANNEL_EVALUATION
         finish(row.regeneration, RegenerationState.SUCCEEDED)
         row.policy_revision = job.policy_revision
         snapshot["policy_revision"] = job.policy_revision

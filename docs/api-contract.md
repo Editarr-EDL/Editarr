@@ -506,9 +506,12 @@ List `sort=name` uses Unicode `casefold()` and applies direction only to that pr
 key; stable review ID ascending breaks equal folded names. Date sorting applies direction
 only to `updated_at` and uses the same ID tie-breaker. Default opening chooses greatest
 `updated_at`, independently of presentation sort.
-Each export reads review snapshots, records active review/format-revision provenance, and
-computes `outdated` from that format's revision. Existing sidecars remain continuously
-present until one atomic replacement; a later database failure restores the previous
+Each export reads review snapshots and records active review, format revision, and policy
+provenance. A retained personal or item-default publication is also `outdated` if its
+published bytes lack a mandatory cue newly matched by inferring the MCF channel from
+the cue's source. The status change preserves the published file and leaves replacement
+to an explicit republish. Existing sidecars remain continuously present until one atomic
+replacement. A later database failure restores the previous
 sidecar, and a failed restoration retains its recovery backup. Import creates a named completed imported
 scan and saved review atomically without queueing or changing active EDL state.
 

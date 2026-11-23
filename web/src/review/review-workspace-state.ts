@@ -12,7 +12,7 @@ import {
 } from "../api/api-reviews";
 import { ApiError } from "../api/api-transport";
 import type { JellyfinMediaItem } from "../api/api-media-types";
-import type { ExportStatus, McfRegistry } from "../api/api-mcf-types";
+import type { ExportFormat, ExportStatus, McfRegistry } from "../api/api-mcf-types";
 import type { Scan } from "../api/api-scan-types";
 import type {
   SavedReview,
@@ -234,10 +234,13 @@ export function useSavedReviewWorkspace({
       setSelected(saved);
       setDraft(replaceReviewDraftAfterSave(draft, saved));
       if (exportStatus && Object.values(exportStatus.exports).some((status) => status.review_id === saved.id)) {
-        onExportStatusChange?.({ exports: {
-          edl: exportStatus.exports.edl.review_id === saved.id ? { ...exportStatus.exports.edl, current: exportStatus.exports.edl.exported_format_revision === saved.edl_content_revision, outdated: exportStatus.exports.edl.exported_format_revision !== saved.edl_content_revision, exported_review: saved } : exportStatus.exports.edl,
-          mcf: exportStatus.exports.mcf.review_id === saved.id ? { ...exportStatus.exports.mcf, current: exportStatus.exports.mcf.exported_format_revision === saved.mcf_content_revision, outdated: exportStatus.exports.mcf.exported_format_revision !== saved.mcf_content_revision, exported_review: saved } : exportStatus.exports.mcf,
-        } });
+        const afterSave = (format: ExportFormat) => {
+          const summary = exportStatus.exports[format];
+          if (summary.review_id !== saved.id) return summary;
+          const outdated = summary.outdated || summary.exported_format_revision !== saved[`${format}_content_revision`];
+          return { ...summary, current: summary.current && !outdated, outdated, exported_review: saved };
+        };
+        onExportStatusChange?.({ exports: { edl: afterSave("edl"), mcf: afterSave("mcf") } });
       }
       setMetadataCandidates([]);
       setApplyStatus(null);

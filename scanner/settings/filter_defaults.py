@@ -157,6 +157,21 @@ def enforce_filter_policy(
     return EnforcedFilters(tuple(effective), selection_changes, severity_changes)
 
 
+def inferred_channel_policy_floor(candidate, policy: EnforcedFilterPolicy):
+    """Return the cue with policy severity when only channel inference makes it mandatory."""
+    if candidate.mcf_channel is not None:
+        return None
+    candidate = candidate.model_copy(
+        update={"severity": policy.severities.get(candidate.subcategory, candidate.severity)}
+    )
+    matches = [
+        rule
+        for rule in policy.rules
+        if rule.disposition is FilterRuleDisposition.DENY and _rule_matches(rule, candidate)
+    ]
+    return candidate if matches and all(rule.mcf_channel is not None for rule in matches) else None
+
+
 def _evaluate_selection(
     candidate: ReviewFilterInput | NewManualReviewFilter,
     rules: Sequence[FilterSelectionRule],
