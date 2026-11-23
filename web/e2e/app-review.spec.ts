@@ -1,3 +1,4 @@
+import { chooseExportFormat, chooseWorkflowStep } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import { MockReviewFilter, expectNoAccessibilityViolations, mockApi } from "./app-fixtures";
 
@@ -12,6 +13,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   await page.getByRole("button", { name: "Open Example Movie" }).click();
   const panel = page.locator(".saved-review-panel");
   const expandReviewFilterGroups = async () => {
+    await panel.getByLabel("Sort", { exact: true }).selectOption("category");
     const subcategories = panel.locator(".hierarchy-subcategory button");
     await expect(subcategories.first()).toBeVisible();
     for (let index = 0; index < await subcategories.count(); index += 1) {
@@ -31,7 +33,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
     const editButton = panel.getByRole("button", { name: /^Edit filter / }).first();
     if (await editButton.getAttribute("aria-expanded") !== "true") await editButton.click();
   };
-  const version = page.getByLabel("Review version");
+  const version = page.getByLabel("Media version");
   await expect(version).toHaveValue("source-1");
   await expect(page.getByLabel(/Include scan .* in review/)).toHaveCount(0);
 
@@ -44,7 +46,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   let dialog = page.getByRole("dialog", { name: "New Review" });
   await dialog.getByLabel("New review name").fill("Review A");
   await dialog.getByRole("button", { name: "Start new review" }).click();
-  await panel.getByLabel("Scan #2").check();
+  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
   await openFirstReviewFilterEditor();
   await expect(panel.getByLabel(/Filter .* label/)).toHaveValue("Visual content");
   await expect(panel.getByRole("heading", { name: "Review A", level: 3 })).toBeVisible();
@@ -54,10 +56,12 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   ]);
   const membershipPayload = membershipSave.request().postDataJSON() as { filters: MockReviewFilter[] };
   expect(membershipPayload.filters).toEqual([expect.objectContaining({
-    source_scan_id: "scan-previous", source_finding_id: 10, label: "Visual content",
+    source_scan_id: "scan-history", source_finding_id: 10, label: "Visual content",
   })]);
   await panel.getByLabel(/Filter .* label/).fill("A isolated");
+  await chooseWorkflowStep(page, "Scans");
   await expect(page.getByRole("button", { name: "Import", exact: true })).toBeDisabled();
+  await chooseWorkflowStep(page, "Review");
   page.once("dialog", async (confirmation) => {
     expect(confirmation.message()).toContain("switch versions");
     await confirmation.dismiss();
@@ -110,20 +114,29 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   await dialog.getByLabel("Duplicate review name").fill("Review B copy");
   await dialog.getByRole("button", { name: "Duplicate" }).click();
   await expect(panel.getByRole("heading", { name: "Review B copy", level: 3 })).toBeVisible();
-  page.once("dialog", (confirmation) => confirmation.accept());
   await panel.getByRole("button", { name: "Delete review" }).click();
+  await page.getByRole("dialog", { name: "Delete review" }).getByRole("button", { name: "Delete review" }).click();
   await expect(panel.getByRole("row").filter({ hasText: "Review B copy" })).toHaveCount(0);
   await panel.getByRole("button", { name: "Open review Review B renamed" }).click();
+  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
+  await panel.getByRole("button", { name: "Save Changes" }).click();
 
-  await panel.getByRole("button", { name: "Export" }).click();
-  await page.getByRole("menuitem", { name: /EDL/ }).click();
+  await (await chooseExportFormat(page, "EDL")).click();
+  await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Publish EDL" }).click();
+  await expect(page.getByRole("dialog", { name: "Export" }).getByRole("status")).toContainText("Published EDL");
+  await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Close" }).click();
+  await chooseWorkflowStep(page, "Review");
   await expect(reviewB).toContainText("EDL · Current");
   await reviewA.getByRole("button", { name: "Open review Review A" }).click();
-  await panel.getByRole("button", { name: "Export" }).click();
-  await page.getByRole("menuitem", { name: /EDL/ }).click();
+  await (await chooseExportFormat(page, "EDL")).click();
+  await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Publish EDL" }).click();
+  await expect(page.getByRole("dialog", { name: "Export" }).getByRole("status")).toContainText("Published EDL");
+  await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Close" }).click();
+  await chooseWorkflowStep(page, "Review");
   await expect(reviewA).toContainText("EDL · Current");
   await expect(reviewB).not.toContainText("EDL · Current");
 
+  await chooseWorkflowStep(page, "Scans");
   await page.getByRole("button", { name: "Import", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "Import" });
   await expect(dialog.getByRole("button", { name: "EDL", exact: true })).toBeFocused();
@@ -134,7 +147,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   await dialog.getByLabel("Import review name").fill("Imported review");
   await dialog.getByLabel("EDL file").setInputFiles({ name: "mixed.edl", mimeType: "text/plain", buffer: Buffer.from("1 2 1\n") });
   await dialog.getByRole("button", { name: "Import EDL" }).click();
-  await expect(page.getByRole("status")).toContainText("Unsupported EDL actions were ignored and not imported");
+  await expect(page.getByRole("status").filter({ hasText: "Unsupported EDL actions were ignored and not imported" })).toBeVisible();
   await expect(panel.getByRole("heading", { name: "Imported review", level: 3 })).toBeVisible();
   await openFirstReviewFilterEditor();
   await expect(panel.getByLabel(/Filter .* label/)).toHaveValue("Imported mute");
@@ -164,17 +177,23 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   }));
   await expandReviewFilterGroups();
   await expect(panel.getByRole("button", { name: /^Edit filter / })).toHaveCount(2);
-  await panel.getByRole("button", { name: "Export" }).click();
-  await page.getByRole("menuitem", { name: /EDL/ }).click();
+  await (await chooseExportFormat(page, "EDL")).click();
+  await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Publish EDL" }).click();
+  await expect(page.getByRole("dialog", { name: "Export" }).getByRole("status")).toContainText("Published EDL");
+  await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Close" }).click();
+  await chooseWorkflowStep(page, "Review");
   await expect(panel.getByRole("row").filter({ hasText: "Imported review" })).toContainText("EDL · Current");
 
   const reviewCount = await panel.getByRole("button", { name: /^Open review / }).count();
+  await chooseWorkflowStep(page, "Scans");
   await page.getByRole("button", { name: "Import", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "Import" });
   await dialog.getByLabel("Import review name").fill("Invalid import");
   await dialog.getByLabel("EDL file").setInputFiles({ name: "invalid.edl", mimeType: "text/plain", buffer: Buffer.from("1 2 1\n") });
   await dialog.getByRole("button", { name: "Import EDL" }).click();
   await expect(dialog.getByRole("alert")).toContainText("Invalid EDL (line 1)");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await chooseWorkflowStep(page, "Review");
   await expect(panel.getByRole("button", { name: /^Open review / })).toHaveCount(reviewCount);
   await expectNoAccessibilityViolations(page);
 });
@@ -182,11 +201,11 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
 for (const width of [320, 1440]) {
   test(`names the Jellyfin item an import attaches to and refuses a file without one at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.getByRole("button", { name: "Movies" }).click();
-    await page.getByRole("button", { name: "Open Example Movie" }).click();
+    await page.goto("/#/library/movies/item/movie-1");
     const panel = page.locator(".saved-review-panel");
     await expect(panel.getByRole("heading", { name: "Saved reviews" })).toBeVisible();
     const reviewCount = await panel.getByRole("button", { name: /^Open review / }).count();
+    await chooseWorkflowStep(page, "Scans");
     await page.getByRole("button", { name: "Import", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Import" });
     await expect(dialog.getByText(/^Imports into Jellyfin item Example Movie, version /)).toBeVisible();

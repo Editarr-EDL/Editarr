@@ -8,7 +8,7 @@ export type ExportCondition = "current" | "outdated" | "regenerating" | "regener
 /** Label and plain-language consequence of each publication condition. */
 export const EXPORT_CONDITIONS: Record<ExportCondition, { label: string; explanation: string }> = {
   current: { label: "Current", explanation: "Matches the saved review and its owner's current policy." },
-  outdated: { label: "Outdated", explanation: "The review changed after this file was published. Publish again to update it." },
+  outdated: { label: "Outdated", explanation: "Publish again to apply the current saved review and enforced filters." },
   regenerating: { label: "Regenerating", explanation: "Updating for a policy change. The previous file stays available until regeneration finishes." },
   regeneration_failed: { label: "Regeneration failed", explanation: "Could not be updated for the current policy. The previous file is still in place until it is withdrawn." },
   withdrawn: { label: "Withdrawn", explanation: "Removed because it could not be regenerated under the current policy. Publish again to restore it." },
@@ -49,6 +49,11 @@ export function publishDestinations(reviewOwnerId: number | null | undefined, me
 export function canDownload(reviewOwnerId: number | null | undefined, me: number | null, allowed: Allowed): boolean {
   const other = reviewOwnerId != null && me != null && reviewOwnerId !== me;
   return allowed("exports.personal.download.own") && (!other || allowed("reviews.export.other"));
+}
+
+/** A saved review can be exported when any existing download or publication action is available. */
+export function canExportSavedReview(reviewOwnerId: number | null | undefined, me: number | null, allowed: Allowed): boolean {
+  return canDownload(reviewOwnerId, me, allowed) || publishDestinations(reviewOwnerId, me, allowed).length > 0;
 }
 
 /** Whether the caller holds the capability that deleting this file exercises. */

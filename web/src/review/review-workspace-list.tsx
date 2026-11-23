@@ -51,15 +51,17 @@ function ReviewNameDialog({ mode, name, error, normalized, busy, onNameChange, o
 /** Show saved reviews, import controls, and review creation dialogs.
  * @param workspace Review state and list actions.
  */
-export function ReviewWorkspaceList({ workspace, onResolve }: { workspace: Workspace; onResolve: (review: SavedReviewSummary, opener: HTMLButtonElement) => void }) {
+export function ReviewWorkspaceList({ workspace, onResolve, showImport = true }: {
+  workspace: Workspace;
+  onResolve: (review: SavedReviewSummary, opener: HTMLButtonElement) => void;
+  showImport?: boolean;
+}) {
   const {
-    item, mediaSourceId, onImported, reviewTarget, reviews, selected, draft,
-    name, sort, direction, busy, showNewReview, showDuplicateReview,
-    completedCreditsScans, rowExportStatus, pendingNameValidation,
+    reviews, selected, name, sort, direction, busy, showNewReview, showDuplicateReview,
+    rowExportStatus, pendingNameValidation,
     setName, setError, setShowNewReview, setShowDuplicateReview,
     toggleReviewSort, selectReview, createEmpty, duplicateReview, access, conflict,
   } = workspace;
-  const selectedVersion = item.versions?.find((version) => version.id === mediaSourceId);
   const closeNew = () => { setShowNewReview(false); setName(""); };
   const closeDuplicate = () => { setShowDuplicateReview(false); setName(""); };
 
@@ -71,15 +73,7 @@ export function ReviewWorkspaceList({ workspace, onResolve }: { workspace: Works
         onClick={() => { setName(""); setError(null); setShowNewReview(true); }}
         disabled={busy}
       >New Review</button>}
-      <ImportDialog
-        target={reviewTarget}
-        itemName={item.name}
-        versionName={selectedVersion?.name}
-        durationSeconds={selectedVersion?.duration_seconds ?? item.duration_seconds ?? null}
-        creditsScans={completedCreditsScans}
-        onImported={onImported}
-        disabled={busy || Boolean(draft && isReviewDraftDirty(draft))}
-      />
+      {showImport && <ReviewImportAction workspace={workspace} />}
     </div>
     <div className="library-table-wrap saved-review-table-wrap" role="region" aria-label="Saved reviews table" tabIndex={0}>
       <table className="library-table saved-review-table" aria-label="Saved reviews">
@@ -140,4 +134,24 @@ export function ReviewWorkspaceList({ workspace, onResolve }: { workspace: Works
       onSave={() => void duplicateReview()}
     />}
   </>;
+}
+
+/** Offer EDL and MCF import for the selected version using the review's permissions and draft guard. */
+export function ReviewImportAction({ workspace, onComplete, stageForVerification }: {
+  workspace: Workspace;
+  onComplete?: () => void;
+  stageForVerification?: boolean;
+}) {
+  const { item, mediaSourceId, onImported, reviewTarget, completedCreditsScans, busy, draft } = workspace;
+  const version = item.versions?.find((value) => value.id === mediaSourceId);
+  return <ImportDialog
+    target={reviewTarget}
+    itemName={item.name}
+    versionName={version?.name}
+    durationSeconds={version?.duration_seconds ?? item.duration_seconds ?? null}
+    creditsScans={completedCreditsScans}
+    onImported={(result) => { onImported(result); if (result.review) onComplete?.(); }}
+    stageForVerification={stageForVerification}
+    disabled={busy || Boolean(draft && isReviewDraftDirty(draft))}
+  />;
 }

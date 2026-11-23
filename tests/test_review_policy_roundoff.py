@@ -18,6 +18,8 @@ from scanner.db import (
     UserRow,
 )
 from scanner.mcf import TimingInterval, map_affine_range
+from scanner.persistence.repository.media_identity_store import get_version, review_version_id
+from scanner.runtime.media_fingerprints import content_digest
 from scanner.security import account_repository as accounts
 from scanner.security.auth_repository import issue_session
 from tests.arr_archive_support import undo_archive_migration
@@ -30,6 +32,7 @@ from tests.owner_schema_support import (
     undo_manual_filter_tracking_migration,
     undo_remove_passwords_migration,
     undo_scan_read_indexes_migration,
+    undo_stable_media_identity_migration,
 )
 from tests.scan_access_http import LIBRARY_A, guid
 from tests.test_review_policy_binding import body
@@ -152,6 +155,8 @@ def test_legacy_nearest_import_cues_under_source_basis_binding(app, monkeypatch,
     detail = imported.json()["review"]
     with app.accounts.factory() as db:
         stored = db.query(ReviewFilterRow).filter_by(review_id=detail["id"]).one()
+        original_scan = db.get(ScanRow, stored.source_scan_id)
+        original_digest = content_digest(original_scan.resolved_local_path)
         finding = db.get(ScanFindingRow, stored.source_finding_id)
         stored.start_seconds, stored.end_seconds = map_affine_range(
             finding.start_seconds,
@@ -170,6 +175,7 @@ def test_legacy_nearest_import_cues_under_source_basis_binding(app, monkeypatch,
         ):
             db.connection().exec_driver_sql(f"ALTER TABLE media_item_exports DROP COLUMN {column}")
         db.connection().exec_driver_sql("PRAGMA foreign_keys = OFF")
+        undo_stable_media_identity_migration(db.connection())
         undo_scan_read_indexes_migration(db.connection())
         undo_manual_filter_tracking_migration(db.connection())
         undo_explicit_filter_modes_migration(db.connection())
@@ -196,6 +202,9 @@ def test_legacy_nearest_import_cues_under_source_basis_binding(app, monkeypatch,
     )
     assert adoption._inspect_database(recovered) == "0018_jellyfin_account_sync"
     with app.accounts.factory() as db:
+        # Restore the fixture's independent proof of the original bytes.
+        migrated = get_version(db, review_version_id(db, detail["id"]))
+        migrated.content_sha256 = original_digest
         binding = db.query(ReviewPolicyEvidenceRow).filter_by(review_id=detail["id"]).one()
         assert (
             binding.start_seconds,

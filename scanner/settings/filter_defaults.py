@@ -5,13 +5,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
+from scanner.modeling.model_core import channel_for_source
 from scanner.models import (
     FilterDefaultsApplyResult,
     FilterDefaultsSettings,
     FilterRuleDisposition,
     FilterSelectionRule,
     McfCategory,
-    McfChannel,
     NewManualReviewFilter,
     ReviewFilterInput,
     Severity,
@@ -62,7 +62,7 @@ def _evaluate_copies(
             severity = default_severity
 
         channel = source_filter.mcf_channel
-        default_channel = _channel_for_source(source_filter.source)
+        default_channel = channel_for_source(source_filter.source)
         if overwrite_existing or channel is None:
             channel = default_channel
 
@@ -138,7 +138,7 @@ def enforce_filter_policy(
     non-enforced defaults, so it changes only with saved content or
     `policy_revision`. Enforced severities replace the saved severity of their
     subcategory. Enforcement is a floor: a finding is selected when an enforced
-    Deny matches it with that severity and its saved channel; every other finding
+    Deny matches it with that severity and its effective channel; every other finding
     keeps its saved selection. An enforced Allow never unselects, because the saved
     selection may come from the user's own Deny. Apply includes the enforced rules
     and severities, so the view of an Applied result is that result. Never feed
@@ -157,8 +157,19 @@ def enforce_filter_policy(
     return EnforcedFilters(tuple(effective), selection_changes, severity_changes)
 
 
-def _channel_for_source(source: str) -> McfChannel:
-    return McfChannel.AUDIO if source == "audio" else McfChannel.VIDEO
+def inferred_channel_policy_floor(candidate, policy: EnforcedFilterPolicy):
+    """Return the cue with policy severity when only channel inference makes it mandatory."""
+    if candidate.mcf_channel is not None:
+        return None
+    candidate = candidate.model_copy(
+        update={"severity": policy.severities.get(candidate.subcategory, candidate.severity)}
+    )
+    matches = [
+        rule
+        for rule in policy.rules
+        if rule.disposition is FilterRuleDisposition.DENY and _rule_matches(rule, candidate)
+    ]
+    return candidate if matches and all(rule.mcf_channel is not None for rule in matches) else None
 
 
 def _evaluate_selection(
@@ -183,7 +194,10 @@ def _rule_matches(
         and (rule.category is None or rule.category == candidate.category)
         and (rule.subcategory is None or rule.subcategory == candidate.subcategory)
         and (rule.severity is None or rule.severity == candidate.severity)
-        and (rule.mcf_channel is None or rule.mcf_channel == candidate.mcf_channel)
+        and (
+            rule.mcf_channel is None
+            or rule.mcf_channel == (candidate.mcf_channel or channel_for_source(candidate.source))
+        )
         and (
             rule.label_contains is None
             or _contains_token_sequence(candidate.label, rule.label_contains)

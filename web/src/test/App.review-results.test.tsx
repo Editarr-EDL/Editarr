@@ -1,3 +1,4 @@
+import { exportAction, openWorkflowStep, revealMediaFiles, useCategorySort } from "./review-workflow-test-helpers";
 import { act, cleanup, fireEvent, render as renderComponent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -60,7 +61,8 @@ describe("production saved-review UI authority", () => {
     const reviewRow = (await screen.findByRole("button", { name: "Open review Existing review" })).closest("tr")!;
     expect(reviewRow).toHaveTextContent("EDL · Current");
 
-    fireEvent.click(screen.getByRole("button", { name: "Manage exports" }));
+    revealMediaFiles();
+    fireEvent.click(screen.getByRole("button", { name: "Manage legacy exports" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage exports" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete EDL" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm Delete EDL" }));
@@ -135,7 +137,7 @@ describe("production saved-review UI authority", () => {
     const reviewRow = (await screen.findByRole("button", { name: "Open review Movie review" })).closest("tr")!;
     expect(reviewRow).toHaveTextContent("EDL · Outdated");
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    fireEvent.click(await exportAction("EDL"));
     const exportDialog = await screen.findByRole("dialog", { name: "Export" });
     fireEvent.click(within(exportDialog).getByRole("button", { name: "Publish EDL" }));
     await waitFor(() => expect(reviewRow).toHaveTextContent("EDL · Current"));
@@ -146,7 +148,8 @@ describe("production saved-review UI authority", () => {
     expect(discoveryReads.at(-1)).toBe("movie-media:source-1");
     expect(screen.getByRole("listitem", { name: "EDL · Personal · You" })).toHaveTextContent("CurrentFrom this review.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Manage exports" }));
+    revealMediaFiles();
+    fireEvent.click(screen.getByRole("button", { name: "Manage legacy exports" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage exports" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete EDL" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm Delete EDL" }));
@@ -226,24 +229,28 @@ describe("production saved-review UI authority", () => {
       created_at: "2026-09-14T10:00:00Z", updated_at: "2026-09-14T10:00:30Z",
       name: "Primary", origin: "imported", import_source_name: "input.edl", imported_at: "2026-09-14T10:00:00Z",
     };
+    const generated = {
+      ...scan, id: "scan-generated", scan_id: 8, name: "d1-3B", origin: "generated", video_model: "d1-3b",
+      scan_audio: false, audio_model: null, audio_filter: null, import_source_name: null, imported_at: null,
+    };
     const review = {
       id: "review-rich", media_item_id: "movie-1",
       target: { source: "jellyfin", item_id: "movie-1", media_source_id: "source-1" },
       name: "Rich review", revision: 1, content_revision: 1,
       created_at: "2026-09-14T10:00:00Z", updated_at: "2026-09-14T10:00:00Z",
-      memberships: [{ scan_id: "scan-1", role: "both" }],
-      scans: [{ scan, role: "both" }],
+      memberships: [{ scan_id: "scan-1", role: "both" }, { scan_id: generated.id, role: "video" }],
+      scans: [{ scan, role: "both" }, { scan: generated, role: "video" }],
       filters: [
         { id: "visual-1", source_scan_id: "scan-1", source_finding_id: 1, source: "visual", category: "violence", subcategory: "violence", severity: "medium", mcf_channel: "video", mcf_comment: null, label: "Fight", details: "Fight in hallway", group_key: "violence", start_seconds: 10, end_seconds: 20, confidence: 0.9, edit_action: "skip", selected: true },
         { id: "visual-2", source_scan_id: "scan-1", source_finding_id: 2, source: "visual", category: "violence", subcategory: "violence", severity: "high", mcf_channel: "video", mcf_comment: null, label: "Weapon", details: "Weapon visible", group_key: "violence", start_seconds: 15, end_seconds: 25, confidence: 0.8, edit_action: "skip", selected: false },
-        { id: "visual-clean", source_scan_id: "scan-1", source_finding_id: 4, source: "visual", category: "violence", subcategory: "violence", severity: "low", mcf_channel: "video", mcf_comment: null, label: "d1_violence", details: null, group_key: "No objectionable content", start_seconds: 30, end_seconds: 35, confidence: 0.9, edit_action: "skip", selected: false },
+        { id: "visual-clean", source_scan_id: generated.id, source_finding_id: 4, source: "visual", category: "violence", subcategory: "violence", severity: "low", mcf_channel: "video", mcf_comment: null, label: "d1_violence", details: null, group_key: "No objectionable content", start_seconds: 30, end_seconds: 35, confidence: 0.9, edit_action: "skip", selected: false },
         { id: "audio-1", source_scan_id: "scan-1", source_finding_id: 3, source: "audio", category: "language", subcategory: "swearing", severity: "low", mcf_channel: "audio", mcf_comment: null, label: "swearing", details: "A line with swearing", group_key: null, start_seconds: 40, end_seconds: 42, confidence: 0.95, edit_action: "mute", selected: true },
       ],
     };
     const baseApi = installProductionApi();
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input), "http://editarr.test");
-      if (url.pathname === "/api/scans/history") return json([scan]);
+      if (url.pathname === "/api/scans/history") return json([scan, generated]);
       if (url.pathname === "/api/library-items/movie-1/reviews") return json([review]);
       if (url.pathname === "/api/reviews/review-rich") return json(review);
       if (url.pathname === "/api/settings/filters/apply") {
@@ -264,15 +271,19 @@ describe("production saved-review UI authority", () => {
     expect(await screen.findByText("1/2 results")).toBeVisible();
     expect(screen.queryByRole("region", { name: "Review filters" })).not.toBeInTheDocument();
     expect(screen.getByText("Skipped Time 0:10")).toBeVisible();
-    expect(screen.getByRole("img", { name: "1 selected results across 1 scans" })).toBeVisible();
-    expect(screen.getAllByText(/Imported from input\.edl on/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", { name: "1 selected results across 2 scans" })).toBeVisible();
+    expect(screen.queryByText(/Imported from input\.edl/)).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Primary" })).toBeChecked();
+    expect(screen.getAllByRole("button", { name: "Show scan details for Primary" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("No objectionable content detected")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show No Objectionable Content" }));
     expect(await screen.findByText("1/3 results")).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Include No objectionable content at 0:30" })).toBeVisible();
     expect(screen.queryByText("d1_violence")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Hide No Objectionable Content" }));
     expect(await screen.findByText("1/2 results")).toBeVisible();
 
+    await useCategorySort();
     const audioSection = screen.getByRole("region", { name: "Audio review filters" });
     const languageFamily = within(audioSection).getByRole("button", { name: /^Language family, 1 result, 1 selected$/i });
     expect(languageFamily).toHaveAttribute("aria-expanded", "true");
@@ -366,6 +377,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await useCategorySort();
     const videoSection = await screen.findByRole("region", { name: "Video review filters" });
     await within(videoSection).findByRole("button", { name: /Violence family/ });
     const familyNames = within(videoSection).getAllByRole("button", { name: /family,/ }).map((button) => button.getAttribute("aria-label")?.split(" family,")[0]);
@@ -479,6 +491,7 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "Import" }));
     const importDialog = screen.getByRole("dialog", { name: "Import" });
     fireEvent.change(within(importDialog).getByLabelText("Import review name"), { target: { value: "Imported review" } });
@@ -513,6 +526,7 @@ describe("production saved-review UI authority", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
     await waitFor(() => expect(listRequests).toBe(2));
+    await openWorkflowStep("Scans");
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     const importDialog = screen.getByRole("dialog", { name: "Import" });
     fireEvent.change(within(importDialog).getByLabelText("Import review name"), { target: { value: "Imported review" } });

@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from scanner import api as root
 from scanner.api import _import_error_responses
 from scanner.formats.edl import EdlParseError
+from scanner.integrations.community.local_downloads import drained_thread
 from scanner.mcf import (
     MAX_CONTENT_BYTES as MAX_MCF_CONTENT_BYTES,
 )
@@ -35,6 +37,8 @@ from scanner.repository import (
     import_mcf_as_saved_review,
     resolve_local_path,
 )
+from scanner.runtime.media_fingerprints import SampledMediaFingerprint, sampled_media_fingerprint
+from scanner.runtime.scan_version import ScanVersionChanged, file_generation
 from scanner.security.access.capability_ids import Capability as C
 
 from .review_access import review_caller
@@ -48,9 +52,68 @@ from .review_import_helpers_api import (
     _safe_mcf_import_basename,
 )
 from .review_targets import capture_target
+from .stable_media_capture import cached_target_digest, observe_sampled_target_version
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _StagedVersion:
+    fingerprint: SampledMediaFingerprint
+    known_content_sha256: str | None
+
+
+def _target_generation(path: str) -> tuple[int, ...]:
+    try:
+        return file_generation(path)
+    except ScanVersionChanged as exc:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        ) from exc
+
+
+def _capture_staged_version(caller, prepared, *, capabilities=CONTENT_EDITS, scan_ids=()):
+    """Authorize all import capabilities before reading the selected media file."""
+    caller.authorize_create(
+        prepared.media,
+        capability=C.REVIEWS_IMPORT_UPLOAD,
+        capabilities=capabilities,
+        scan_ids=scan_ids,
+    )
+    path = prepared.media.resolved_path
+    generation = _target_generation(path)
+    try:
+        fingerprint = sampled_media_fingerprint(path)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        ) from exc
+    if fingerprint.generation != generation:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        )
+    return _StagedVersion(fingerprint, cached_target_digest(caller.db, prepared))
+
+
+def _store_staged_version(db, prepared, staged_version: _StagedVersion | None):
+    if staged_version is None:
+        return None
+    if _target_generation(prepared.media.resolved_path) != staged_version.fingerprint.generation:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        )
+    try:
+        return observe_sampled_target_version(
+            db,
+            prepared,
+            fingerprint=staged_version.fingerprint,
+            known_content_sha256=staged_version.known_content_sha256,
+        )
+    except ScanVersionChanged as exc:
+        raise root._review_http_error(
+            "target_changed", "The selected media file changed during import", 409
+        ) from exc
 
 
 def _run_edl_import(
@@ -61,10 +124,13 @@ def _run_edl_import(
     source_name: str,
     caller=None,
     prepared=None,
+    staged_version=None,
 ):
     """Import EDL content for a resolved target and return the new review."""
     if caller is not None:
         prepared = capture_target(caller, options.target)
+        if options.stage_for_verification:
+            staged_version = _capture_staged_version(caller, prepared)
         return caller.present(
             caller.create(
                 prepared.media,
@@ -74,6 +140,7 @@ def _run_edl_import(
                     options=options,
                     source_name=source_name,
                     prepared=prepared,
+                    staged_version=staged_version,
                 ),
                 capability=C.REVIEWS_IMPORT_UPLOAD,
                 capabilities=CONTENT_EDITS,
@@ -103,7 +170,8 @@ def _run_edl_import(
         catalog_document = catalog_document.model_copy(update={"material_end_seconds": duration})
     from scanner.formats.edl import parse_edl_content
 
-    parsed = parse_edl_content(content, duration_seconds=duration)
+    version_id = _store_staged_version(db, prepared, staged_version)
+    parsed = parse_edl_content(content, duration_seconds=None if version_id else duration)
     return import_edl_as_saved_review(
         db,
         media_item=media,
@@ -114,6 +182,7 @@ def _run_edl_import(
         parsed=parsed,
         duration_seconds=duration,
         catalog_mcf_document=catalog_document,
+        verification_version_id=version_id,
     )
 
 
@@ -125,10 +194,19 @@ def _run_mcf_import(
     source_name: str,
     caller=None,
     prepared=None,
+    staged_version=None,
 ):
     """Parse and import MCF content with synchronization and metadata checks."""
     if caller is not None:
         prepared = capture_target(caller, options.target)
+        capabilities = CONTENT_EDITS + (
+            (C.REVIEWS_CREDITS_EDIT_OWN,) if options.accepted_credits else ()
+        )
+        scan_ids = (options.accepted_credits.scan_id,) if options.accepted_credits else ()
+        if options.stage_for_verification:
+            staged_version = _capture_staged_version(
+                caller, prepared, capabilities=capabilities, scan_ids=scan_ids
+            )
         return caller.present(
             caller.create(
                 prepared.media,
@@ -138,11 +216,11 @@ def _run_mcf_import(
                     options=options,
                     source_name=source_name,
                     prepared=prepared,
+                    staged_version=staged_version,
                 ),
                 capability=C.REVIEWS_IMPORT_UPLOAD,
-                capabilities=CONTENT_EDITS
-                + ((C.REVIEWS_CREDITS_EDIT_OWN,) if options.accepted_credits else ()),
-                scan_ids=[options.accepted_credits.scan_id] if options.accepted_credits else [],
+                capabilities=capabilities,
+                scan_ids=scan_ids,
             )
         )
     if prepared is None:
@@ -171,6 +249,7 @@ def _run_mcf_import(
     if recovered.issues and not options.ignore_errors:
         raise _McfImportIssues(recovered.issues)
     parsed = recovered.parsed
+    version_id = _store_staged_version(db, prepared, staged_version)
     return import_mcf_as_saved_review(
         db,
         media_item=media,
@@ -184,6 +263,7 @@ def _run_mcf_import(
         synchronization=options.synchronization,
         mcf_material_end_seconds=options.mcf_material_end_seconds,
         accepted_credits=options.accepted_credits,
+        verification_version_id=version_id,
     )
 
 
@@ -243,7 +323,8 @@ async def api_import_mcf_upload(
         content = await file.read(MAX_MCF_CONTENT_BYTES + 1)
         if len(content) > MAX_MCF_CONTENT_BYTES:
             raise McfParseError("mcf_import_too_large", "MCF content exceeds the size limit")
-        return _run_mcf_import(
+        return await drained_thread(
+            _run_mcf_import,
             db,
             content=content,
             options=parsed_options,
@@ -307,7 +388,8 @@ async def api_import_edl_upload(
         content = await file.read(1_048_577)
         if len(content) > 1_048_576:
             raise EdlParseError("edl_import_too_large", "EDL content exceeds the size limit")
-        return _run_edl_import(
+        return await drained_thread(
+            _run_edl_import,
             db,
             content=content,
             options=parsed_options,

@@ -1,3 +1,4 @@
+import { workflowStep } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { authenticationStatus, json, mockApi } from "./app-fixtures";
 
@@ -20,7 +21,9 @@ async function openDraftFilter(page: Page) {
   const dialog = page.getByRole("dialog", { name: "New Review" });
   await dialog.getByLabel("New review name").fill("Draft for preview");
   await dialog.getByRole("button", { name: "Start new review" }).click();
-  await panel.getByLabel("Scan #2").check();
+  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
+  await workflowStep(page, "Review").click();
+  await panel.getByLabel("Sort", { exact: true }).selectOption("category");
   const video = panel.getByRole("region", { name: "Video review filters", exact: true });
   await video.locator(".hierarchy-subcategory button").click();
   await video.locator(".hierarchy-group button").click();

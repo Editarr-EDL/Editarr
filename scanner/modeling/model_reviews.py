@@ -324,6 +324,7 @@ class ReviewExportRequest(ReviewPolicyToken):
 
 class LibraryReviewCreate(ReviewCreate):
     media_source_id: str | None = None
+    stable_version_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ReviewReference(BaseModel):
@@ -355,6 +356,7 @@ class ReviewExportResponse(BaseModel):
 class EdlImportOptions(ReviewWriteModel):
     target: ReviewTargetRequest
     name: ReviewName
+    stage_for_verification: bool = False
 
 
 class EdlImportWarning(BaseModel):
@@ -364,7 +366,7 @@ class EdlImportWarning(BaseModel):
 
 
 class EdlImportResult(BaseModel):
-    review: SavedReview
+    review: SavedReview | None
     scan: Scan
     warning: EdlImportWarning | None
 
@@ -372,6 +374,7 @@ class EdlImportResult(BaseModel):
 class McfImportOptions(ReviewWriteModel):
     target: ReviewTargetRequest
     name: ReviewName
+    stage_for_verification: bool = False
     ignore_errors: bool = False
     synchronization: ReviewSynchronization
     mcf_material_end_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -400,7 +403,7 @@ class McfMetadataNotice(BaseModel):
 
 
 class McfImportResult(BaseModel):
-    review: SavedReview
+    review: SavedReview | None
     scan: Scan
     source_version: McfSourceVersion
     notices: list[McfMetadataNotice] = Field(default_factory=list)

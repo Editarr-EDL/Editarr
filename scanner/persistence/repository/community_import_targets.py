@@ -9,13 +9,29 @@ from sqlalchemy.orm import object_session
 from scanner.db import CommunityImportRow, CommunityImportTargetRow, MediaItemRow
 
 
-def verified_target(db, scan, media_item_id, media_source_id):
+def stored_target(db, scan, media_item_id, media_source_id):
+    """Find an intact signed association, including a pending verification."""
     imported = db.query(CommunityImportRow).filter_by(scan_id=scan.id).one_or_none()
     if imported is None or not all(
         (imported.artifact_bytes, imported.manifest_bytes, imported.signature_bytes)
     ):
         return None
     return db.get(CommunityImportTargetRow, (imported.id, media_item_id, media_source_id or ""))
+
+
+def pending_target_channels(association) -> set[str]:
+    if association is None:
+        return set()
+    evidence = json.loads(association.target_evidence_json)
+    return set(evidence.get("pending_channels", ())) & {"audio", "video"}
+
+
+def verified_target(db, scan, media_item_id, media_source_id):
+    """Find a target association with at least one approved channel."""
+    association = stored_target(db, scan, media_item_id, media_source_id)
+    if pending_target_channels(association) and not _approved_channels(association):
+        return None
+    return association
 
 
 def matches_target(association, target_path):
@@ -43,6 +59,7 @@ def _approved_channels(association):
     if (
         not isinstance(channels, list)
         or not channels
+        and not pending_target_channels(association)
         or any(
             not isinstance(channel, str) or channel not in {"audio", "video"}
             for channel in channels
@@ -92,14 +109,15 @@ def _approvals_by_import(db, scans_by_import):
         .all()
     )
     for association, media in rows:
+        approved = approved_target_channels(association, scans_by_import[association.import_id])
+        if not approved:
+            continue
         approvals[association.import_id].append(
             {
                 "source": "jellyfin",
                 "target_item_id": media.jellyfin_id,
                 "media_source_id": association.media_source_id or None,
-                "channels": approved_target_channels(
-                    association, scans_by_import[association.import_id]
-                ),
+                "channels": approved,
             }
         )
     return approvals
@@ -111,6 +129,49 @@ def scan_target_approvals(scan):
     if db is None or scan.community_import is None or not scan.community_import.artifact_bytes:
         return []
     return _approvals_by_import(db, {scan.community_import.id: scan})[scan.community_import.id]
+
+
+def scan_pending_targets(scan):
+    """Expose candidate channels for the scan's visible source item only."""
+    imported = scan.community_import
+    db = object_session(scan)
+    if db is None or imported is None:
+        return []
+    rows = db.query(CommunityImportTargetRow).filter_by(
+        import_id=imported.id,
+        media_item_id=scan.media_item_id,
+    )
+    return _pending_targets(scan, rows)
+
+
+def _pending_targets(scan, rows):
+    return [
+        {
+            "source": "jellyfin",
+            "target_item_id": scan.media_item.jellyfin_id,
+            "media_source_id": item.media_source_id or None,
+            "channels": sorted(pending),
+        }
+        for item in rows
+        if (pending := pending_target_channels(item))
+    ]
+
+
+def scan_pending_targets_by_scan(db, scans):
+    """Batch pending target lookups and expose only each scan's own media item."""
+    imports = {scan.community_import.id: scan for scan in scans if scan.community_import}
+    rows_by_import = {import_id: [] for import_id in imports}
+    if imports:
+        rows = db.query(CommunityImportTargetRow).filter(
+            CommunityImportTargetRow.import_id.in_(imports),
+        )
+        for row in rows:
+            if row.media_item_id == imports[row.import_id].media_item_id:
+                rows_by_import[row.import_id].append(row)
+    return {
+        scan.id: _pending_targets(scan, rows_by_import[import_id])
+        for import_id, scan in imports.items()
+    }
 
 
 def scan_target_approvals_by_scan(db, scans):

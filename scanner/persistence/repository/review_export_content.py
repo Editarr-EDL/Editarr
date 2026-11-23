@@ -20,7 +20,7 @@ from scanner.models import (
     Severity,
 )
 
-from .repository_mcf_preflight import _signature_value
+from .repository_mcf_preflight import _signature_value, filter_mcf_value
 from .review_export_target import _review_export_scans
 from .review_policy import (
     PreparedReviewPolicy,
@@ -100,12 +100,8 @@ def render_review_export(review, policy, export_format, duration):
                 category=McfCategoryFamily(_signature_value(review_filter.category)),
                 subcategory=McfCategory(review_filter.subcategory),
                 severity=Severity(_signature_value(review_filter.severity)),
-                mcf_channel=(
-                    McfChannel(_signature_value(review_filter.mcf_channel))
-                    if review_filter.mcf_channel is not None
-                    else McfChannel.BOTH
-                ),
-                mcf_comment=review_filter.mcf_comment,
+                mcf_channel=McfChannel(filter_mcf_value(review_filter, "mcf_channel")),
+                mcf_comment=filter_mcf_value(review_filter, "mcf_comment"),
             )
             for position, review_filter in enumerate(filters)
             if review_filter.selected

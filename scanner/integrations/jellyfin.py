@@ -89,6 +89,7 @@ class JellyfinClient:
         limit: int = 100,
         recursive: bool = True,
         include_item_types: tuple[str, ...] = (),
+        search_term: str = "",
     ) -> list[JellyfinMediaItem]:
         """Fetch a page of library items using the supplied parent and paging options."""
         payload = self._get_json(
@@ -105,6 +106,7 @@ class JellyfinClient:
                 **(
                     {"IncludeItemTypes": ",".join(include_item_types)} if include_item_types else {}
                 ),
+                **({"SearchTerm": search_term} if search_term else {}),
             },
             names_id=True,
         )
@@ -123,6 +125,7 @@ class JellyfinClient:
         *,
         recursive: bool = True,
         include_item_types: tuple[str, ...] = (),
+        search_term: str = "",
     ) -> list[JellyfinMediaItem]:
         """Retrieve every page for a bounded Jellyfin catalog query."""
         items: list[JellyfinMediaItem] = []
@@ -134,6 +137,7 @@ class JellyfinClient:
                 limit=page_size,
                 recursive=recursive,
                 include_item_types=include_item_types,
+                search_term=search_term,
             )
             items.extend(page)
             if len(page) < page_size:
@@ -259,6 +263,18 @@ class JellyfinClient:
         if not content_type.startswith("image/"):
             raise JellyfinError("Jellyfin returned an invalid poster image")
         return response.content, content_type
+
+    def refresh_sidecars(self, item_id: str) -> None:
+        """Request a validation-only item refresh so Jellyfin discovers a new subtitle."""
+        try:
+            response = self._client.post(
+                f"{self.server_url}/Items/{quote(item_id, safe='')}/Refresh",
+                params={"metadataRefreshMode": "ValidationOnly", "imageRefreshMode": "None"},
+                headers=self._headers("application/json"),
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise JellyfinError("Jellyfin did not accept the subtitle refresh") from exc
 
     def _get_json(
         self, path: str, params: dict[str, str] | None = None, *, names_id: bool = False
@@ -438,6 +454,9 @@ def _media_version(
             if isinstance(streams, list)
             else None
         ),
+        subtitle_streams=[
+            stream for stream in normalized_streams if stream.get("Type") == "Subtitle"
+        ],
         duration_seconds=runtime_ticks / 10_000_000 if runtime_ticks else None,
         size_bytes=int(size) if isinstance(size, int) else None,
         media_identity=media_identity,

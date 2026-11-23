@@ -22,6 +22,13 @@ _REVIEW_VIEW = (C.REVIEWS_VIEW_OWN, C.REVIEWS_VIEW_OTHER)
 _PUBLISH_EXPORT = _gated(
     C.EXPORTS_PERSONAL_PUBLISH_OWN, C.REVIEWS_EXPORT_OTHER, C.EXPORTS_DEFAULT_PUBLISH
 )
+_SUBTITLE_EXPORT = _gated(
+    *_REVIEW_VIEW,
+    C.EXPORTS_PERSONAL_DOWNLOAD_OWN,
+    C.EXPORTS_PERSONAL_PUBLISH_OWN,
+    C.REVIEWS_EXPORT_OTHER,
+    C.EXPORTS_DEFAULT_PUBLISH,
+)
 _PREVIEW = _gated(C.REVIEWS_PREVIEW_OWN, C.REVIEWS_PREVIEW_OTHER)
 _JOB_VIEW = (C.SCAN_JOBS_VIEW_OWN, C.SCAN_JOBS_VIEW_OTHER)
 # A scan is visible as its job or, once complete, as shared findings on its media.
@@ -224,10 +231,18 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
     ("GET /api/capabilities", _START),
     ("GET /api/libraries", _BROWSE),
     ("GET /api/libraries/{library_id}/items", _BROWSE),
+    ("GET /api/editarr-items/{title_id}", _BROWSE),
+    ("GET /api/editarr-items/legacy/{item_id}", _BROWSE),
+    ("POST /api/editarr-items/{title_id}/versions", _BROWSE),
+    ("GET /api/media-fingerprints/queue", _gated(C.REVIEWS_IMPORT_UPLOAD)),
+    ("POST /api/media-versions/{version_id}/reuse/transcript-status", _gated(C.REVIEWS_IMPORT_UPLOAD)),
+    ("POST /api/media-versions/{version_id}/reuse/preview", _gated(C.REVIEWS_IMPORT_UPLOAD)),
+    ("POST /api/media-versions/{version_id}/reuse/approve", _gated(C.REVIEWS_IMPORT_UPLOAD)),
     ("GET /api/library-items/{item_id}", _BROWSE),
     ("GET /api/library-items/{item_id}/children", _BROWSE),
     ("GET /api/library-items/{item_id}/seasons", _BROWSE),
     ("GET /api/library-items/{item_id}/image", _BROWSE),
+    ("GET /api/media/subtitles/publications", _BROWSE),
     ("GET /api/library-items/{item_id}/scans", _gated(*_SEEN)),
     ("GET /api/library-items/{item_id}/exports", _gated(*_ITEM_EXPORTS)),
     ("DELETE /api/library-items/{item_id}/exports/{format}", _LEGACY_DELETE),
@@ -304,6 +319,9 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
     ("GET /api/reviews/{review_id}/filters/{filter_id}/video-preview", _PREVIEW),
     ("POST /api/reviews/{review_id}/edl", _PUBLISH_EXPORT),
     ("POST /api/reviews/{review_id}/mcf", _PUBLISH_EXPORT),
+    ("POST /api/reviews/{review_id}/subtitles/sources", _SUBTITLE_EXPORT),
+    ("POST /api/reviews/{review_id}/subtitles/preview", _SUBTITLE_EXPORT),
+    ("POST /api/reviews/{review_id}/subtitles/publish", _SUBTITLE_EXPORT),
     ("POST /api/reviews/{review_id}/exports/{format}", _PUBLISH_EXPORT),
     (
         "POST /api/reviews/{review_id}/exports/{format}/download",

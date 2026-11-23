@@ -130,6 +130,10 @@ export function installProductionApi() {
     }
     if (url.pathname === "/api/media/audio-tracks/selection") return json(JSON.parse(String(init?.body)).selection);
     if (url.pathname === "/api/library-items/movie-1/reviews") return json([]);
+    if (url.pathname === "/api/media/subtitles/publications") return json({ published_subtitles: [] });
+    if (/^\/api\/reviews\/[^/]+\/subtitles\/sources$/.test(url.pathname)) {
+      return json({ sources: [], audio_sources: [], audio_source_id: null, fallback: "scan_required", published_subtitles: [] });
+    }
     if (url.pathname === "/api/capabilities") return json({ audio_models: [], audio_filters: [], video_models: [], qwen_models: [{ id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B", recommended: true }, { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B", recommended: false }], model_capabilities: [] });
     if (url.pathname === "/api/edl-imports/upload" && init?.method === "POST") return json({ review: {}, scan: {}, warning: null }, 201);
     return json({});

@@ -35,7 +35,6 @@ from scanner.repository import (
 )
 
 from .community_import_targets import (
-    matches_target,
     project_review_channel,
     review_duration,
     validate_target_role,
@@ -54,6 +53,8 @@ from .review_filter_tracking import label_edits, load_source_findings, with_labe
 from .review_policy import prepare_review_policy
 from .review_policy_display import locked_severities
 from .review_repairs import repair_records_by_review
+from .review_scan_paths import review_scan_location
+from .version_reuse import bound_scan_file_matches, source_pending_reuse
 
 
 def _review_filter(row: ReviewFilterRow) -> ReviewFilter:
@@ -136,6 +137,8 @@ def _scan_is_available(
     db: Session, scan: ScanRow, *, media_item_id: str, media_source_id: str
 ) -> bool:
     """Check whether a completed scan belongs to the requested media version."""
+    if source_pending_reuse(scan):
+        return False
     if scan.community_import is not None and scan.community_import.artifact_bytes:
         return (
             scan.status == "complete"
@@ -172,6 +175,9 @@ def _scan_matches_physical_version(
     scan: ScanRow, target_path: Path, *, require_hash: bool = False
 ) -> bool:
     """Check whether a scan still belongs to the requested physical media version."""
+    approval = bound_scan_file_matches(scan, target_path)
+    if approval is not None:
+        return approval
     if _resolved_scan_path(scan) != target_path.resolve():
         return False
     if scan.video_hash is None:
@@ -237,20 +243,11 @@ def _validate_memberships(
             raise ReviewMembershipError("Selected scan does not include video analysis")
         association = verified_target(db, scan, media_item_id, media_source_id)
         validate_target_role(association, membership.role)
-        scan_path = (
-            Path(association.resolved_local_path).resolve()
-            if association
-            else _resolved_scan_path(scan)
-        )
+        scan_path, matches = review_scan_location(scan, target_path, association)
         if target_path is not None and scan_path != target_path:
             raise ReviewMembershipError(
                 "Selected scans must resolve to the target physical media file"
             )
-        matches = (
-            matches_target(association, target_path or scan_path)
-            if association
-            else _scan_matches_physical_version(scan, target_path or scan_path)
-        )
         if not matches:
             raise ReviewMembershipError(
                 "Selected scans must match the target physical media version"

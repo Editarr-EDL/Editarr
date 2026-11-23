@@ -15,6 +15,7 @@ from scanner.modeling.media_identity import (
     ProviderIdentifier,
 )
 from scanner.modeling.model_community_imports import CommunityScanProvenance
+from scanner.runtime.media_fingerprints import SampledMediaFingerprint
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,9 @@ class LocalImportTarget:
     evidence: MatchEvidence
     selected_channels: tuple[str, ...] | None = None
     lookup_target_key: str | None = None
+    stage_for_verification: bool = False
+    fingerprint: SampledMediaFingerprint | None = None
+    known_content_sha256: str | None = None
 
 
 def canonical(value: object) -> str:

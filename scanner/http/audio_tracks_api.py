@@ -14,11 +14,13 @@ from scanner.modeling.model_audio_tracks import (
     AudioSelectionRequest,
 )
 from scanner.persistence.repository.repository_audio_tracks import (
+    analyzed_track_matches_file,
     remember_audio_selection,
     remembered_audio_selection,
 )
 from scanner.pipeline.audio_tracks import AudioSelectionError, probe_audio_tracks
 from scanner.repository import resolve_local_path
+from scanner.runtime.media_fingerprints import cached_content_digest
 from scanner.security.access.capability_ids import Capability
 from scanner.server_paths import UnresolvablePath
 
@@ -93,6 +95,14 @@ def get_audio_tracks(
             except AudioSelectionError:
                 selection = None
                 stale = True
+                previous = remembered.selection().track
+                if previous in inventory.tracks:
+                    checksum = cached_content_digest(path)
+                    if checksum and analyzed_track_matches_file(db, path, checksum, previous):
+                        selection = AudioSelection.from_selection(
+                            inventory.select(previous.stream_index)
+                        )
+                        stale = False
         return AudioInventory(
             file_version=inventory.file_version,
             tracks=[asdict(track) for track in inventory.tracks],

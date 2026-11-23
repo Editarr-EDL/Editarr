@@ -72,6 +72,37 @@ def _consent(artifact: bytes, manifest: bytes, preview: bytes, guard: str) -> st
     ).hexdigest()
 
 
+def _require_original_versions(bind, captured, sources):
+    """Check pinned evidence before claiming physical fingerprints in a contribution."""
+    from scanner.db import ScanRow
+    from scanner.persistence.repository.media_identity_store import (
+        get_version,
+        review_version_id,
+        version_locators,
+    )
+    from scanner.persistence.repository.review_version_evidence import version_file_matches
+    from scanner.persistence.repository.version_reuse import bound_scan_file_matches
+
+    with Session(bind) as db:
+        if captured.reference.kind == "review":
+            pin = review_version_id(db, captured.reference.identifier)
+            if pin:
+                review = captured.data()["root"]
+                version = get_version(db, pin)
+                if not any(
+                    locator.media_item_id == review["media_item_id"]
+                    and locator.media_source_id == review["media_source_id"]
+                    and locator.resolved_path
+                    and version_file_matches(version, locator.resolved_path)
+                    for locator in version_locators(db, pin)
+                ):
+                    raise ArtifactError("The original review version is unavailable")
+        for identifier, path in sources:
+            scan = db.get(ScanRow, identifier)
+            if scan is None or bound_scan_file_matches(scan, Path(path)) is False:
+                raise ArtifactError("The original scan version is unavailable")
+
+
 def prepare_donation(
     bind: Engine,
     source: SourceRef,
@@ -87,6 +118,11 @@ def prepare_donation(
     scans = {item["id"]: item for item in captured.data()["scans"]}
     selected = scans.get(chosen) if chosen else None
     primary = selected or next(iter(scans.values()), None)
+    _require_original_versions(
+        bind,
+        captured,
+        {(scan["id"], scan["resolved_local_path"]) for scan in (primary, selected) if scan},
+    )
     states = {}
 
     def fingerprint(channel, scan):

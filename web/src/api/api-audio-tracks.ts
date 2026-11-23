@@ -14,6 +14,13 @@ export type AudioTrackInventory = {
 
 export type AudioTarget = { item_id: string; media_source_id?: string | null };
 
+/** Match one selection to the same file snapshot and track metadata in a fresh inventory. */
+export function findSelectedAudioTrack(inventory: AudioTrackInventory | null, selection: AudioTrackSelection | null) {
+  if (!inventory || !selection || selection.file_version !== inventory.file_version) return undefined;
+  return inventory.tracks.find((track) => (Object.keys(track) as Array<keyof AudioTrack>)
+    .every((field) => track[field] === selection.track[field]));
+}
+
 function targetFields(target: AudioTarget): Record<string, string> {
   return { item_id: target.item_id, ...(target.media_source_id ? { media_source_id: target.media_source_id } : {}) };
 }

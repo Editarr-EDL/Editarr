@@ -192,3 +192,42 @@ it("shows a relabelled generated finding's label and follows a relabel in the ed
   const renamed = within(section).getByRole("checkbox", { name: "Include Car chase at 0:30" });
   expect(renamed.closest("tr")).toHaveTextContent("Car chase");
 });
+
+it("sorts mixed review filters by time and restores the collapsible categories", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [{
+    token: "violence", label: "Violence", categories: [{ token: "violence", label: "Violence (General)" }],
+  }] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const video: SavedReview["filters"][number] = {
+    id: "late-video", source_scan_id: "scan-1", source_finding_id: 1, source: "visual",
+    category: "violence", subcategory: "violence", severity: "medium", mcf_channel: "video", mcf_comment: null,
+    label: "Fight", details: "Fight", group_key: "fight", start_seconds: 12, end_seconds: 14,
+    confidence: null, edit_action: "skip", selected: true,
+  };
+  const audio: SavedReview["filters"][number] = {
+    ...video, id: "early-audio", source_finding_id: 2, source: "audio",
+    category: "language", subcategory: "swearing", mcf_channel: "audio", group_key: "fudge",
+    label: "fudge", details: "oh fudge it", start_seconds: 1, end_seconds: 2, edit_action: "mute",
+  };
+  render(<SavedReviewOverview filters={[video, audio]} memberships={[]} scans={[]} busy={false}
+    defaultSort="time" onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+    onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
+
+  const list = screen.getByRole("region", { name: "Filter results" });
+  const timeline = screen.getByRole("region", { name: "Timeline summary" });
+  expect(timeline).not.toContainElement(list);
+  expect(within(list).getAllByRole("checkbox").map((checkbox) => checkbox.getAttribute("aria-label")))
+    .toEqual(["Include fudge at 0:01", "Include Fight at 0:12"]);
+  const show = screen.getByRole("combobox", { name: "Show" });
+  fireEvent.change(show, { target: { value: "audio" } });
+  expect(within(list).getByText("f*dg*")).toBeVisible();
+  expect(within(list).queryByText("Fight")).not.toBeInTheDocument();
+  expect(timeline).toHaveTextContent("2/2 results");
+
+  fireEvent.change(show, { target: { value: "visual" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), { target: { value: "category" } });
+  const category = await within(list).findByRole("button", { name: /Violence \(General\) subcategory/ });
+  expect(category).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(category);
+  expect(await within(list).findByRole("button", { name: /fight finding group/ })).toBeVisible();
+  expect(within(list).queryByRole("region", { name: "Audio review filters" })).not.toBeInTheDocument();
+});

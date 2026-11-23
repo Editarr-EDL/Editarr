@@ -1,10 +1,21 @@
 """Reverse recent migrations so test fixtures can stand in for older revisions."""
 
+from importlib import import_module
+
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 from tests.community_schema_fixture import SYNTHETIC_PASSWORD_HASH
+
+
+def undo_stable_media_identity_migration(connection) -> None:
+    """Remove stable identity tables from a fixture representing an older database."""
+    migration = import_module(
+        "scanner.persistence.migrations.versions.0035_stable_media_identity"
+    )
+    with Operations.context(MigrationContext.configure(connection)):
+        migration.downgrade()
 
 
 def undo_scan_read_indexes_migration(connection) -> None:

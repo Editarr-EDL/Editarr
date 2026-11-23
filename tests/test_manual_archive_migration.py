@@ -128,7 +128,7 @@ def test_every_supported_revision_archives_other_files_and_keeps_every_row(tmp_p
 
     assert generation.is_dir()
     assert (
-        adoption._inspect_database(path) == adoption.HEAD_REVISION == "0034_scan_read_indexes"
+        adoption._inspect_database(path) == adoption.HEAD_REVISION == "0036_sampled_media_identity"
     )
     upgraded, _ = _snapshot(path)
     drop_0031_additions(upgraded, original)

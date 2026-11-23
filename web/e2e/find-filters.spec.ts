@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, items, json, mockApi } from "./app-fixtures";
 
@@ -48,7 +49,8 @@ for (const width of [320, 1440]) {
     });
     await page.goto("/#/library/movies");
     await page.getByRole("button", { name: "Open Example Movie" }).click();
-    await page.getByLabel("Review version").selectOption("source-2");
+    await page.getByLabel("Media version").selectOption("source-2");
+    await chooseWorkflowStep(page, "Scans");
     const trigger = page.getByRole("button", { name: "Find Filters" });
     expect(searches).toEqual([]);
     await trigger.click();
@@ -97,6 +99,7 @@ for (const width of [320, 1440]) {
     await expect(page.getByRole("status")).toHaveText("Associated 1 scan.");
     expect(associations).toEqual([{ media_item_id: "resolved-target", scan_ids: [scan.id] }]);
     await expect(page.getByRole("list", { name: "Scan history" }).getByText(new RegExp(scan.name)).first()).toBeVisible();
+    await chooseWorkflowStep(page, "Review");
     await page.getByRole("button", { name: "New Review" }).click();
     await page.getByLabel("New review name").fill("Reuse local filters");
     await page.getByRole("button", { name: "Start new review" }).click();
@@ -123,6 +126,7 @@ for (const width of [320, 1440]) {
     });
     await page.goto("/#/library/movies");
     await page.getByRole("button", { name: "Open Example Movie" }).click();
+    await chooseWorkflowStep(page, "Scans");
     const trigger = page.getByRole("button", { name: "Find Filters" });
     await trigger.click();
     await expect(page.getByRole("status")).toContainText("Local lookup unavailable");

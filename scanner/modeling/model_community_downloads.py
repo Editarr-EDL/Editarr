@@ -24,6 +24,7 @@ class DownloadRequest(LookupModel):
     lookup: LookupRequest
     choice: DownloadChoice
     confirmed: StrictBool = False
+    stage_for_verification: StrictBool = False
 
 
 class DownloadStatusRequest(LookupModel):

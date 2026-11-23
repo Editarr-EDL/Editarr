@@ -17,9 +17,6 @@ from scanner.pipeline.cache import (
     cached_audio_path as cached_audio_path,
 )
 from scanner.pipeline.cache import (
-    compute_video_md5,
-)
-from scanner.pipeline.cache import (
     transcription_cache_path as transcription_cache_path,
 )
 from scanner.pipeline.frames import (
@@ -52,6 +49,7 @@ from scanner.pipeline.runner_workers import (
 )
 from scanner.pipeline.scenes import detect_scenes as detect_scenes
 from scanner.pipeline.scenes import sample_scene_frames as sample_scene_frames
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.runtime.process_control import terminate_isolated_process as terminate_isolated_process
 from scanner.runtime.runtime_workspaces import (
     cleanup_stale_scan_workspaces,
@@ -234,6 +232,8 @@ def run_scan(
     *,
     audio_selection=None,
     analyzed_audio_callback=None,
+    analyzed_audio_timing_callback=None,
+    media_cache_key: str | None = None,
 ) -> str:
     """
     Run the full analysis pipeline on a video file.
@@ -385,9 +385,11 @@ def run_scan(
 
     emit("setup", 0.7, "Initialized scan")
 
-    emit("setup", 0.8, "Computing video hash")
-    video_hash = compute_video_md5(str(path))
-    logger.info("Computed video MD5 for cache key: %s", video_hash)
+    video_hash = media_cache_key
+    if video_hash is None:
+        emit("setup", 0.8, "Computing video hash")
+        video_hash = sampled_media_fingerprint(path).artifact_cache_key
+    logger.info("Using video content hash for cache key: %s", video_hash)
     emit("setup", 1.0, "Video hash computed")
 
     if should_cancel and should_cancel():
@@ -448,6 +450,7 @@ def run_scan(
                 completed_stages=completed_stages,
                 checkpoint_callback=checkpoint_callback,
                 analyzed_audio_callback=analyzed_audio_callback,
+                analyzed_audio_timing_callback=analyzed_audio_timing_callback,
                 findings_writer=findings_writer,
                 record_stage=record_stage,
                 emit=emit,

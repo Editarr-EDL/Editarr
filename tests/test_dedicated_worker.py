@@ -521,7 +521,6 @@ def test_runner_leaves_scan_status_to_the_worker_on_full_quit(monkeypatch, tmp_p
 
     monkeypatch.setattr(runner, "require_available", lambda _name: None)
     monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
-    monkeypatch.setattr(runner, "compute_video_md5", lambda _path: "hash")
     monkeypatch.setattr(runner, "run_audio_stages", quit_during_audio)
     with pytest.raises(FullApplicationQuitRequested):
         runner.run_scan(

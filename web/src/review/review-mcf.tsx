@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import type {
   McfCategory,
   McfCategoryFamily,
-  McfChannel,
   McfRegistry,
   Severity,
 } from "../api/api-mcf-types";
@@ -42,8 +41,6 @@ interface ClassificationValue {
   category: McfCategoryFamily | null;
   subcategory: McfCategory | null;
   severity: Severity | null;
-  mcf_channel: McfChannel | null;
-  mcf_comment: string | null;
 }
 
 /** Edit an MCF family and subcategory using the server registry.
@@ -66,14 +63,11 @@ export function McfClassificationFields({
 }) {
   const family = registry.families.find((item) => item.token === value.category);
   const subcategoryValid = classificationIsValid(registry, value.category, value.subcategory);
-  const commentInvalid = value.mcf_comment !== null && (!value.mcf_comment || value.mcf_comment.includes("-->"));
   const listId = `${controlId}-subcategories`;
   return <div className="mcf-classification-fields">
     <label className="field"><span>Family</span><select aria-label={`${controlId} family`} value={value.category || ""} onChange={(event) => { const next = (event.target.value || null) as McfCategoryFamily | null; onChange({ category: next, subcategory: null }); }}><option value="">Unclassified</option>{registry.families.map((item) => <option key={item.token} value={item.token}>{item.label}</option>)}</select></label>
     <label className="field"><span>Subcategory</span><input type="search" list={listId} aria-label={`${controlId} subcategory`} value={value.subcategory || ""} disabled={!family} aria-invalid={Boolean(value.subcategory && !subcategoryValid)} onChange={(event) => onChange({ subcategory: event.target.value || null })} /><datalist id={listId}>{family?.categories.map((item) => <option key={item.token} value={item.token}>{item.label}</option>)}</datalist>{value.subcategory && !subcategoryValid && <small className="form-error">Choose a subcategory from {family?.label || "the selected family"}.</small>}</label>
     <fieldset className="mcf-severity-control" disabled={severityLocked}><legend>Severity{severityLocked ? " - locked by instance policy" : ""}</legend>{(["low", "medium", "high"] as const).map((severity) => <label key={severity}><input type="radio" name={`${controlId}-severity`} value={severity} checked={value.severity === severity} onChange={() => onChange({ severity })} /> {severity[0].toUpperCase() + severity.slice(1)}</label>)}</fieldset>
-    <label className="field"><span>Channel</span><select aria-label={`${controlId} channel`} value={value.mcf_channel || ""} onChange={(event) => onChange({ mcf_channel: (event.target.value || null) as McfChannel | null })}><option value="">Default (both)</option><option value="both">Both</option><option value="video">Video</option><option value="audio">Audio</option></select></label>
-    <label className="field mcf-comment-field"><span>MCF comment</span><input aria-label={`${controlId} MCF comment`} value={value.mcf_comment || ""} aria-invalid={commentInvalid} onChange={(event) => onChange({ mcf_comment: event.target.value || null })} />{commentInvalid && <small className="form-error">Comment must be non-empty and exclude --&gt;.</small>}</label>
     {allowClear && <button type="button" className="btn-secondary compact-button mcf-clear-classification" onClick={() => onChange({ category: null, subcategory: null })}>Clear classification</button>}
   </div>;
 }
@@ -89,7 +83,6 @@ export function McfFilterSummary({ filter, registry }: { filter: ReviewFilter; r
     <span>{familyLabel(registry, filter.category)} / {categoryLabel(registry, filter.subcategory)}</span>
     <code>{filter.subcategory}</code>
     <span>{filter.severity ? filter.severity[0].toUpperCase() + filter.severity.slice(1) : "No severity"}</span>
-    <span>{filter.mcf_channel || "Both"}</span>
     {filter.mcf_comment && <span className="mcf-comment-summary">{filter.mcf_comment}</span>}
   </span>;
 }

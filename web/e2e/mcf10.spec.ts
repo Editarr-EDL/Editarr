@@ -1,3 +1,4 @@
+import { chooseExportFormat, chooseWorkflowStep } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { authenticationStatus, expectNoHorizontalPageOverflow as expectNoOverflow, json } from "./app-fixtures";
@@ -9,7 +10,7 @@ const emptyExport = (format: "edl" | "mcf") => ({
 });
 
 const scan = {
-  id: "scan-1", scan_id: 1, media_item_id: "media-1", jellyfin_item_id: "movie-1",
+  id: "scan-1", scan_id: 1, media_item_id: "media-1", jellyfin_item_id: "movie-1", owner_id: 1, is_own: true,
   scan_mode: "content",
   library_id: "movies", item_name: "Example Movie", item_type: "Movie",
   media_source_id: "source-1", media_source_name: "4K", status: "complete",
@@ -150,6 +151,10 @@ async function mockApi(page: Page) {
     if (path === "/api/library-items/movie-1/scans") return json(route, [scan, creditsScan]);
     if (path === "/api/library-items/movie-1/reviews") return json(route, [catalogReview]);
     if (path === "/api/reviews/review-catalog") return json(route, catalogReview);
+    if (path === "/api/reviews/review-catalog/subtitles/sources") return json(route, {
+      sources: [], audio_sources: [], audio_source_id: null, fallback: "scan_required", published_subtitles: [],
+    });
+    if (path === "/api/media/subtitles/publications") return json(route, { published_subtitles: [] });
     if (path === "/api/reviews/review-catalog/mcf/preflight") return json(route, {
       review_id: catalogReview.id, revision: 1, eligible: false,
       issues: [{ code: "invalid_mcf_metadata", field: "title", filter_id: null, filter_position: null, message: "Review title needs attention." }],
@@ -222,8 +227,10 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await mockApi(page);
     await page.goto("/#/library/movies/item/movie-1");
     await expect(page.getByRole("heading", { name: "Example Movie", level: 1 })).toBeVisible();
-    await expect(page.getByText("EDL · Current").first()).toBeVisible();
-    await expect(page.getByText("MCF · Outdated").first()).toBeVisible();
+    const published = page.getByRole("region", { name: "Published files" });
+    await expect(published.getByText("EDL · Current")).toBeVisible();
+    await expect(published.getByText("MCF · Outdated")).toBeVisible();
+    await chooseWorkflowStep(page, "Scans");
     const scanRows = await page.locator('.bounded-scan-list[aria-label="Scan history"] .scan-history-row').evaluateAll((rows) => rows.map((row) => {
       const box = row.getBoundingClientRect();
       const content = row.querySelector(":scope > div")!.getBoundingClientRect();
@@ -237,7 +244,22 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
       expect(row.contentRight).toBeLessThanOrEqual(row.actionLeft);
     }
 
-    const manage = page.getByRole("button", { name: "Manage exports" });
+    const metadata = page.locator(".detail-meta");
+    const showDetails = metadata.getByRole("button", { name: "Show Details", exact: true });
+    const hideDetails = metadata.getByRole("button", { name: "Hide Details", exact: true });
+    const files = page.getByRole("region", { name: "Media files" });
+    await expect(page.getByRole("combobox", { name: "Item history" })).toHaveCount(0);
+    await expect(showDetails).toHaveAttribute("aria-expanded", "false");
+    await showDetails.focus();
+    await showDetails.press("Enter");
+    await expect(hideDetails).toHaveAttribute("aria-expanded", "true");
+    await expect(files).toBeVisible();
+    await hideDetails.press("Space");
+    await expect(showDetails).toHaveAttribute("aria-expanded", "false");
+    await expect(files).toBeHidden();
+    await showDetails.click();
+    await expect(hideDetails).toBeVisible();
+    const manage = page.getByRole("button", { name: "Manage legacy exports" });
     await manage.click();
     const manageDialog = page.getByRole("dialog", { name: "Manage exports" });
     await expect(manageDialog.getByRole("region", { name: "EDL export" })).toContainText("Catalog review");
@@ -260,14 +282,15 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await importDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(importButton).toBeFocused();
 
-    const exportButton = page.getByRole("button", { name: "Export", exact: true });
+    const exportButton = await chooseExportFormat(page, "EDL");
     await exportButton.focus();
-    await exportButton.press("ArrowDown");
-    await expect(page.getByRole("menuitem", { name: /EDL/ })).toBeFocused();
-    await page.getByRole("menu").press("Escape");
+    await exportButton.press("Enter");
+    const edlDialog = page.getByRole("dialog", { name: "Export" });
+    await expect(edlDialog.getByRole("button", { name: "Download EDL" })).toBeVisible();
+    await edlDialog.press("Escape");
     await expect(exportButton).toBeFocused();
-    await exportButton.click();
-    await page.getByRole("menuitem", { name: /MCF/ }).click();
+    await (await chooseExportFormat(page, "MCF")).click();
+    await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Publish MCF" }).click();
     const issue = page.getByRole("alert", { name: "MCF export needs attention" });
     await issue.getByRole("button", { name: "Review title needs attention." }).click();
     await expect(page.getByLabel("MCF title")).toBeFocused();
@@ -282,6 +305,18 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await mockApi(page);
     await page.goto("/#/library/movies/item/movie-1");
 
+    const membership = page.locator(".saved-review-memberships");
+    const choice = membership.getByRole("checkbox", { name: "Imported scan", exact: true });
+    const info = membership.getByRole("button", { name: "Show scan details for Imported scan" });
+    await expect(choice).toBeChecked();
+    await info.hover();
+    await expect(page.getByRole("tooltip")).toContainText("Scan #1");
+    await expect(page.getByRole("tooltip")).toContainText(/imported/i);
+    await info.press("Escape");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(choice).toBeChecked();
+
+    await page.getByLabel("Sort", { exact: true }).selectOption("category");
     const video = page.getByRole("region", { name: "Video review filters" });
     const audio = page.getByRole("region", { name: "Audio review filters" });
     await expect(video.getByRole("button", { name: /Violence family/ })).toHaveAttribute("aria-expanded", "true");
@@ -302,6 +337,11 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
 
     const linkedRows = video.getByRole("checkbox", { name: /^Include Linked fight; Linked weapon at 0:30/ });
     await expect(linkedRows).toHaveCount(2);
+    await expect(video.getByRole("columnheader", { name: "Channel" })).toHaveCount(0);
+    const sourceInfo = video.getByRole("button", { name: "Show scan details for Imported scan" }).first();
+    await sourceInfo.focus();
+    await expect(page.getByRole("tooltip")).toContainText("Scan #1");
+    await sourceInfo.press("Escape");
     await expect(video.getByRole("img", { name: "Linked result repeated in another category" })).toHaveCount(4);
     await linkedRows.first().click();
     await expect(linkedRows.first()).toBeChecked();

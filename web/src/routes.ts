@@ -4,6 +4,7 @@ import type { SettingsSection } from "./settings/settings-sections";
 
 export type Route =
   | { kind: "settings"; section: SettingsSection; deleteAccountId?: number; filterTab?: FilterTab; eventId?: string; openBackups?: boolean }
+  | { kind: "title"; titleId: string; versionId?: string; itemId?: string }
   | { kind: "library"; libraryId: string; itemId?: string; seriesId?: string; seasonId?: string };
 
 export const AUDIT_SETTINGS_ROUTE = "settings/audit";
@@ -15,7 +16,7 @@ export function libraryLastRoute(libraryId: string): string {
     const saved = readUserValue(`library-last-route.${libraryId}`);
     if (!saved) return root;
     const route = parseRoute(`#${saved}`);
-    return route.kind === "library" && route.libraryId === libraryId ? saved : root;
+    return route.kind === "title" || route.kind === "library" && route.libraryId === libraryId ? saved : root;
   } catch { return root; }
 }
 
@@ -36,6 +37,13 @@ export function parseRoute(hash = window.location.hash): Route {
   const deletion = /^settings\/users\/(\d+)\/delete$/.exec(path);
   if (deletion) return { kind: "settings", section: "users", deleteAccountId: Number(deletion[1]) };
   if (path === "settings/profile") return { kind: "settings", section: "profile" };
+  const title = /^title\/([^/]+)(?:\/(version|item)\/([^/]+))?$/.exec(path);
+  if (title) return {
+    kind: "title",
+    titleId: decodeURIComponent(title[1]),
+    versionId: title[2] === "version" ? decodeURIComponent(title[3]) : undefined,
+    itemId: title[2] === "item" ? decodeURIComponent(title[3]) : undefined,
+  };
   if (path.startsWith("library/")) {
     const [, rawLibraryId, section, rawId, childSection, rawChildId, itemSection, rawItemId] = path.split("/");
     if (rawLibraryId) {
@@ -62,4 +70,11 @@ export function isRootRoute(hash = window.location.hash): boolean {
 
 export function navigate(route: string) {
   window.location.hash = route;
+}
+
+export function editarrItemRoute(titleId: string, versionId?: string, itemId?: string) {
+  const base = `title/${encodeURIComponent(titleId)}`;
+  if (versionId) return `${base}/version/${encodeURIComponent(versionId)}`;
+  if (itemId) return `${base}/item/${encodeURIComponent(itemId)}`;
+  return base;
 }

@@ -19,8 +19,10 @@ from scanner.security.access.records import MediaAllowed
 from scanner.security.access.targets import AccountRef, ActionPair, MediaRef, ResourceRef
 from scanner.security.access.vocabulary import Role
 
+from .export_policy_freshness import missing_channel_policy_coverage
 from .export_publication import publication_summary
 from .review_access import media_facts, not_found
+from .review_policy import owner_policy
 from .scan_jobs import ScanMedia
 
 
@@ -40,11 +42,13 @@ class AuthorizedPublication:
         return ExportSummary.model_validate_json(self.summary_json)
 
     @classmethod
-    def capture(cls, caller, row):
+    def capture(cls, caller, row, *, policies=None):
         """Materialize both views with direct status's source-review visibility projection."""
         from .repository_exports import _export_summary
 
-        publication = caller.present(publication_status(row, caller.access.principal.user_id))
+        publication = caller.present(
+            publication_status(row, caller.access.principal.user_id, policies=policies)
+        )
         summary = caller.present(_export_summary(row, row.format, row.review))
         summary = summary.model_copy(
             update={
@@ -101,7 +105,7 @@ PUBLIC_REGENERATION_STATES = {
 }
 
 
-def publication_status(row, user_id):
+def publication_status(row, user_id, *, policies=None):
     """Describe one destination without collapsing targets or exposing private snapshots."""
     review = row.review
     revision = (
@@ -115,20 +119,27 @@ def publication_status(row, user_id):
     )
     snapshot = json.loads(row.snapshot_json)
     job = row.regeneration
-    from .export_regeneration import policy_identity
+    from .export_regeneration import policy_owner
 
     db = object_session(row)
-    policy_current = db is not None and policy_identity(db, row) == (
-        row.policy_owner_id,
-        row.policy_revision,
-    )
+    policy = None
+    if db is not None:
+        owner_id = policy_owner(db, row)
+        if owner_id == row.policy_owner_id:
+            if policies is None:
+                policies = {}
+            if owner_id not in policies:
+                policies[owner_id] = owner_policy(db, owner_id)
+            policy = policies[owner_id]
     state = "idle" if job is None or job.deleted else PUBLIC_REGENERATION_STATES[job.state]
     current = (
         row.content_bytes is not None
-        and policy_current
+        and policy is not None
+        and policy.policy_revision == row.policy_revision
         and state not in {"queued", "running", "failed"}
         and (review is not None or row.scope == ExportScope.PERSONAL)
         and (review is None or row.exported_format_revision == revision)
+        and not missing_channel_policy_coverage(snapshot, row.format, row.content_bytes, policy)
     )
     target = snapshot.get("target") or (
         "item_default"
@@ -185,13 +196,14 @@ def _discover_publications(
     if not isinstance(caller.media_decision(media_facts(caller.db, media_row)), MediaAllowed):
         raise not_found()
     result = []
+    policies = {}
     for row in query.order_by(MediaItemExportRow.id):
         allowed = caller.media_decision(export_media(row))
         try:
             require_export(caller, row, allowed)
         except AccessDenied:
             continue
-        result.append(AuthorizedPublication.capture(caller, row))
+        result.append(AuthorizedPublication.capture(caller, row, policies=policies))
     return tuple(result)
 
 

@@ -1,9 +1,12 @@
+import os
+
 import pytest
 from fastapi import HTTPException
 
 from scanner import api, repository
 from scanner.credits.credits_detector import ChapterMarker, detect_from_observations
-from scanner.db import ScanFindingRow, ScanQueueRow
+from scanner.db import MediaVersionRow, ScanFindingRow, ScanQueueRow, ScanRow
+from scanner.http import credits_api
 from scanner.models import (
     AcceptedCreditsReference,
     CreditsAcceptanceRequest,
@@ -14,6 +17,7 @@ from scanner.models import (
     ReviewSave,
     ScanMode,
 )
+from scanner.persistence.repository.media_identity_store import scan_version_id
 from tests.credits_api_support import _database, review_caller
 from tests.jellyfin_item_support import jellyfin_target
 from tests.scan_access_support import owner_caller
@@ -44,12 +48,91 @@ def test_start_credits_detection_queues_once_and_reconnects(monkeypatch, tmp_pat
     assert reconnected.scan.id == started.scan.id
     assert reconnected.queue_id == started.queue_id
     assert db.query(ScanQueueRow).count() == 1
+    initial_version = scan_version_id(db, started.scan.id)
+    assert initial_version is not None
 
     video_path.write_bytes(b"replacement-physical-version")
     replacement = api.api_start_credits_detection(request, owner_caller(db))
     assert replacement.scan.id != started.scan.id
     assert replacement.queue_id != started.queue_id
     assert db.query(ScanQueueRow).count() == 2
+    replacement_version = scan_version_id(db, replacement.scan.id)
+    assert replacement_version is not None and replacement_version != initial_version
+    db.close()
+
+
+def test_credits_reuses_the_sampled_version_without_reusing_an_older_attempt(monkeypatch, tmp_path):
+    db = _database()
+    media = tmp_path / "movie.mkv"
+    media.write_bytes(b"unchanged test media")
+    monkeypatch.setattr(api, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(repository, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
+    request = CreditsDetectionStartRequest(target=jellyfin_target(monkeypatch, db, media))
+
+    initial = api.api_start_credits_detection(request, owner_caller(db))
+    stats = media.stat()
+    os.utime(media, ns=(stats.st_atime_ns, stats.st_mtime_ns + 3_000_000_000))
+    current = api.api_start_credits_detection(request, owner_caller(db))
+    assert current.queue_id != initial.queue_id
+    assert scan_version_id(db, initial.scan.id) == scan_version_id(db, current.scan.id)
+    assert db.query(MediaVersionRow).count() == 1
+    assert api.api_start_credits_detection(request, owner_caller(db)).queue_id == current.queue_id
+    db.close()
+
+
+@pytest.mark.parametrize(
+    ("operation", "existing", "remap"),
+    [
+        ("sampled_media_fingerprint", False, False),
+        ("sampled_media_fingerprint", True, False),
+        ("sampled_media_fingerprint", False, True),
+        ("create_scan", False, False),
+        ("find_active_credits_detection", True, False),
+    ],
+)
+def test_credits_admission_rejects_file_replacement_or_remapping(
+    monkeypatch, tmp_path, operation, existing, remap
+):
+    db = _database()
+    media = tmp_path / "movie.mkv"
+    media.write_bytes(b"original test media")
+    target = media
+    if remap:
+        target = tmp_path / "jellyfin.mkv"
+        target.symlink_to(media)
+    monkeypatch.setattr(api, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(repository, "get_video_duration", lambda _path: 120.0)
+    monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
+    request = CreditsDetectionStartRequest(target=jellyfin_target(monkeypatch, db, target))
+    active = api.api_start_credits_detection(request, owner_caller(db)) if existing else None
+    read_or_stage = getattr(credits_api, operation)
+
+    def replace_then_admit(*args, **kwargs):
+        result = read_or_stage(*args, **kwargs)
+        replacement = tmp_path / "new-generation.mkv"
+        replacement.write_bytes(b"replacement with different test media content")
+        if remap:
+            target.unlink()
+            target.symlink_to(replacement)
+        else:
+            replacement.replace(media)
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(credits_api, operation, replace_then_admit)
+        with pytest.raises(HTTPException) as refused:
+            api.api_start_credits_detection(request, owner_caller(db))
+
+    assert refused.value.status_code == 409
+    assert refused.value.detail["code"] == "credits_media_unavailable"
+    assert db.query(ScanRow).count() == int(existing)
+    assert db.query(ScanQueueRow).count() == int(existing)
+    assert db.query(MediaVersionRow).count() == int(existing)
+    current = api.api_start_credits_detection(request, owner_caller(db))
+    if active is not None:
+        assert current.queue_id != active.queue_id
+        assert scan_version_id(db, current.scan.id) != scan_version_id(db, active.scan.id)
     db.close()
 
 

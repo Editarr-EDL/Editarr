@@ -32,6 +32,22 @@ it("does not send uncertain choices without deliberate confirmation", async () =
   expect(downloadCommunityFilter).not.toHaveBeenCalled();
 });
 
+it("finishes every selected download before opening the first staged scan", async () => {
+  const firstStaged = { ...success, verificationPending: true };
+  const secondStaged = { ...firstStaged, revisionId: "second", scan: { id: "other" } };
+  const onStaged = vi.fn(() => expect(downloadCommunityFilter).toHaveBeenCalledTimes(2));
+  vi.mocked(downloadCommunityFilter).mockResolvedValueOnce(firstStaged as never)
+    .mockResolvedValueOnce(secondStaged as never);
+  const { result } = renderHook(() => useCommunityDownloads(input, vi.fn(), onStaged));
+
+  await act(() => result.current.start([mixedCandidate, second], [
+    selection("mixed", mixedCandidate.artifactDigest), selection("second", second.artifactDigest),
+  ], false));
+
+  expect(result.current.entries.map((entry) => entry.status)).toEqual(["imported", "imported"]);
+  expect(onStaged).toHaveBeenCalledExactlyOnceWith(firstStaged.scan);
+});
+
 it("cancelled in-flight outcomes remain unknown and reconcile to committed truth", async () => {
   vi.mocked(downloadCommunityFilter).mockImplementation((_input, _key, _choice, _confirmed, signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))));
   const { result } = renderHook(() => useCommunityDownloads(input, vi.fn()));
@@ -45,4 +61,39 @@ it("cancelled in-flight outcomes remain unknown and reconcile to committed truth
   await act(() => result.current.reconcile([mixedCandidate], "a".repeat(64)));
   expect(result.current.entries[0].status).toBe("imported");
   expect(downloadCommunityFilter).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  { status: "imported" as const, approvedChannels: ["audio" as const], expected: ["audio", "video"], retry: [] },
+  { status: "partial" as const, approvedChannels: [], expected: ["video"], retry: ["audio"] },
+])("recovers a $status staged download after its reply is lost", async ({ status, approvedChannels, expected, retry }) => {
+  vi.mocked(downloadCommunityFilter).mockRejectedValueOnce(new Error("response lost"));
+  const onStaged = vi.fn();
+  const { result } = renderHook(() => useCommunityDownloads(input, vi.fn(), onStaged));
+  const mixed = { ...selection("mixed", mixedCandidate.artifactDigest), channels: ["audio" as const, "video" as const] };
+  await act(() => result.current.start([mixedCandidate], [mixed], false));
+  expect(result.current.entries[0].status).toBe("unknown");
+  vi.mocked(communityDownloadStatus).mockResolvedValueOnce([{
+    revisionId: "mixed", status, approvedChannels, pendingChannels: ["video"],
+    verificationPending: true, scanId: "saved", receiptState: "pending", reviewRequired: false, reviewed: false,
+  }]);
+
+  await act(() => result.current.reconcile([mixedCandidate], mixed.targetKey));
+
+  const committed = result.current.entries.find((entry) => entry.status === "imported");
+  expect([...committed!.choice.channels].sort()).toEqual(expected);
+  expect(committed!.result?.pendingChannels).toEqual(["video"]);
+  expect(result.current.entries.find((entry) => entry.status === "cancelled")?.choice.channels ?? []).toEqual(retry);
+  expect(downloadCommunityFilter).toHaveBeenCalledTimes(1);
+  expect(onStaged).not.toHaveBeenCalled();
+});
+
+it("does not infer staged channels from a legacy partial status", async () => {
+  const { result } = renderHook(() => useCommunityDownloads(input, vi.fn()));
+  vi.mocked(communityDownloadStatus).mockResolvedValueOnce([{
+    revisionId: "mixed", status: "partial", approvedChannels: [], verificationPending: true,
+    scanId: "saved", receiptState: "pending", reviewRequired: false, reviewed: false,
+  }]);
+  await act(() => result.current.reconcile([mixedCandidate], "a".repeat(64)));
+  expect(result.current.entries).toEqual([]);
 });

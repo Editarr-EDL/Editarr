@@ -102,10 +102,8 @@ def publish(
     action = ActionPair(own, C.REVIEWS_EXPORT_OTHER)
     extra = (C.EXPORTS_DEFAULT_PUBLISH,) if request.target == "item_default" else ()
 
-    def operation(db, source_id):
+    def authorize(ref):
         if request.target == "self":
-            facts = caller.visible(source_id)
-            ref = caller.ref(facts)
             require(
                 caller.access,
                 C.EXPORTS_PERSONAL_PUBLISH_OWN,
@@ -116,6 +114,8 @@ def publish(
                     ref.media,
                 ),
             )
+
+    def operation(db, source_id):
         return publish_export(
             db,
             source_id,
@@ -130,7 +130,15 @@ def publish(
 
     try:
         with publication_lock(caller.db):
-            return run_review(caller, review_id, action, operation, extra_capabilities=extra)
+            return run_review(
+                caller,
+                review_id,
+                action,
+                operation,
+                extra_capabilities=extra,
+                authorize=authorize,
+                capture_review_media=True,
+            )
     except ReviewPolicyConflict:
         raise
     except (ValueError, OSError, SQLAlchemyError) as exc:
@@ -163,8 +171,7 @@ def api_download_review_export(
 ):
     """Download the same prepared bytes without creating directories or export rows."""
 
-    def operation(db, source_id):
-        ref = caller.ref(caller.visible(source_id))
+    def authorize(ref):
         require(
             caller.access,
             C.EXPORTS_PERSONAL_DOWNLOAD_OWN,
@@ -173,6 +180,8 @@ def api_download_review_export(
                 ref.media,
             ),
         )
+
+    def operation(db, source_id):
         output = prepare_review_export(
             db,
             source_id,
@@ -189,7 +198,14 @@ def api_download_review_export(
 
     action = ActionPair(C.EXPORTS_PERSONAL_DOWNLOAD_OWN, C.REVIEWS_EXPORT_OTHER)
     try:
-        content, filename = run_review(caller, review_id, action, operation)
+        content, filename = run_review(
+            caller,
+            review_id,
+            action,
+            operation,
+            authorize=authorize,
+            capture_review_media=True,
+        )
     except ReviewPolicyConflict:
         raise
     except (ValueError, OSError, SQLAlchemyError) as exc:

@@ -2,15 +2,28 @@
 
 import json
 import shutil
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
-from scanner.db import MediaItemExportRow, ScanRow
+from scanner.db import MediaItemExportRow, SavedReviewRow, ScanRow
+from scanner.persistence.repository import review_version_evidence
 from scanner.persistence.repository.export_regeneration import retry_regeneration
+from scanner.persistence.repository.media_identity_store import (
+    bind_review_version,
+    observe_sampled_version,
+)
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from tests.multi_user_access_support import USER
 from tests.test_export_regeneration_boundaries import observe
-from tests.test_export_regeneration_convergence import job_state, nested_review, settle_due
+from tests.test_export_regeneration_convergence import (
+    job_state,
+    nested_review,
+    set_policy_revision,
+    settle_due,
+)
 from tests.test_export_regeneration_failures import bump_policy
 from tests.test_personal_exports_http import app as app
 from tests.test_personal_exports_http import publish, seeded_review
@@ -86,6 +99,93 @@ def test_removed_media_with_retained_directory_converges(app, export_format):
     status, retained, destination = observe(app, published["id"])
     assert retained is None and not destination.exists() and not status["serving"]
     assert settle_due(app, 3) is None
+
+
+def _publish_pinned_review(app, name):
+    review = seeded_review(app, USER, name)
+    with app.accounts.factory() as db:
+        row = db.get(SavedReviewRow, review.id)
+        scan = row.memberships[0].scan
+        media = Path(scan.resolved_local_path)
+        version = observe_sampled_version(
+            db,
+            media=row.media_item,
+            media_source_id=scan.media_source_id,
+            source_path=scan.source_path,
+            fingerprint=sampled_media_fingerprint(media),
+        )
+        bind_review_version(db, review.id, version)
+        db.commit()
+    published = publish(app, review, "edl")
+    assert published.status_code == 200, published.text
+    identifier = published.json()["id"]
+    with app.accounts.factory() as db:
+        row = db.get(MediaItemExportRow, identifier)
+        assert json.loads(row.snapshot_json)["media_version_id"] == version
+    return identifier, media
+
+
+def test_regeneration_withdraws_instead_of_publishing_on_replacement_media(app):
+    identifier, media = _publish_pinned_review(app, "pinned-regeneration")
+    media.write_bytes(b"replacement physical generation")
+    bump_policy(app.accounts)
+    assert settle_due(app, 0) == "failed"
+    status, retained, destination = observe(app, identifier)
+    assert retained is None and not status["serving"] and not destination.exists()
+
+
+def test_regeneration_fingerprinting_leaves_other_writers_unblocked(app, monkeypatch):
+    identifier, media = _publish_pinned_review(app, "pinned-write-interleaving")
+    bump_policy(app.accounts)
+    hashed = []
+
+    def fingerprint(path):
+        # A separate writer can claim SQLite while the media is being read.
+        with closing(sqlite3.connect(app.accounts.path, timeout=0.1)) as other:
+            other.execute("BEGIN IMMEDIATE")
+            hashed.append(Path(path))
+        return sampled_media_fingerprint(path)
+
+    monkeypatch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
+    assert settle_due(app, 0) == "succeeded"
+    assert hashed == [media]
+    assert observe(app, identifier)[0]["regeneration_state"] == "succeeded"
+
+
+def test_regeneration_rechecks_generation_after_fingerprinting(app, monkeypatch):
+    identifier, media = _publish_pinned_review(app, "pinned-interleaved-replacement")
+    _, original, destination = observe(app, identifier)
+    bump_policy(app.accounts)
+
+    def fingerprint(path):
+        checksum = sampled_media_fingerprint(path)
+        media.write_bytes(b"replacement after fingerprint capture")
+        return checksum
+
+    with monkeypatch.context() as patch:
+        patch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
+        assert settle_due(app, 0) == "retry"
+    assert destination.read_bytes() == original
+    assert settle_due(app, 1) == "failed"
+    assert not destination.exists()
+
+
+def test_regeneration_rechecks_claim_after_fingerprinting(app, monkeypatch):
+    identifier, _ = _publish_pinned_review(app, "pinned-interleaved-policy")
+    _, original, destination = observe(app, identifier)
+    bump_policy(app.accounts)
+
+    def fingerprint(path):
+        checksum = sampled_media_fingerprint(path)
+        set_policy_revision(app, 2)
+        return checksum
+
+    with monkeypatch.context() as patch:
+        patch.setattr(review_version_evidence, "sampled_media_fingerprint", fingerprint)
+        assert settle_due(app, 0) == "stale"
+    assert destination.read_bytes() == original
+    assert settle_due(app, 1) == "succeeded"
+    assert observe(app, identifier)[0]["policy_revision"] == 2
 
 
 @FORMATS

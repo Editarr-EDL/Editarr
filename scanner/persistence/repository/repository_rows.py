@@ -3,9 +3,10 @@
 import json
 from datetime import timezone
 
-from sqlalchemy.orm import defer, selectinload
+from sqlalchemy.orm import defer, object_session, selectinload
 
 from scanner.db import CommunityImportRow, ScanFindingRow, ScanQueueRow, ScanRow
+from scanner.modeling.model_scans import ScanVerificationCoverage
 from scanner.models import (
     CreditsDetection,
     EditAction,
@@ -43,6 +44,7 @@ def scan_list_loading():
     )
     return (
         selectinload(ScanRow.media_item),
+        selectinload(ScanRow.media_version_pin),
         selectinload(ScanRow.stage_coverage),
         selectinload(ScanRow.mcf_document),
         selectinload(ScanRow.credits_detection),
@@ -51,22 +53,37 @@ def scan_list_loading():
 
 
 def _scan_from_row(
-    row: ScanRow, *, finding_count: int = 0, community_approvals: list | None = None
+    row: ScanRow,
+    *,
+    finding_count: int = 0,
+    community_approvals: list | None = None,
+    community_pending: list | None = None,
+    verification_coverage: dict[str, ScanVerificationCoverage] | None = None,
 ) -> Scan:
     """Convert a scan database row and supplied finding count to the API model.
 
-    ``community_approvals`` accepts batch-loaded approvals; otherwise they are queried.
+    List reads can supply batch-loaded community approvals and pending targets.
     """
-    from .community_import_targets import scan_target_approvals
+    from .community_import_targets import scan_pending_targets, scan_target_approvals
+    from .scan_verification_coverage import verification_coverage_by_scan
+    from .version_reuse import approved_reuse, source_pending_reuse
 
     item = row.media_item
     duration, as_of = scan_timing(row)
+    reuse_approval = approved_reuse(row)
+    db = object_session(row) if reuse_approval and verification_coverage is None else None
+    if db is not None:
+        verification_coverage = verification_coverage_by_scan(db, [row])
     return Scan(
         id=row.id,
         scan_id=row.scan_number,
         name=row.name,
         origin=row.origin,
         import_source_name=row.import_source_name,
+        reuse_pending=source_pending_reuse(row),
+        stable_version_id=row.media_version_pin.version_id if row.media_version_pin else None,
+        verified_from_scan_id=reuse_approval.get("source_scan_id") if reuse_approval else None,
+        verification_coverage=verification_coverage.get(row.id) if verification_coverage else None,
         imported_at=(
             row.imported_at.replace(tzinfo=timezone.utc)
             if row.imported_at is not None and row.imported_at.tzinfo is None
@@ -174,6 +191,9 @@ def _scan_from_row(
         community_provenance=_community_provenance(row),
         community_approvals=(
             scan_target_approvals(row) if community_approvals is None else community_approvals
+        ),
+        community_pending_targets=(
+            scan_pending_targets(row) if community_pending is None else community_pending
         ),
     )
 

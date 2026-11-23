@@ -55,8 +55,6 @@ export function ManualReviewFilterDialog({
   const [category, setCategory] = useState<NonNullable<NewManualReviewFilter["category"]>>("language");
   const [subcategory, setSubcategory] = useState("swearing");
   const [severity, setSeverity] = useState<NewManualReviewFilter["severity"]>(null);
-  const [channel, setChannel] = useState<NewManualReviewFilter["mcf_channel"]>(null);
-  const [comment, setComment] = useState<NewManualReviewFilter["mcf_comment"]>(null);
   const [details, setDetails] = useState("");
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(1);
@@ -65,14 +63,13 @@ export function ManualReviewFilterDialog({
   const action = source === "audio" ? "mute" : "skip";
   const previewId = `manual-preview:${source}:${startSeconds}:${endSeconds}`;
   const invalid = disabled || !label.trim() || invalidTiming
-    || !classificationIsValid(registry, category, subcategory)
-    || Boolean(comment?.includes("-->"));
+    || !classificationIsValid(registry, category, subcategory);
   return <ModalDialog labelledBy="manual-review-filter-heading" className="finding-editor" onClose={onClose}>
     <h2 id="manual-review-filter-heading">Add Manual Filter</h2>
     <p>This filter will be created with the saved review when changes are saved.</p>
     <label className="field"><span>Filter type</span><select aria-label="Manual filter type" value={source} onChange={(event) => { const next = event.target.value as "audio" | "visual"; setSource(next); setCategory(next === "audio" ? "language" : "violence"); setSubcategory(next === "audio" ? "swearing" : "violence"); }}><option value="audio">Audio mute</option><option value="visual">Video skip</option></select></label>
     <label className="field"><span>{source === "audio" ? "Word or label" : "Label"}</span><input aria-label="Manual filter label" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
-    {registry ? <McfClassificationFields controlId="Manual filter" registry={registry} value={{ category, subcategory, severity, mcf_channel: channel, mcf_comment: comment }} onChange={(patch) => { if (patch.category !== undefined) setCategory(patch.category || "language"); if (patch.subcategory !== undefined) setSubcategory(patch.subcategory || ""); if (patch.severity !== undefined) setSeverity(patch.severity); if (patch.mcf_channel !== undefined) setChannel(patch.mcf_channel); if (patch.mcf_comment !== undefined) setComment(patch.mcf_comment); }} /> : <McfRegistryStatus error={registryError} />}
+    {registry ? <McfClassificationFields controlId="Manual filter" registry={registry} value={{ category, subcategory, severity }} onChange={(patch) => { if (patch.category !== undefined) setCategory(patch.category || "language"); if (patch.subcategory !== undefined) setSubcategory(patch.subcategory || ""); if (patch.severity !== undefined) setSeverity(patch.severity); }} /> : <McfRegistryStatus error={registryError} />}
     <label className="field"><span>Description</span><textarea aria-label="Manual filter description" value={details} onChange={(event) => setDetails(event.target.value)} rows={3} /></label>
     <div className="finding-timing-fields"><label className="field"><span>Start seconds</span><input aria-label="Manual filter start seconds" type="number" min="0" step="0.1" value={startSeconds} onChange={(event) => setStartSeconds(Number(event.target.value))} /></label><label className="field"><span>End seconds</span><input aria-label="Manual filter end seconds" type="number" min="0.1" step="0.1" value={endSeconds} onChange={(event) => setEndSeconds(Number(event.target.value))} /></label></div>
     {preview?.filterId === previewId && <div className="finding-preview">{source === "audio"
@@ -82,7 +79,7 @@ export function ManualReviewFilterDialog({
     <div className="button-row">{onPreview && <button type="button" className="btn-secondary"
       disabled={disabled || invalidTiming} onClick={() => onPreview({
         id: previewId, source, edit_action: action, start_seconds: startSeconds, end_seconds: endSeconds,
-      })}>Preview</button>}<button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={invalid} onClick={() => onAdd({ id: "", source, category, subcategory, severity, mcf_channel: channel, mcf_comment: comment, label: label.trim(), details: details.trim() || null, group_key: null, start_seconds: startSeconds, end_seconds: endSeconds, confidence: null, edit_action: action, selected: true })}>Add Filter</button></div>
+      })}>Preview</button>}<button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={invalid} onClick={() => onAdd({ id: "", source, category, subcategory, severity, mcf_channel: source === "audio" ? "audio" : "video", mcf_comment: null, label: label.trim(), details: details.trim() || null, group_key: null, start_seconds: startSeconds, end_seconds: endSeconds, confidence: null, edit_action: action, selected: true })}>Add Filter</button></div>
   </ModalDialog>;
 }
 

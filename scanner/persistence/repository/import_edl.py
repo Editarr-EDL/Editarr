@@ -33,6 +33,7 @@ from .import_transaction import (
 from .repository_rows import _scan_from_row
 from .review_policy import policy_write, prepare_review_policy
 from .review_policy_evidence import bind_review_evidence
+from .version_reuse import stage_reuse_source
 
 
 @policy_write
@@ -48,6 +49,7 @@ def import_edl_as_saved_review(
     duration_seconds: float | None = None,
     catalog_mcf_document: ReviewMcfDocument | None = None,
     imported_at: datetime | None = None,
+    verification_version_id: str | None = None,
 ) -> EdlImportResult:
     """Import parsed EDL actions into a scan and saved review for the target media."""
     if not parsed.filters:
@@ -100,6 +102,22 @@ def import_edl_as_saved_review(
         db.add(finding)
         finding_rows.append(finding)
     db.flush()
+    warning = (
+        EdlImportWarning(
+            code="unsupported_actions_ignored",
+            message="Unsupported EDL actions were ignored and not imported",
+            ignored_action_count=parsed.ignored_action_count,
+        )
+        if parsed.ignored_action_count
+        else None
+    )
+    if verification_version_id:
+        stage_reuse_source(db, scan, verification_version_id)
+        db.commit()
+        return EdlImportResult(
+            review=None, scan=_scan_from_row(scan, finding_count=len(finding_rows)),
+            warning=warning,
+        )
     review = stage_imported_review(
         db,
         media_item=media_item,
@@ -178,15 +196,6 @@ def import_edl_as_saved_review(
         prepare_review_policy(db, review)
         db.commit()
     refresh_imported_rows(db, scan, review)
-    warning = (
-        EdlImportWarning(
-            code="unsupported_actions_ignored",
-            message="Unsupported EDL actions were ignored and not imported",
-            ignored_action_count=parsed.ignored_action_count,
-        )
-        if parsed.ignored_action_count
-        else None
-    )
     return EdlImportResult(
         review=root._review_detail(db, review),
         scan=_scan_from_row(scan, finding_count=len(finding_rows)),

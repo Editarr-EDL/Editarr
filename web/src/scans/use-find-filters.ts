@@ -26,11 +26,13 @@ export function useFindFilters({
   target,
   onMessage,
   onAssociated,
+  requireVerification = false,
   communityInput = null,
 }: {
   target: LocalFilterTarget;
   onMessage: (message: string | null) => void;
   onAssociated: () => Promise<void>;
+  requireVerification?: boolean;
   communityInput?: LookupInput | null;
 }) {
   const community = useCommunityLookup(communityInput);
@@ -87,7 +89,7 @@ export function useFindFilters({
       if (currentKey.current !== key || token !== generation.current) return;
       setResult(null);
       community.cancel();
-      onMessage(`Associated ${selectedIds.length} ${selectedIds.length === 1 ? "scan" : "scans"}.`);
+      onMessage(`Associated ${selectedIds.length} ${selectedIds.length === 1 ? "scan" : "scans"}.${requireVerification ? " Check their timing under Scans before using them in a review." : ""}`);
       await onAssociated();
     } catch (error) {
       if (currentKey.current !== key || token !== generation.current) return;

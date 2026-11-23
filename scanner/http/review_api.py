@@ -7,6 +7,7 @@ from . import (
     review_edit_api,
     review_export_api,
     review_repair_api,
+    review_subtitle_api,
     review_target_api,
     review_target_routes,
 )
@@ -15,6 +16,7 @@ router = APIRouter()
 router.include_router(review_target_routes.router)
 router.include_router(review_edit_api.router)
 router.include_router(review_export_api.router)
+router.include_router(review_subtitle_api.router)
 router.include_router(review_deletion_api.router)
 router.include_router(review_repair_api.router)
 

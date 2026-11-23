@@ -31,13 +31,14 @@ def stage_imported_scan(
     resolved_local_path: str,
     media_source_id: str | None,
     source_name: str,
-    review_name: str,
+    review_name: str | None,
     duration_seconds: float | None,
     has_audio: bool,
     has_video: bool,
     progress_message: str,
     imported_at: datetime,
     mcf_document: ScanMcfDocumentRow | None = None,
+    video_hash: str | None = None,
 ) -> ScanRow:
     """Flush an imported scan without committing; callers stage its evidence next."""
     scan = ScanRow(
@@ -52,7 +53,9 @@ def stage_imported_scan(
         media_source_id=media_source_id,
         media_source_name=source_name,
         resolved_local_path=resolved_local_path,
-        video_hash=root._compute_video_hash(resolved_local_path),
+        video_hash=video_hash
+        if video_hash is not None
+        else root._compute_video_hash(resolved_local_path),
         duration_seconds=duration_seconds,
         status="complete",
         scan_audio=has_audio,

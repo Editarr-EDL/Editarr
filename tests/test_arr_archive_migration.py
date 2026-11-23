@@ -8,6 +8,7 @@ from scanner.persistence.migrations import adoption
 from tests import upgrade_matrix_support as state
 from tests.activity_migration_support import _clone
 from tests.explicit_filter_modes_support import drop_0031_additions
+from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_upgrade_matrix import SOURCES as MATRIX_SOURCES
 from tests.test_upgrade_matrix import _built
@@ -134,7 +135,7 @@ def test_the_previous_revision_changes_only_archived_work(tmp_path):
     adoption.upgrade_existing_database(path, path.parent)
     upgraded, _ = _snapshot(path)
     drop_0031_additions(upgraded, original)
-    assert upgraded == _expected(original, columns)
+    assert without_stable_media_identity(upgraded) == _expected(original, columns)
 
 
 def test_access_grants_for_removed_sources_move_to_the_archive(tmp_path):

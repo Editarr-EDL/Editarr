@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi } from "./app-fixtures";
 import { communityResponse, mixedCandidate } from "../src/test/community-lookup-fixtures";
@@ -53,8 +54,9 @@ async function setup(page: Page) {
   });
   await page.goto("/#/library/movies");
   await page.getByRole("button", { name: "Open Example Movie" }).click();
-  await page.getByLabel("Review version").selectOption("source-2");
+  await page.getByLabel("Media version").selectOption("source-2");
   const open = async () => {
+    await chooseWorkflowStep(page, "Scans");
     await page.getByRole("button", { name: "Find Filters", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Found Filters" });
     await expect(dialog.getByLabel("Audio track")).toHaveValue("1");
@@ -170,16 +172,21 @@ for (const width of [320, 1440]) {
     await expect(dialog.getByRole("button", { name: "Downloaded Second scan" })).toBeDisabled();
     expect(state.downloads).toHaveLength(3);
     await page.keyboard.press("Escape");
+    await chooseWorkflowStep(page, "Review");
     await page.getByRole("button", { name: "New Review", exact: true }).click();
     await page.getByLabel("New review name").fill("Community assembly");
     await page.getByRole("button", { name: "Start new review" }).click();
-    await expect(page.getByText("Source author: signed-author").first()).toBeVisible();
+    const scanInfo = page.getByRole("button", { name: "Show scan details for Community mixed", exact: true }).first();
+    const sourceAuthor = page.getByRole("tooltip").getByText("Source author: signed-author");
+    await scanInfo.hover();
+    await expect(sourceAuthor).toBeVisible();
     await page.getByRole("checkbox", { name: /Community mixed/ }).check();
     await expect(page.getByRole("combobox", { name: /Review role for Community mixed/ })).toHaveCount(0);
     await page.getByRole("button", { name: "Save Review", exact: true }).click();
     await expect.poll(() => state.counts().reviewWrites).toBe(1);
     expect(state.savedMemberships[0]).toContainEqual({ scan_id: "saved-mixed", role: "video" });
-    await expect(page.getByText("Source author: signed-author").first()).toBeVisible();
+    await scanInfo.hover();
+    await expect(sourceAuthor).toBeVisible();
     dialog = await state.open();
     await dialog.getByLabel("Channel").selectOption("audio");
     await dialog.getByRole("button", { name: "Download Mixed review" }).click();
@@ -220,5 +227,34 @@ for (const width of [320, 1440]) {
     await expectNoAccessibilityViolations(page);
     await expectNoHorizontalPageOverflow(page);
     await page.screenshot({ path: `test-results/css50-reconciled-${width}.png` });
+  });
+
+  test(`${width}px a lost staged reply blocks repeat download only for the staged channel`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const state = await setup(page);
+    let staged = false;
+    await page.route("**/api/community/downloads", (route) => {
+      state.downloads.push(route.request().postDataJSON());
+      staged = true;
+      return json(route, { code: "network_unavailable" }, 503);
+    });
+    await page.route("**/api/community/downloads/status", (route) => json(route, {
+      version: 1, outcomes: route.request().postDataJSON().choices.map((choice: { revisionId: string; channels: string[] }) =>
+        staged && choice.revisionId === "mixed" && choice.channels.includes("video") ? {
+          revisionId: choice.revisionId, status: choice.channels.length === 1 ? "imported" : "partial",
+          scanId: "saved-mixed", receiptState: "pending", reviewRequired: false, reviewed: false,
+          approvedChannels: [], pendingChannels: ["video"], verificationPending: true,
+        } : { revisionId: choice.revisionId, status: "not_imported" }),
+    }));
+    const dialog = await state.open();
+    await dialog.getByLabel("Channel").selectOption("video");
+    await dialog.getByRole("button", { name: "Download Mixed review" }).click();
+    await expect(dialog.getByText("Outcome unknown; check download status.")).toBeVisible();
+    await dialog.getByRole("button", { name: "Check download status" }).click();
+    await expect(dialog.getByText(/Needs verification \(video\)/)).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Downloaded Mixed review" })).toBeDisabled();
+    await dialog.getByLabel("Channel").selectOption("audio");
+    await expect(dialog.getByRole("button", { name: "Download Mixed review" })).toBeEnabled();
+    expect(state.downloads).toHaveLength(1);
   });
 }

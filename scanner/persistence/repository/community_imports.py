@@ -23,6 +23,7 @@ from scanner.integrations.community.downloads import VerifiedDownload
 from scanner.integrations.community.transport import CommunityFailure
 from scanner.modeling.community_matching import Compatibility
 from scanner.models import Scan
+from scanner.runtime.scan_version import ScanVersionChanged, file_generation
 from scanner.security.community_artifact_signatures import verify_artifact_signature
 from scanner.security.community_download_receipts import DownloadReceipt, verify_download_receipt
 from scanner.server_paths import UnresolvablePath
@@ -35,7 +36,9 @@ from .community_import_projection import (
     project_findings,
     public_provenance,
 )
+from .community_import_targets import pending_target_channels
 from .import_transaction import rollback_on_import_error, stage_imported_scan
+from .media_identity_store import observe_sampled_version, observe_title
 from .repository_community import attach_import, enqueue_operation, identity_connection
 from .repository_rows import _scan_from_row
 
@@ -50,6 +53,7 @@ class CommunityImportResult:
     review_required: bool
     receipt_state: str
     import_id: str
+    verification_pending: bool = False
 
 
 def queue_import_receipt(
@@ -118,6 +122,23 @@ def _stored_local_path(db, server_path: str) -> str | None:
         return None
 
 
+def _target_choices(previous: dict, target: LocalImportTarget, scan: ScanRow) -> None:
+    """Record candidate channels without granting an approval or erasing existing ones."""
+    pending = set(previous.get("pending_channels", ()))
+    prior = previous.get("selected_channels")
+    available = {name for name in ("audio", "video") if getattr(scan, f"scan_{name}")}
+    approved = set(prior) if prior is not None else available
+    selected = set(target.selected_channels) if target.selected_channels is not None else available
+    if target.stage_for_verification:
+        pending |= selected - approved
+    elif prior is not None:
+        approved |= selected - pending
+    if prior is not None:
+        previous["selected_channels"] = sorted(approved)
+    if pending:
+        previous["pending_channels"] = sorted(pending)
+
+
 def _stage_import(db, downloaded, target, review_required, credential_ref):
     artifact = downloaded.verified.artifact.artifact
     digest = downloaded.verified.manifest.manifest.artifact_digest
@@ -134,6 +155,18 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
     local_path = str(Path(target.resolved_local_path).resolve())
     if media.path and _stored_local_path(db, media.path) != local_path:
         raise CommunityFailure("invalid_target")
+    fingerprint = target.fingerprint
+    if target.stage_for_verification:
+        if fingerprint is None:
+            raise CommunityFailure("invalid_target")
+        try:
+            same_file = fingerprint.path == Path(local_path) and (
+                fingerprint.generation == file_generation(local_path)
+            )
+        except (OSError, RuntimeError, ScanVersionChanged) as exc:
+            raise CommunityFailure("target_changed") from exc
+        if not same_file:
+            raise CommunityFailure("target_changed")
     imported = (
         db.query(CommunityImportRow)
         .filter(
@@ -176,6 +209,7 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
             has_video=not channels or bool(channels & {"video", "both"}),
             progress_message="Imported community evidence",
             imported_at=datetime.now(timezone.utc),
+            video_hash=fingerprint.digest if fingerprint else None,
         )
         findings = project_findings(downloaded, scan.id)
         project_execution(downloaded, scan)
@@ -212,29 +246,43 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
             {str(row.id): item.event_id for row, item in zip(findings, artifact.findings)}
         )
         imported.receipt_json = canonical(downloaded.receipt.model_dump(by_alias=True))
+        if target.stage_for_verification and fingerprint is not None:
+            observe_title(db, media, target.evidence.media)
+            observe_sampled_version(
+                db,
+                media=media,
+                media_source_id=target.media_source_id,
+                source_path=media.path or local_path,
+                fingerprint=fingerprint,
+                known_content_sha256=target.known_content_sha256,
+                scan_id=scan.id,
+            )
     target_key = (imported.id, media.id, target.media_source_id or "")
     association = db.get(CommunityImportTargetRow, target_key)
     evidence_value = asdict(target.evidence)
-    if target.selected_channels is not None:
-        evidence_value["selected_channels"] = sorted(target.selected_channels)
-    if target.lookup_target_key is not None:
-        evidence_value["lookup_target_key"] = target.lookup_target_key
-    evidence = canonical(evidence_value)
     if association is None:
+        if target.stage_for_verification or target.selected_channels is not None:
+            evidence_value["selected_channels"] = []
+        _target_choices(evidence_value, target, scan)
+        if target.lookup_target_key is not None:
+            evidence_value["lookup_target_key"] = target.lookup_target_key
         db.add(
             CommunityImportTargetRow(
                 import_id=imported.id,
                 media_item_id=media.id,
                 media_source_id=target.media_source_id or "",
                 resolved_local_path=local_path,
-                video_hash=root._compute_video_hash(local_path),
-                target_evidence_json=evidence,
+                video_hash=fingerprint.digest
+                if fingerprint
+                else root._compute_video_hash(local_path),
+                target_evidence_json=canonical(evidence_value),
                 review_required=review_required,
             )
         )
     else:
         previous = json.loads(association.target_evidence_json)
         approved = previous.pop("selected_channels", None)
+        pending_channels = previous.pop("pending_channels", None)
         previous_key = previous.pop("lookup_target_key", None)
         if previous_key is not None and previous_key != target.lookup_target_key:
             raise CommunityFailure("target_association_conflict")
@@ -243,8 +291,10 @@ def _stage_import(db, downloaded, target, review_required, credential_ref):
         ):
             raise CommunityFailure("target_association_conflict")
         if approved is not None:
-            channels = set(approved) | set(target.selected_channels or ("audio", "video"))
-            previous["selected_channels"] = sorted(channels)
+            previous["selected_channels"] = approved
+        if pending_channels is not None:
+            previous["pending_channels"] = pending_channels
+        _target_choices(previous, target, scan)
         if target.lookup_target_key is not None:
             previous["lookup_target_key"] = target.lookup_target_key
         association.target_evidence_json = canonical(previous)
@@ -299,9 +349,15 @@ def stage_verified_download(
     )
     downloaded = replace(downloaded, verified=verified, receipt=receipt)
     compatibility, review_required = import_compatibility(downloaded, target, bounds)
-    if review_required and confirm_uncertain is not True:
+    if review_required and confirm_uncertain is not True and not target.stage_for_verification:
         raise CommunityFailure("explicit_review_required")
-    imported, scan, reused = _stage_import(db, downloaded, target, review_required, credential_ref)
+    imported, scan, reused = _stage_import(
+        db,
+        downloaded,
+        target,
+        review_required,
+        credential_ref,
+    )
     return imported, scan, reused, compatibility, review_required
 
 
@@ -343,6 +399,10 @@ def import_verified_download(
     except Exception:
         receipt_state = "unavailable"
     scan = db.get(ScanRow, scan_id)
+    association = db.get(
+        CommunityImportTargetRow,
+        (import_id, target.media_item_id, target.media_source_id or ""),
+    )
     return CommunityImportResult(
         _scan_from_row(scan, finding_count=len(downloaded.verified.artifact.artifact.findings)),
         reused,
@@ -352,4 +412,8 @@ def import_verified_download(
         review_required,
         receipt_state,
         import_id,
+        bool(
+            pending_target_channels(association)
+            & set(target.selected_channels or ("audio", "video"))
+        ),
     )

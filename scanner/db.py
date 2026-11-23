@@ -56,6 +56,15 @@ from scanner.persistence.rows.db_community import (
 )
 from scanner.persistence.rows.db_core import Base
 from scanner.persistence.rows.db_export_regenerations import ExportRegenerationRow
+from scanner.persistence.rows.db_media_identity import (
+    MediaTitleAliasRow,
+    MediaTitleRow,
+    MediaTitleSourceRow,
+    MediaVersionLocatorRow,
+    MediaVersionRow,
+    ReviewMediaVersionRow,
+    ScanMediaVersionRow,
+)
 from scanner.persistence.rows.db_policies import (
     ExportScope,
     FilterEnforcementKind,

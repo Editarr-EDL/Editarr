@@ -9,6 +9,7 @@ import scanner.api as scanner_api
 import scanner.security.auth_policy as auth_policy
 from scanner.http import scan_jobs_api
 from scanner.repository import update_scan_status
+from scanner.runtime.scan_version import prepare_scan_fingerprint
 from scanner.settings.capabilities import (
     SUPPORTED_VIDEO_MODELS,
     CapabilityEnvironment,
@@ -160,7 +161,12 @@ def test_verifier_sets_up_signs_in_and_scans_fresh_media_through_the_stand_in(
             if path == "/api/scans":
                 # Stand in for the worker, which this app does not start.
                 with app.state.factory() as db:
-                    update_scan_status(db, reply.json()["id"], "complete")
+                    scan_id = reply.json()["id"]
+                    proof = prepare_scan_fingerprint(
+                        db, scan_id, str(media), write=lambda operation, *args: operation(db, *args)
+                    )
+                    assert proof is not None
+                    update_scan_status(db, scan_id, "complete")
             return reply.json()
 
         monkeypatch.setattr(smoke, "request", request)

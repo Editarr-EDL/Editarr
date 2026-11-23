@@ -260,9 +260,10 @@ required to send; unset means `downloads_not_configured`, not a production defau
 `POST /api/community/downloads/status` accepts `{target,target_key,choices}`
 (at most 96) and returns `{version:1,outcomes}` in request order. Each outcome has
 `revisionId,status:"not_imported"|"partial"|"imported"`; committed outcomes also
-have `scanId,approvedChannels,receiptState,reviewRequired,reviewed`. It reads local
-persisted exact-target imports without service access or download limits. A partial
-channel approval is not success for unapproved channels. Both endpoints require
+have `scanId,approvedChannels,receiptState,reviewRequired,reviewed`. A staged outcome
+also includes `verificationPending:true` and the requested `pendingChannels` that
+were committed for verification. It reads local persisted exact-target imports
+without service access or download limits. Both endpoints require
 real administrator/same-origin/CSRF and return no-store.
 
 Local `Scan.community_approvals` exposes target source/item/version/channel records
@@ -492,6 +493,20 @@ Supported identity providers are only TMDB and TVDB, never IMDb. The existing
 local discovery fields remain unchanged. Upstream episode aliases are conservative,
 and a linked series record must match the explicit source series ID.
 
+Editarr title IDs are independent of Jellyfin item IDs. An Editarr version records
+the legacy sampled MD5 and file size for the identified media. The fingerprint reads
+files through 50 MiB in full and reads the first and last 10 MiB of larger files.
+A unique sample and size match within a title can follow a file move. Distinct
+known version IDs with the same sample remain separate. The sample offers no
+comparison for bytes outside the selected ranges. Scene and credits cache entries
+include the sample, file size, and saved version ID when a scan has a version pin.
+
+The migration preserves existing version IDs, scans, reviews, and published files.
+Older whole-file pins use a surviving verified observation of the current file
+generation. When that evidence is unavailable, the original version stays in
+history and can be used in the existing verification flow. Signed Community
+artifacts keep their existing fingerprint and signature formats.
+
 See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts).
 
 ## Named review API
@@ -505,9 +520,12 @@ List `sort=name` uses Unicode `casefold()` and applies direction only to that pr
 key; stable review ID ascending breaks equal folded names. Date sorting applies direction
 only to `updated_at` and uses the same ID tie-breaker. Default opening chooses greatest
 `updated_at`, independently of presentation sort.
-Each export reads review snapshots, records active review/format-revision provenance, and
-computes `outdated` from that format's revision. Existing sidecars remain continuously
-present until one atomic replacement; a later database failure restores the previous
+Each export reads review snapshots and records active review, format revision, and policy
+provenance. A retained personal or item-default publication is also `outdated` if its
+published bytes lack a mandatory cue newly matched by inferring the MCF channel from
+the cue's source. The status change preserves the published file and leaves replacement
+to an explicit republish. Existing sidecars remain continuously present until one atomic
+replacement. A later database failure restores the previous
 sidecar, and a failed restoration retains its recovery backup. Import creates a named completed imported
 scan and saved review atomically without queueing or changing active EDL state.
 
@@ -516,6 +534,9 @@ scan and saved review atomically without queueing or changing active EDL state.
 `ScanFinding` and `ReviewFilter` expose nullable `category`, `subcategory`, `severity`,
 `mcf_channel`, and `mcf_comment`. New generated/manual/MCF data requires a registry-valid
 family/subcategory pair; null classification is reserved for unresolved legacy EDL input.
+When exporting a review, a missing MCF channel derives from the filter source (audio or
+video), and a missing MCF comment derives from its description. Explicit values on
+imported or previously saved filters take precedence.
 `ScanMcfDocument` adds immutable `source_version` and finite material bounds to the MCF
 metadata fields. `ReviewMcfDocument` is the review-owned editable copy.
 
@@ -917,10 +938,11 @@ Protected `GET /api/media/audio-tracks?item_id=<Jellyfin item ID>&media_source_i
 returns `{file_version, tracks, selection, selection_stale}`. Each track contains
 physical `stream_index`, observed nullable `language`, `title`, `codec`, `channels`,
 integer `disposition`, nullable `start_seconds`, `duration_seconds`, and rational
-`time_base`. Unknown values are not inferred. The 64-hex file version is local
-state, not portable content identity. Only the sole track or one unambiguous
-flagged default is preselected. A stale remembered choice returns null selection
-and `selection_stale=true`, without falling back to a new default.
+`time_base`. Unknown values are not inferred. The 64-hex file version describes
+the resolved local path, file metadata, and audio inventory without device IDs.
+Only the sole track or one unambiguous flagged default is preselected. A stale
+remembered choice returns null selection and `selection_stale=true` unless a
+completed scan independently confirms the same exact file and audio track.
 
 Protected/CSRF-checked `POST /api/media/audio-tracks/selection` takes
 `{item_id, media_source_id?, selection: {file_version, track}}` and rejects other
@@ -935,6 +957,8 @@ nullable `requested_audio_selection` and `analyzed_audio_selection`. Actual inpu
 is immutable and recorded only after successful analysis; requested input alone
 does not prove analysis. Historical/imported unknown input stays null. Stale or
 missing queued inputs and unverifiable audio checkpoints stop without substitution.
+Device-bound audio selection tokens expire. Start a new scan and choose the audio
+track again if a queued selection can no longer be verified.
 See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts)
 for how selected tracks affect community matching.
 
@@ -1232,6 +1256,11 @@ review/policy tokens and returns exactly the prepared publication bytes, with a
 canonical personal attachment filename and `Cache-Control: private, no-store`.
 It creates no export row, directory, or sidecar. Cross-user downloads also need
 the actor's personal download capability.
+
+The `/api/reviews/{review_id}/subtitles/sources`, `/preview`, and `/publish`
+operations share the same saved-review export eligibility. This includes users
+whose only export permission is to download that review. A published subtitle is
+available to everyone who can play that media version in Jellyfin.
 
 Migration `0021_export_snapshots` appends `content_bytes`, `snapshot_json`,
 `destination_path`, and `publication_revision` to `media_item_exports`.

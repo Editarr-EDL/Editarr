@@ -71,6 +71,13 @@ from scanner.runtime.process_control import (  # noqa: E402
     WorkerControlServer,
     assign_current_worker_job,
 )
+from scanner.runtime.scan_version import (  # noqa: E402
+    STALE_AUDIO_SELECTION,
+    ScanVersionChanged,
+    prepare_scan_fingerprint,
+    require_scan_generation,
+    scan_digest_progress,
+)
 from scanner.runtime.worker_quit import FullApplicationQuitRequested  # noqa: E402
 from scanner.security.scan_jobs.authority import (  # noqa: E402
     REFUSAL_MESSAGES,
@@ -84,9 +91,13 @@ logger = logging.getLogger(__name__)
 
 def run_scan(*args, **kwargs):
     """Load the pipeline only after worker identity and heartbeat are available."""
+    from scanner.pipeline.audio_tracks import StaleAudioSelectionError
     from scanner.pipeline.runner import run_scan as run_pipeline
 
-    return run_pipeline(*args, **kwargs)
+    try:
+        return run_pipeline(*args, **kwargs)
+    except StaleAudioSelectionError as exc:
+        raise ScanVersionChanged(STALE_AUDIO_SELECTION) from exc
 
 
 def run_credits_scan(*args, **kwargs):
@@ -198,10 +209,37 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
             logger.error("Scan %s cannot start because its source path is unavailable", scan_id)
             mark_scan_orphaned(db, scan_id, "Orphaned scan — source path is unavailable")
             return 1
+        media_proof = prepare_scan_fingerprint(
+            db,
+            scan_id,
+            local_path,
+            write=partial(gate.run, db),
+            on_progress=scan_digest_progress(
+                partial(gate.run, db, update_scan_progress, scan_id, worker_token=worker_token)
+            ),
+        )
+
+        def commit_status(session, item_id, status):
+            if status == "complete":
+                require_scan_generation(local_path, media_proof)
+            return update_scan_status(session, item_id, status)
+
+        def update_status(session, item_id, status):
+            return gate.run(session, commit_status, item_id, status)
+
+        def commit_credits(session, **result):
+            require_scan_generation(local_path, media_proof)
+            return complete_credits_detection(session, **result)
+
+        def save_credits(session, **result):
+            return gate.run(session, commit_credits, **result)
+
         checkpoints = scan_checkpoint_stages(db, scan_id, require_provenance=True)
         logger.debug(
             "Scan %s resuming with completed checkpoints: %s", scan_id, sorted(checkpoints)
         )
+        require_scan_generation(local_path, media_proof)
+        media_cache_key = media_proof.cache_key if media_proof is not None else None
         with _prevent_idle_system_sleep():
             if item.scan_mode == "credits_detection":
                 assert item.credits_detection is not None
@@ -212,12 +250,9 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                     configuration=item.credits_detection.configuration,
                     video_duration_seconds=item.duration_seconds,
                     video_hash=item.video_hash,
-                    status_updater=lambda session, *args: gate.run(
-                        session, update_scan_status, *args
-                    ),
-                    result_writer=lambda session, **kwargs: gate.run(
-                        session, complete_credits_detection, **kwargs
-                    ),
+                    status_updater=update_status,
+                    result_writer=save_credits,
+                    media_cache_key=media_cache_key,
                     scan_metadata_updater=lambda session, *args: gate.run(
                         session, update_scan_duration, *args
                     ),
@@ -264,19 +299,19 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                         if item.requested_audio_selection
                         else None
                     ),
-                    analyzed_audio_callback=lambda selection: gate.run(
+                    analyzed_audio_timing_callback=lambda selection, offset: gate.run(
                         db,
                         record_analyzed_audio_selection,
                         item.id,
                         AudioSelection.from_selection(selection),
+                        playback_offset_seconds=offset,
                     ),
                     scan_video=item.scan_video,
                     video_model=item.video_model,
                     video_id=item.id,
                     video_duration_seconds=item.duration_seconds,
-                    status_updater=lambda session, *args: gate.run(
-                        session, update_scan_status, *args
-                    ),
+                    status_updater=update_status,
+                    media_cache_key=media_cache_key,
                     findings_writer=lambda session, video_id, findings: _write_findings(
                         gate, session, video_id, findings
                     ),
@@ -301,6 +336,10 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         db.rollback()
         fail_refused_scan_job(db, scan_id, refused.refusal.message)
         logger.info("Scan %s stopped: %s", scan_id, refused.refusal.reason.value)
+    except ScanVersionChanged as exc:
+        db.rollback()
+        fail_refused_scan_job(db, scan_id, str(exc))
+        logger.info("Scan %s stopped because its source could not be verified", scan_id)
     except FullApplicationQuitRequested:
         # Full Quit retains the queue row and checkpoints so a future launch can
         # resume it.  Cancellation is intentionally a separate user request.

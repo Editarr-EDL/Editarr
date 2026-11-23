@@ -72,6 +72,38 @@ it("shows members only their own destination and explains regeneration of the fi
   expect(within(dialog).getByRole("listitem", { name: "MCF at Your personal files" })).toHaveTextContent("No file published here yet.");
 });
 
+it.each([
+  ["edl", "self", "Your personal files"],
+  ["mcf", "self", "Your personal files"],
+  ["edl", "item_default", "Item default (shared fallback)"],
+  ["mcf", "item_default", "Item default (shared fallback)"],
+] as const)("publishes an outdated %s to %s only after choosing Publish", async (format, target, destination) => {
+  const own = { ...memberReview, owner_id: 1, policy_owner_id: 1 };
+  const existing = testPublication({
+    format, target, scope: target === "self" ? "personal" : "default", target_user_id: target === "self" ? 1 : null,
+    review_id: own.id, policy_revision: own.policy_revision, current: false, outdated: true,
+  });
+  vi.mocked(exportsApi.publishReviewExport).mockResolvedValue({
+    kind: "published", publication: { ...existing, publication_revision: 2, current: true, outdated: false },
+  });
+  const { dialog, exports, handlers } = await open({ userId: 1, capabilities: ADMIN, review: own, rows: [existing] });
+  fireEvent.click(within(dialog).getByRole("radio", { name: destination }));
+  const label = format.toUpperCase();
+  const row = within(dialog).getByRole("listitem", { name: `${label} at ${destination}` });
+  expect(row).toHaveTextContent("OutdatedFrom this review. Publish again to apply the current saved review and enforced filters.");
+  expect(exportsApi.publishReviewExport).not.toHaveBeenCalled();
+  expect(exportsApi.deletePublication).not.toHaveBeenCalled();
+
+  fireEvent.click(within(row).getByRole("button", { name: `Publish ${label}` }));
+  expect(await within(dialog).findByRole("status")).toHaveTextContent(`Published ${label} to ${destination}.`);
+  expect(handlers.onPublished).toHaveBeenCalledOnce();
+  expect(exports.refresh).toHaveBeenCalledOnce();
+  expect(exportsApi.publishReviewExport).toHaveBeenCalledExactlyOnceWith(own.id, format, {
+    revision: own.revision, policy_owner_id: own.policy_owner_id, policy_revision: own.policy_revision, target, confirmation: undefined,
+  });
+  expect(exportsApi.deletePublication).not.toHaveBeenCalled();
+});
+
 it("confirms replacing another review's file with the server's confirmation for the previewed destination", async () => {
   const other = testPublication({ target_user_id: 9, target: "self", actor_id: 9, review_id: "review-a", publication_revision: 2 });
   vi.mocked(exportsApi.publishReviewExport)

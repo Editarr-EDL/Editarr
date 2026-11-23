@@ -16,7 +16,12 @@ from dataclasses import replace
 import pytest
 
 from scanner.models import FilterRuleDisposition, McfChannel, Severity
-from scanner.settings.filter_defaults import apply_filter_defaults, enforce_filter_policy
+from scanner.persistence.repository.review_policy_evidence import covers_evidence
+from scanner.settings.filter_defaults import (
+    EnforcedFilterPolicy,
+    apply_filter_defaults,
+    enforce_filter_policy,
+)
 from scanner.settings.filter_policy.effective import enforced_policy, live_copy, preferences_view
 from scanner.settings.filter_policy.values import (
     CopyValues,
@@ -31,6 +36,19 @@ ALLOW, DENY = FilterRuleDisposition.ALLOW, FilterRuleDisposition.DENY
 OPPOSITE = {ALLOW: DENY, DENY: ALLOW}
 HIGH, MEDIUM, LOW = Severity.HIGH, Severity.MEDIUM, Severity.LOW
 AUDIO, VIDEO = McfChannel.AUDIO, McfChannel.VIDEO
+
+
+@pytest.mark.parametrize(("source", "channel"), [("audio", AUDIO), ("visual", VIDEO)])
+def test_implicit_channel_matches_enforcement_and_covers_only_its_source(source, channel):
+    finding = _filter(source=source, channel=None, selected=False)
+    rule = _rule(DENY, mcf_channel=channel)
+    policy = EnforcedFilterPolicy(1, (rule,))
+    assert enforce_filter_policy([finding], policy).filters[0].selected
+    assert covers_evidence(finding, finding.model_copy(update={"mcf_channel": channel}))
+    required_both = finding.model_copy(update={"mcf_channel": McfChannel.BOTH})
+    assert not covers_evidence(finding, required_both)
+    assert covers_evidence(required_both, finding)
+
 
 # name: (rule clauses, saved finding, instance swearing, personal swearing,
 #        swearing enforced, rules match in the view, rules match after Apply)

@@ -28,10 +28,11 @@ export function scanLabel(scan: Scan | ScanQueueItem): string {
   return `${scan.name ? `${scan.name} · ` : ""}Scan #${scan.scan_id}`;
 }
 
-export function scanOriginLabel(scan: Scan | ScanQueueItem): string {
+export function scanOriginLabel(scan: Scan | ScanQueueItem, { includeTime = true } = {}): string {
   if (scan.origin === "manual") return "Manual";
   if (scan.origin === "imported") {
     const source = scan.import_source_name || scan.media_source_name || "Imported EDL";
+    if (!includeTime) return `Imported from ${source}`;
     const timestamp = scan.imported_at ? new Date(scan.imported_at).toLocaleString() : "time unavailable";
     return `Imported from ${source} on ${timestamp}`;
   }

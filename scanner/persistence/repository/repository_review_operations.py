@@ -38,7 +38,10 @@ from scanner.repository import (
     ReviewMembershipError,
     ReviewRevisionConflict,
 )
+from scanner.runtime.scan_version import file_generation
+from scanner.runtime.version_reuse_audio import analyzed_selection, select_target_audio
 
+from .community_import_targets import validate_target_role, verified_target
 from .repository_paths import (
     resolve_local_path,
 )
@@ -52,6 +55,8 @@ from .review_policy import (
     prepare_review_policy,
     require_policy_evidence,
 )
+from .review_scan_paths import review_scan_location
+from .review_version_evidence import review_file_matches
 from .scan_jobs import ScanMedia
 
 
@@ -185,10 +190,25 @@ def render_saved_review_filter_preview(
         )
     ):
         raise ValueError("The review filter source scan is unavailable")
+    audio = analyzed_selection(scan)
+    if scan.analyzed_audio_selection_json is not None and audio is None:
+        raise ValueError("The analyzed audio track is unavailable")
+    original_path = root._resolved_scan_path(scan)
+    scan_path = original_path
+    generation = None
     if row.media_item.path:
         target_path = Path(resolve_local_path(db, row.media_item.path).local_path).resolve()
-        if not root._scan_matches_physical_version(scan, target_path):
+        if target_path != original_path or audio is not None:
+            generation = file_generation(str(target_path))
+        association = verified_target(db, scan, row.media_item_id, row.media_source_id)
+        validate_target_role(association, membership.role)
+        scan_path, matches = review_scan_location(scan, target_path, association)
+        if not matches:
             raise ValueError("The review filter source media is unavailable")
+    elif audio is not None:
+        generation = file_generation(str(scan_path))
+    if review_file_matches(db, review_id, scan_path) is False:
+        raise ReviewMembershipError("The original Editarr review version is unavailable")
     if preview_kind == "mute":
         if review_filter.source != "audio" or review_filter.edit_action != EditAction.MUTE.value:
             raise ValueError("Only audio mute filters can be previewed")
@@ -201,9 +221,22 @@ def render_saved_review_filter_preview(
     end_seconds = max(start_seconds, review_filter.end_seconds or (start_seconds + 1.0))
     if scan.duration_seconds is not None:
         end_seconds = min(end_seconds, scan.duration_seconds)
-    if preview_kind == "mute":
-        return root.render_mute_preview(scan.resolved_local_path, start_seconds, end_seconds)
-    return root.render_video_preview(scan.resolved_local_path, start_seconds, end_seconds)
+    options = {}
+    if audio is not None:
+        current = select_target_audio(scan_path, audio.track.stream_index)
+        if current.track != audio.track:
+            raise ValueError("The analyzed audio track has changed")
+        options["audio_stream_index"] = current.track.stream_index
+    renderer = root.render_mute_preview if preview_kind == "mute" else root.render_video_preview
+    content = renderer(str(scan_path), start_seconds, end_seconds, **options)
+    if generation is not None:
+        current_path = (
+            Path(resolve_local_path(db, row.media_item.path).local_path).resolve()
+            if row.media_item.path else scan_path
+        )
+        if current_path != scan_path or file_generation(str(scan_path)) != generation:
+            raise ReviewMembershipError("The review filter source media has changed")
+    return content
 
 
 def render_credits_detection_preview(

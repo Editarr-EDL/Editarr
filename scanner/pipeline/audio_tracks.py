@@ -22,6 +22,10 @@ class AudioSelectionError(ValueError):
     """The requested audio input cannot be selected without confirmation."""
 
 
+class StaleAudioSelectionError(AudioSelectionError):
+    """The selection token cannot verify the current file inventory."""
+
+
 @dataclass(frozen=True)
 class AudioTrack:
     stream_index: int
@@ -84,19 +88,20 @@ class AudioTrackInventory:
     def revalidate(self, selection: AudioTrackSelection) -> AudioTrack:
         """Reject changed file versions or stream metadata without substituting tracks."""
         if selection.file_version != self.file_version:
-            raise AudioSelectionError("The file changed; choose an audio track again")
+            raise StaleAudioSelectionError(
+                "The audio selection expired or the file changed. Choose the audio track again."
+            )
         actual = self.select(selection.track.stream_index).track
         if actual != selection.track:
             raise AudioSelectionError("The audio track changed; choose it again")
         return actual
 
 
-def _file_state(path: Path) -> tuple[int, int, int, int, int]:
+def _file_state(path: Path) -> tuple[int, int, int, int]:
     observed = path.stat()
     if not stat.S_ISREG(observed.st_mode):
         raise AudioSelectionError("Audio input must be a regular file")
     return (
-        observed.st_dev,
         observed.st_ino,
         observed.st_size,
         observed.st_mtime_ns,
@@ -149,7 +154,7 @@ def inventory_from_streams(path: Path, before: tuple, streams) -> AudioTrackInve
         raise AudioSelectionError("Duplicate audio stream indexes")
     version_bytes = json.dumps(
         {
-            "version": 1,
+            "version": 2,
             "path": str(path),
             "state": before,
             "tracks": [asdict(track) for track in tracks],

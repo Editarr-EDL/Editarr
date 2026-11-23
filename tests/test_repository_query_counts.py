@@ -86,8 +86,28 @@ def _finding(scan_id: str, start: float) -> ScanFindingRow:
     )
 
 
-def _add_scans(db: Session, count: int, *, start: int = 0, findings: int = 2) -> None:
+def _add_scans(
+    db: Session,
+    count: int,
+    *,
+    start: int = 0,
+    findings: int = 2,
+    verified_finding_id: int | None = None,
+) -> None:
     """Add complete scans with every relationship the scan model reads."""
+    verification = {}
+    if verified_finding_id is not None:
+        verification = {
+            "origin": "imported",
+            "checkpoint_state": json.dumps(
+                {
+                    "identity_reuse": {
+                        "source_scan_id": "scan",
+                        "cues": [{"source_finding_id": verified_finding_id, "channel": "audio"}],
+                    }
+                }
+            ),
+        }
     for index in range(start, start + count):
         scan_id = f"scan-{index}"
         import_id = f"import-{index}"
@@ -105,6 +125,7 @@ def _add_scans(db: Session, count: int, *, start: int = 0, findings: int = 2) ->
                 scan_mode="credits_detection" if index % 2 else "content",
                 updated_at=_BASE + timedelta(minutes=index),
                 created_at=_BASE,
+                **verification,
             )
         )
         db.flush()
@@ -178,14 +199,12 @@ def _add_scans(db: Session, count: int, *, start: int = 0, findings: int = 2) ->
     db.commit()
 
 
-def _lazy(db: Session, rows, *, counts: bool) -> list[str]:
+def _lazy(db: Session, rows) -> list[str]:
     """Serialize scans with only default lazy relationship loading (the prior behavior)."""
     return [
         _scan_from_row(
             row,
-            finding_count=(
-                db.query(ScanFindingRow).filter_by(scan_id=row.id).count() if counts else 0
-            ),
+            finding_count=db.query(ScanFindingRow).filter_by(scan_id=row.id).count(),
         ).model_dump_json()
         for row in rows
     ]
@@ -224,6 +243,22 @@ def _count(db: Session, read) -> int:
     return len(statements)
 
 
+def test_explicitly_linked_scan_includes_its_finding_count():
+    with review_db() as db:
+        _add_associated_scan(db)
+        [linked] = repository.list_scans_for_library_item(
+            db, jellyfin_item_id="item", associated_only=True,
+        )
+        assert linked.finding_count == 0
+
+        db.add(_finding("associated", 1))
+        db.commit()
+        [linked] = repository.list_scans_for_library_item(
+            db, jellyfin_item_id="item", associated_only=True,
+        )
+        assert linked.finding_count == 1
+
+
 def test_scan_lists_do_not_scale_queries_with_scan_count():
     db = review_db()
     try:
@@ -235,9 +270,10 @@ def test_scan_lists_do_not_scale_queries_with_scan_count():
         def by_item():
             return repository.list_scans_for_library_item(db, jellyfin_item_id="item")
 
-        _add_scans(db, 2)
+        original_finding_id = db.query(ScanFindingRow.id).filter_by(scan_id="scan").scalar()
+        _add_scans(db, 2, verified_finding_id=original_finding_id)
         small = (_count(db, history), _count(db, by_item))
-        _add_scans(db, 10, start=2)
+        _add_scans(db, 10, start=2, verified_finding_id=original_finding_id)
         large = (_count(db, history), _count(db, by_item))
 
         assert large == small
@@ -248,17 +284,22 @@ def test_scan_lists_do_not_scale_queries_with_scan_count():
             .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
             .all()
         )
-        expected_history = _lazy(db, history_rows, counts=True)
+        expected_history = _lazy(db, history_rows)
         db.expire_all()
         assert [scan.model_dump_json() for scan in history()] == expected_history
         db.expire_all()
         item_rows = [db.get(ScanRow, scan.id) for scan in by_item()]
         db.expire_all()
-        expected_item = _lazy(db, item_rows, counts=False)
+        expected_item = _lazy(db, item_rows)
         db.expire_all()
         scans = by_item()
         assert [scan.model_dump_json() for scan in scans] == expected_item
         assert len(scans) == 14 and scans[-1].id == "associated"
+        copied = next(scan for scan in scans if scan.id == "scan-0")
+        assert copied.verification_coverage.covered_finding_ids == {
+            "audio": [original_finding_id],
+            "video": [],
+        }
         approvals = {
             scan.id: [approval.model_dump() for approval in scan.community_approvals]
             for scan in scans

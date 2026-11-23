@@ -127,6 +127,7 @@ class ScanRow(Base):
     worker_attempt_started_at = Column(DateTime, nullable=True)
 
     media_item = relationship("MediaItemRow")
+    media_version_pin = relationship("ScanMediaVersionRow", uselist=False, viewonly=True)
     mcf_document = relationship(
         "ScanMcfDocumentRow",
         back_populates="scan",

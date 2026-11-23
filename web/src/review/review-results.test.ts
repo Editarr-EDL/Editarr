@@ -50,6 +50,12 @@ it("keeps labels on user-authored visual filters but not on model findings", () 
   expect(visualFilterListLabel({ ...visual("u", null), label_edited: false }, 0, "generated")).toBe("Video filter 1");
 });
 
+it("uses an existing MCF comment as the visual description", () => {
+  const filter = { ...visual("legacy", "Source evidence"), mcf_comment: "Edited comment" };
+  expect(savedReviewFilterDescription(filter, "generated")).toBe("Edited comment");
+  expect(visualFilterListLabel(filter, 0, "generated")).toBe("Edited comment");
+});
+
 it("keeps the audio description fallbacks", () => {
   expect(savedReviewFilterDescription(audio({ label: "fudge", details: "oh fudge" }))).toBe("fudge");
   expect(savedReviewFilterDescription(audio({ details: "oh fudge" }))).toBe("oh fudge");

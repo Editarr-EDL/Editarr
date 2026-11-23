@@ -27,8 +27,10 @@ from scanner.repository import (
 
 from ..write_lock import write_lock
 from .activity_ownership import new_review_owner_columns
+from .media_identity_store import bind_review_version, review_version_id
 from .repository_mcf_preflight import (
     _signature_value,
+    filter_mcf_value,
 )
 from .repository_review_retime import (
     _map_retime_entries as _map_retime_entries,
@@ -67,9 +69,9 @@ def _revision_signatures(
         (membership.scan_id, _signature_value(membership.role)) for membership in memberships
     )
 
-    def filter_signature(fields):
+    def filter_signature(fields, field_value=getattr):
         return tuple(
-            tuple(_signature_value(getattr(review_filter, field)) for field in fields)
+            tuple(_signature_value(field_value(review_filter, field)) for field in fields)
             for review_filter in filters
         )
 
@@ -91,7 +93,7 @@ def _revision_signatures(
     edl = (membership_signature, filter_signature(root._EDL_FILTER_FIELDS))
     mcf = (
         membership_signature,
-        filter_signature(root._MCF_FILTER_FIELDS),
+        filter_signature(root._MCF_FILTER_FIELDS, filter_mcf_value),
         document_signature,
     )
     return aggregate, edl, mcf
@@ -169,6 +171,7 @@ def _save_saved_review(
         media_source_id=row.media_source_id,
         values=data.new_manual_filters,
         owner_id=row.owner_id,
+        stable_version_id=review_version_id(db, row.id),
     )
     if manual_scan is not None:
         requested_memberships = root._with_manual_membership(
@@ -302,15 +305,17 @@ def duplicate_saved_review(
         prepare_review_policy(db, source), data.policy_revision, data.policy_owner_id
     )
     _claim_review_revision(db, source.id, data.revision)
-    root._validate_memberships(
-        db,
-        media_item_id=source.media_item_id,
-        media_source_id=source.media_source_id,
-        memberships=[
-            ReviewScanMembership(scan_id=value.scan_id, role=value.role)
-            for value in source.memberships
-        ],
-    )
+    source_version = review_version_id(db, source.id)
+    if source_version is None:
+        root._validate_memberships(
+            db,
+            media_item_id=source.media_item_id,
+            media_source_id=source.media_source_id,
+            memberships=[
+                ReviewScanMembership(scan_id=value.scan_id, role=value.role)
+                for value in source.memberships
+            ],
+        )
     duplicate = SavedReviewRow(
         id=str(uuid.uuid4()),
         media_item_id=source.media_item_id,
@@ -321,6 +326,8 @@ def duplicate_saved_review(
     )
     db.add(duplicate)
     db.flush()
+    if source_version is not None:
+        bind_review_version(db, duplicate.id, source_version)
     duplicate.memberships = [
         ReviewScanMembershipRow(
             scan_id=membership.scan_id, role=membership.role, position=membership.position

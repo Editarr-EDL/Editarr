@@ -131,7 +131,7 @@ def test_unrelated_scan_duration_does_not_change_review_runtime_validation():
     ("filter_changes", "document_changes", "expected"),
     [
         ({"label": "Private"}, {}, (1, 1, 1, 0)),
-        ({"details": "Private detail"}, {}, (1, 1, 0, 0)),
+        ({"details": "Description"}, {}, (1, 1, 0, 1)),
         ({"group_key": "private-group"}, {}, (1, 1, 0, 0)),
         ({"confidence": 0.25}, {}, (1, 1, 0, 0)),
         ({"severity": Severity.HIGH}, {}, (1, 1, 0, 1)),

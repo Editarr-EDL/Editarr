@@ -86,9 +86,9 @@ describe("review MCF controls", () => {
     expect(onChange).toHaveBeenCalledWith({ ...document, material_end_seconds: 3723.456, material_start_seconds: 1.25 });
   });
 
-  it("constrains searchable subcategories and edits severity, channel, comment, and clear", () => {
+  it("constrains searchable subcategories and edits severity without separate channel or comment inputs", () => {
     const onChange = vi.fn();
-    const { rerender } = render(<McfClassificationFields controlId="Filter one" registry={registry} value={filter} onChange={onChange} allowClear />);
+    render(<McfClassificationFields controlId="Filter one" registry={registry} value={filter} onChange={onChange} allowClear />);
 
     expect(screen.getByLabelText("Filter one subcategory")).toHaveAttribute("list", "Filter one-subcategories");
     expect(classificationIsValid(registry, "violence", "weapons")).toBe(true);
@@ -97,12 +97,8 @@ describe("review MCF controls", () => {
     expect(onChange).toHaveBeenCalledWith({ category: "language", subcategory: null });
     fireEvent.click(screen.getByLabelText("Medium"));
     expect(onChange).toHaveBeenCalledWith({ severity: "medium" });
-    fireEvent.change(screen.getByLabelText("Filter one channel"), { target: { value: "both" } });
-    expect(onChange).toHaveBeenCalledWith({ mcf_channel: "both" });
-    fireEvent.change(screen.getByLabelText("Filter one MCF comment"), { target: { value: "bad --> comment" } });
-    expect(onChange).toHaveBeenCalledWith({ mcf_comment: "bad --> comment" });
-    rerender(<McfClassificationFields controlId="Filter one" registry={registry} value={{ ...filter, mcf_comment: "bad --> comment" }} onChange={onChange} allowClear />);
-    expect(screen.getByText(/exclude/)).toBeVisible();
+    expect(screen.queryByLabelText("Filter one channel")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Filter one MCF comment")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear classification" }));
     expect(onChange).toHaveBeenCalledWith({ category: null, subcategory: null });
   });

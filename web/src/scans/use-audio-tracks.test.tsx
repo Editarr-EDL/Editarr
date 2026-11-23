@@ -3,7 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as api from "../api/api-audio-tracks";
 import { useAudioTracks } from "./use-audio-tracks";
 
-vi.mock("../api/api-audio-tracks", () => ({ fetchAudioTracks: vi.fn(), confirmAudioTrack: vi.fn() }));
+vi.mock("../api/api-audio-tracks", async (importOriginal) => ({
+  ...await importOriginal<typeof api>(),
+  fetchAudioTracks: vi.fn(),
+  confirmAudioTrack: vi.fn(),
+}));
 const main: api.AudioTrack = { stream_index: 1, language: "eng", title: "Main", codec: "aac", channels: 2,
   disposition: 1, start_seconds: 0, duration_seconds: 5, time_base: "1/48000" };
 const inventory = (version: string): api.AudioTrackInventory => ({ file_version: version, tracks: [main],

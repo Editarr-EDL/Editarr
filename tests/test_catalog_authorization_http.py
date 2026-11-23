@@ -90,6 +90,28 @@ def test_search_and_seasons_decide_before_anything_is_counted(catalog):
     assert ("seasons", MATURE) not in catalog.jellyfin.calls
 
 
+def test_title_search_finds_missing_browse_items_and_filters_access(catalog, monkeypatch):
+    all_items = catalog.jellyfin.all_items
+
+    def listing(library_id, *, recursive, include_item_types, search_term=""):
+        rows = all_items(library_id, recursive, include_item_types, search_term)
+        if search_term:
+            return rows
+        return [item for item in rows if item.id not in {FAMILY_FILM, MATURE}]
+
+    monkeypatch.setattr(catalog.jellyfin, "all_items", listing)
+    assert _names(catalog.get(OWNER, FAMILY_ITEMS).json()) == ["Synthetic Late Show"]
+
+    owner = catalog.get(OWNER, FAMILY_ITEMS, search="synthetic").json()
+    casey = catalog.get(CASEY, FAMILY_ITEMS, search="synthetic").json()
+    assert owner["total_count"] == 3 and "Synthetic Family Film" in _names(owner)
+    assert casey["total_count"] == 2 and "Synthetic Family Film" in _names(casey)
+    assert "Synthetic Mature Film" not in _names(casey)
+    assert casey["rating_values"] == ["G", "PG"]
+    assert all(item["path"] is None for item in casey["items"])
+    assert _names(catalog.get(OWNER, FAMILY_ITEMS).json()) == ["Synthetic Late Show"]
+
+
 def test_restricted_libraries_are_absent_and_refused(catalog):
     assert [library["id"] for library in catalog.get(OWNER, "/api/libraries").json()] == [
         MOVIES,

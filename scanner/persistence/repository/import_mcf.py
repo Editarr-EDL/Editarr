@@ -57,6 +57,7 @@ from .review_policy import (
     prepare_review_policy,
 )
 from .review_policy_evidence import bind_review_evidence
+from .version_reuse import stage_reuse_source
 
 
 @policy_write
@@ -75,6 +76,7 @@ def import_mcf_as_saved_review(
     mcf_material_end_seconds: float | None,
     accepted_credits: AcceptedCreditsReference | None,
     imported_at: datetime | None = None,
+    verification_version_id: str | None = None,
 ) -> McfImportResult:
     """Create one immutable MCF scan and isolated saved review atomically."""
     with rollback_on_import_error(db):
@@ -92,6 +94,7 @@ def import_mcf_as_saved_review(
             mcf_material_end_seconds=mcf_material_end_seconds,
             accepted_credits=accepted_credits,
             imported_at=imported_at,
+            verification_version_id=verification_version_id,
         )
 
 
@@ -110,6 +113,7 @@ def _import_mcf_as_saved_review(
     mcf_material_end_seconds: float | None,
     accepted_credits: AcceptedCreditsReference | None,
     imported_at: datetime | None,
+    verification_version_id: str | None,
 ) -> McfImportResult:
     """Validate MCF cues, metadata, and timing before persisting an imported review."""
     if duration_seconds is None or not math.isfinite(duration_seconds) or duration_seconds <= 0:
@@ -122,27 +126,28 @@ def _import_mcf_as_saved_review(
         start_seconds=synchronization.start_seconds,
         end_seconds=synchronization.end_seconds,
     )
-    try:
-        map_affine_range(
-            source_interval.start_seconds,
-            source_interval.end_seconds,
-            source_interval,
-            target_interval,
-            duration_seconds=duration_seconds,
-        )
-    except ValueError as exc:
-        raise McfImportTimingError(
-            "invalid_synchronization_bounds",
-            str(exc),
-            document_fields=["synchronization"],
-        ) from exc
-    if synchronization.end_mode.value == "before_credits":
-        if mcf_material_end_seconds != synchronization.end_seconds:
-            raise ValueError("Before-credits material end must match synchronization end")
-    elif mcf_material_end_seconds is not None and not (
-        synchronization.start_seconds < mcf_material_end_seconds <= synchronization.end_seconds
-    ):
-        raise ValueError("File-end material end must be within the synchronization interval")
+    if not verification_version_id:
+        try:
+            map_affine_range(
+                source_interval.start_seconds,
+                source_interval.end_seconds,
+                source_interval,
+                target_interval,
+                duration_seconds=duration_seconds,
+            )
+        except ValueError as exc:
+            raise McfImportTimingError(
+                "invalid_synchronization_bounds",
+                str(exc),
+                document_fields=["synchronization"],
+            ) from exc
+        if synchronization.end_mode.value == "before_credits":
+            if mcf_material_end_seconds != synchronization.end_seconds:
+                raise ValueError("Before-credits material end must match synchronization end")
+        elif mcf_material_end_seconds is not None and not (
+            synchronization.start_seconds < mcf_material_end_seconds <= synchronization.end_seconds
+        ):
+            raise ValueError("File-end material end must be within the synchronization interval")
     accepted_detection = None
     if accepted_credits is not None:
         accepted_scan, candidate, accepted_finding = root._validated_credits_acceptance(
@@ -215,6 +220,13 @@ def _import_mcf_as_saved_review(
         findings.append(finding)
     db.flush()
 
+    if verification_version_id:
+        stage_reuse_source(db, scan, verification_version_id)
+        db.commit()
+        return McfImportResult(
+            review=None, scan=_scan_from_row(scan, finding_count=len(findings)),
+            source_version=parsed.source_version,
+        )
     review = stage_imported_review(
         db,
         media_item=media_item,

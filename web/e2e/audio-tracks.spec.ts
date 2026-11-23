@@ -1,3 +1,4 @@
+import { chooseWorkflowStep } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import type { AudioTrack, AudioTrackSelection } from "../src/api/api-audio-tracks";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi } from "./app-fixtures";
@@ -52,9 +53,10 @@ for (const width of [320, 1440]) {
       const observed = probe === "empty" ? [] : probe === "unknown" ? [{ ...tracks[0], language: null, title: null }] : tracks;
       const version = "a".repeat(64);
       const remembered = memory.get(`${query.get("item_id")}:${query.get("media_source_id")}`);
+      const stale = probe === "tracks" && !!remembered && remembered.file_version !== version;
       await json(route, { file_version: version, tracks: observed,
-        selection: probe === "tracks" ? remembered || null : observed.length === 1 ? { file_version: version, track: observed[0] } : null,
-        selection_stale: false });
+        selection: probe === "tracks" ? (stale ? null : remembered || null) : observed.length === 1 ? { file_version: version, track: observed[0] } : null,
+        selection_stale: stale });
     });
     await page.route(/\/api\/scans$/, async (route) => {
       if (route.request().method() !== "POST") { await json(route, []); return; }
@@ -63,8 +65,10 @@ for (const width of [320, 1440]) {
       await json(route, { id: "selected", scan_id: 9, status: "queued", ...request }, 201);
     });
     await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Scans");
     await expect(page.getByText(/Analyzed audio: Stream 2.*Commentary/)).toBeVisible();
-    await expect(page.getByText(/Analyzed audio track unknown/)).toBeVisible();
+    const ordinaryScan = page.getByRole("listitem").filter({ hasText: /Scan #2.*complete/ });
+    await expect(ordinaryScan.getByText(/Analyzed audio track unknown/)).toBeVisible();
     await page.getByRole("button", { name: "New Scan", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "New Scan" });
     const catalogSelect = dialog.getByLabel("Audio track", { exact: true });
@@ -99,11 +103,22 @@ for (const width of [320, 1440]) {
 
     const reopen = async () => {
       await page.reload();
+      await chooseWorkflowStep(page, "Scans");
       await page.getByRole("button", { name: "New Scan", exact: true }).click();
       await expect(dialog).toBeVisible();
     };
     await reopen();
     await expect(catalogSelect).toHaveValue("2");
+    memory.set("movie-1:source-1", { file_version: "b".repeat(64), track: tracks[1] });
+    await reopen();
+    await expect(dialog.getByRole("alert")).toHaveText("Audio selection changed. Choose a track again.");
+    await expect(catalogSelect).toHaveValue("");
+    await expect(dialog.getByRole("button", { name: "Add to Queue" })).toBeDisabled();
+    await catalogSelect.selectOption("2");
+    await dialog.getByRole("button", { name: "Add to Queue" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(submissions[1].audio_selection).toEqual({ file_version: "a".repeat(64), track: tracks[1] });
+
     probe = "empty"; await reopen();
     await expect(dialog.getByRole("status").filter({ hasText: "No audio tracks" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Add to Queue" })).toBeDisabled();

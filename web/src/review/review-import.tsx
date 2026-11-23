@@ -162,6 +162,7 @@ export function ImportDialog({
   durationSeconds,
   creditsScans,
   onImported,
+  stageForVerification = false,
   disabled = false,
 }: {
   target: ReviewTargetRequest;
@@ -170,6 +171,7 @@ export function ImportDialog({
   durationSeconds: number | null;
   creditsScans: Scan[];
   onImported?: (result: ImportResult) => void;
+  stageForVerification?: boolean;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -205,18 +207,21 @@ export function ImportDialog({
     const endTimestamp = endMode === "before_credits" ? beforeCreditsEnd : fileEnd;
     const endSeconds = parseMcfTimestamp(endTimestamp);
     const materialEndSeconds = beforeCreditsEnd ? parseMcfTimestamp(beforeCreditsEnd) : null;
-    if (format === "mcf" && (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds || (materialEndSeconds !== null && (!Number.isFinite(materialEndSeconds) || materialEndSeconds <= startSeconds || materialEndSeconds > endSeconds)))) {
+    if (!stageForVerification && format === "mcf" && (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds || (materialEndSeconds !== null && (!Number.isFinite(materialEndSeconds) || materialEndSeconds <= startSeconds || materialEndSeconds > endSeconds)))) {
       setError("Enter valid target times in HH:MM:SS.MMM format. END must be after START and within the selected file interval.");
       return;
     }
     setBusy(true); setError(null);
     try {
-      const options = { name: nameValidation.normalized, target };
+      const options = { name: nameValidation.normalized, target,
+        ...(stageForVerification ? { stage_for_verification: true } : {}) };
       const mcfOptions = {
         ...options,
         ignore_errors: ignoreErrors,
-        synchronization: { start_seconds: startSeconds, end_seconds: endSeconds, end_mode: endMode },
-        mcf_material_end_seconds: endMode === "before_credits" ? endSeconds : materialEndSeconds,
+        synchronization: stageForVerification
+          ? { start_seconds: 0, end_seconds: durationSeconds && durationSeconds > 0 ? durationSeconds : 1, end_mode: "file_end" as const }
+          : { start_seconds: startSeconds, end_seconds: endSeconds, end_mode: endMode },
+        mcf_material_end_seconds: stageForVerification ? null : endMode === "before_credits" ? endSeconds : materialEndSeconds,
         accepted_credits: acceptedCredits,
       };
       const result = format === "edl"
@@ -248,8 +253,8 @@ export function ImportDialog({
       <p>Imports into Jellyfin item {itemName || target.item_id}{target.media_source_id ? `, version ${versionName || target.media_source_id}` : ""}</p>
       <div className="segmented-control" role="group" aria-label="Import format"><button type="button" className={format === "edl" ? "selected" : ""} aria-pressed={format === "edl"} onClick={() => { setFormat("edl"); setFile(null); setError(null); }} disabled={busy}>EDL</button><button type="button" className={format === "mcf" ? "selected" : ""} aria-pressed={format === "mcf"} onClick={() => { setFormat("mcf"); setFile(null); setError(null); }} disabled={busy}>MCF</button></div>
       <p className="muted-copy">{format === "edl" ? "Simple EDL (.edl, text/plain)" : "Movie Content Filter 1.0.0 or 1.1.0 (.mcf, text/plain or text/mcf+vtt)"}</p>
-      {format === "mcf" && <McfImportTimingFields startTimestamp={startTimestamp} beforeCreditsEnd={beforeCreditsEnd} fileEnd={fileEnd} endMode={endMode} busy={busy} onStartChange={setStartTimestamp} onBeforeCreditsEndChange={setBeforeCreditsEnd} onFileEndChange={setFileEnd} onEndModeChange={setEndMode} />}
-      {format === "mcf" && <div className="mcf-detect-row"><CreditsResultDialog scans={creditsScans} context={{ kind: "import", target }} disabled={busy} onAccepted={(result) => { setAcceptedCredits(result.accepted_credits); setBeforeCreditsEnd(formatMcfTimestamp(result.accepted_credits.accepted_boundary_seconds)); }} />{acceptedCredits && <span className="form-status" role="status">Accepted credits boundary {formatMcfTimestamp(acceptedCredits.accepted_boundary_seconds)}</span>}</div>}
+      {format === "mcf" && !stageForVerification && <McfImportTimingFields startTimestamp={startTimestamp} beforeCreditsEnd={beforeCreditsEnd} fileEnd={fileEnd} endMode={endMode} busy={busy} onStartChange={setStartTimestamp} onBeforeCreditsEndChange={setBeforeCreditsEnd} onFileEndChange={setFileEnd} onEndModeChange={setEndMode} />}
+      {format === "mcf" && !stageForVerification && <div className="mcf-detect-row"><CreditsResultDialog scans={creditsScans} context={{ kind: "import", target }} disabled={busy} onAccepted={(result) => { setAcceptedCredits(result.accepted_credits); setBeforeCreditsEnd(formatMcfTimestamp(result.accepted_credits.accepted_boundary_seconds)); }} />{acceptedCredits && <span className="form-status" role="status">Accepted credits boundary {formatMcfTimestamp(acceptedCredits.accepted_boundary_seconds)}</span>}</div>}
       <label className="field"><span>Review name</span><input aria-label="Import review name" value={name} aria-invalid={Boolean(name && nameValidation.error)} onChange={(event) => setName(event.target.value)} disabled={busy} /></label>
       <p className="muted-copy">Created scan: {nameValidation.normalized || "Enter a review name"}</p>
       <label className="field"><span>{formatLabel} file</span><input key={format} aria-label={`${formatLabel} file`} type="file" accept={format === "edl" ? ".edl,text/plain" : ".mcf,text/plain,text/mcf+vtt"} onChange={(event) => setFile(event.target.files?.[0] || null)} disabled={busy} /></label>

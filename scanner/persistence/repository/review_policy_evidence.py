@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from scanner.db import ReviewPolicyEvidenceRow, ScanFindingRow, ScanRow
 from scanner.mcf import TimingInterval
+from scanner.modeling.model_core import channel_for_source
 
 ACTION_COVERAGE = {"mute": frozenset({"mute"}), "skip": frozenset({"mute", "skip"})}
 CHANNEL_COVERAGE = {
@@ -183,8 +184,8 @@ def covers_evidence(proposed, required, *, tolerance_seconds=0):
         and proposed.source == required.source
         and required.edit_action
         in ACTION_COVERAGE.get(proposed.edit_action, {proposed.edit_action})
-        and (required.mcf_channel or ("audio" if required.source == "audio" else "video"))
-        in CHANNEL_COVERAGE.get(proposed.mcf_channel or "both", ())
+        and (required.mcf_channel or channel_for_source(required.source))
+        in CHANNEL_COVERAGE.get(proposed.mcf_channel or channel_for_source(proposed.source), ())
         and proposed.start_seconds <= required.start_seconds + tolerance_seconds
         and (
             required.end_seconds is None

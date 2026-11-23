@@ -1,7 +1,7 @@
 """Actor-scoped review decisions with provider reads outside SQLite's write lock."""
 
 from collections.abc import Callable
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
@@ -24,6 +24,7 @@ from scanner.security.scan_jobs.state import load_authority
 
 from .activity_ownership import ActivityOwner
 from .repository_paths import resolve_local_path
+from .review_version_evidence import capture_review_media_proof, use_review_media_proof
 from .scan_jobs import ScanMedia, scan_job_facts
 
 VIEW = ActionPair(C.REVIEWS_VIEW_OWN, C.REVIEWS_VIEW_OTHER)
@@ -165,9 +166,14 @@ class ReviewAccess:
         repair=False,
         extra_capabilities=(),
         authorize: Callable[[ResourceRef], None] | None = None,
+        capture_review_media: bool = False,
+        store_prepared: bool = True,
         **kwargs,
     ):
-        """Gather evidence first, then decide and execute against locked stored authority."""
+        """Run under live locked authority, optionally proving the prepared file before locking.
+
+        Read-only previews can authorize a prepared target without storing its catalog mapping.
+        """
         facts = self.visible(review_id)
         if action != DELETE and not repair:
             from .review_repairs import require_repaired
@@ -181,14 +187,30 @@ class ReviewAccess:
         if prepared is not None:
             media.append(prepared.media)
         media.extend(item.media for item in scans.values())
+        proof = None
 
         def validate(captured):
+            nonlocal proof
             target = self.ref(facts, evidence=captured[0])
             if not isinstance(decide(self.access, VIEW, target), Allowed):
                 raise not_found()
             require(self.access, action, target)
             for capability in extra_capabilities:
                 require(self.access, capability, MediaRef(target.media))
+            if capture_review_media:
+                self._require_review_sources(
+                    facts, prepared, scans, captured[1:], action, allow_jobs=allow_jobs
+                )
+                if authorize is not None:
+                    authorize(target)
+                if draft is not None:
+                    self.require_changes(review_id, draft, target)
+                path = (
+                    prepared.media.resolved_path
+                    if prepared is not None
+                    else facts.media.resolved_path
+                )
+                proof = capture_review_media_proof(self.db, review_id, path, tuple(scans))
 
         with self.writing(media, validate) as captured:
             evidence, *scan_evidence = captured
@@ -212,38 +234,49 @@ class ReviewAccess:
                     require(self.access, capability, destination)
                 if self.db.get(SavedReviewRow, review_id).accepted_credits is not None:
                     require(self.access, C.REVIEWS_CREDITS_EDIT_OWN, destination)
-            if prepared is not None:
-                fresh_evidence, *scan_evidence = scan_evidence
-                fresh = self.ref(replace(current, media=prepared.media), evidence=fresh_evidence)
-                require(self.access, VIEW, fresh)
-                require(self.access, action, fresh)
-            if scan_job_facts(self.db, list(requested)) != scans:
-                raise not_found()
-
-            for item, captured_scan in zip(scans.values(), scan_evidence, strict=True):
-                media = decide_scans(
-                    self.db,
-                    self.access.principal.account,
-                    [item.media],
-                    datetime.now(UTC),
-                    evidence=captured_scan,
-                )[0]
-                self.require_scan(item, media, allow_jobs=allow_jobs)
+            self._require_review_sources(
+                current, prepared, scans, scan_evidence, action, allow_jobs=allow_jobs, recheck=True
+            )
             if authorize is not None:
                 authorize(target)
             if draft is not None:
                 self.require_changes(review_id, draft, target)
-            if prepared is not None:
+            if prepared is not None and store_prepared:
                 prepared.store(self.db)
             actor = ActivityOwner(
                 int(self.access.principal.user_id), int(self.access.principal.permission_revision)
             )
             self.db.info["review_actor"] = actor
             try:
-                result = operation(self.db, review_id, *args, **kwargs)
-                return result
+                with (
+                    use_review_media_proof(self.db, proof)
+                    if capture_review_media
+                    else nullcontext()
+                ):
+                    return operation(self.db, review_id, *args, **kwargs)
             finally:
                 self.db.info.pop("review_actor", None)
+
+    def _require_review_sources(
+        self, facts, prepared, scans, evidence, action, *, allow_jobs, recheck=False
+    ):
+        """Authorize the selected catalog file and every scan supplying evidence."""
+        if prepared is not None:
+            fresh_evidence, *evidence = evidence
+            fresh = self.ref(replace(facts, media=prepared.media), evidence=fresh_evidence)
+            require(self.access, VIEW, fresh)
+            require(self.access, action, fresh)
+        if recheck and scan_job_facts(self.db, scans) != scans:
+            raise not_found()
+        for item, captured_scan in zip(scans.values(), evidence, strict=True):
+            media = decide_scans(
+                self.db,
+                self.access.principal.account,
+                [item.media],
+                datetime.now(UTC),
+                evidence=captured_scan,
+            )[0]
+            self.require_scan(item, media, allow_jobs=allow_jobs)
 
     def require_changes(self, review_id: str, draft, target: ResourceRef) -> None:
         """A general save permission does not grant every kind of review edit."""
@@ -322,7 +355,7 @@ class ReviewAccess:
     def present(self, value):
         """Project host paths without changing stored review or scan evidence."""
         from .export_discovery import project_publications
-        from .review_projection import project_review
+        from .review_projection import project_review, verification_source_ids
 
         def visible(review_id):
             try:
@@ -331,11 +364,55 @@ class ReviewAccess:
                 return False
             return True
 
+        projected = project_publications(self, value)
+        sources = list(scan_job_facts(self.db, verification_source_ids(projected)).values())
+        visible_sources = set()
+        if sources:
+            decisions = decide_scans(
+                self.db,
+                self.access.principal.account,
+                [source.media for source in sources],
+                datetime.now(UTC),
+            )
+            for source, decision in zip(sources, decisions, strict=True):
+                try:
+                    self.require_scan(source, decision)
+                except AccessDenied:
+                    continue
+                visible_sources.add(source.scan_id)
+
         return project_review(
-            project_publications(self, value),
+            projected,
             paths=C.MEDIA_PATHS_VIEW in self.access.capabilities,
             visible=visible,
+            scan_visible=visible_sources.__contains__,
         )
+
+    def _require_creation(self, decision, *, capability, capabilities, creating):
+        principal = self.access.principal
+        target = ResourceRef(AccountRef(principal.user_id, principal.account.role), decision)
+        if creating:
+            require(self.access, C.REVIEWS_CREATE_OWN, target)
+        require(self.access, capability, target)
+        for required in capabilities:
+            require(self.access, required, target)
+
+    def authorize_create(self, media: ScanMedia, *, capability, capabilities, scan_ids=()):
+        """Check upload authority before reading media. Creation checks again under lock."""
+        scans = scan_job_facts(self.db, scan_ids)
+        decision, *source_decisions = decide_scans(
+            self.db,
+            self.access.principal.account,
+            [media, *(item.media for item in scans.values())],
+            datetime.now(UTC),
+        )
+        self._require_creation(
+            decision, capability=capability, capabilities=capabilities, creating=True
+        )
+        if set(scans) != set(scan_ids):
+            raise not_found()
+        for item, source_decision in zip(scans.values(), source_decisions, strict=True):
+            self.require_scan(item, source_decision)
 
     def create(
         self,
@@ -360,12 +437,9 @@ class ReviewAccess:
             decision = decide_scans(
                 self.db, principal.account, [media], datetime.now(UTC), evidence=evidence
             )[0]
-            target = ResourceRef(AccountRef(principal.user_id, principal.account.role), decision)
-            if creating:
-                require(self.access, C.REVIEWS_CREATE_OWN, target)
-            require(self.access, capability, target)
-            for required in capabilities:
-                require(self.access, required, target)
+            self._require_creation(
+                decision, capability=capability, capabilities=capabilities, creating=creating
+            )
             if set(scans) != set(scan_ids):
                 raise missing_scan_error()
             if scan_job_facts(self.db, list(scan_ids)) != scans:

@@ -100,9 +100,10 @@ it.each([
   render(<ReviewRepairDialog review={review} onClose={vi.fn()} onResolved={vi.fn()} onDelete={vi.fn()} />);
   fireEvent.click(screen.getByRole("radio", { name: "Re-download from the community" }));
   fireEvent.click(screen.getByRole("button", { name: "Re-download" }));
+  const status = await screen.findByRole("status");
   await waitFor(() => expect(screen.getByRole("radio", { name: "Re-download from the community" })).toBeDisabled());
-  expect(screen.getByRole("status")).toHaveTextContent(`remaining options. ${message}`);
-  expect(screen.getByRole("status")).not.toHaveTextContent(reason);
+  expect(status).toHaveTextContent(`remaining options. ${message}`);
+  expect(status).not.toHaveTextContent(reason);
 });
 
 it("formats stored reason codes when reopened", () => {

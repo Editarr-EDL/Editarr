@@ -17,8 +17,11 @@ from scanner.persistence.repository.activity_ownership import (
     ActivityOwner,
     assign_awaiting_activity,
 )
+from scanner.persistence.repository.media_identity_store import get_version, review_version_id
 from scanner.persistence.repository.review_deletion import PublishedReviewDeletionBlocked
 from scanner.persistence.rows.db_policies import ExportScope
+from scanner.runtime import media_fingerprints
+from scanner.runtime.scan_version import file_generation
 from tests.activity_migration_support import build_activity_database, sidecar_state
 
 _TIME = "2026-03-01 00:00:00.000000"
@@ -172,9 +175,10 @@ def _personal(export_format, revision):
 _JELLYFIN, _ITEM = "http://jellyfin.test", "movie-legacy"
 
 
-def test_existing_owner_workflows_run_on_an_upgraded_database(tmp_path):
+def test_existing_owner_workflows_run_on_an_upgraded_database(tmp_path, monkeypatch):
     data_dir, media = tmp_path / "data", tmp_path / "media"
     data_dir.mkdir()
+    monkeypatch.setattr(media_fingerprints.settings, "data_dir", data_dir)
     path = data_dir / "scanner.db"
     _cookie, before = build_activity_database(path, media, "0009_readable_api_key")
     with sqlite3.connect(path) as legacy:
@@ -210,6 +214,22 @@ def test_existing_owner_workflows_run_on_an_upgraded_database(tmp_path):
             )
             assert not (media / "Movie.edl").exists()
             review = db.get(SavedReviewRow, "review-legacy-001")
+            version = get_version(db, review_version_id(db, review.id))
+            assert version.content_sha256 is None
+            with pytest.raises(repository.ReviewMembershipError, match="physical media version"):
+                repository.export_saved_review_edl(db, review.id, review.revision)
+            db.rollback()
+            # The fixture owns the original media bytes, but a stored SHA alone
+            # cannot establish that those bytes are still at the current path.
+            media_path = media / "Movie.mkv"
+            version.content_sha256 = digest = _sha(media_path)
+            db.commit()
+            with pytest.raises(repository.ReviewMembershipError, match="physical media version"):
+                repository.export_saved_review_edl(db, review.id, review.revision)
+            db.rollback()
+            media_fingerprints.remember_content_digest(
+                media_path, file_generation(str(media_path)), digest
+            )
             exported = repository.export_saved_review_edl(db, review.id, review.revision)
             assert exported.exported_format_revision == review.edl_content_revision
             assert _sha(media / "Movie.mcf") == mcf_hash

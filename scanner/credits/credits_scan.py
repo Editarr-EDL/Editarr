@@ -10,14 +10,11 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from scanner.models import CreditsDetectionConfiguration, CreditsDetectionResult
-from scanner.pipeline.cache import (
-    compute_video_md5,
-    load_cached_credits_result,
-    save_cached_credits_result,
-)
+from scanner.pipeline.cache import load_cached_credits_result, save_cached_credits_result
 from scanner.pipeline.frames import get_video_duration
 from scanner.pipeline.processes import ScanCancelledError
 from scanner.repository import complete_credits_detection, update_scan_duration
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.runtime.runtime_workspaces import create_scan_workspace, remove_scan_workspace
 from scanner.settings.config import settings
 
@@ -51,6 +48,7 @@ def run_credits_scan(
     stage_callback: Callable[[str, str, dict[str, object]], None] | None = None,
     result_writer: Callable = complete_credits_detection,
     scan_metadata_updater: Callable = update_scan_duration,
+    media_cache_key: str | None = None,
 ) -> CreditsDetectionResult:
     """Run one detector configuration and atomically persist its evidence."""
     status_updater(db, scan_id, "scanning")
@@ -62,13 +60,15 @@ def run_credits_scan(
     if duration is None or not math.isfinite(duration) or duration <= 0:
         duration = get_video_duration(video_path)
         scan_metadata_updater(db, scan_id, duration)
-    resolved_hash = compute_video_md5(video_path)
+    fingerprint = sampled_media_fingerprint(video_path) if media_cache_key is None else None
     if should_cancel and should_cancel():
         raise ScanCancelledError("Scan cancelled")
-    if video_hash is not None and resolved_hash != video_hash:
-        raise ValueError("Credits detection media changed after the scan was queued")
+    if fingerprint is not None:
+        if video_hash is not None and fingerprint.digest != video_hash:
+            raise ValueError("Credits detection media changed after the scan was queued")
+        media_cache_key = fingerprint.artifact_cache_key
     cache_key = credits_cache_key(
-        video_hash=resolved_hash,
+        video_hash=media_cache_key,
         configuration=configuration,
     )
     cached_payload = load_cached_credits_result(cache_key)

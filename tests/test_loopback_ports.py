@@ -13,29 +13,25 @@ def ports(monkeypatch):
     return monkeypatch
 
 
-def _free_block(size):
-    """A run of currently free loopback ports, found from an ephemeral base."""
-    for _ in range(50):
-        with socket.socket() as probe:
-            probe.bind(("127.0.0.1", 0))
-            base = probe.getsockname()[1]
-        if base + size <= 65535 and all(
-            loopback_ports._free(port) for port in range(base, base + size)
-        ):
-            return base
-    pytest.skip("no free run of loopback ports")
-
-
-def test_each_issued_port_and_its_restart_successor_stay_inside_the_span(ports):
-    base = _free_block(4)
+@pytest.fixture
+def configured_span(ports):
+    """Hold port availability constant while testing configured-span selection."""
+    base = 9240
+    available = set(range(base, base + 4))
     ports.setenv("EDITARR_VERIFY_PORTS", f"{base}-{base + 3}")
+    ports.setattr(loopback_ports, "_free", available.__contains__)
+    return base, available
+
+
+def test_each_issued_port_and_its_restart_successor_stay_inside_the_span(configured_span):
+    base, _ = configured_span
     assert [loopback_ports.available_port() for _ in range(2)] == [base, base + 2]
     with pytest.raises(RuntimeError, match="no free loopback port pair"):
         loopback_ports.available_port()
 
 
-def test_a_span_without_room_for_the_successor_issues_nothing(ports):
-    base = _free_block(4)
+def test_a_span_without_room_for_the_successor_issues_nothing(ports, configured_span):
+    base, _ = configured_span
     ports.setenv("EDITARR_VERIFY_PORTS", f"{base}-{base + 2}")
     assert loopback_ports.available_port() == base
     with pytest.raises(RuntimeError, match="no free loopback port pair"):
@@ -45,16 +41,20 @@ def test_a_span_without_room_for_the_successor_issues_nothing(ports):
         loopback_ports.available_port()
 
 
-def test_an_occupied_successor_skips_the_candidate(ports):
-    base = _free_block(4)
-    ports.setenv("EDITARR_VERIFY_PORTS", f"{base}-{base + 3}")
+def test_an_occupied_successor_skips_the_candidate(configured_span):
+    base, available = configured_span
+    available.remove(base + 1)
+    assert loopback_ports.available_port() == base + 2
+    available.add(base + 1)
+    available.remove(base)
+    with pytest.raises(RuntimeError, match="no free loopback port pair"):
+        loopback_ports.available_port()
+
+
+def test_bind_probe_detects_a_real_occupied_port():
     with socket.socket() as occupied:
-        occupied.bind(("127.0.0.1", base + 1))
-        assert loopback_ports.available_port() == base + 2
-    with socket.socket() as occupied:
-        occupied.bind(("127.0.0.1", base))
-        with pytest.raises(RuntimeError, match="no free loopback port pair"):
-            loopback_ports.available_port()
+        occupied.bind(("127.0.0.1", 0))
+        assert not loopback_ports._free(occupied.getsockname()[1])
 
 
 def test_without_a_span_ephemeral_ports_also_reserve_their_successor(ports):

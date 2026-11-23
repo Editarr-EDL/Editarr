@@ -208,7 +208,7 @@ export interface ReviewDeletionPreview {
 export interface ReviewDeletionRequest { revision: number; confirmation: string; files: { export_id: number; choice: ReviewFileChoice }[]; }
 export interface ReviewDeletionResult { review_id: string; retained: number[]; removed: number[]; }
 export interface McfMetadataNotice { code: "metadata_mismatch"; fields: string[]; mcf_metadata: ReviewMcfDocument; catalog_metadata: ReviewMcfDocument; }
-export interface McfImportResult { review: SavedReview; scan: Scan; source_version: McfSourceVersion; notices: McfMetadataNotice[]; }
+export interface McfImportResult { review: SavedReview | null; scan: Scan; source_version: McfSourceVersion; notices: McfMetadataNotice[]; }
 export interface McfImportIssue { code: string; message: string; line_number: number; line_text: string; }
 export type McfPreflightIssueCode = "missing_category" | "missing_subcategory" | "missing_severity" | "invalid_category" | "invalid_subcategory" | "invalid_category_pair" | "invalid_severity" | "invalid_mcf_channel" | "invalid_mcf_comment" | "invalid_mcf_metadata" | "invalid_material_bounds";
 export interface McfPreflightIssue { code: McfPreflightIssueCode; field: string; filter_id: string | null; filter_position: number | null; message: string; }
@@ -218,7 +218,7 @@ export interface EdlImportWarning {
   message: string;
   ignored_action_count: number;
 }
-export interface EdlImportResult { review: SavedReview; scan: Scan; warning: EdlImportWarning | null; }
+export interface EdlImportResult { review: SavedReview | null; scan: Scan; warning: EdlImportWarning | null; }
 export interface ReviewReference { id: string; name: string; updated_at: string; }
 export interface ScanReferences { scan_id: string; active_exports: ExportFormat[]; reviews: ReviewReference[]; community_in_progress: boolean; }
 export interface ReviewErrorDetail {
@@ -234,12 +234,13 @@ export interface ReviewErrorDetail {
   metadata_candidates: McfMetadataSeedCandidate[];
   import_issues: McfImportIssue[];
 }
-export interface ReviewTargetRequest { source: ReviewSource; item_id: string; media_source_id?: string | null; }
-export interface EdlImportOptions { target: ReviewTargetRequest; name: string; }
+export interface ReviewTargetRequest { source: ReviewSource; item_id: string; media_source_id?: string | null; stable_version_id?: string; }
+export interface EdlImportOptions { target: ReviewTargetRequest; name: string; stage_for_verification?: boolean }
 export interface McfImportOptions {
   target: ReviewTargetRequest;
   name: string;
   ignore_errors?: boolean;
+  stage_for_verification?: boolean;
   synchronization: ReviewSynchronization;
   mcf_material_end_seconds: number | null;
   accepted_credits?: AcceptedCreditsReference | null;

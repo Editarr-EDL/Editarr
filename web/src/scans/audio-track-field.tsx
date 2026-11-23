@@ -1,4 +1,4 @@
-import type { AudioTrack, AudioTrackInventory, AudioTrackSelection } from "../api/api-audio-tracks";
+import { findSelectedAudioTrack, type AudioTrack, type AudioTrackInventory, type AudioTrackSelection } from "../api/api-audio-tracks";
 export type { AudioTrack, AudioTrackInventory, AudioTrackSelection } from "../api/api-audio-tracks";
 
 export function audioTrackLabel(track: AudioTrack): string {
@@ -15,6 +15,7 @@ export function audioTrackLabel(track: AudioTrack): string {
 /** Controlled field: callers own file-bound loading, preselection, and memory. */
 export function AudioTrackField({
   inventory, selection, loading = false, error = null, disabled = false,
+  label = "Audio track", showSelectedLabel = true,
   onChange, onRetry,
 }: {
   inventory: AudioTrackInventory | null;
@@ -22,19 +23,18 @@ export function AudioTrackField({
   loading?: boolean;
   error?: string | null;
   disabled?: boolean;
+  label?: string;
+  showSelectedLabel?: boolean;
   onChange: (selection: AudioTrackSelection) => void;
   onRetry: () => void;
 }) {
-  const selected = selection && inventory?.file_version === selection.file_version
-    ? inventory.tracks.find((track) => Object.keys(track).every(
-      (key) => track[key as keyof AudioTrack] === selection.track[key as keyof AudioTrack],
-    )) : null;
+  const selected = findSelectedAudioTrack(inventory, selection);
   return (
     <div>
       <label className="field">
-        <span>Audio track</span>
+        <span>{label}</span>
         <select
-          aria-label="Audio track"
+          aria-label={label}
           value={selected?.stream_index ?? ""}
           disabled={disabled || loading || !inventory?.tracks.length}
           onChange={(event) => {
@@ -52,7 +52,7 @@ export function AudioTrackField({
           ))}
         </select>
       </label>
-      {selected && <p style={{ overflowWrap: "anywhere" }}>{audioTrackLabel(selected)}</p>}
+      {selected && showSelectedLabel && <p style={{ overflowWrap: "anywhere" }}>{audioTrackLabel(selected)}</p>}
       {loading && <p role="status">Loading audio tracks...</p>}
       {error && <><p role="alert">{error}</p><button type="button" disabled={disabled || loading} onClick={onRetry}>Retry</button></>}
       {!loading && !error && inventory?.tracks.length === 0 && <p role="status">No audio tracks available.</p>}

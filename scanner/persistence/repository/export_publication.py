@@ -40,6 +40,7 @@ from .review_export_content import PreparedReviewExport, prepare_review_export
 from .review_policy import policy_write
 
 SNAPSHOT_VERSION = "editarr-export-snapshot-1"
+POLICY_CHANNEL_EVALUATION = "inferred-source-channel"
 
 
 class ExportConflict(ValueError):
@@ -205,6 +206,7 @@ class Publication:
         row.snapshot_json = json.dumps(
             {
                 "version": SNAPSHOT_VERSION,
+                "policy_channel_evaluation": POLICY_CHANNEL_EVALUATION,
                 "publication_id": str(uuid4()),
                 **retained_review_snapshot(db, self.output),
                 "actor_id": row.actor_id,
@@ -226,8 +228,10 @@ def retained_review_snapshot(db, output):
     """Capture the same immutable evidence for publication and successful regeneration."""
     from scanner.repository import get_saved_review
 
+    from .media_identity_store import review_version_id
+
     review = output.review
-    return {
+    snapshot = {
         "source_review_id": review.id,
         "review_revision": review.revision,
         "media_path": str(output.media),
@@ -252,6 +256,10 @@ def retained_review_snapshot(db, output):
             for membership in output.memberships
         ],
     }
+    version_id = review_version_id(db, review.id)
+    if version_id is not None:
+        snapshot["media_version_id"] = version_id
+    return snapshot
 
 
 def _current(db, output, scope, target_user_id):

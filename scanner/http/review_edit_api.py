@@ -78,6 +78,7 @@ def api_save_saved_review(
             request,
             draft=request,
             scan_ids=[value.scan_id for value in request.memberships],
+            capture_review_media=True,
         )
     except ValueError as exc:
         db.rollback()
@@ -105,6 +106,7 @@ def api_retime_saved_review(
             retime_saved_review_draft,
             request,
             scan_ids=[value.scan_id for value in request.memberships],
+            capture_review_media=True,
         )
     except ReviewRetimeError as exc:
         db.rollback()
@@ -204,6 +206,7 @@ def api_saved_review_mute_preview(
             render_saved_review_filter_preview,
             filter_id,
             preview_kind="mute",
+            capture_review_media=True,
         )
     except ValueError as exc:
         raise root._review_mutation_error(exc) from exc
@@ -228,6 +231,7 @@ def api_saved_review_video_preview(
             render_saved_review_filter_preview,
             filter_id,
             preview_kind="video",
+            capture_review_media=True,
         )
     except ValueError as exc:
         raise root._review_mutation_error(exc) from exc
@@ -270,7 +274,9 @@ def api_export_saved_review(
 def api_preflight_saved_review_mcf(review_id: str, caller: ReviewAccess = Depends(review_caller)):
     """Report issues that must be resolved before exporting a review as MCF."""
     try:
-        preflight = run_review(caller, review_id, VIEW, preflight_saved_review_mcf)
+        preflight = run_review(
+            caller, review_id, VIEW, preflight_saved_review_mcf, capture_review_media=True
+        )
     except ReviewMembershipError as exc:
         raise root._review_http_error("invalid_membership", str(exc)) from exc
     if preflight is None:

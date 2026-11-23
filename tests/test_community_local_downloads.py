@@ -10,13 +10,15 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.orm import Session
 
-from scanner.db import CommunityImportRow, MediaItemRow
+from scanner.db import CommunityImportRow, MediaItemRow, ScanRow
 from scanner.integrations.community import local_downloads as module
 from scanner.integrations.community.lookup_targets import CapturedTarget
 from scanner.integrations.community.transport import CommunityFailure
 from scanner.modeling.community_matching import POLICY_VERSION, classify
 from scanner.modeling.model_community_downloads import DownloadRequest, DownloadStatusRequest
 from scanner.modeling.model_community_lookup import LookupSummary
+from scanner.persistence.repository.media_identity_store import get_version
+from scanner.persistence.repository.repository_review_core import _scan_is_available
 from scanner.pipeline.audio_tracks import _file_state
 from scanner.security.private_identity_files import IdentityHome
 from tests.community_identity_support import only_identity_ref
@@ -101,14 +103,14 @@ def scenario(import_database, tmp_path, monkeypatch):
         )
 
 
-def status(scenario):
+def status(scenario, choices=None):
     return module.download_status(
         scenario.db,
         SERVICE,
         DownloadStatusRequest(
             target=scenario.body.lookup.target,
             target_key=scenario.captured.key,
-            choices=[scenario.body.choice],
+            choices=choices or [scenario.body.choice],
         ),
     )
 
@@ -142,6 +144,40 @@ def test_uncertain_channel_needs_deliberate_confirmation(scenario):
     with pytest.raises(CommunityFailure, match="explicit_review_required"):
         asyncio.run(scenario.service.run(body))
     assert status(scenario)["outcomes"][0]["status"] == "not_imported"
+
+
+def test_staged_download_is_reconcilable_without_approving_raw_cues(scenario):
+    body = scenario.body.model_copy(update={"confirmed": False, "stage_for_verification": True})
+    first = asyncio.run(scenario.service.run(body))
+    assert first["verificationPending"] is True
+    assert first["scan"]["stable_version_id"]
+    version = get_version(scenario.db, first["scan"]["stable_version_id"])
+    assert version.sampled_md5 == first["scan"]["video_hash"]
+    assert version.content_sha256 is None
+    assert first["scan"]["community_approvals"] == []
+    assert first["scan"]["community_pending_targets"][0]["channels"] == ["video"]
+    scan = scenario.db.get(ScanRow, first["scan"]["id"])
+    assert not _scan_is_available(
+        scenario.db,
+        scan,
+        media_item_id=scan.media_item_id,
+        media_source_id=scan.media_source_id,
+    )
+    outcome = status(scenario)["outcomes"][0]
+    assert outcome["status"] == "imported"
+    assert outcome["approvedChannels"] == []
+    assert outcome["verificationPending"] is True
+    assert outcome["pendingChannels"] == ["video"]
+    audio = scenario.body.choice.model_copy(update={"channels": ["audio"]})
+    mixed = scenario.body.choice.model_copy(update={"channels": ["audio", "video"]})
+    audio_outcome, mixed_outcome = status(scenario, [audio, mixed])["outcomes"]
+    assert audio_outcome == {"revisionId": audio.revisionId, "status": "not_imported"}
+    assert mixed_outcome["status"] == "partial"
+    assert mixed_outcome["approvedChannels"] == []
+    assert mixed_outcome["pendingChannels"] == ["video"]
+    legacy_retry = asyncio.run(scenario.service.run(scenario.body))
+    assert legacy_retry["verificationPending"] is True
+    assert legacy_retry["scan"]["id"] == scan.id
 
 
 def test_cancel_before_commit_never_claims_imported(scenario, monkeypatch):

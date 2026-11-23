@@ -13,7 +13,13 @@ from scanner.runtime.runtime_support import resolve_ffmpeg
 MINIMUM_MUTE_PREVIEW_SECONDS = 1.0
 
 
-def render_mute_preview(media_path: str | Path, start_seconds: float, end_seconds: float) -> bytes:
+def render_mute_preview(
+    media_path: str | Path,
+    start_seconds: float,
+    end_seconds: float,
+    *,
+    audio_stream_index: int | None = None,
+) -> bytes:
     """Render one mute range as a browser-playable MP3, at least one second long."""
     if end_seconds <= start_seconds:
         raise ValueError("The mute filter does not have a valid time range")
@@ -41,6 +47,7 @@ def render_mute_preview(media_path: str | Path, start_seconds: float, end_second
         str(media_path),
         "-t",
         f"{duration_seconds:.3f}",
+        *(["-map", f"0:{audio_stream_index}"] if audio_stream_index is not None else []),
         "-vn",
         "-ac",
         "1",
@@ -77,7 +84,13 @@ def render_mute_preview(media_path: str | Path, start_seconds: float, end_second
     return result.stdout
 
 
-def render_video_preview(media_path: str | Path, start_seconds: float, end_seconds: float) -> bytes:
+def render_video_preview(
+    media_path: str | Path,
+    start_seconds: float,
+    end_seconds: float,
+    *,
+    audio_stream_index: int | None = None,
+) -> bytes:
     """Render one exact skip range as a browser-playable MP4 preview."""
     if end_seconds <= start_seconds:
         raise ValueError("The video filter does not have a valid time range")
@@ -107,7 +120,7 @@ def render_video_preview(media_path: str | Path, start_seconds: float, end_secon
             "-map",
             video_stream,
             "-map",
-            "0:a:0?",
+            f"0:{audio_stream_index}" if audio_stream_index is not None else "0:a:0?",
             # H.264 needs even dimensions, and these codecs are broadly
             # supported by the browsers Editarr targets.
             "-vf",

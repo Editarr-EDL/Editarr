@@ -44,11 +44,12 @@ export function applyReviewFilterDefaults(reviewId: string, filters: ReviewFilte
   }, "Unable to apply filter defaults");
 }
 
-function reviewQuery(params: { media_source_id?: string | null; sort?: "name" | "updated_at"; direction?: "asc" | "desc" }): string {
+function reviewQuery(params: { media_source_id?: string | null; stable_version_id?: string | null; sort?: "name" | "updated_at"; direction?: "asc" | "desc" }): string {
   const query = new URLSearchParams();
   if (params.media_source_id !== undefined && params.media_source_id !== null) {
     query.set("media_source_id", params.media_source_id);
   }
+  if (params.stable_version_id) query.set("stable_version_id", params.stable_version_id);
   if (params.sort) query.set("sort", params.sort);
   if (params.direction) query.set("direction", params.direction);
   const value = query.toString();
@@ -57,14 +58,15 @@ function reviewQuery(params: { media_source_id?: string | null; sort?: "name" | 
 
 export function fetchSavedReviews(
   itemId: string,
-  params: { media_source_id?: string | null; sort?: "name" | "updated_at"; direction?: "asc" | "desc" } = {},
+  params: { media_source_id?: string | null; stable_version_id?: string | null; sort?: "name" | "updated_at"; direction?: "asc" | "desc" } = {},
 ): Promise<SavedReviewSummary[]> {
   return jsonApi(`${runtimeApiBasePath()}/library-items/${encodeURIComponent(itemId)}/reviews${reviewQuery(params)}`, {}, "Unable to load saved reviews");
 }
 
 export function createSavedReview(target: ReviewTargetRequest, data: ReviewCreate): Promise<SavedReview> {
   const path = `${runtimeApiBasePath()}/library-items/${encodeURIComponent(target.item_id)}/reviews`;
-  const body = { ...data, media_source_id: target.media_source_id ?? null };
+  const body = { ...data, media_source_id: target.media_source_id ?? null,
+    ...(target.stable_version_id ? { stable_version_id: target.stable_version_id } : {}) };
   return jsonApi(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, "Unable to create saved review");
 }
 
@@ -126,6 +128,9 @@ export function fetchSavedReviewVideoPreview(reviewId: string, filterId: string)
 
 export interface DraftFilterPreview {
   review_id?: string;
+  stable_version_id?: string;
+  target_generation?: string;
+  audio_track_index?: number;
   source_scan_id?: string;
   source_finding_id?: number | null;
   source: "audio" | "visual";
@@ -134,9 +139,10 @@ export interface DraftFilterPreview {
   end_seconds: number | null;
 }
 
-export async function fetchDraftFilterPreview(target: ReviewTargetRequest, filter: DraftFilterPreview): Promise<Blob> {
+export async function fetchDraftFilterPreview(target: ReviewTargetRequest, filter: DraftFilterPreview, signal?: AbortSignal): Promise<Blob> {
   const response = await fetch(`${runtimeApiBasePath()}/library-items/${encodeURIComponent(target.item_id)}/reviews/preview`, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...filter, media_source_id: target.media_source_id ?? null }),
   });

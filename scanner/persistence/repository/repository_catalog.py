@@ -25,13 +25,14 @@ from scanner.models import (
 )
 from scanner.pipeline.cache import compute_video_md5
 
-from .community_import_targets import scan_target_approvals_by_scan
+from .community_import_targets import scan_pending_targets_by_scan, scan_target_approvals_by_scan
 from .repository_rows import (
     _scan_finding_from_row,
     _scan_from_row,
     _scan_queue_from_row,
     scan_list_loading,
 )
+from .scan_verification_coverage import verification_coverage_by_scan
 
 
 def find_filter_candidates(
@@ -193,6 +194,17 @@ def list_scan_queue(db: Session) -> list[ScanQueueItem]:
     return [_scan_queue_from_row(row) for row in rows]
 
 
+def _finding_counts(db: Session, scans: list[ScanRow]) -> dict[str, int]:
+    if not scans:
+        return {}
+    return dict(
+        db.query(ScanFindingRow.scan_id, func.count(ScanFindingRow.id))
+        .filter(ScanFindingRow.scan_id.in_([scan.id for scan in scans]))
+        .group_by(ScanFindingRow.scan_id)
+        .all()
+    )
+
+
 def list_scan_history(db: Session) -> list[Scan]:
     """Return persisted scans in history order with their finding counts."""
     rows = (
@@ -203,52 +215,60 @@ def list_scan_history(db: Session) -> list[Scan]:
         .all()
     )
     approvals = scan_target_approvals_by_scan(db, rows)
-    finding_counts = (
-        dict(
-            db.query(ScanFindingRow.scan_id, func.count(ScanFindingRow.id))
-            .filter(ScanFindingRow.scan_id.in_([row.id for row in rows]))
-            .group_by(ScanFindingRow.scan_id)
-            .all()
-        )
-        if rows
-        else {}
-    )
+    pending = scan_pending_targets_by_scan(db, rows)
+    coverage = verification_coverage_by_scan(db, rows)
+    finding_counts = _finding_counts(db, rows)
     return [
         _scan_from_row(
             row,
             finding_count=finding_counts.get(row.id, 0),
             community_approvals=approvals[row.id],
+            community_pending=pending.get(row.id, []),
+            verification_coverage=coverage,
         )
         for row in rows
     ]
 
 
 def list_scans_for_library_item(
-    db: Session, *, jellyfin_item_id: str, server_id: str | None = None
+    db: Session,
+    *,
+    jellyfin_item_id: str,
+    server_id: str | None = None,
+    associated_only: bool = False,
 ) -> list[Scan]:
-    """Find scans linked to the given media item and optional physical version."""
+    """Find locally stored scans and explicit links for a Jellyfin item."""
     items_query = db.query(MediaItemRow.id).filter(MediaItemRow.jellyfin_id == jellyfin_item_id)
     if server_id:
         items_query = items_query.filter(MediaItemRow.server_id == server_id)
     media_item_ids = [row[0] for row in items_query.all()]
     if not media_item_ids:
         return []
+    linked = ScanMediaItemAssociationRow.media_item_id.in_(media_item_ids)
+    owned = ScanRow.media_item_id.in_(media_item_ids)
     rows = (
         db.query(ScanRow)
         .options(*scan_list_loading())
         .outerjoin(ScanMediaItemAssociationRow)
-        .filter(
-            or_(
-                ScanRow.media_item_id.in_(media_item_ids),
-                ScanMediaItemAssociationRow.media_item_id.in_(media_item_ids),
-            )
-        )
+        .filter(linked & ~owned if associated_only else or_(owned, linked))
         .distinct()
         .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
         .all()
     )
     approvals = scan_target_approvals_by_scan(db, rows)
-    return [_scan_from_row(row, community_approvals=approvals[row.id]) for row in rows]
+    pending = scan_pending_targets_by_scan(db, rows)
+    coverage = verification_coverage_by_scan(db, rows)
+    finding_counts = _finding_counts(db, rows)
+    return [
+        _scan_from_row(
+            row,
+            finding_count=finding_counts.get(row.id, 0),
+            community_approvals=approvals[row.id],
+            community_pending=pending.get(row.id, []),
+            verification_coverage=coverage,
+        )
+        for row in rows
+    ]
 
 
 def associate_scans_with_media_item(

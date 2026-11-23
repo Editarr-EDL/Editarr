@@ -149,6 +149,21 @@ function versionPublications(rows: ExportPublication[]): VersionPublications {
   return { publications: rows, notice: null, setNotice: vi.fn(), refresh: vi.fn(async () => rows) };
 }
 
+it("keeps outdated personal and item-default files in Published files without mutating them", async () => {
+  signIn(4, MEMBER);
+  const exports = versionPublications([memberEdl, sharedMcf].map((row) => ({ ...row, current: false, outdated: true })));
+  render(<AuthenticationGate><PublishedFiles exports={exports} reviews={[]} selectedId="review-1" allowed={(capability) => MEMBER.includes(capability)} /></AuthenticationGate>);
+  const files = await screen.findByRole("region", { name: "Published files" });
+  for (const name of ["EDL · Personal · You", "MCF · Item default"]) {
+    const row = within(files).getByRole("listitem", { name });
+    expect(within(row).getByText("Outdated")).toBeVisible();
+    expect(row).toHaveTextContent("Publish again to apply the current saved review and enforced filters.");
+    expect(row).toHaveTextContent("Publication revision 1.");
+  }
+  expect(exportsApi.publishReviewExport).not.toHaveBeenCalled();
+  expect(exportsApi.deletePublication).not.toHaveBeenCalled();
+});
+
 it("shows members delete only for their own files and admins for every file they hold rights to", async () => {
   const rows = [memberEdl, testPublication({ id: 5, target_user_id: 9, review_id: null }), sharedMcf];
   const reviewsList = [{ id: "review-1", name: "Doomed" }] as SavedReviewSummary[];
