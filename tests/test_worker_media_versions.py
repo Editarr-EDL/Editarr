@@ -104,9 +104,11 @@ def test_worker_fails_expired_audio_selection_and_requires_a_new_scan(monkeypatc
         engine.dispose()
 
 
-@pytest.mark.parametrize("changed", [False, True])
-def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, changed):
+@pytest.mark.parametrize(("changed", "cached"), [(False, False), (False, True), (True, False)])
+def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, changed, cached):
+    from scanner.formats.community.fingerprints import SAMPLE_BYTES
     from scanner.persistence.repository.media_identity_store import scan_version_id
+    from scanner.runtime import scan_version
     from scanner.runtime.scan_version import (
         completed_scan_digest,
         file_generation,
@@ -114,7 +116,14 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
     )
 
     path = tmp_path / "queued.mkv"
-    path.write_bytes(b"original media")
+    with path.open("wb") as media:
+        media.truncate(24 * SAMPLE_BYTES)
+    if cached:
+        content_digest(path)
+    # The digest reads at 0, 8, 16, and 24 MiB. Only the first and third
+    # reports should reach the queue while a long read is running.
+    ticks = iter([0.0, 0.4, 1.1, 1.5])
+    monkeypatch.setattr(scan_version, "monotonic", lambda: next(ticks))
     engine = create_engine(f"sqlite:///{tmp_path / 'scanner.db'}")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
@@ -131,12 +140,29 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
         if changed:
             path.write_bytes(b"replacement media")
 
+        observed_progress = []
+        update_progress = worker.update_scan_progress
+
+        def record_progress(db, scan_id, update, **kwargs):
+            update_progress(db, scan_id, update, **kwargs)
+            with factory() as reader:
+                visible = repository.get_scan_queue_item_by_scan_id(reader, scan_id)
+                observed_progress.append(visible.progress_percent)
+
         def fake_scan(db, _path, **callbacks):
             assert not changed, "The worker analyzed a replacement"
             assert scan_version_id(db, scan.id)
-            assert db.get(ScanRow, scan.id).progress_stage == "hashing"
+            row = db.get(ScanRow, scan.id)
+            assert row.progress_stage == ("setup" if cached else "hashing")
+            saved_percent = row.progress_percent
+            update_progress(db, scan.id, {"stage": "hashing", "percent": 95}, worker_token="old")
+            assert db.get(ScanRow, scan.id).progress_percent == saved_percent
             assert callbacks["content_sha256"] == content_digest(path)
             callbacks["status_updater"](db, scan.id, "complete")
+            update_progress(
+                db, scan.id, {"stage": "hashing", "percent": 99}, worker_token="worker-token"
+            )
+            assert db.get(ScanRow, scan.id).progress_percent == saved_percent
 
         monkeypatch.setattr(
             worker,
@@ -145,7 +171,9 @@ def test_worker_pins_deferred_file_after_job_is_queued(monkeypatch, tmp_path, ch
         )
         monkeypatch.setattr(worker, "get_session_factory", lambda: factory)
         monkeypatch.setattr(worker, "run_scan", fake_scan)
+        monkeypatch.setattr(worker, "update_scan_progress", record_progress)
         assert worker.run_scan_worker(scan.id, "worker-token") == 0
+        assert observed_progress == ([] if cached or changed else [0, 66.67])
         with factory() as db:
             row = db.get(ScanRow, scan.id)
             assert row.status == ("failed" if changed else "complete")

@@ -2,8 +2,10 @@
 
 import logging
 import stat
+from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
+from time import monotonic
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,12 +40,14 @@ def expected_scan_digest(db: Session, scan_id: str) -> str | None:
     return version.content_sha256
 
 
-def require_scan_digest(path: str, expected: str | None) -> None:
+def require_scan_digest(
+    path: str, expected: str | None, *, on_progress: Callable[[int, int], None] | None = None
+) -> None:
     """Check exact file bytes for new scans, retaining legacy worker behavior."""
     if expected is None:
         return
     try:
-        actual = content_digest(path)
+        actual = content_digest(path, on_progress=on_progress)
     except (OSError, ValueError) as exc:
         raise ScanVersionChanged(_FAILURE) from exc
     if actual != expected:
@@ -197,14 +201,36 @@ def _pin_queued_scan(
     db.commit()
 
 
-def prepare_scan_digest(db: Session, scan_id: str, path: str, *, write, on_hashing) -> str | None:
+def scan_digest_progress(write: Callable[[dict[str, object]], None]) -> Callable[[int, int], None]:
+    """Convert actual fingerprint bytes to at most one queue update per second."""
+    next_update = None
+
+    def report(done: int, total: int) -> None:
+        nonlocal next_update
+        now = monotonic()
+        if not total or (next_update is not None and now < next_update):
+            return
+        write({"stage": "hashing", "message": "Identifying media", "percent": 100 * done / total})
+        next_update = now + 1.0
+
+    return report
+
+
+def prepare_scan_digest(
+    db: Session,
+    scan_id: str,
+    path: str,
+    *,
+    write,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> str | None:
     """Pin deferred evidence before any analysis, or verify an existing pin."""
     from scanner.db import ScanRow
     from scanner.persistence.repository.repository_checkpoints import _checkpoint_state
 
     known = expected_scan_digest(db, scan_id)
     if known is not None:
-        require_scan_digest(path, known)
+        require_scan_digest(path, known, on_progress=on_progress)
         return known
     state = _checkpoint_state(db.get(ScanRow, scan_id))
     captured = state.get(_GENERATION)
@@ -213,9 +239,8 @@ def prepare_scan_digest(db: Session, scan_id: str, path: str, *, write, on_hashi
     generation = file_generation(path)
     if not generation_matches(captured, generation):
         raise ScanVersionChanged(_FAILURE)
-    on_hashing()
     try:
-        digest = content_digest(path)
+        digest = content_digest(path, on_progress=on_progress)
     except (OSError, ValueError) as exc:
         raise ScanVersionChanged(_FAILURE) from exc
     write(_pin_queued_scan, scan_id, path, generation, digest)

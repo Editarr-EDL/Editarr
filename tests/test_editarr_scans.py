@@ -135,9 +135,10 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
     for item, path in ((first, video), (second, alternate_video)):
         assert scan_version_id(db, item.id) is None
         prepare_scan_digest(
-            db, item.id, str(path),
+            db,
+            item.id,
+            str(path),
             write=lambda operation, *args: operation(db, *args),
-            on_hashing=lambda: None,
         )
     first_version = scan_version_id(db, first.id)
     second_version = scan_version_id(db, second.id)

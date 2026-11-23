@@ -390,10 +390,14 @@ def update_scan_duration(db: Session, scan_id: str, duration_seconds: float) -> 
     db.commit()
 
 
-def update_scan_progress(db: Session, scan_id: str, update: dict[str, object]) -> None:
+def update_scan_progress(
+    db: Session, scan_id: str, update: dict[str, object], *, worker_token: str | None = None
+) -> None:
     """Persist stage progress for a scan that still belongs to its worker."""
-    row = db.get(ScanRow, scan_id)
+    row = db.get(ScanRow, scan_id, populate_existing=worker_token is not None)
     if not row:
+        return
+    if worker_token is not None and (row.status != "scanning" or row.worker_token != worker_token):
         return
     if row.status == "orphaned" and row.progress_stage == "orphaned":
         return

@@ -76,6 +76,7 @@ from scanner.runtime.scan_version import (  # noqa: E402
     ScanVersionChanged,
     prepare_scan_digest,
     require_scan_digest,
+    scan_digest_progress,
 )
 from scanner.runtime.worker_quit import FullApplicationQuitRequested  # noqa: E402
 from scanner.security.scan_jobs.authority import (  # noqa: E402
@@ -209,10 +210,12 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
             mark_scan_orphaned(db, scan_id, "Orphaned scan — source path is unavailable")
             return 1
         digest = prepare_scan_digest(
-            db, scan_id, local_path, write=partial(gate.run, db),
-            on_hashing=lambda: gate.run(
-                db, update_scan_progress, scan_id,
-                {"stage": "hashing", "message": "Identifying media", "percent": 0},
+            db,
+            scan_id,
+            local_path,
+            write=partial(gate.run, db),
+            on_progress=scan_digest_progress(
+                partial(gate.run, db, update_scan_progress, scan_id, worker_token=worker_token)
             ),
         )
 
