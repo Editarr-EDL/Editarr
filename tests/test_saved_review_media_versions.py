@@ -8,6 +8,7 @@ import pytest
 from scanner.db import SavedReviewRow
 from scanner.persistence.repository.media_identity_store import (
     bind_review_version,
+    observe_sampled_version,
     observe_version,
     review_version_id,
 )
@@ -88,20 +89,28 @@ def test_saved_empty_reviews_and_duplicates_keep_original_file_generation(app):
         assert response.json()["detail"]["code"] == "subtitle_media_changed"
 
 
-def _pinned_list_target(app, *, bind):
+def _pinned_list_target(app, *, bind, sampled=False):
     review, _ = _seed(app)
     item_id = review.target.item_id
     media = Path(app.items[item_id].versions[1].path)
     with app.accounts.factory() as db:
         saved = db.get(SavedReviewRow, review.id)
-        version_id = observe_version(
-            db,
-            media=saved.media_item,
-            media_source_id="alternate",
-            source_path=str(media),
-            resolved_path=str(media),
-            content_sha256=sha256(media.read_bytes()).hexdigest(),
-        )
+        target = {
+            "media": saved.media_item,
+            "media_source_id": "alternate",
+            "source_path": str(media),
+        }
+        if sampled:
+            version_id = observe_sampled_version(
+                db, **target, fingerprint=media_fingerprints.sampled_media_fingerprint(media)
+            )
+        else:
+            version_id = observe_version(
+                db,
+                **target,
+                resolved_path=str(media),
+                content_sha256=sha256(media.read_bytes()).hexdigest(),
+            )
         if bind:
             bind_review_version(db, review.id, version_id)
         db.commit()
@@ -149,7 +158,38 @@ def test_pinned_list_uses_proven_digest_and_rejects_a_replaced_media_file(
         assert response.status_code == 200, response.text
         assert [row["id"] for row in response.json()] == [review_id]
 
-    media.write_bytes(b"replacement bytes in the same Jellyfin slot")
+    cached = review_target_routes.cached_target_digest
+
+    def replace_after_read(*args):
+        digest = cached(*args)
+        media.write_bytes(b"replacement bytes during review listing")
+        return digest
+
+    with monkeypatch.context() as patched:
+        patched.setattr(review_target_routes, "cached_target_digest", replace_after_read)
+        patched.setattr(review_target_routes, "version_file_matches", unexpected_read)
+        response = app.send("GET", route, app.accounts.cookie(USER))
+        assert response.status_code == 200, response.text
+        assert response.json() == []
+
+    response = app.send("GET", route, app.accounts.cookie(USER))
+    assert response.status_code == 200, response.text
+    assert response.json() == []
+
+
+def test_sampled_list_rejects_generation_changed_after_matching(app, monkeypatch):
+    from scanner.http import review_target_routes
+
+    route, media, _ = _pinned_list_target(app, bind=True, sampled=True)
+    matches = review_target_routes.version_file_matches
+
+    def replace_after_match(*args, **kwargs):
+        result = matches(*args, **kwargs)
+        assert result
+        media.write_bytes(b"replacement after a valid sampled match")
+        return result
+
+    monkeypatch.setattr(review_target_routes, "version_file_matches", replace_after_match)
     response = app.send("GET", route, app.accounts.cookie(USER))
     assert response.status_code == 200, response.text
     assert response.json() == []

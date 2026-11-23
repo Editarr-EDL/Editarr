@@ -1,6 +1,7 @@
 """Actor-scoped saved-review lists and creation by authorized media target."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Literal
 
@@ -22,7 +23,7 @@ from scanner.persistence.repository.review_version_evidence import (
     version_file_matches,
 )
 from scanner.runtime.media_fingerprints import sampled_media_fingerprint
-from scanner.runtime.scan_version import ScanVersionChanged
+from scanner.runtime.scan_version import ScanVersionChanged, file_generation
 from scanner.security.access.authorization import require
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied
@@ -51,9 +52,21 @@ def _matches_target_version(db, media_id, prepared, version_id: str) -> bool:
     version = get_version(db, version_id)
     if version is None:
         return False
-    if version.content_sha256:
-        cached_target_digest(db, prepared)
-    return version_file_matches(version, prepared.media.resolved_path, db=db)
+    try:
+        path = Path(prepared.media.resolved_path).resolve(strict=True)
+        generation = file_generation(str(path))
+        matches = (
+            version.content_sha256 is not None
+            and cached_target_digest(db, prepared) == version.content_sha256
+        ) or (
+            version.sampled_md5 is not None
+            and version_file_matches(version, prepared.media.resolved_path, db=db)
+        )
+        if matches:
+            require_media_generation(db, prepared.source.path, path, generation)
+        return matches
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 def list_target(caller, target, sort, direction, stable_version_id=None):
