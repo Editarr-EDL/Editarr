@@ -59,7 +59,8 @@ to that version:
 An **Unconfirmed** label marks a candidate version. Its filters come from
 contributors whose files could only be loosely matched (by ID, title or runtime).
 It becomes confirmed once several contributors with matching files submit for it,
-or after moderator review. Treat unconfirmed versions with extra care.
+or after moderator review. Hover over or focus the label to see this explanation.
+Treat unconfirmed versions with extra care.
 
 ## Apply and align a master set
 
@@ -82,8 +83,9 @@ their time, category, severity, action, confidence and contributor count.
 
 - **Confirm** or **Reject** each filter. Your decisions are kept locally and are
   never overwritten by updates; **Reset** returns a filter to the master values.
-- Filters with a **Locally verified** badge are ones you confirmed or adjusted,
-  or that overlap one of your own local findings of the same category.
+- Filters with a **Locally verified** check icon (hover or focus it for the
+  tooltip) are ones you confirmed or adjusted, or that overlap a local model
+  finding of the same category.
 - A filter is **Low Confidence** when its negative signals (downvotes, disputes and
   contributors whose coverage found nothing there) outweigh its support. Untouched
   Low Confidence filters are not active unless you turn on **Show Low Confidence
