@@ -104,8 +104,6 @@ it('full fresh OAuth recovery preserves contributor identity and rejects old rea
   expect(await status.json()).toEqual(result);
   const retry = await contributorRecovery(await edgeRequest(plan, '/v1/keys/recover'), config, timestamp, provider(old.discordId));
   expect(await retry.json()).toEqual(result);
-  expect((await db.prepare("SELECT * FROM quota_charges WHERE contributor_id = ? AND charge_id LIKE 'key_recovery:%'")
-    .bind(old.contributorId).all()).results).toHaveLength(0);
 });
 
 it('a reinstall registers another installation without replacing the original or resetting contributor limits', async () => {

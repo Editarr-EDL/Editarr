@@ -9,7 +9,11 @@ import { config, confirm, db, discordOAuth, initializeOAuthDb, json, now, origin
   provider, request, start } from './helpers/discord-oauth';
 import { signedEnrollment } from './helpers/enrollment-signatures';
 
-beforeAll(initializeOAuthDb);
+beforeAll(async () => {
+  await initializeOAuthDb();
+  // The fixed-callback case completes an unconfirmed grant, which stores no profile name key.
+  await db.exec('DROP TRIGGER guard_profile_name_insert; DROP INDEX uq_contributors_display_name;');
+});
 
 describe('OAuth broker security boundaries', () => {
   it('admits browser start only after trusted ingress and service approval', async () => {

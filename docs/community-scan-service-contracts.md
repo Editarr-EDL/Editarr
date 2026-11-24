@@ -450,7 +450,7 @@ submitter's file playback timeline.
 | Field | Type and rule |
 | --- | --- |
 | `schemaVersion` | Literal `community-artifact-3` |
-| `submissionId` | Token. A client-generated unique token, equal to manifest `submission_id` |
+| `submissionId` | Token of at most 121 characters, so that `submit-<submissionId>` fits the 128-character operation ID (§2). A client-generated unique token, equal to manifest `submission_id` |
 | `createdAt` | Integer Unix seconds |
 | `author.contributorId`, `author.keyId` | Must equal the manifest and the signing request's key |
 | `work.kind` | `movie` or `episode` |
@@ -920,6 +920,33 @@ Errors:
 
 Each contributor may accept `submissionsPerDay` submissions (default 50).
 
+**Clarifications.** The service resolves these details as follows:
+
+- The `Idempotency-Key` must be exactly `submit-<submissionId>`; any other key is
+  `400 invalid_submission`. A `submissionId` longer than 121 characters is
+  `400 invalid_submission`. A retry with the same operation and bytes returns the
+  stored result. A different upload that reuses a stored `submissionId`, from any
+  contributor, is `409 submission_conflict`.
+- `tier` is the attach tier, and is null when the submission created the version.
+- `supersedes` is the contributor's previous counted submission for the version, or
+  null.
+- `outcome` counts this submission's rows after the recompute: `newFilters` are
+  registry IDs created by it that are now active; `supports` are weight-1 support
+  members; `disputes` and `coverageNegatives` are assigned disputes and explicit plus
+  implicit coverage negatives; `ignored` are weight-0 support entries
+  (`unverified_reshare` or `duplicate`); and `unassigned` are disputes and explicit
+  coverage negatives that no filter took.
+- `403 upload_suspended` refuses a contributor under moderator quarantine (§7.8).
+  A suspended contributor already fails request authentication.
+- Past the daily limit the service returns `429 rate_limited` with `Retry-After`. The
+  limit counts accepted submissions in the rolling 24 hours before the request, and is
+  checked again inside the submission's write transaction, so concurrent uploads
+  cannot exceed it.
+- A recompute that finds the accepted version merged meanwhile plans the submission
+  again.
+- A submission that would exceed the stored-byte caps (§8) is refused with
+  `503 service_unavailable`, and nothing is stored.
+
 ### 7.3 `GET /v1/versions/{versionId}/master[?knownRevision=N]`
 
 This route has no body. It returns `200` in one of two forms:
@@ -1013,6 +1040,15 @@ Errors:
 
 A contributor gets `versionChecksPerHour` requests (default 60).
 
+**Clarifications.** `knownRevision` is optional and appears at most once as a
+canonical non-negative decimal; any other query parameter is
+`400 invalid_master_request`. The limit counts every authenticated request to this
+route, including unchanged answers, in fixed one-hour windows, and returns
+`429 rate_limited` with `Retry-After`. Both signatures use the issuing time of the
+response as `issuedAt`; the stored receipt keeps the time of its first issue. Each
+issued receipt records the snapshot's filter IDs and their `mergedIds` in
+`master_revision_filters` for vote and report eligibility.
+
 ### 7.4 `POST /v1/filters/{filterId}/votes`
 
 Body: `{"version":1,"vote":"up"|"down"|"none","receiptId":"<64 hex>"}`. Use
@@ -1050,6 +1086,17 @@ Errors:
 
 It returns at most 4,000 votes.
 
+**Clarifications.** The `Idempotency-Key` must start with `vote-`; any other key
+is `400 invalid_vote`. A contributor may cast `votesPerHour` votes (from
+`VOTE_LIMITS`, default 120) in fixed one-hour windows; beyond that the route returns
+`429 rate_limited` with `Retry-After`. Retries of a completed vote are not counted.
+A vote may name a retired filter ID listed in the receipt snapshot's `mergedIds`;
+the self-vote check follows the whole `mergedInto` chain to the current filter.
+Changing or removing a vote keeps a moderator's `exclude_vote`. A vote on a filter
+whose version is merged meanwhile is recomputed on the target. The vote list returns
+`404 version_not_found`, `409 version_merged` and `410 version_unavailable` like
+§7.3.
+
 ### 7.5 `POST /v1/sync/revisions` (read)
 
 ```json
@@ -1079,6 +1126,13 @@ It returns at most 4,000 votes.
 - `unavailable` covers quarantined and unknown versions.
 - Sync issues no receipts.
 
+**Clarifications.** Runs are scoped to the signing key's installation. A request
+that would exceed the run's batches or window, or start a run past the daily limit,
+returns `429 sync_rate_limited` with `Retry-After` until `nextRunAllowedAt`.
+`nextRunAllowedAt` is the request time when another run may start now, otherwise
+the time the oldest counted run leaves the rolling 24 hours. A malformed request
+is `400 invalid_sync`. Items keep request order.
+
 ### 7.6 `POST /v1/reports`
 
 ```json
@@ -1099,6 +1153,11 @@ Result:
 ```json
 {"version":1,"operationId":"…","reportId":"…","state":"open"}
 ```
+
+**Clarifications.** `note` is optional. A report on an unknown target is
+`403 report_ineligible`, so the route reveals nothing about targets the caller has
+no receipt for. A version report also accepts a receipt for a version merged into
+the target. A malformed request is `400 invalid_report`.
 
 ### 7.7 `GET /v1/aliases` and `GET /v1/receipt-keys`
 
@@ -1145,11 +1204,47 @@ Each returns 20 items per page with `nextCursor`.
 - `all` runs in bounded batches and returns `{"version":1,"jobId":"…"}`.
 - The operator uses it after config changes.
 
+**Clarifications.** The service resolves these admin details as follows:
+
+- The envelope always carries `resource`. A vote action uses `resource: "vote"`,
+  `targetId` = filter ID and `contributorId`; its moderation resource is
+  `vote:<filterId>:<contributorId>`. Other resources are `<resource>:<targetId>`.
+  `GET /admin/v1/moderation/{resource}/{id}` reads `filter`, `attestation`
+  (URL-encoded `submissionId:entryId`), `submission`, `contributor`, `version`,
+  `alias_suggestion`, `report` and `vote/{filterId}/{contributorId}`.
+- Quarantining something already quarantined, or restoring something that is not,
+  is `403 moderation_ineligible`, as are suspend, unsuspend, vote and report actions
+  that do not change state. Each refusal is audited.
+- Contributor quarantine (`contributors.quarantined`) is separate from suspension.
+  It excludes the contributor's submissions and votes from every version they
+  touched, and their uploads return `403 upload_suspended`; their requests still
+  authenticate.
+- Every quarantine, restore and vote action recomputes each affected version in the
+  action's batch. A version restore advances the revision only if the served
+  content then differs (§6.11).
+- `merge_version` recomputes the target with the source's submissions, registry
+  and votes. Filter IDs, and therefore votes and the eligibility of receipts for
+  source snapshots, follow the filters into the target.
+- An approved alias relabel advances `versions.revision` once and stores the
+  relabeled snapshot at that revision; the recompute does not advance it again.
+- A `versionIds` list holds 1–100 unique non-merged versions, otherwise
+  `404 resource_not_found`. It returns
+  `{"version":1,"actionId":"…","versions":[{"versionId","revision","changed"}]}`.
+  `all` runs synchronously: it recomputes at most 200 non-merged versions in version
+  ID order, 20 per batch, and answers
+  `{"version":1,"jobId":"<actionId>","complete":bool,"nextAfter":"<versionId>"|null}`.
+  To continue, send a new action with `"versionIds":"all","after":"<nextAfter>"`;
+  `after` is allowed only with `all`. Reusing an `actionId` with a different body is
+  `409 action_conflict`. A retry recomputes again, which changes nothing when no
+  input changed. Recompute audit rows use `command: "recompute"` and need no
+  `expectedRevision`.
+
 Admin errors:
 
 | Status | Code |
 | --- | --- |
 | 400 | `invalid_moderation` |
+| 403 | `moderation_ineligible` (the action would not change state, for example quarantining a quarantined filter) |
 | 404 | `resource_not_found` |
 | 409 | `moderation_conflict` (stale `expectedRevision`), `alias_conflict`, `merge_invalid` |
 | 429 | `operator_rate_limited` |
@@ -1207,15 +1302,44 @@ Each raw submission is stored exactly once, as BLOBs, with no expanded copies
 except `submission_entries`. Those rows are derived from the artifact and can
 be rebuilt from it.
 
-**Interim catalog migration:** until the baseline rebase lands, the catalog
-tables ship as the additive migration `0018_master_catalog.sql` on the
-existing lineage. It changes no existing row. Because the old schema already
-has `works` and `work_identifiers`, the new tables are named `master_works`
-(with a `catalog_seq` optimistic write guard) and `master_work_identifiers`.
-It also adds `version_acceptances` with the `version_counted_acceptances`
-view (counted inputs for promotion, runtime and trust) and the
-`catalog_moderation_actions` audit for the version and alias commands. The
-rebase may rename or fold these tables into the baseline.
+**Baseline details.** The rebased baseline resolves these storage details
+conservatively; none changes a wire format:
+
+- **Lineage:** the single-row, immutable `schema_lineage` table holds
+  `community-master-1`. The offline runner and the server refuse a store whose
+  lineage is missing or different with `unsupported_database_lineage`, before any
+  version check, and print that reason.
+- **Catalog:** the interim `master_works` (with its `catalog_seq` optimistic write
+  guard) and `master_work_identifiers` are renamed `works` and
+  `work_identifiers`. `version_acceptances` with the `version_counted_acceptances`
+  view, and the `catalog_moderation_actions` audit for the version and alias
+  commands, are kept. `submissions.submission_id` references
+  `version_acceptances`, and a merge moves both rows.
+- **Derived submission columns:** `submissions.match_keys_json` holds the
+  artifact's tier 1–3 keys, which the merge needs for identity alignment (§6.2).
+  Like `submission_entries` and `submission_coverage`, it is derived from, and can
+  be rebuilt from, the stored artifact.
+- **Moderation state:** `contributors.quarantined` records contributor quarantine,
+  which is separate from `state` (suspension). `moderation_actions` adds
+  `error_code` and the `recompute` command; the separate account, report and vote
+  triggers of the old schema are replaced by one audit trigger that advances the
+  resource's moderation revision.
+- **Limits:** `rate_counters (scope, window_start, requests)` holds the fixed
+  one-hour windows for `versionChecksPerHour` and `votesPerHour`. `submissionsPerDay`
+  counts the contributor's accepted `submissions` in the rolling 24 hours before the
+  request; the submission batch re-checks it through a `rate_counters` guard row whose
+  `requests > 0` check aborts the batch over the limit.
+  `sync_runs` is keyed by `(installation_id, run_id)`, so a run ID is scoped to its
+  installation.
+- **Stored bytes:** `artifact_storage_policy` and `artifact_storage_usage` are kept.
+  Inserting a submission charges its three raw buffers and is refused beyond the
+  global (350,000,000 bytes) or per-contributor (7,000,000 bytes) cap.
+- **Snapshot bytes:** the latest stored revision of a version always keeps
+  `snapshot_bytes`. An older revision keeps them only while a receipt for it was
+  first issued within the last 7 days, and at most 8 older revisions per version keep
+  them; others keep their digest, receipts and `master_revision_filters` but drop the
+  bytes. The check runs when a revision is stored and in the hourly maintenance. Old
+  snapshots are never served, so this bounds storage without changing any response.
 
 ### 8.1 Operator configuration
 
@@ -1239,9 +1363,11 @@ rebase may rename or fold these tables into the baseline.
 | `versionChecksPerHour` | 60 | `GET …/master` per contributor |
 | `submissionsPerDay` | 50 | Per contributor |
 
-`SUBMISSION_LIMITS` holds the request, manifest and artifact bounds (§5.2).
-`VOTE_LIMITS`, `REPORT_LIMITS` and `DOWNLOAD_RECEIPT_KEYS` keep their existing
-shapes. Changing `MASTER_POLICY` takes effect only after an
+`SUBMISSION_LIMITS` holds the request, manifest and artifact bounds (§5.2):
+`{"requestBytes","manifestBytes","artifact":{"compressedBytes","expandedBytes","depth","stringBytes"}}`,
+each at most its §5.2 value. `VOTE_LIMITS` keeps `requestBytes` and `maxQueries` and
+adds an optional `votesPerHour` (default 120) per contributor (§7.4).
+`REPORT_LIMITS` and `DOWNLOAD_RECEIPT_KEYS` keep their existing shapes. Changing `MASTER_POLICY` takes effect only after an
 `/admin/v1/recompute`.
 
 ## 9. Removed features

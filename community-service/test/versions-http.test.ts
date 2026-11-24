@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { tunnelActor } from '../src/runtime/environment.mjs';
 import { contributorVersionCatalog } from '../src/http/match';
-import { acceptVersionForSubmission, type VersionAcceptance } from '../src/versions/acceptance-service';
+import type { VersionAcceptance } from '../src/versions/acceptance-service';
 import service from '../src/index';
 import { registerKey, signedPost, signedRead, type SigningKey } from './helpers/key-lifecycle';
-import { db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
+import { acceptPlanned, db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
 
 let key: SigningKey & { discordId: string }, theatrical: VersionAcceptance, extended: VersionAcceptance, candidate: VersionAcceptance;
 const eligible = async () => 'eligible' as const;
@@ -19,7 +19,7 @@ type Results = { results: { versionId: string; tier: string; matchPercent: numbe
 beforeAll(async () => {
   await setupVersionCatalog();
   key = await registerKey(db);
-  const accept = (overrides: Parameters<typeof submission>[0]) => acceptVersionForSubmission(db, submission(overrides), { policy, now, newId });
+  const accept = (overrides: Parameters<typeof submission>[0]) => acceptPlanned(submission(overrides), { policy, now, newId });
   theatrical = await accept({ matchKeys: [keys.md5('a')] });
   extended = await accept({ contributorId: 'c2', version: { choice: 'alias', aliasId: 'extended' }, durationMs: 8_400_000,
     matchKeys: [keys.md5('b')] });

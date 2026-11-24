@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { SqlDatabase, AssetFetcher } from './runtime/contracts';
 import { parseMasterPolicy, type MasterPolicy } from './filters/policy';
 export interface Env {
@@ -7,10 +8,7 @@ export interface Env {
   TRUSTED_ACTOR_KEY?: (request: Request) => string | null;
   PUBLIC_ORIGIN?: string;
   POLICY_VERSION?: string;
-  PUBLICATION_LIMITS?: string;
-  LOOKUP_LIMITS?: string;
-  DOWNLOAD_LIMITS?: string;
-  IMPORT_LIMITS?: string;
+  SUBMISSION_LIMITS?: string;
   VOTE_LIMITS?: string;
   REPORT_LIMITS?: string;
   MODERATION_LIMITS?: string;
@@ -40,7 +38,7 @@ export function missingConfig(env: Env): string[] {
 
 /** A missing or invalid required configuration value; routes answer 503. */
 export class ConfigurationError extends Error {
-  constructor(public code: 'master_policy_missing' | 'master_policy_invalid') { super(code); }
+  constructor(public code: 'master_policy_missing' | 'master_policy_invalid' | 'public_origin_missing') { super(code); }
 }
 
 let parsedPolicy: { source: string; policy: MasterPolicy } | undefined;
@@ -58,3 +56,12 @@ export function masterPolicy(env: Pick<Env, 'MASTER_POLICY'>): MasterPolicy {
   }
   return parsedPolicy.policy;
 }
+
+/** `VOTE_LIMITS` and `REPORT_LIMITS`: request body and handler query bounds. */
+export const routeLimits = z.strictObject({ requestBytes: z.number().int().min(1).max(8192),
+  maxQueries: z.number().int().min(1).max(64) });
+export type RouteLimits = z.infer<typeof routeLimits>;
+
+/** `VOTE_LIMITS`: the route bounds plus `votesPerHour` per contributor (default 120, §7.4). */
+export const voteLimits = routeLimits.extend({ votesPerHour: z.number().int().min(1).max(100_000).default(120) });
+export type VoteLimits = z.infer<typeof voteLimits>;

@@ -1,8 +1,6 @@
 import type { SqlDatabase } from '../src/runtime/contracts';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import migration from '../migrations/0006_oauth_usage.sql?raw';
-import membershipMigration from '../migrations/0007_membership.sql?raw';
-import profileMigration from '../migrations/0008_enrollment_profiles.sql?raw';
 import service from '../src/index';
 import { discordService } from '../src/integrations/discord/service';
 import { serviceUsage } from '../src/integrations/discord/usage';
@@ -10,9 +8,6 @@ import { config, db, initializeOAuthDb, now, origin, provider, start } from './h
 
 beforeAll(async () => {
   await initializeOAuthDb();
-  await db.exec(migration.replace(/\s*\n\s*/g, ' '));
-  await db.exec(membershipMigration.replace(/\s*\n\s*/g, ' '));
-  await db.exec(profileMigration.replace(/\s*\n\s*/g, ' '));
 });
 
 function fixture(url: string) {

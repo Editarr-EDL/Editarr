@@ -37,7 +37,7 @@ for (const name of ['identity', 'sharing', 'operator', 'cleanup', ...(process.en
             try {
               for (const name of readdirSync('/app/migrations').filter(name => name.endsWith('.sql')).sort())
                 database.connection.exec(readFileSync('/app/migrations/' + name, 'utf8'));
-              database.connection.exec('PRAGMA user_version = 18');
+              database.connection.exec('PRAGMA user_version = 1');
               database.lockWriter();
               await exercise(database, { service, validateEnvironment, createHttpServer, readConfiguration, startMaintenance, serverPath: '/app/dist/runtime/server.mjs', assets: operatorAssets(new URL('file:///app/dist/runtime/assets/')) });
             } finally { database.close(); }`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 });
@@ -48,15 +48,7 @@ for (const name of ['identity', 'sharing', 'operator', 'cleanup', ...(process.en
             database.connection.exec(readFileSync(new URL(name, migrationsDirectory), 'utf8'));
           database.lockWriter();
           await (await import(pathToFileURL(output).href)).exercise(database, { assets: operatorAssets(new URL('../../../web/dist-operator/', import.meta.url)),
-            applicationRoot: fileURLToPath(new URL('../../../', import.meta.url)),
-            importDownload: async input => {
-              const root = fileURLToPath(new URL('../../../', import.meta.url));
-              const output = execFileSync(join(root, '.venv/bin/python'), ['-m', 'tests.community_node_import'], {
-                cwd: root, input: JSON.stringify(input), encoding: 'utf8', timeout: 30000,
-                env: { ...process.env, EDITARR_DATA_DIR: join(directory, 'local-app') },
-              });
-              if (!JSON.parse(output).committed) throw new Error('local_import_not_committed');
-            } });
+            applicationRoot: fileURLToPath(new URL('../../../', import.meta.url)) });
         } finally { database.close(); }
       }
     } finally { rmSync(directory, { recursive: true, force: true }); }

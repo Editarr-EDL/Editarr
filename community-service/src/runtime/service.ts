@@ -1,14 +1,9 @@
 import service from '../index';
-import { masterPolicy, type Env } from '../config';
+import { masterPolicy, routeLimits, voteLimits, type Env } from '../config';
 import { operatorConfig } from '../admin/auth/access';
 import { moderationLimits } from '../admin/admission';
-import { publicationLimits } from '../contributions/publication-input';
-import { searchLimits } from '../catalog/search-input';
-import { downloadLimits } from '../contributions/download';
-import { importLimits } from '../http/imports';
-import { voteLimits } from '../contributions/votes';
-import { reportLimits } from '../contributions/reports';
-import { loadReceiptSigner, receiptKeysSchema } from '../contributions/receipts';
+import { loadReceiptSigner, receiptKeysSchema } from '../security/service-signer';
+import { submissionLimitsSchema } from '../submissions/input';
 
 export { previewRetention } from '../retention/policy';
 
@@ -18,12 +13,9 @@ export async function validateEnvironment(env: Env) {
       !/^\d{17,20}$/.test(env.DISCORD_CLIENT_ID ?? '') || !/^\d{17,20}$/.test(env.DISCORD_GUILD_ID ?? '') ||
       !env.DISCORD_CLIENT_SECRET || !env.DISCORD_BOT_TOKEN || !env.POLICY_VERSION) throw new Error('invalid_service_configuration');
   operatorConfig(env);
-  publicationLimits(JSON.parse(env.PUBLICATION_LIMITS ?? ''));
-  searchLimits(JSON.parse(env.LOOKUP_LIMITS ?? ''));
-  downloadLimits(JSON.parse(env.DOWNLOAD_LIMITS ?? ''));
-  importLimits.parse(JSON.parse(env.IMPORT_LIMITS ?? ''));
+  submissionLimitsSchema.parse(JSON.parse(env.SUBMISSION_LIMITS ?? ''));
   voteLimits.parse(JSON.parse(env.VOTE_LIMITS ?? ''));
-  reportLimits.parse(JSON.parse(env.REPORT_LIMITS ?? ''));
+  routeLimits.parse(JSON.parse(env.REPORT_LIMITS ?? ''));
   moderationLimits.parse(JSON.parse(env.MODERATION_LIMITS ?? ''));
   masterPolicy(env);
   const keys = receiptKeysSchema.parse(JSON.parse(env.DOWNLOAD_RECEIPT_KEYS ?? ''));

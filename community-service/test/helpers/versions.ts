@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { env } from './environment';
 import { DEFAULT_MASTER_POLICY } from '../../src/filters/policy';
-import type { VersionAcceptanceInput } from '../../src/versions/acceptance-service';
+import { isCatalogWriteConflict, planVersionAcceptance, type AcceptanceOptions, type VersionAcceptance,
+  type VersionAcceptanceInput } from '../../src/versions/acceptance-service';
 import type { EvidenceKey } from '../../src/versions/keys';
 
 export const db = env.CATALOG_DB;
@@ -42,3 +43,19 @@ export function submission(overrides: Partial<VersionAcceptanceInput> = {}): Ver
 let ids = 0;
 /** Deterministic, ASCII-ordered service IDs for assertions. */
 export const newId = (prefix: string) => `${prefix}_${String(++ids).padStart(4, '0')}`;
+
+/**
+ * Commit a version acceptance plan on its own, replanning after a catalog write race. Catalog
+ * tests use it in place of a full submission; the service commits plans inside the submission batch.
+ */
+export async function acceptPlanned(input: VersionAcceptanceInput, options: AcceptanceOptions, attempts = 5): Promise<VersionAcceptance> {
+  for (let attempt = 1; ; attempt++) {
+    const plan = await planVersionAcceptance(db, input, options);
+    try {
+      await db.batch(plan.statements);
+      return plan.result;
+    } catch (error) {
+      if (attempt >= attempts || !isCatalogWriteConflict(error)) throw error;
+    }
+  }
+}

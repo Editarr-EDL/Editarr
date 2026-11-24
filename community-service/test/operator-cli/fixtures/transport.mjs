@@ -11,9 +11,9 @@ globalThis.fetch = async (url, options) => {
   if (path === '/admin/v1/moderation') {
     if (process.env.CSS59_INTERRUPTED) throw new Error('secret.header.signature');
     const body = JSON.parse(options.body);
-    return Response.json({ version: 1, actionId: body.actionId, resource: `revision:${body.targetId}`,
+    return Response.json({ version: 1, actionId: body.actionId, resource: `${body.resource}:${body.targetId}`,
       revision: body.expectedRevision + 1, outcome: 'applied' });
   }
-  return Response.json({ version: 1, resource: 'revision:revision-1', revision: process.env.CSS59_STALE ? 3 : 2,
+  return Response.json({ version: 1, resource: 'filter:filter-1', revision: process.env.CSS59_STALE ? 3 : 2,
     state: { state: 'published' }, audit: [] });
 };

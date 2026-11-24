@@ -6,6 +6,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { SqliteDatabase } from './sqlite.mjs';
 
 export const migrationsDirectory = new URL('../../migrations/', import.meta.url);
+/** Schema lineage of the rebased master-set baseline; stores from any other lineage are refused. */
+export const SCHEMA_LINEAGE = 'community-master-1';
+/** Refusal codes that are safe to print, so operators see why a store was not opened. */
+export const REPORTED_REFUSALS = new Set(['unsupported_database_lineage', 'database_upgrade_required',
+  'unknown_database_schema', 'unknown_database_version', 'database_missing_or_symlink', 'database_integrity_failed']);
 
 function migrations(root) {
   const names = readdirSync(root).filter(name => /^\d{4}_.+\.sql$/.test(name)).sort();
@@ -22,7 +27,21 @@ function verifyIntegrity(connection) {
       connection.prepare('PRAGMA foreign_key_check').all().length) throw new Error('database_integrity_failed');
 }
 
+/**
+ * Refuse a store from another schema lineage (for example the pre-rebase revision schema)
+ * before comparing versions. Such a store is never stamped or upgraded; archive it instead.
+ */
+function verifyLineage(connection) {
+  let rows = [];
+  try { rows = connection.prepare('SELECT lineage FROM schema_lineage').all(); }
+  catch (error) {
+    if (!/no such (table|column)/.test(String(error?.message))) throw error;
+  }
+  if (rows.length !== 1 || rows[0].lineage !== SCHEMA_LINEAGE) throw new Error('unsupported_database_lineage');
+}
+
 function verifySchema(connection, inventory) {
+  verifyLineage(connection);
   const version = connection.prepare('PRAGMA user_version').get().user_version;
   if (!Number.isSafeInteger(version) || version < 1 || version > inventory.length) throw new Error('unknown_database_version');
   const expected = new DatabaseSync(':memory:');

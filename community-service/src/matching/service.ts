@@ -45,7 +45,7 @@ export async function matchVersions(db: SqlDatabase, query: MatchRequest, option
     } else if (key.type === 'tmdb' || key.type === 'tvdb') {
       const row = key.kind === 'movie' ? identifierRow(key.type, 'movie', key.id)
         : identifierRow(key.type, 'episode', key.id, key.season, key.episode, key.lastEpisode ?? null);
-      const rows = await db.prepare(`SELECT work_id FROM master_work_identifiers WHERE provider = ? AND kind = ? AND value = ?
+      const rows = await db.prepare(`SELECT work_id FROM work_identifiers WHERE provider = ? AND kind = ? AND value = ?
         AND season = ? AND episode = ? AND last_episode = ?`)
         .bind(row.provider, row.kind, row.value, row.season, row.episode, row.lastEpisode).all<{ work_id: string }>();
       for (const { work_id } of rows.results) providerWorks.set(work_id, (providerWorks.get(work_id) ?? new Set()).add(key.type));

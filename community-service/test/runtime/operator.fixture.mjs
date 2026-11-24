@@ -29,7 +29,7 @@ export async function exercise(database, runtime) {
     const current = await cli(['inspect', 'contributor', person.contributorId]);
     const directory = mkdtempSync(join(tmpdir(), 'community-cli-'));
     try {
-      const action = ['moderate', 'suspend', person.contributorId, '--expected-revision', String(current.revision), '--reason', 'Synthetic operator review'];
+      const action = ['moderate', 'suspend', 'contributor', person.contributorId, '--expected-revision', String(current.revision), '--reason', 'Synthetic operator review'];
       assert.equal((await cli(action)).dryRun, true);
       expectStatus(await read(person, '/v1/identity'));
       const checkpoint = join(directory, 'action');

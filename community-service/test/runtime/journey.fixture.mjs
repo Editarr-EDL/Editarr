@@ -11,8 +11,8 @@ import { tunnelActor, readConfiguration } from '../../src/runtime/environment.mj
 import { signingKey, signedPost, signedRead } from '../helpers/key-lifecycle.ts';
 import { signedEnrollment } from '../helpers/enrollment-signatures.ts';
 import { confirmationHash } from '../../src/identity/confirmation.ts';
-import { limits } from '../helpers/publication.ts';
 import { DEFAULT_MASTER_POLICY } from '../../src/filters/policy.ts';
+import { DEFAULT_SUBMISSION_LIMITS } from '../../src/submissions/input.ts';
 
 export const origin = 'https://community.example';
 export const timestamp = () => Math.floor(Date.now() / 1000);
@@ -48,13 +48,7 @@ export async function journey(database, run, runtime = {}) {
     DISCORD_CLIENT_SECRET: 'synthetic-secret', DISCORD_BOT_TOKEN: 'synthetic-bot',
     OPERATOR_ORIGIN: 'https://operator.example.test', ACCESS_ISSUER: 'https://journey.cloudflareaccess.com',
     ACCESS_AUDIENCE: 'journey', OPERATOR_SUBJECTS: '["operator"]',
-    PUBLICATION_LIMITS: JSON.stringify(limits),
-    LOOKUP_LIMITS: JSON.stringify({ requestBytes: 131072, responseBytes: 1048576, maxItems: 50,
-      maxKeys: 300, maxQueries: 12, maxCandidates: 96, maxRows: 500, maxPageSize: 20,
-      cacheEntries: 8, cacheBytes: 1048576, positiveTtlSeconds: 60, negativeTtlSeconds: 5 }),
-    DOWNLOAD_LIMITS: JSON.stringify({ requestBytes: 8192, artifactBytes: 65536, manifestBytes: 16384,
-      payloadBytes: 82176, responseBytes: 131072, maxQueries: 24, cacheEntries: 4, cacheBytes: 1048576, cacheTtlSeconds: 60 }),
-    IMPORT_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 32 }),
+    SUBMISSION_LIMITS: JSON.stringify(DEFAULT_SUBMISSION_LIMITS),
     VOTE_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
     REPORT_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
     MODERATION_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
