@@ -92,7 +92,6 @@ export interface ReviewRepairSummary {
   missing_scan_ids: string[];
   detected_at: string;
   recover: { kept_cues: number; removed_memberships: number; removed_accepted_credits: number };
-  community: { available: boolean; unavailable_reason: string | null } | null;
 }
 
 export interface SavedReviewSummary {

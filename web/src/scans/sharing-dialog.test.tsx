@@ -138,7 +138,7 @@ it("queues only the exact approved ID, retries the saved job and cancels without
 });
 it("recovers saved publication status on reopen without auto-send", async () => {
   vi.mocked(api.fetchSharingContext).mockResolvedValue({ ...sharingContextFixture(), jobs: [pendingPublication] });
-  vi.mocked(api.checkPublication).mockResolvedValue({ ...pendingPublication, state: "published", result: { committedAt: 123, revisionId: pendingPublication.revisionId } });
+  vi.mocked(api.checkPublication).mockResolvedValue({ ...pendingPublication, state: "published", result: { committedAt: 123 } });
   await open();
   fireEvent.click(within(screen.getByRole("region", { name: "Saved publications" })).getByRole("button"));
   expect(api.retryPublication).not.toHaveBeenCalled();
@@ -210,7 +210,7 @@ it.each([false, true])("allows in-flight cancellation without overriding a commi
     finishCancel(cancelled);
     await screen.findByText(/Cancellation does not delete/);
   }
-  finish({ ...pendingPublication, state: "published", result: { committedAt: 123, revisionId: pendingPublication.revisionId } });
+  finish({ ...pendingPublication, state: "published", result: { committedAt: 123 } });
   await screen.findByRole("heading", { name: "Published" });
   if (lateCancel) {
     finishCancel(cancelled);

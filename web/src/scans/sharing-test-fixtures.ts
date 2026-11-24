@@ -26,7 +26,7 @@ export function sharingContextFixture(kind = "ai"): SharingContext {
 }
 export const pendingPublication: PublicationJob = {
   ownerId: 1, actorId: 1, contributorId: "original-contributor",
-  operationId: "publish-original", contributionId: "contribution-original", revisionId: "submission-original",
+  operationId: "publish-original",
   artifactDigest: "a".repeat(64), state: "pending", phase: "awaiting_send", cancelRequested: false,
   errorCode: null, result: null,
 };

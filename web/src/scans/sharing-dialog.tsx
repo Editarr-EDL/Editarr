@@ -252,10 +252,10 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
     </>}
       {context && !job && context.jobs.length > 0 && <section aria-label="Saved publications"><h3>Saved publications</h3>
         {context.jobs.map((saved) => <button type="button" className="btn-secondary" key={saved.operationId}
-          onClick={() => acceptJob(saved)} disabled={busy}>{saved.state} · {saved.revisionId.slice(0, 12)}</button>)}
+          onClick={() => acceptJob(saved)} disabled={busy}>{saved.state} · {saved.operationId.slice(0, 12)}</button>)}
       </section>}
     {job && <section aria-label="Publication status"><h3>{job.state === "published" ? "Published" : job.state.replace(/_/g, " ")}</h3>
-      <dl className="sharing-facts"><dt>Original contributor</dt><dd>{job.contributorId}</dd><dt>Revision</dt><dd>{job.revisionId}</dd><dt>Phase</dt><dd>{job.phase}</dd></dl>
+      <dl className="sharing-facts"><dt>Original contributor</dt><dd>{job.contributorId}</dd><dt>Operation</dt><dd>{job.operationId}</dd><dt>Phase</dt><dd>{job.phase}</dd></dl>
       {job.errorCode && (job.errorCode !== "not_connected" || jobHeld) && <p role="alert">{jobHeld
         ? "This contributor is disconnected. Saved publications are held until reconnect."
         : errorText(job.errorCode)}</p>}

@@ -1,8 +1,7 @@
 import { Fragment, useId, useMemo, useState } from "react";
 import type { SharingFinding, SharingPreview } from "../api/api-community-sharing";
 import { CommunityIcon } from "./community-icon";
-import { categoryLabel } from "./community-result-state";
-import { estimateText } from "./community-master-format";
+import { categoryLabel, estimateText } from "./community-master-format";
 
 type Counts = { total: number; scanned: number | null; added: number | null; edited: number | null };
 type Subcategory = { name: string; counts: Counts };

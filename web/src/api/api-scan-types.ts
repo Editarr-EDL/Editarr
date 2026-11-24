@@ -70,7 +70,7 @@ export interface Scan {
   imported_at: string | null;
   mcf_document: ScanMcfDocument | null;
   credits_detection: CreditsDetection | null;
-  community_provenance?: { author_id: string; contribution_id: string; revision_id: string; digest: string; [key: string]: unknown } | null;
+  community_provenance?: { author_id: string; digest: string; [key: string]: unknown } | null;
   community_approvals?: { source: "jellyfin"; target_item_id: string;
     media_source_id: string | null; channels: ("audio" | "video")[] }[];
 }

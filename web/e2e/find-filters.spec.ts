@@ -66,9 +66,9 @@ for (const width of [320, 1440]) {
     expect(searches[0]).toMatchObject({ source: "jellyfin", item_id: "movie-1", media_source_id: "source-2",
       duration_seconds: 5700, scene_name: items[0].versions[1].scene_name, release_group: "OTHER" });
     expect(searches[0]).not.toHaveProperty("source_path");
-    await expect(dialog.getByRole("button", { name: "Find community filters" })).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: "Find community versions" })).toBeEnabled();
     await page.keyboard.press("Shift+Tab");
-    await expect(dialog.getByRole("button", { name: "Find community filters" })).toBeFocused();
+    await expect(dialog.getByRole("button", { name: "Find community versions" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(selected).toBeFocused();
     await expectNoHorizontalPageOverflow(page);

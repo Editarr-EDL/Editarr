@@ -15,7 +15,6 @@ const repair: ReviewRepairSummary = {
   message: "This review uses a scan that no longer exists.",
   missing_scan_ids: ["missing"], detected_at: "2026-10-25T00:00:00Z",
   recover: { kept_cues: 3, removed_memberships: 2, removed_accepted_credits: 1 },
-  community: { available: true, unavailable_reason: null },
 };
 const healthy: SavedReview = {
   id: "healthy", media_item_id: "media-1", target: { source: "jellyfin", item_id: "media-1", media_source_id: null },
@@ -48,7 +47,7 @@ function installApi(initial: SavedReviewSummary[] = [broken], detail: SavedRevie
     throw new Error(`Unexpected request ${path}`);
   });
   vi.stubGlobal("fetch", requests);
-  access.principal = { capabilities: knownCapabilities(["reviews.delete.own", "reviews.save.own", "community.download"]) } as Principal;
+  access.principal = { capabilities: knownCapabilities(["reviews.delete.own", "reviews.save.own"]) } as Principal;
   return requests;
 }
 
@@ -115,7 +114,6 @@ it("deletes a flagged review through the file-choice dialog and refreshes the li
 
 it.each([
   { option: "Recover the review", submit: "Recover review", method: "POST", endpoint: "/api/reviews/broken/repair/recover" },
-  { option: "Re-download from the community", submit: "Re-download", method: "POST", endpoint: "/api/reviews/broken/repair/community" },
 ])("$option succeeds through its endpoint, closes the modal and refreshes the list", async ({ option, submit, method, endpoint }) => {
   const requests = installApi();
   render(<SavedReviewPanel {...props} />);

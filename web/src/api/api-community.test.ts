@@ -3,7 +3,6 @@ import { CommunityApiError, completeCommunityEnrollment, fetchCommunityConnectio
   renameCommunityProfile, startCommunityEnrollment, rotateCommunityKey, reconcileCommunityKey, retryCommunityKey } from "./api-community";
 import { setCsrfToken } from "./api-transport";
 import { resetRuntimeUrlsForTests } from "../shared/runtime-urls";
-import { recoverCommunityReceipts, retryCommunityReceipt } from "./api-community-receipts";
 
 afterEach(() => {
   setCsrfToken(null);
@@ -11,32 +10,6 @@ afterEach(() => {
   document.head.insertAdjacentHTML("beforeend", '<script id="editarr-bootstrap" type="application/json">{"version":1,"basePath":"/","apiBasePath":"/api"}</script>');
   resetRuntimeUrlsForTests();
   vi.unstubAllGlobals();
-});
-
-it("binds explicit receipt recovery and retry to one target, request lifetime, and CSRF session", async () => {
-  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ importIds: ["private/import"] })))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ importId: "private/import", state: "acknowledged" })));
-  vi.stubGlobal("fetch", fetch);
-  setCsrfToken("receipt-csrf");
-  const signal = new AbortController().signal;
-  const options = { userId: 17, signal };
-  expect(await recoverCommunityReceipts(options)).toEqual(["private/import"]);
-  await retryCommunityReceipt("private/import", options);
-  expect(fetch.mock.calls.map(call => call[0])).toEqual([
-    "/api/community/import-receipts/recover?user_id=17", "/api/community/import-receipts/private%2Fimport/retry?user_id=17",
-  ]);
-  for (const [, init] of fetch.mock.calls) {
-    expect(init.signal).toBe(signal);
-    expect(new Headers(init.headers).get("X-CSRF-Token")).toBe("receipt-csrf");
-    expect(JSON.parse(init.body)).toEqual({ confirmed: true });
-  }
-});
-
-it("preserves receipt refusals and rejects mismatched retry acknowledgments", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ code: "not_found" }), { status: 404 }))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ importId: "another", state: "acknowledged" }))));
-  await expect(recoverCommunityReceipts()).rejects.toMatchObject({ code: "not_found", status: 404 });
-  await expect(retryCommunityReceipt("original")).rejects.toMatchObject({ code: "invalid_response" });
 });
 
 it("uses only mounted local APIs, session CSRF and explicit completion", async () => {
