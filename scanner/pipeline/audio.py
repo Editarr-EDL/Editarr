@@ -1,4 +1,4 @@
-"""Audio content scanner using Whisper transcription + profanity detection."""
+"""Audio transcription and timestamped profanity detection."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -16,9 +17,18 @@ from scanner.evaluation.subcategorization import subcategorize_detector_label
 from scanner.model_acquisition import acquire_backend
 from scanner.models import FindingCreate, McfCategoryFamily, Severity
 from scanner.runtime.runtime_support import resolve_ffmpeg
-from scanner.settings.capabilities import DEFAULT_QWEN_MODEL, capability_for, current_environment
+from scanner.settings.capabilities import (
+    APPLE_SPEECH_MODEL,
+    DEFAULT_QWEN_MODEL,
+    capability_for,
+    current_environment,
+)
+from scanner.settings.capabilities import (
+    SUPPORTED_AUDIO_MODELS as SUPPORTED_AUDIO_MODELS,
+)
 from scanner.settings.config import settings
 
+from .apple_speech import speech_locale, transcript_revision
 from .audio_filters import (
     _audio_filter_detector as _audio_filter_detector,
 )
@@ -85,7 +95,6 @@ _models: dict[str, Any] = {}
 _audio_filter_detectors: dict[str, Callable[[str], bool]] = {}
 _better_profanity_loaded = False
 
-SUPPORTED_AUDIO_MODELS = {"whisper", "mlx_whisper"}
 _AUDIO_MODEL_ALIASES = {
     "faster_whisper": "whisper",
     "faster-whisper": "whisper",
@@ -122,10 +131,16 @@ def resolve_audio_model_name(model_name: str | None = None) -> str:
     return resolved
 
 
-def transcription_cache_model_key(model_name: str | None = None) -> str:
-    """Return a stable cache key scoped by backend and underlying model size."""
+def transcription_cache_model_key(
+    model_name: str | None = None, *, audio_language: str | None = None
+) -> str:
+    """Scope the transcript cache to the backend and its transcription settings."""
     selected_model = resolve_audio_model_name(model_name)
-    model_variant = resolve_whisper_model_name()
+    model_variant = (
+        transcript_revision(speech_locale(audio_language))
+        if selected_model == APPLE_SPEECH_MODEL
+        else resolve_whisper_model_name()
+    )
     return f"{selected_model}_{model_variant}"
 
 
@@ -273,6 +288,8 @@ def scan_audio(
     *,
     audio_padding_seconds: float | None = None,
     decision_callback: Callable[[LanguageDecisionAttempt], None] | None = None,
+    audio_language: str | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[FindingCreate]:
     """
     Transcribe audio and detect profanity with timestamps.
@@ -293,6 +310,14 @@ def scan_audio(
         else _audio_filter_detector(selected_filter)
     )
     _runtime_allow_unused, runtime_deny = effective_audio_filter_words([], deny_words)
+    transcribe = None
+    if resolve_audio_model_name(model_name) == APPLE_SPEECH_MODEL:
+        transcribe = partial(
+            _transcribe_serialized,
+            model_name=model_name,
+            locale=speech_locale(audio_language),
+            should_cancel=should_cancel,
+        )
     transcript_segments = _transcription_with_cache(
         audio_path,
         model_name,
@@ -302,6 +327,7 @@ def scan_audio(
             if qwen_model and progress_callback
             else progress_callback
         ),
+        transcribe=transcribe,
     )
 
     detections: list[ProfanityDetection] = []

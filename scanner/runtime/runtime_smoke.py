@@ -146,6 +146,10 @@ def run_runtime_smoke() -> int:
     if ffprobe is None:
         raise RuntimeError("Bundled ffprobe is unavailable")
     _run_helper(ffprobe, "ffprobe")
+    if platform.system() == "Darwin":
+        from .apple_speech.helper import bundled_helper
+
+        _run_helper(str(bundled_helper()), "Apple Speech")
     if has_source_built_media():
         _smoke_release_media(ffmpeg)
     model = os.environ.get(MODEL_ENVIRONMENT)

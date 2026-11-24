@@ -115,6 +115,9 @@ class Settings(BaseSettings):
 
     # Audio scanning
     whisper_model: str = "base"
+    apple_speech_locale: str | None = Field(
+        default=None, pattern=r"^[a-zA-Z]{2,3}(?:[-_][a-zA-Z0-9]{2,8}){0,3}$"
+    )
     audio_filter: str = "better_profanity"
     # Include a small lead-in and tail after each detected audio word. A
     # deployment can set the default using EDITARR_PROFANITY_PAD_SECONDS.

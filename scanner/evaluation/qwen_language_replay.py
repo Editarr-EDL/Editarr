@@ -13,11 +13,12 @@ from pydantic import BaseModel, Field
 
 from scanner.model_acquisition import _cross_process_lock, artifact_ids_for_backend, manifest
 from scanner.models import FindingCreate
+from scanner.pipeline.apple_speech import speech_locale, transcript_revision
 from scanner.pipeline.audio import resolve_audio_model_name, scan_audio
 from scanner.pipeline.audio_words import effective_audio_filter_words
 from scanner.pipeline.qwen_language_trace import LanguageDecisionAttempt
 from scanner.runtime.runtime_paths import ensure_user_private_directory
-from scanner.settings.capabilities import SUPPORTED_QWEN_LANGUAGE_REPLAY_MODELS
+from scanner.settings.capabilities import APPLE_SPEECH_MODEL, SUPPORTED_QWEN_LANGUAGE_REPLAY_MODELS
 from scanner.settings.model_scan_settings import ModelScanSettings
 
 
@@ -62,8 +63,12 @@ def replay_qwen_language(
     audio_hash = _sha256(audio)
     audio_model = resolve_audio_model_name(audio_model)
     model_manifest = manifest()
-    artifact = model_manifest.artifact(artifact_ids_for_backend(audio_model)[0])
-    transcriber_id, revision = artifact.id, artifact.revision
+    if audio_model == APPLE_SPEECH_MODEL:
+        transcriber_id = "apple-speech"
+        revision = transcript_revision(speech_locale())
+    else:
+        artifact = model_manifest.artifact(artifact_ids_for_backend(audio_model)[0])
+        transcriber_id, revision = artifact.id, artifact.revision
     qwen_artifact = model_manifest.artifact(qwen_model)
     directory = ensure_user_private_directory(cache_dir / "v1" / audio_hash)
     transcript_path = directory / f"{transcriber_id}-{revision}.json"

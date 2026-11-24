@@ -7,7 +7,10 @@ import { AuthenticationGate } from "../auth/auth-gate";
 import { completeScan, installProductionApi, json, mediaItem, signedInStatus } from "./app-test-fixtures";
 
 const audioCapabilities = {
-  audio_models: [{ id: "whisper", display_name: "Whisper" }],
+  audio_models: [
+    { id: "whisper", display_name: "Whisper" },
+    { id: "apple_speech", display_name: "Apple Speech" },
+  ],
   audio_filters: [
     { id: "better_profanity", display_name: "better-profanity" },
     { id: "qwen", display_name: "Qwen (multilingual)" },
@@ -52,6 +55,11 @@ describe("Qwen language scan controls", () => {
     expect(within(dialog).getByLabelText("Scan type")).toHaveValue("audio");
     fireEvent.change(within(dialog).getByLabelText("Scan type"), { target: { value: mode } });
     if (mode !== "video") {
+      const transcriber = within(dialog).getByLabelText("Transcriber");
+      await within(transcriber).findByRole("option", { name: "Apple Speech" });
+      expect(transcriber).toHaveValue("whisper");
+      fireEvent.change(transcriber, { target: { value: "apple_speech" } });
+      expect(within(dialog).getByText(/macOS may download speech assets/)).toBeVisible();
       await within(dialog).findByRole("option", { name: "Qwen (multilingual)" });
       fireEvent.change(within(dialog).getByLabelText("Filter"), { target: { value: "qwen" } });
     }
@@ -75,6 +83,7 @@ describe("Qwen language scan controls", () => {
       media_source_id: "source-1",
       scan_audio: mode !== "video",
       scan_video: mode !== "audio",
+      audio_model: mode === "video" ? null : "apple_speech",
       audio_filter: mode === "video" ? null : "qwen",
       qwen_model: "qwen3-vl-4b-instruct-4bit",
     });

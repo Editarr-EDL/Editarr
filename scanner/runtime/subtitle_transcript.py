@@ -12,7 +12,7 @@ from scanner.formats.subtitles import SubtitleDocument, parse_subtitles, srt_tim
 from scanner.integrations.jellyfin_subtitles import normalize_language
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.modeling.model_subtitles import ReviewAudioSource
-from scanner.pipeline.audio import transcription_cache_model_key
+from scanner.pipeline.audio import resolve_audio_model_name, transcription_cache_model_key
 from scanner.pipeline.audio_timing import audio_playback_start
 from scanner.pipeline.audio_tracks import AudioTrackSelection, probe_audio_tracks
 from scanner.pipeline.cache import transcription_cache_path
@@ -89,13 +89,15 @@ def _time(value) -> float:
 def _cache_paths(audio: ReviewedAudio):
     for model in audio.models:
         try:
-            key = transcription_cache_model_key(model)
+            key = transcription_cache_model_key(
+                model, audio_language=audio.selection.track.language
+            )
+            backend = resolve_audio_model_name(model)
         except ValueError:
             continue
         path = transcription_cache_path(audio.source.id, key, create=False)
         yield path
-        backend = key.split("_", 1)[0]
-        # Backend names use a hyphen internally. Try other model-variant caches for this track.
+        # Try other cached variants of this backend for the same physical track.
         yield from sorted(path.parent.glob(f"transcript_{backend}_*.json"), reverse=True)
 
 

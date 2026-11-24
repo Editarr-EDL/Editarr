@@ -149,6 +149,26 @@ def test_prompt_replay_reuses_transcript_and_compares_findings(
     assert all(value in comparison for value in ("jerk", "low", "high"))
 
 
+def test_apple_speech_replay_records_locale_in_transcript_identity(
+    tmp_path, replay_backend, monkeypatch
+):
+    audio_path = tmp_path / "excerpt.wav"
+    report = tmp_path / "report.json"
+    cache = tmp_path / "cache"
+    _write_audio(audio_path)
+    monkeypatch.setattr(audio.settings, "apple_speech_locale", "en-GB")
+
+    assert main(_run_args(audio_path, report, cache, "--audio-model", "apple_speech")) == 0
+    result = json.loads(report.read_text())
+    assert result["transcription_model"] == "apple-speech@v1.en-gb"
+    assert replay_backend.transcriptions == [
+        (
+            "apple_speech",
+            str(cache / "v1" / result["audio_sha256"] / "apple-speech-v1.en-gb.json"),
+        ),
+    ]
+
+
 def test_replay_compares_qwen35_to_default_with_the_same_transcript(
     tmp_path, replay_backend, capsys
 ):

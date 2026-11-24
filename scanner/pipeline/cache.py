@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 
+from scanner.runtime.durability import atomic_write_bytes
 from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.settings.config import settings
 
@@ -103,16 +103,7 @@ def save_cached_credits_result(cache_key: str, payload: dict[str, object]) -> No
 
 def atomic_write_json(path: Path, payload: object) -> None:
     """Write a JSON cache entry without exposing a partial file to a retry."""
-    temporary_path = path.with_name(f".{path.name}.partial")
-    try:
-        with temporary_path.open("w", encoding="utf-8") as file_obj:
-            json.dump(payload, file_obj)
-            file_obj.flush()
-            os.fsync(file_obj.fileno())
-        os.replace(temporary_path, path)
-    finally:
-        if temporary_path.exists():
-            temporary_path.unlink(missing_ok=True)
+    atomic_write_bytes(path, json.dumps(payload).encode("utf-8"), prefix=f".{path.name}-")
 
 
 def transcription_cache_path(video_hash: str, model_name: str, *, create: bool = True) -> Path:

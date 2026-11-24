@@ -1,4 +1,4 @@
-"""Whisper transcript serialization, caching, and resumable WAV chunks."""
+"""Timed transcript serialization, caching, and resumable WAV chunks."""
 
 import json
 import wave
@@ -6,9 +6,15 @@ from collections.abc import Callable
 from importlib import import_module
 from inspect import signature
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from scanner.pipeline.cache import atomic_write_json
+from scanner.settings.capabilities import APPLE_SPEECH_MODEL
+
+from . import apple_speech
+
+Transcriber = Callable[[str], list[dict[str, Any]]]
 
 
 def _serialize_transcript(segments: Any) -> list[dict[str, Any]]:
@@ -108,6 +114,8 @@ def _transcription_with_cache(
     model_name: str | None,
     transcript_cache_path: str | None = None,
     progress_callback: Callable[[float, str], None] | None = None,
+    *,
+    transcribe: Transcriber | None = None,
 ) -> list[dict[str, Any]]:
     """Read a cached transcript or transcribe and atomically cache the result."""
     from scanner.pipeline import audio as root
@@ -130,6 +138,7 @@ def _transcription_with_cache(
         model_name,
         transcript_cache_path,
         progress_callback=progress_callback,
+        transcribe=transcribe,
     )
 
     if transcript_cache_path:
@@ -140,10 +149,23 @@ def _transcription_with_cache(
     return serialized
 
 
-def _transcribe_serialized(audio_path: str, model_name: str | None) -> list[dict[str, Any]]:
+def _transcribe_serialized(
+    audio_path: str,
+    model_name: str | None,
+    *,
+    locale: str | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> list[dict[str, Any]]:
     from scanner.pipeline import audio as root
 
     selected_model = root.resolve_audio_model_name(model_name)
+    if selected_model == APPLE_SPEECH_MODEL:
+        return root._serialize_transcript(
+            apple_speech.transcribe(
+                audio_path, locale=locale or apple_speech.speech_locale(),
+                should_cancel=should_cancel,
+            )
+        )
     if selected_model == "mlx_whisper":
         return root._transcribe_with_mlx_whisper(audio_path)
     model = root._get_whisper_model(model_name)
@@ -156,19 +178,26 @@ def _transcribe_with_resumable_chunks(
     model_name: str | None,
     transcript_cache_path: str | None,
     progress_callback: Callable[[float, str], None] | None = None,
+    *,
+    transcribe: Transcriber | None = None,
 ) -> list[dict[str, Any]]:
     """Transcribe PCM WAV in reusable, overlapped chunks when a cache is available."""
     from scanner.pipeline import audio as root
 
+    trim_timed_text = root.resolve_audio_model_name(model_name) == APPLE_SPEECH_MODEL
+
+    def transcribe_file(path: str) -> list[dict[str, Any]]:
+        return transcribe(path) if transcribe else root._transcribe_serialized(path, model_name)
+
     if not transcript_cache_path:
-        transcript = root._transcribe_serialized(audio_path, model_name)
+        transcript = transcribe_file(audio_path)
         if progress_callback:
             progress_callback(1.0, "Audio transcription complete")
         return transcript
     try:
         with wave.open(audio_path, "rb") as source:
             if source.getcomptype() != "NONE":
-                transcript = root._transcribe_serialized(audio_path, model_name)
+                transcript = transcribe_file(audio_path)
                 if progress_callback:
                     progress_callback(1.0, "Audio transcription complete")
                 return transcript
@@ -177,7 +206,7 @@ def _transcribe_with_resumable_chunks(
             sample_width = source.getsampwidth()
             total_frames = source.getnframes()
     except (OSError, wave.Error):
-        transcript = root._transcribe_serialized(audio_path, model_name)
+        transcript = transcribe_file(audio_path)
         if progress_callback:
             progress_callback(1.0, "Audio transcription complete")
         return transcript
@@ -197,26 +226,25 @@ def _transcribe_with_resumable_chunks(
         chunk_cache = chunk_dir / f"chunk_{index:06d}.json"
         chunk_segments = root._load_transcript_chunk(chunk_cache)
         if chunk_segments is None:
-            temporary_audio = chunk_dir / f".chunk_{index:06d}.wav.partial"
-            with (
-                wave.open(audio_path, "rb") as source,
-                wave.open(str(temporary_audio), "wb") as target,
-            ):
-                target.setnchannels(channels)
-                target.setsampwidth(sample_width)
-                target.setframerate(frame_rate)
-                source.setpos(source_start)
-                target.writeframes(source.readframes(source_end - source_start))
-            try:
-                chunk_segments = root._transcribe_serialized(str(temporary_audio), model_name)
-            finally:
-                temporary_audio.unlink(missing_ok=True)
+            with TemporaryDirectory(dir=chunk_dir) as temporary:
+                temporary_audio = str(Path(temporary) / "audio.wav")
+                with (
+                    wave.open(audio_path, "rb") as source,
+                    wave.open(temporary_audio, "wb") as target,
+                ):
+                    target.setnchannels(channels)
+                    target.setsampwidth(sample_width)
+                    target.setframerate(frame_rate)
+                    source.setpos(source_start)
+                    target.writeframes(source.readframes(source_end - source_start))
+                chunk_segments = transcribe_file(temporary_audio)
             chunk_segments = root._offset_and_trim_segments(
                 chunk_segments,
                 source_start / frame_rate,
                 primary_start / frame_rate,
                 primary_end / frame_rate,
                 primary_end == total_frames,
+                trim_timed_text=trim_timed_text,
             )
             atomic_write_json(chunk_cache, chunk_segments)
         transcript.extend(chunk_segments)
@@ -244,6 +272,8 @@ def _offset_and_trim_segments(
     primary_start: float,
     primary_end: float,
     is_final_chunk: bool,
+    *,
+    trim_timed_text: bool = False,
 ) -> list[dict[str, Any]]:
 
     """Shift chunk timestamps and retain words belonging to the chunk primary span."""
@@ -263,6 +293,9 @@ def _offset_and_trim_segments(
             is_final_chunk or midpoint < primary_end
         )
         if words or (not segment.get("words") and belongs_to_primary_chunk):
+            if trim_timed_text and words and len(words) != len(segment["words"]):
+                segment = {**segment, "text": "".join(word["word"] for word in words).strip()}
+                start, end = words[0]["start_seconds"], words[-1]["end_seconds"]
             trimmed.append({**segment, "start_seconds": start, "end_seconds": end, "words": words})
     return trimmed
 

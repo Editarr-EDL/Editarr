@@ -34,6 +34,18 @@ from native_build.runtime_content import assert_clean_runtime as _assert_clean_r
 from native_build.runtime_content import (
     prune_excluded_runtime_content as _prune_excluded_runtime_content,
 )
+from native_build.runtime_helpers import (
+    build_apple_speech as _build_apple_speech,
+)
+from native_build.runtime_helpers import (
+    imageio_ffmpeg as _imageio_ffmpeg,
+)
+from native_build.runtime_helpers import (
+    stage_helpers as _stage_helpers,
+)
+from native_build.runtime_helpers import (
+    target_helper as _target_helper,
+)
 from native_build.runtime_layout import helper_name, resolve_executable
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -129,46 +141,8 @@ def _target_inputs() -> tuple[str, dict[str, str]]:
     return target, package_versions(target)
 
 
-def _imageio_ffmpeg() -> Path:
-    import imageio_ffmpeg
-
-    helper = Path(imageio_ffmpeg.get_ffmpeg_exe()).resolve()
-    if not helper.is_file():
-        raise RuntimeError("imageio-ffmpeg did not resolve a bundled FFmpeg helper")
-    return helper
-
-
-def _target_helper(value: str | None, name: str) -> Path:
-    if not value:
-        raise RuntimeError(
-            f"A relocatable {name} helper is required. Pass --{name}-helper from the "
-            "target release toolchain; do not use an untracked system PATH dependency."
-        )
-    supplied = Path(value).expanduser()
-    helper = supplied.resolve()
-    if supplied.is_symlink() or not helper.is_file():
-        raise RuntimeError(f"--{name}-helper must name a regular target helper executable")
-    return helper
-
-
 def _ffprobe_helper(value: str | None) -> Path:
     return _target_helper(value, "ffprobe")
-
-
-def _stage_helpers(
-    helpers: dict[str, Path], build_root: Path, *, target: str
-) -> dict[str, Path]:
-    """Give collected helpers stable runtime filenames independent of wheel filenames."""
-
-    destination = build_root / "helpers"
-    destination.mkdir(parents=True, exist_ok=True)
-    staged: dict[str, Path] = {}
-    for name, source in helpers.items():
-        staged_path = destination / helper_name(name, target)
-        shutil.copy2(source, staged_path)
-        staged_path.chmod(source.stat().st_mode)
-        staged[name] = staged_path
-    return staged
 
 
 def _build_backup_age(build_root: Path, target: str) -> Path:
@@ -223,8 +197,11 @@ def _inventory(
 ) -> dict[str, object]:
     from scripts.release_assets import source_identity
 
-    if set(helpers) != {"ffmpeg", "ffprobe", "backup-age"}:
-        raise RuntimeError("native runtime requires ffmpeg, ffprobe and backup-age helpers")
+    expected = {"ffmpeg", "ffprobe", "backup-age"}
+    if target == "macos-arm64":
+        expected.add("apple-speech")
+    if set(helpers) != expected:
+        raise RuntimeError(f"{target} runtime requires helpers {', '.join(sorted(expected))}")
     _revision, dirty = source_identity(ROOT)
     # ``sys._MEIPASS`` is the onedir ``_internal`` directory.  Hash the collected
     # helper rather than its build-time source: macOS code signing can legitimately
@@ -382,17 +359,11 @@ def build_native(args: argparse.Namespace) -> int:
     work_parent = args.work_dir.resolve()
     work_parent.mkdir(parents=True, exist_ok=True)
     build_root = Path(tempfile.mkdtemp(prefix="editarr-pyinstaller-", dir=work_parent))
-    backup_age = _build_backup_age(build_root, target)
-    helpers = {"ffmpeg": ffmpeg, "ffprobe": ffprobe, "backup-age": backup_age}
-    staged_helpers = _stage_helpers(helpers, build_root, target=target)
     environment = os.environ.copy()
     environment.setdefault("SOURCE_DATE_EPOCH", DEFAULT_SOURCE_DATE_EPOCH)
     environment.update(
         {
             "EDITARR_PYINSTALLER_TARGET": target,
-            "EDITARR_PYINSTALLER_FFMPEG": str(staged_helpers["ffmpeg"]),
-            "EDITARR_PYINSTALLER_FFPROBE": str(staged_helpers["ffprobe"]),
-            "EDITARR_PYINSTALLER_BACKUP_AGE": str(staged_helpers["backup-age"]),
             # PyInstaller otherwise persists its discovery cache below the developer's
             # home directory. Build-only state must stay inside our disposable root.
             "PYINSTALLER_CONFIG_DIR": str(build_root / "pyinstaller-config"),
@@ -409,6 +380,12 @@ def build_native(args: argparse.Namespace) -> int:
         environment["EDITARR_PYINSTALLER_MACOS_RELEASE"] = "1"
     try:
         with _staged_frontend() as frontend_hashes:
+            helpers = {"ffmpeg": ffmpeg, "ffprobe": ffprobe}
+            helpers["backup-age"] = _build_backup_age(build_root, target)
+            if target == "macos-arm64":
+                helpers["apple-speech"] = _build_apple_speech(build_root)
+            for name, path in _stage_helpers(helpers, build_root, target=target).items():
+                environment[f"EDITARR_PYINSTALLER_{name.upper().replace('-', '_')}"] = str(path)
             _run(
                 [
                     "uv",

@@ -30,7 +30,10 @@ def run_audio_stages(
 
     identity = audio_selection.extraction_cache_key() if audio_selection else video_hash
     shared_audio_path = pipeline.cached_audio_path(identity)
-    selected_model = pipeline.transcription_cache_model_key(audio_model)
+    audio_language = audio_selection.track.language if audio_selection else None
+    selected_model = pipeline.transcription_cache_model_key(
+        audio_model, audio_language=audio_language
+    )
     transcript_path = pipeline.transcription_cache_path(identity, selected_model)
     if should_cancel and should_cancel():
         raise ScanCancelledError("Scan cancelled")
@@ -85,6 +88,7 @@ def run_audio_stages(
             str(shared_audio_path),
             video_id,
             audio_model=audio_model,
+            audio_language=audio_language,
             audio_filter=audio_filter,
             audio_padding_seconds=audio_padding_seconds,
             qwen_model=qwen_model,

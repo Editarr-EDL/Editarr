@@ -54,6 +54,7 @@ class ModelCapability(ScanModelCapability):
         Literal[
             "unsupported_platform",
             "unsupported_architecture",
+            "unsupported_os_version",
             "missing_package",
             "missing_provider",
             "deferred_gap",
