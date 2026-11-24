@@ -6,9 +6,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import event
 
-from scanner.db import ScanRow
-from scanner.http.reuse_alignment import _transcript_cache_by_generation
+from scanner.db import ScanRow, ScanStageCoverageRow
+from scanner.http.reuse_alignment import (
+    _transcript_cache_by_generation,
+    alignment_transcript_status,
+)
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.persistence.repository.repository_audio_tracks import record_analyzed_audio_selection
 from scanner.persistence.repository.repository_checkpoints import mark_scan_checkpoint
@@ -17,6 +21,7 @@ from scanner.pipeline import audio, audio_tracks, runner
 from scanner.pipeline.audio_tracks import AudioTrack, AudioTrackInventory
 from scanner.pipeline.cache import transcription_cache_path
 from scanner.runtime.subtitle_transcript import cached_segments, reviewed_audio_sources
+from scanner.runtime.transcript_evidence import scan_transcript_candidates_by_id
 from scanner.runtime.version_reuse_audio import target_transcript_ready
 from tests.review_repository_support import review_db
 
@@ -132,24 +137,81 @@ def test_saved_review_uses_completed_attempt_and_never_substitutes_locale(apple_
 
 
 def test_target_transcript_requires_recorded_apple_scan_for_exact_generation(apple_scans):
-    _db, scans, paths, _media, selection = apple_scans
+    db, scans, paths, _media, selection = apple_scans
     source = scans["scan"]
     target_scans = [scans["rescan"]]
-    assert _transcript_cache_by_generation(source, selection, [], None)[2] is False
-    assert _transcript_cache_by_generation(source, selection, target_scans, None)[2] is True
+    recorded = scan_transcript_candidates_by_id(db, target_scans)
+    assert _transcript_cache_by_generation(source, selection, [], None, {})[2] is False
+    assert _transcript_cache_by_generation(source, selection, target_scans, None, recorded)[2]
     moved = replace(selection, file_version="b" * 64)
     # A different generation can have an identically named cache. The scan never used it.
     unproven = transcription_cache_path(moved.extraction_cache_key(), "apple_speech_v1.es-es")
     unproven.write_bytes(paths["rescan"].read_bytes())
-    assert _transcript_cache_by_generation(source, moved, target_scans, None)[2] is False
+    assert _transcript_cache_by_generation(source, moved, target_scans, None, recorded)[2] is False
 
     recorded_selection, candidates, ready = _transcript_cache_by_generation(
-        source, moved, target_scans, "verified-version"
+        source, moved, target_scans, "verified-version", recorded
     )
     assert ready and recorded_selection == selection
     assert target_transcript_ready(recorded_selection, candidates) is True
     assert target_transcript_ready(moved, candidates) is False
 
     paths["rescan"].unlink()
-    _, _, ready = _transcript_cache_by_generation(source, moved, target_scans, "verified-version")
+    _, _, ready = _transcript_cache_by_generation(
+        source, moved, target_scans, "verified-version", recorded
+    )
     assert not ready
+
+
+def test_alignment_status_batches_exact_coverage_for_100_scans(apple_scans):
+    db, scans, _paths, media, selection = apple_scans
+    source = scans["scan"]
+    coverage = next(row for row in source.stage_coverage if row.stage == "audio_scan")
+    for number in range(3, 101):
+        scan_id = f"scan-{number}"
+        db.add(ScanRow(
+            id=scan_id,
+            media_item_id="media",
+            scan_number=number,
+            status="complete",
+            origin="generated",
+            scan_audio=True,
+            scan_video=False,
+            audio_model="apple_speech",
+            source_path=str(media),
+            resolved_local_path=str(media),
+            analyzed_audio_selection_json=source.analyzed_audio_selection_json,
+            checkpoint_state=source.checkpoint_state,
+        ))
+        db.add(ScanStageCoverageRow(
+            scan_id=scan_id,
+            stage="audio_scan",
+            execution_id=coverage.execution_id,
+            status="complete",
+            source="generated",
+            effective_settings_json=coverage.effective_settings_json,
+        ))
+    db.commit()
+    db.expire_all()
+    queries = []
+
+    def record_query(_connection, _cursor, statement, parameters, _context, _many):
+        if "FROM scan_stage_coverage" in statement:
+            queries.append((statement, parameters))
+
+    caller = SimpleNamespace(db=db, require_scan=lambda *_: None, media_decision=lambda *_: None)
+    target = SimpleNamespace(
+        source=SimpleNamespace(item_id="item", media_source_id=None, server_id="server"),
+        media=SimpleNamespace(resolved_path=str(media)),
+    )
+    bind = db.get_bind()
+    event.listen(bind, "before_cursor_execute", record_query)
+    try:
+        assert alignment_transcript_status(caller, source, target, selection, None) == (True, False)
+    finally:
+        event.remove(bind, "before_cursor_execute", record_query)
+
+    [(query, parameters)] = queries
+    assert "scan_stage_coverage.execution_id) IN" in query
+    assert parameters[:2] == ("audio_scan", "complete")
+    assert len(parameters[2:]) == 200

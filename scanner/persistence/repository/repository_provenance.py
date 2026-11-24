@@ -1,7 +1,9 @@
 """Attempt-specific scanner execution provenance."""
 
 import json
+from collections.abc import Iterable
 
+from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
 from scanner.db import ScanRow, ScanStageCoverageRow
@@ -10,8 +12,7 @@ from scanner.settings.version_info import version_information
 from .repository_checkpoints import _checkpoint_state
 
 
-def completed_stage_settings(scan: ScanRow, stage: str) -> dict[str, object] | None:
-    """Read settings from the completed execution selected by the scan checkpoint."""
+def _completed_execution(scan: ScanRow, stage: str) -> str | None:
     checkpoint = _checkpoint_state(scan)
     entry = checkpoint.get(stage)
     if (
@@ -21,14 +22,51 @@ def completed_stage_settings(scan: ScanRow, stage: str) -> dict[str, object] | N
         or not isinstance(execution_id := entry.get("execution_id"), str)
     ):
         return None
+    return execution_id
+
+
+def _decode_settings(payload: str | None) -> dict[str, object] | None:
+    try:
+        settings = json.loads(payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return settings if isinstance(settings, dict) else None
+
+
+def completed_stage_settings(scan: ScanRow, stage: str) -> dict[str, object] | None:
+    """Read settings from the completed execution selected by the scan checkpoint."""
+    execution_id = _completed_execution(scan, stage)
+    if execution_id is None:
+        return None
     for row in scan.stage_coverage:
         if row.stage == stage and row.execution_id == execution_id and row.status == "complete":
-            try:
-                settings = json.loads(row.effective_settings_json or "{}")
-            except (TypeError, json.JSONDecodeError):
-                return None
-            return settings if isinstance(settings, dict) else None
+            return _decode_settings(row.effective_settings_json)
     return None
+
+
+def completed_stage_settings_by_scan(
+    db: Session, scans: Iterable[ScanRow], stage: str
+) -> dict[str, dict[str, object]]:
+    """Fetch the exact checkpoint-selected settings for a bounded set of scans."""
+    keys = [
+        (scan.id, execution_id)
+        for scan in scans
+        if (execution_id := _completed_execution(scan, stage)) is not None
+    ]
+    if not keys:
+        return {}
+    rows = db.execute(
+        select(ScanStageCoverageRow.scan_id, ScanStageCoverageRow.effective_settings_json).where(
+            ScanStageCoverageRow.stage == stage,
+            ScanStageCoverageRow.status == "complete",
+            tuple_(ScanStageCoverageRow.scan_id, ScanStageCoverageRow.execution_id).in_(keys),
+        )
+    )
+    return {
+        scan_id: settings
+        for scan_id, payload in rows
+        if (settings := _decode_settings(payload)) is not None
+    }
 
 
 def record_scan_stage(

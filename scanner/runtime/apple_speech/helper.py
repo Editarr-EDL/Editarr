@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 from collections.abc import Callable
 from functools import lru_cache
 from hashlib import sha256
@@ -20,6 +21,7 @@ from scanner.runtime.runtime_paths import (
 
 HELPER_NAME = "apple-speech"
 SOURCE = Path(__file__).with_name("AppleSpeech.swift")
+_COMPILER_WATCHDOG = Path(__file__).with_name("compiler_watchdog.py")
 MINIMUM_MACOS = 26
 _XCRUN = ("/usr/bin/xcrun", "--sdk", "macosx")
 
@@ -55,6 +57,7 @@ def compile_helper(
     try:
         run_command(
             [
+                sys.executable, str(_COMPILER_WATCHDOG), str(os.getpid()),
                 *_XCRUN, "swiftc", "-O", "-parse-as-library", "-target", "arm64-apple-macos14.0",
                 "-module-cache-path", str(module_cache), str(SOURCE), "-o", str(destination),
             ],

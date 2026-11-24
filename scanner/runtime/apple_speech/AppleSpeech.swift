@@ -104,15 +104,19 @@ struct AppleSpeech {
         let file = try AVAudioFile(forReading: input)
         guard file.length > 0 else { return [] }
         let transcriber = try await makeTranscriber(localeIdentifier: localeIdentifier)
-        let status = await AssetInventory.status(forModules: [transcriber])
-        if status == .supported || status == .downloading {
+        let selectedLocales = transcriber.selectedLocales
+        guard !selectedLocales.isEmpty else {
+            throw SpeechError(message: "Apple Speech assets are unavailable for \(localeIdentifier).")
+        }
+        // Check the system's installed locales before this helper claims any reservations.
+        let installedLocales = await SpeechTranscriber.installedLocales
+        let installedIdentifiers = Set(installedLocales.map { $0.identifier(.bcp47) })
+        guard selectedLocales.allSatisfy({ installedIdentifiers.contains($0.identifier(.bcp47)) })
+        else {
             throw SpeechError(
                 message: "Apple Speech assets are missing for \(localeIdentifier).",
                 exitCode: speechAssetsMissingExit
             )
-        }
-        guard status == .installed else {
-            throw SpeechError(message: "Apple Speech assets are unavailable for \(localeIdentifier).")
         }
 
         let analyzer = SpeechAnalyzer(modules: [transcriber])

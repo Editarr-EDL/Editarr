@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -36,7 +37,8 @@ def source_runtime(tmp_path, monkeypatch):
 
 
 def _write_compiler_outputs(command, source, cache):
-    assert command[:4] == ["/usr/bin/xcrun", "--sdk", "macosx", "swiftc"]
+    assert command[:3] == [sys.executable, str(helper._COMPILER_WATCHDOG), str(os.getpid())]
+    assert command[3:7] == ["/usr/bin/xcrun", "--sdk", "macosx", "swiftc"]
     assert str(source) in command
     assert "-target" in command
     output = Path(command[command.index("-o") + 1])

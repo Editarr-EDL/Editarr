@@ -53,6 +53,10 @@ SITES: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         SYSTEM,
     ),
+    ("scanner/runtime/apple_speech/compiler_watchdog.py", "run_compiler", "Popen"): (
+        1,
+        "source compilation: drained by the watchdog bound to the scan worker or local build",
+    ),
     ("scanner/runtime/jellyfin_sync_scheduler.py", "JellyfinSyncScheduler.__init__", "Thread"): (
         1,
         SYSTEM,
