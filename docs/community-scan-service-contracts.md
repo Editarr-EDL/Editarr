@@ -1195,7 +1195,14 @@ The read routes are:
 - `GET /admin/v1/moderation/{resource}/{id}`
 - `GET /admin/v1/reports?after=`
 
-Each returns 20 items per page with `nextCursor`.
+- `GET /admin/v1/dashboard/versions/{versionId}/filters?after=` (registry state,
+  quarantine and master filter values with count-only `attestations`, votes,
+  disputes and `served`)
+- `GET /admin/v1/dashboard/versions/{versionId}/submissions?after=` (submission
+  ID, contributor, state, tier, quarantine and creation time; no bytes or digest)
+
+Each returns 20 items per page with `nextCursor`. A version list row also
+carries `contributorCount`, `filterCount` and `servedFilterCount`.
 
 `POST /admin/v1/recompute` accepts
 `{"version":1,"actionId":"<uuid>","versionIds":["…"]|"all","reason":"…"}`.

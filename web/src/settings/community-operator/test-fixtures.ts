@@ -12,15 +12,21 @@ export const overviewFixture = { version: 1, observedAt: operatorTimestamp, peri
     unknownReads: handler === "download" ? 1 : null, writes: handler === "download" ? 9 : null,
     unknownWrites: handler === "download" ? 0 : null, observedAt: handler === "download" ? operatorTimestamp : null })) };
 export const contributorFixture = { contributorId: "contributor-1", displayName: "<img src=x onerror=alert(1)>", state: "suspended", createdAt: operatorTimestamp };
-export const contributionFixture = { revisionId: "revision-1", contributionId: "root-1", contributorId: "contributor-1",
-  displayName: "Synthetic Author", authorState: "suspended", kind: "scan", state: "quarantined", createdAt: operatorTimestamp,
-  totalEvents: 5, payloadBytes: 12345, imports: 1, likes: 0, dislikes: 0,
-  ranking: { policyVersion: "community-ranking-wilson-1", qualityScore: 0.094528655, voteCount: 0, uploaderBoost: 0, score: 0.094528655 } };
-export const reportFixture = { reportId: "report-1", contributorId: "contributor-2", revisionId: "revision-1", reason: "privacy",
+export const versionFixture = { versionId: "version-1", workId: "work-1", status: "candidate", aliasId: null, labelText: "Remastered",
+  mergedInto: null, runtimeMs: 5400000, trust: 0.5, revision: 3, quarantined: 0, createdAt: operatorTimestamp };
+export const versionRowFixture = { ...versionFixture, contributorCount: 2, filterCount: 4, servedFilterCount: 3 };
+export const suggestionFixture = { suggestionId: "suggestion-1", normalized: "remastered", text: "Remastered", submissionId: "submission-1",
+  state: "pending", aliasId: null, createdAt: operatorTimestamp };
+export const filterRowFixture = { filterId: "filter-1", state: "active", quarantined: 0, category: "violence", subcategory: "gore",
+  severity: "high", action: "skip", startMs: 1000, endMs: 2000, confidence: 0.75, contributorCount: 2, attestations: 3,
+  upvotes: 1, downvotes: 0, disputes: 0, served: 1 };
+export const submissionRowFixture = { submissionId: "submission-1", contributorId: "contributor-1", state: "counted", tier: 1,
+  quarantined: 0, createdAt: operatorTimestamp };
+export const reportFixture = { reportId: "report-1", contributorId: "contributor-2", targetType: "filter", targetId: "filter-1", reason: "privacy",
   note: "<script>window.hostileTextExecuted=true</script>", createdAt: operatorTimestamp };
 export const operationFixture = { contributorId: "contributor-1", kind: "publication", operationId: "operation-1",
   state: "completed", createdAt: operatorTimestamp, updatedAt: operatorTimestamp };
-export const auditFixture = { actionId: "action-1", actor: "fixture-operator", resource: "revision:revision-1", command: "quarantine",
+export const auditFixture = { actionId: "action-1", actor: "fixture-operator", resource: "filter:filter-1", command: "quarantine",
   reason: "<b>Private operator reason</b>", outcome: "applied", expectedRevision: 1, createdAt: operatorTimestamp };
 export const keyFixture = { keyId: "key-1", installationId: "installation-1", state: "retired", createdAt: operatorTimestamp, retiredAt: operatorTimestamp };
 export const usageFixture = { version: 1, contributorId: "contributor-1", observedAt: operatorTimestamp, period: "2026-10-04",
@@ -33,7 +39,10 @@ export function pageFixture(items: unknown[] = [], nextCursor: string | null = n
 export function operatorFixture(path: string) {
   if (path === "/admin/v1/session") return { version: 1, subject: "fixture-operator" };
   if (path === "/admin/v1/dashboard/overview") return overviewFixture;
-  if (path === "/admin/v1/dashboard/contributions") return pageFixture([contributionFixture]);
+  if (path === "/admin/v1/versions") return { version: 1, versions: [versionRowFixture], nextCursor: null };
+  if (path === "/admin/v1/alias-suggestions") return { version: 1, suggestions: [suggestionFixture], nextCursor: null };
+  if (path.endsWith("/filters")) return pageFixture([filterRowFixture]);
+  if (path.endsWith("/submissions")) return pageFixture([submissionRowFixture]);
   if (path === "/admin/v1/dashboard/contributors") return pageFixture([contributorFixture]);
   if (path === "/admin/v1/dashboard/operations") return pageFixture([operationFixture]);
   if (path === "/admin/v1/dashboard/audit") return pageFixture([auditFixture]);
@@ -42,10 +51,12 @@ export function operatorFixture(path: string) {
   if (path.endsWith("/keys")) return pageFixture([keyFixture]);
   if (path.startsWith("/admin/v1/moderation/")) {
     const { resource: _resource, ...entry } = auditFixture;
-    const kind = path.split("/")[4], id = path.split("/")[5];
-    const state = kind === "revision" ? { revisionId: id, contributorId: "contributor-1", state: "quarantined", authorState: "suspended", imports: 1, likes: 0, dislikes: 0 } :
-      kind === "report" ? { ...reportFixture, state: "open" } :
-        { contributorId: id, displayName: contributorFixture.displayName, state: "suspended" };
+    const [kind, id] = path.split("/").slice(4).map(decodeURIComponent);
+    const state = kind === "version" ? { ...versionFixture, versionId: id, referenceSubmissionId: "submission-1" } :
+      kind === "alias_suggestion" ? { ...suggestionFixture, suggestionId: id } :
+        kind === "filter" ? { filterId: id, versionId: "version-1", state: "active", mergedInto: null, quarantined: 0, served: 1, confidence: 0.75, contributorCount: 2 } :
+          kind === "report" ? { ...reportFixture, state: "open" } :
+            { contributorId: id, displayName: contributorFixture.displayName, state: "suspended", quarantined: 0 };
     return { version: 1, resource: `${kind}:${id}`, revision: 2, state, audit: [entry] };
   }
   throw new Error(`Unknown synthetic operator route: ${path}`);

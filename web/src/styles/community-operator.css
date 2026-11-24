@@ -63,11 +63,13 @@ tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
 .operator-confirm [role="alert"] { color: #ffb4ae; }
 .operator-confirm dl { margin-block: 20px; }
 .operator-main label, .operator-confirm label { display: block; margin-block: 16px 8px; }
-.operator-main input, .operator-confirm textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #5d6875;
+.operator-main input, .operator-main select, .operator-main textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #5d6875;
   border-radius: 4px; color: #e6e9ef; background: #111318; font: inherit; }
-.operator-confirm textarea { min-height: 100px; resize: vertical; }
-.operator-main input:focus-visible, .operator-confirm textarea:focus-visible { outline: 3px solid var(--operator-accent); outline-offset: 2px; }
+.operator-main textarea { min-height: 100px; resize: vertical; }
+.operator-main input:focus-visible, .operator-main select:focus-visible, .operator-main textarea:focus-visible { outline: 3px solid var(--operator-accent); outline-offset: 2px; }
 .operator-main form button { margin-top: 12px; }
+.operator-main input.operator-checkbox { width: auto; margin-right: 8px; }
+.operator-filter { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 18px; }
 .operator-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 480px) {
   .operator-brand { padding: 18px 20px; }

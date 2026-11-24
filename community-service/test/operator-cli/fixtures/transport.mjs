@@ -14,6 +14,12 @@ globalThis.fetch = async (url, options) => {
     return Response.json({ version: 1, actionId: body.actionId, resource: `${body.resource}:${body.targetId}`,
       revision: body.expectedRevision + 1, outcome: 'applied' });
   }
+  if (path === '/admin/v1/recompute') {
+    const body = JSON.parse(options.body);
+    return Response.json({ version: 1, jobId: body.actionId, complete: true, nextAfter: null });
+  }
+  if (path.startsWith('/admin/v1/moderation/version/')) return Response.json({ version: 1, resource: 'version:version-1', revision: 2,
+    state: { status: 'candidate' }, audit: [] });
   return Response.json({ version: 1, resource: 'filter:filter-1', revision: process.env.CSS59_STALE ? 3 : 2,
     state: { state: 'published' }, audit: [] });
 };

@@ -150,6 +150,7 @@ describe('admin version lists', () => {
       { versions: { versionId: string; status: string }[]; nextCursor: string };
     expect(first.versions).toHaveLength(20);
     expect(first.versions.every(item => item.status === 'candidate')).toBe(true);
+    expect(first.versions[0]).toMatchObject({ filterCount: expect.any(Number), servedFilterCount: expect.any(Number) });
     const second = await (await handle(request(`/admin/v1/versions?status=candidate&after=${first.nextCursor}`))).json() as
       { versions: { versionId: string }[] };
     expect(second.versions[0].versionId > first.nextCursor).toBe(true);

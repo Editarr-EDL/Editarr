@@ -76,6 +76,23 @@ export async function operatorDashboard(request: Request, env: Env, now: number)
           storage: { source: 'artifact_storage_usage', observedAt: now * 1000, bytes: storage?.bytes ?? 0 },
           observations });
       }
+      const version = path.match(/^\/admin\/v1\/dashboard\/versions\/([A-Za-z0-9_.-]{1,128})\/(filters|submissions)$/);
+      if (version) {
+        const id = resourceId.parse(version[1]);
+        if (!await db.prepare('SELECT version_id FROM versions WHERE version_id = ?').bind(id).first())
+          return operatorFailure(404, 'resource_not_found');
+        if (version[2] === 'filters') return Response.json(await page(db,
+          `SELECT r.filter_id AS filterId, r.state, r.quarantined, f.category, f.subcategory, f.severity, f.action,
+            f.start_ms AS startMs, f.end_ms AS endMs, f.confidence, f.contributor_count AS contributorCount,
+            f.attestations, f.upvotes, f.downvotes, f.disputes, f.served FROM filter_registry r
+            LEFT JOIN master_filters f USING (filter_id) WHERE r.version_id = ? AND r.filter_id > ?
+            ORDER BY r.filter_id LIMIT 21`, [id, ...cursor(url, 1)], ['filterId'], now));
+        return Response.json(await page(db,
+          `SELECT s.submission_id AS submissionId, s.contributor_id AS contributorId, s.state, s.tier,
+            a.quarantined, s.created_at AS createdAt FROM submissions s JOIN version_acceptances a USING (submission_id)
+            WHERE s.version_id = ? AND s.submission_id > ? ORDER BY s.submission_id LIMIT 21`,
+          [id, ...cursor(url, 1)], ['submissionId'], now));
+      }
       if (path === '/admin/v1/dashboard/operations') return Response.json(await page(db,
         `SELECT contributor_id AS contributorId, kind, operation_id AS operationId, state,
           created_at AS createdAt, updated_at AS updatedAt FROM operations

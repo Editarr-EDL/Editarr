@@ -55,3 +55,18 @@ it('lists version, alias and moderation actions in one audit page', async () => 
   const page = await (await handle('audit')).json() as { items: { actionId: string; command: string }[] };
   expect(page.items.map(item => [item.actionId, item.command])).toEqual([['a-catalog', 'confirm_version'], ['b-account', 'suspend']]);
 });
+
+it('pages a version\'s filters with counts only and its submissions without payloads', async () => {
+  const { version_id: versionId } = (await db.prepare(`SELECT version_id FROM submissions WHERE contributor_id = ?`)
+    .bind(author.contributorId).first<{ version_id: string }>())!;
+  const filters = await (await handle(`versions/${versionId}/filters`)).json() as { items: Record<string, unknown>[]; nextCursor: string | null };
+  expect(filters.items.length).toBeGreaterThan(0);
+  expect(Object.keys(filters.items[0])).toEqual(['filterId', 'state', 'quarantined', 'category', 'subcategory', 'severity', 'action',
+    'startMs', 'endMs', 'confidence', 'contributorCount', 'attestations', 'upvotes', 'downvotes', 'disputes', 'served']);
+  expect(filters.items[0].attestations).toBeTypeOf('number');
+  const submissions = await (await handle(`versions/${versionId}/submissions`)).json() as { items: Record<string, unknown>[] };
+  expect(submissions.items).toEqual([expect.objectContaining({ contributorId: author.contributorId, quarantined: 0 })]);
+  expect(JSON.stringify(submissions)).not.toContain('digest');
+  expect((await handle('versions/v_missing/filters')).status).toBe(404);
+  expect((await handle(`versions/${versionId}/filters?after=!`)).status).toBe(400);
+});
