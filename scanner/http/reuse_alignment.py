@@ -12,6 +12,7 @@ from scanner.persistence.repository.repository_audio_tracks import recorded_play
 from scanner.persistence.repository.scan_jobs import scan_job_facts
 from scanner.persistence.repository.version_reuse import source_findings
 from scanner.persistence.rows.db_media_identity import MediaVersionRow, ScanMediaVersionRow
+from scanner.runtime.transcript_evidence import scan_transcript_candidates_by_id
 from scanner.runtime.verification_waveform import match_cached_audio_cues
 from scanner.runtime.version_reuse_audio import (
     TranscriptAlignmentUnavailable,
@@ -113,26 +114,24 @@ def _audio_reference(caller, source, source_version, target_audio):
     return next(iter(matches.values())) if len(matches) == 1 else None
 
 
-def _transcript_models(source, target_scans):
-    return tuple(
-        dict.fromkeys([*(scan.audio_model for scan in target_scans), source.audio_model, None])
-    )
+def _target_transcript_candidates(source, target_scans, recorded):
+    candidates = (candidate for scan in target_scans for candidate in recorded[scan.id])
+    # Source model hints can locate historical Whisper caches on the target. A
+    # bare Apple Speech model cannot locate a cache without target scan evidence.
+    return tuple(dict.fromkeys((*candidates, source.audio_model, None)))
 
 
-def _transcript_cache_by_generation(source, audio, target_scans, version_id):
-    models = _transcript_models(source, target_scans)
-    if target_transcript_ready(audio, models):
-        return audio, models, True
+def _transcript_cache_by_generation(source, audio, target_scans, version_id, recorded):
+    candidates = _target_transcript_candidates(source, target_scans, recorded)
+    if target_transcript_ready(audio, candidates):
+        return audio, candidates, True
     if version_id:
         for scan in target_scans:
             analyzed = analyzed_selection(scan)
-            if (
-                analyzed
-                and analyzed != audio
-                and target_transcript_ready(analyzed, (scan.audio_model,))
-            ):
-                return analyzed, (scan.audio_model,), True
-    return audio, models, False
+            transcript = recorded[scan.id]
+            if analyzed and analyzed != audio and target_transcript_ready(analyzed, transcript):
+                return analyzed, transcript, True
+    return audio, candidates, False
 
 
 def alignment_transcript_status(
@@ -140,21 +139,29 @@ def alignment_transcript_status(
 ):
     """Distinguish a usable cache from one that needs its file identity rechecked."""
     target_scans = list(_target_audio_scans(caller, target, audio, version_id))
-    _, _, ready = _transcript_cache_by_generation(source, audio, target_scans, version_id)
+    recorded = scan_transcript_candidates_by_id(caller.db, target_scans)
+    _, _, ready = _transcript_cache_by_generation(source, audio, target_scans, version_id, recorded)
     if ready:
         return True, False
     if version_id is None and not sampled:
-        for scan, prior, pinned in _visible_target_audio(caller, target, audio):
-            if (
-                pinned is not None
-                and (
-                    pinned.sampled_md5
-                    or (known_content_sha256 and known_content_sha256 == pinned.content_sha256)
-                )
-                and prior != audio
-                and target_transcript_ready(prior, (scan.audio_model,))
-            ):
-                return False, True
+        prior_generations = [
+            (scan, prior)
+            for scan, prior, pinned in _visible_target_audio(caller, target, audio)
+            if pinned is not None
+            and (
+                pinned.sampled_md5
+                or (known_content_sha256 and known_content_sha256 == pinned.content_sha256)
+            )
+            and prior != audio
+        ]
+        prior_transcripts = scan_transcript_candidates_by_id(
+            caller.db, [scan for scan, _prior in prior_generations]
+        )
+        if any(
+            target_transcript_ready(prior, prior_transcripts[scan.id])
+            for scan, prior in prior_generations
+        ):
+            return False, True
     return False, False
 
 
@@ -164,17 +171,20 @@ def align_from_transcript(
     """Line up the cut and refine individual mutes with direct dialogue or audio evidence."""
     reference = _audio_reference(caller, source, source_version, audio)
     target_scans = list(_target_audio_scans(caller, target, audio, version_id))
+    recorded = scan_transcript_candidates_by_id(caller.db, target_scans)
     if version_id is None:
-        cache_audio, models = audio, _transcript_models(source, target_scans)
+        cache_audio, candidates = audio, _target_transcript_candidates(
+            source, target_scans, recorded
+        )
     else:
-        cache_audio, models, _ = _transcript_cache_by_generation(
-            source, audio, target_scans, version_id
+        cache_audio, candidates, _ = _transcript_cache_by_generation(
+            source, audio, target_scans, version_id, recorded
         )
     try:
         target_words = (
-            target_transcript_words(path, audio, models)
+            target_transcript_words(path, audio, candidates)
             if cache_audio == audio
-            else target_transcript_words(path, audio, models, cache_audio)
+            else target_transcript_words(path, audio, candidates, cache_audio)
         )
     except TranscriptAlignmentUnavailable as error:
         return (
@@ -197,7 +207,7 @@ def align_from_transcript(
                 reference,
                 path,
                 audio,
-                models,
+                candidates,
                 target_words=target_words,
                 original_offset=original_offset,
             )

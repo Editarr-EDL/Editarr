@@ -293,10 +293,10 @@ jobs:
             Invoke-Native13 'uv sync' { uv sync --locked --python 3.11.9 --extra dev }
           }
           Invoke-Native13 'ruff' {
-            uv run ruff check native_build scanner/settings/capabilities.py scanner/models.py scanner/pipeline/audio.py scripts/build_release.py scripts/package_windows.py scripts/verify_installed_release.py tests/test_model_capabilities.py tests/test_audio_progress.py tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py tests/test_installed_artifact_verifier.py tests/test_windows_package.py
+            uv run ruff check native_build scanner/settings/capabilities.py scanner/models.py scanner/pipeline/audio.py scripts/build_release.py scripts/package_windows.py scripts/verify_installed_release.py scripts/verifier_windows_processes.py tests/test_model_capabilities.py tests/test_audio_progress.py tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py tests/test_installed_artifact_verifier.py tests/test_verifier_windows_processes.py tests/test_windows_package.py
           }
           Invoke-Native13 'focused pytest' {
-            uv run pytest -q -n 0 tests/test_model_capabilities.py tests/test_audio_progress.py tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py tests/test_installed_artifact_verifier.py tests/test_windows_package.py --junitxml "$env:RUNNER_TEMP\native13-windows-junit.xml"
+            uv run pytest -q -n 0 tests/test_model_capabilities.py tests/test_audio_progress.py tests/test_native_runtime_build.py tests/test_native_artifact_size.py tests/test_native_collection_size.py tests/test_installed_artifact_verifier.py tests/test_verifier_windows_processes.py tests/test_windows_package.py --junitxml "$env:RUNNER_TEMP\native13-windows-junit.xml"
           }
 
           $mediaOptions = @()

@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Literal
 
 from scanner.models import ModelCapability, ModelDownloadState
+from scanner.runtime.apple_speech.helper import MINIMUM_MACOS
 
 from .model_runtime import (
     CapabilityEnvironment as CapabilityEnvironment,
@@ -26,6 +27,7 @@ D1_MIN_TRANSFORMERS = (5, 14)
 AvailabilityReason = Literal[
     "unsupported_platform",
     "unsupported_architecture",
+    "unsupported_os_version",
     "missing_package",
     "missing_provider",
     "deferred_gap",
@@ -34,9 +36,10 @@ AvailabilityReason = Literal[
 
 TARGET_IDS = ("macos-arm64", "windows-x64", "linux-x86_64")
 DEFAULT_AUDIO_MODEL = "whisper"
+APPLE_SPEECH_MODEL = "apple_speech"
 DEFAULT_AUDIO_FILTER = "better_profanity"
 DEFAULT_QWEN_MODEL = "qwen3-vl-8b-instruct-4bit"
-SUPPORTED_AUDIO_MODELS = (DEFAULT_AUDIO_MODEL, "mlx_whisper")
+SUPPORTED_AUDIO_MODELS = (DEFAULT_AUDIO_MODEL, "mlx_whisper", APPLE_SPEECH_MODEL)
 SUPPORTED_AUDIO_FILTERS = (
     DEFAULT_AUDIO_FILTER,
     "glin_profanity",
@@ -67,6 +70,7 @@ _MLX_VLM_PACKAGES = ("mlx_vlm", "mlx", "huggingface_hub", "PIL", "numpy")
 DISPLAY_NAMES = {
     "whisper": "Whisper (faster-whisper)",
     "mlx_whisper": "Whisper (mlx-whisper)",
+    APPLE_SPEECH_MODEL: "Apple Speech",
     "better_profanity": "better-profanity",
     "glin_profanity": "glin-profanity",
     "alt_profanity_check": "alt-profanity-check",
@@ -139,6 +143,24 @@ def _target_failure(
     if environment.system in {"Darwin", "Windows", "Linux"}:
         return "unsupported_architecture"
     return "unsupported_platform"
+
+
+def _apple_speech_capability(environment: CapabilityEnvironment) -> ModelCapability:
+    reason = _target_failure(environment)
+    if reason is None:
+        if environment.target_id != "macos-arm64":
+            reason = "unsupported_platform"
+        elif not version_at_least(environment.macos_version, (MINIMUM_MACOS,)):
+            reason = "unsupported_os_version"
+        elif not environment.apple_speech_runtime:
+            reason = "missing_package"
+    return _capability(
+        APPLE_SPEECH_MODEL,
+        "audio",
+        available=reason is None,
+        reason=reason,
+        weight_requirement="none",
+    )
 
 
 def model_capabilities(
@@ -216,6 +238,7 @@ def model_capabilities(
             available=False,
             reason=target_failure or "unsupported_platform",
         ),
+        _apple_speech_capability(environment),
         standard("better_profanity", "audio", ("better_profanity",), weight_requirement="none"),
         standard(
             "glin_profanity",
@@ -356,6 +379,11 @@ def require_available(
     capability = capability_for(backend_id, environment=environment)
     if capability.availability == "unavailable":
         detail = capability.reason.replace("_", " ") if capability.reason else "unavailable"
+        if backend_id == APPLE_SPEECH_MODEL:
+            if capability.reason == "unsupported_os_version":
+                detail = f"requires macOS {MINIMUM_MACOS} or later"
+            elif capability.reason == "missing_package":
+                detail = "requires the Editarr macOS app or Command Line Tools with a macOS 26 SDK"
         raise CapabilityUnavailableError(f"{capability.display_name} is unavailable: {detail}")
     return capability
 

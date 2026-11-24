@@ -56,6 +56,9 @@ datas = [
     (str(FFPROBE), "helpers"),
     (str(BACKUP_AGE), "helpers"),
 ]
+if TARGET == "macos-arm64":
+    apple_speech = _required_environment("EDITARR_PYINSTALLER_APPLE_SPEECH")
+    datas.append((str(apple_speech), "helpers"))
 if os.environ.get("EDITARR_PYINSTALLER_TEST_FAKE_MODELS") == "1":
     marker = ROOT / "native_build" / "native-test-fake-models.marker"
     datas.append((str(marker), "."))

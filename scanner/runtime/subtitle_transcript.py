@@ -10,15 +10,21 @@ from pathlib import Path
 
 from scanner.formats.subtitles import SubtitleDocument, parse_subtitles, srt_time
 from scanner.integrations.jellyfin_subtitles import normalize_language
-from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.modeling.model_subtitles import ReviewAudioSource
-from scanner.pipeline.audio import transcription_cache_model_key
+from scanner.pipeline.audio import resolve_audio_model_name, transcription_cache_model_key
 from scanner.pipeline.audio_timing import audio_playback_start
 from scanner.pipeline.audio_tracks import AudioTrackSelection, probe_audio_tracks
 from scanner.pipeline.cache import transcription_cache_path
+from scanner.settings.capabilities import APPLE_SPEECH_MODEL
 
 from .scan_version import file_generation
 from .subtitle_sidecars import read_local_bytes
+from .transcript_evidence import (
+    RecordedTranscript,
+    TranscriptCandidate,
+    analyzed_selection,
+    scan_transcript_candidates,
+)
 
 _MAX_TRANSCRIPT_BYTES = 24 * 1024 * 1024
 
@@ -27,7 +33,7 @@ _MAX_TRANSCRIPT_BYTES = 24 * 1024 * 1024
 class ReviewedAudio:
     source: ReviewAudioSource
     selection: AudioTrackSelection
-    models: tuple[str | None, ...]
+    transcripts: tuple[TranscriptCandidate, ...]
     verified_generation: tuple[int, ...] | None = None
 
 
@@ -46,11 +52,8 @@ def reviewed_audio_sources(db, memberships, scans, media: Path) -> list[Reviewed
             or not scan.analyzed_audio_selection_json
         ):
             continue
-        try:
-            selection = AudioSelection.model_validate_json(
-                scan.analyzed_audio_selection_json
-            ).selection()
-        except ValueError:
+        selection = analyzed_selection(scan)
+        if selection is None:
             continue
         identity = selection.extraction_cache_key()
         if identity not in audio:
@@ -73,8 +76,9 @@ def reviewed_audio_sources(db, memberships, scans, media: Path) -> list[Reviewed
                 generation,
             )
         entry = audio[identity]
-        if scan.audio_model not in entry.models:
-            audio[identity] = replace(entry, models=(*entry.models, scan.audio_model))
+        transcripts = tuple(dict.fromkeys((*entry.transcripts, *scan_transcript_candidates(scan))))
+        if transcripts != entry.transcripts:
+            audio[identity] = replace(entry, transcripts=transcripts)
     return sorted(
         audio.values(), key=lambda entry: (entry.selection.track.stream_index, entry.source.id)
     )
@@ -87,15 +91,23 @@ def _time(value) -> float:
 
 
 def _cache_paths(audio: ReviewedAudio):
-    for model in audio.models:
+    for candidate in audio.transcripts:
+        if isinstance(candidate, RecordedTranscript):
+            if candidate.selection_key == audio.selection.extraction_cache_key():
+                yield transcription_cache_path(
+                    candidate.selection_key, candidate.model_key, create=False
+                )
+            continue
         try:
-            key = transcription_cache_model_key(model)
+            backend = resolve_audio_model_name(candidate)
+            if backend == APPLE_SPEECH_MODEL:
+                continue
+            key = transcription_cache_model_key(candidate)
         except ValueError:
             continue
         path = transcription_cache_path(audio.source.id, key, create=False)
         yield path
-        backend = key.split("_", 1)[0]
-        # Backend names use a hyphen internally. Try other model-variant caches for this track.
+        # Try other cached variants of this backend for the same physical track.
         yield from sorted(path.parent.glob(f"transcript_{backend}_*.json"), reverse=True)
 
 

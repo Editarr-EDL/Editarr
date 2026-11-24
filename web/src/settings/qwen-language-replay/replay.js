@@ -5,6 +5,7 @@ const labels = { baseline: "Baseline", candidate: "Candidate" };
 const modelNames = {
   whisper: "Faster-Whisper",
   mlx_whisper: "MLX Whisper",
+  apple_speech: "Apple Speech",
   "qwen3-vl-8b-instruct-4bit": "Qwen3-VL 8B · 4-bit",
   "qwen3-vl-4b-instruct-4bit": "Qwen3-VL 4B · 4-bit",
   "qwen35-9b-4bit": "Qwen3.5-9B · 4-bit",

@@ -41,6 +41,7 @@ from scripts.jellyfin_stand_in import ADMIN, ADMIN_PASSWORD, MOVIE_ID
 from scripts.jellyfin_stand_in import serve as serve_jellyfin
 from scripts.loopback_ports import available_port as _available_port
 from scripts.verifier_survivors import SURVIVING
+from scripts.verifier_windows_processes import windows_process_rows
 
 _ENV_PREFIXES = (
     "EDITARR_",
@@ -700,33 +701,7 @@ def _asset_path(html: str) -> str:
 def _process_rows() -> list[tuple[int, int, str]]:
     """Return the host process table without putting private argv values in evidence."""
     if _is_windows():
-        command = (
-            "$ErrorActionPreference = 'Stop'; "
-            "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
-            "Get-CimInstance Win32_Process | ForEach-Object { "
-            "[PSCustomObject]@{ProcessId=$_.ProcessId;ParentProcessId=$_.ParentProcessId;"
-            "CommandLine=$_.CommandLine} } | ConvertTo-Json -Compress"
-        )
-        result = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
-            capture_output=True,
-            encoding="utf-8",
-            check=True,
-            timeout=15,
-        )
-        try:
-            raw = json.loads(result.stdout.lstrip("\ufeff"))
-        except json.JSONDecodeError as error:
-            raise RuntimeError("could not decode Windows process inventory") from error
-        records = raw if isinstance(raw, list) else [raw]
-        return [
-            (record["ProcessId"], record["ParentProcessId"], record["CommandLine"])
-            for record in records
-            if isinstance(record, dict)
-            and isinstance(record.get("ProcessId"), int)
-            and isinstance(record.get("ParentProcessId"), int)
-            and isinstance(record.get("CommandLine"), str)
-        ]
+        return windows_process_rows()
     result = subprocess.run(
         ["/bin/ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True, check=True
     )

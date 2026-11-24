@@ -97,7 +97,7 @@ def test_isolated_audio_scan_settles_a_cooperative_acquisition_cancellation(monk
 
         def Process(self, *, target, args):
             assert target is runner._scan_audio_worker
-            assert args[-1] == 0.45
+            assert args[-2:] == (0.45, None)
             return FakeProcess()
 
     monkeypatch.setattr(runner.mp, "get_context", lambda _name: FakeContext())

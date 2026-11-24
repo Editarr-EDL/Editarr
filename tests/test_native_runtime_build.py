@@ -102,9 +102,11 @@ def test_native_inventory_records_frontend_helpers_and_exclusions(tmp_path, monk
     ffmpeg = helpers / "ffmpeg"
     ffprobe = helpers / "ffprobe"
     backup_age = helpers / "backup-age"
+    apple_speech = helpers / "apple-speech"
     ffmpeg.write_bytes(b"ffmpeg")
     ffprobe.write_bytes(b"ffprobe")
     backup_age.write_bytes(b"backup-age")
+    apple_speech.write_bytes(b"apple-speech")
     monkeypatch.setattr(release, "_git_revision", lambda: "a" * 40)
 
     inventory = release._inventory(
@@ -116,6 +118,7 @@ def test_native_inventory_records_frontend_helpers_and_exclusions(tmp_path, monk
             "ffmpeg": tmp_path / "build-ffmpeg",
             "ffprobe": tmp_path / "build-ffprobe",
             "backup-age": tmp_path / "build-backup-age",
+            "apple-speech": tmp_path / "build-apple-speech",
         },
     )
 
@@ -125,13 +128,14 @@ def test_native_inventory_records_frontend_helpers_and_exclusions(tmp_path, monk
     assert inventory["resources_root"] == "_internal"
     assert inventory["helpers"]["ffmpeg"]["path"] == "_internal/helpers/ffmpeg"
     assert inventory["helpers"]["backup-age"]["path"] == "_internal/helpers/backup-age"
+    assert inventory["helpers"]["apple-speech"]["path"] == "_internal/helpers/apple-speech"
     assert "coverage" in inventory["exclusions"]["development_modules"]
     assert inventory["exclusions"]["model_weights"] == "on-demand managed cache only"
     assert inventory["acceleration"] == {
         "baseline": "cpu",
         "optional": ["coreml", "metal", "mlx"],
     }
-    assert inventory["runtime_size_bytes"] == len(b"frozenffmpegffprobebackup-age")
+    assert inventory["runtime_size_bytes"] == len(b"frozenffmpegffprobebackup-ageapple-speech")
 
 
 @pytest.mark.parametrize("target", ["windows-x64", "linux-x86_64"])

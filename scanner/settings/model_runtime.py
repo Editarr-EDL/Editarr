@@ -12,6 +12,8 @@ from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from typing import Literal
 
+from scanner.runtime.apple_speech.helper import MINIMUM_MACOS, runtime_available
+
 PackageProbe = Callable[[str], bool]
 VersionProbe = Callable[[str], "str | None"]
 
@@ -50,6 +52,8 @@ class CapabilityEnvironment:
     torch_devices: frozenset[str] = frozenset()
     ctranslate2_devices: frozenset[str] = frozenset()
     package_version: VersionProbe = installed_version
+    macos_version: str = ""
+    apple_speech_runtime: bool = False
 
     @property
     def target_id(self) -> str:
@@ -151,8 +155,13 @@ def current_environment() -> CapabilityEnvironment:
     )
     target = environment.target_id
     macos_arm64 = target == "macos-arm64"
+    macos_version = platform.mac_ver()[0] if macos_arm64 else ""
     return replace(
         environment,
+        macos_version=macos_version,
+        apple_speech_runtime=(
+            version_at_least(macos_version, (MINIMUM_MACOS,)) and runtime_available()
+        ),
         providers=_packaged_onnx_providers(macos_arm64),
         torch_devices=_verified_mps_devices() if macos_arm64 else frozenset(),
         ctranslate2_devices=(

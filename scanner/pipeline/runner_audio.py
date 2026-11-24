@@ -1,5 +1,7 @@
 """Selected audio extraction, analysis, checkpoints, and actual-input recording."""
 
+from scanner.settings.capabilities import APPLE_SPEECH_MODEL
+
 from .processes import ScanCancelledError
 
 
@@ -26,12 +28,12 @@ def run_audio_stages(
 ):
     """Run one track through existing pipeline adapters and provenance callbacks."""
     from . import runner as pipeline
+    from .apple_speech import speech_locale
+    from .audio import resolve_audio_model_name
     from .audio_tracks import probe_audio_tracks
 
     identity = audio_selection.extraction_cache_key() if audio_selection else video_hash
     shared_audio_path = pipeline.cached_audio_path(identity)
-    selected_model = pipeline.transcription_cache_model_key(audio_model)
-    transcript_path = pipeline.transcription_cache_path(identity, selected_model)
     if should_cancel and should_cancel():
         raise ScanCancelledError("Scan cancelled")
     if not shared_audio_path.exists():
@@ -69,6 +71,15 @@ def run_audio_stages(
     if "audio_scan" in completed_stages:
         emit("audio_scan", 1.0, "Audio analysis restored from checkpoint")
         return
+    apple_locale = (
+        speech_locale(audio_selection.track.language if audio_selection else None)
+        if resolve_audio_model_name(audio_model) == APPLE_SPEECH_MODEL
+        else None
+    )
+    transcript_key = pipeline.transcription_cache_model_key(
+        audio_model, apple_speech_locale=apple_locale
+    )
+    transcript_path = pipeline.transcription_cache_path(identity, transcript_key)
     playback_offset = 0.0
     if audio_selection is not None:
         from .audio import audio_playback_offset
@@ -78,13 +89,15 @@ def run_audio_stages(
         )
     pipeline.logger.info("Transcribing and scanning for profanity...")
     emit("audio_scan", 0.0, "Transcribing audio")
-    record_stage("audio_scan", "started")
+    stage_settings = {"transcript_cache_key": transcript_key} if apple_locale else {}
+    record_stage("audio_scan", "started", **stage_settings)
     record_stage("audio_qwen", "requested")
     try:
         findings = pipeline._scan_audio_isolated(
             str(shared_audio_path),
             video_id,
             audio_model=audio_model,
+            apple_speech_locale=apple_locale,
             audio_filter=audio_filter,
             audio_padding_seconds=audio_padding_seconds,
             qwen_model=qwen_model,

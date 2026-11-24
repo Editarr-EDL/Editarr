@@ -62,6 +62,17 @@ uv pip install --python /opt/editarr/venv/bin/python dist/editarr-*.whl
 Open `http://localhost:3348`. See the [release build guide](docs/release-build.md)
 for details.
 
+### Apple Speech transcription
+
+On Apple Silicon with macOS 26 or later, choose **Apple Speech** under
+**New Scan > Transcriber**. Speech recognition runs on the Mac. On first use,
+macOS may download the speech assets for the selected audio track's language
+if the account starting the scan has permission to download models.
+Editarr uses US English for untagged tracks. Set the server environment variable
+`EDITARR_APPLE_SPEECH_LOCALE` to a locale such as `es-ES` to override the track language.
+Source and wheel installations need Xcode or Command Line Tools with the macOS 26 SDK
+or later to compile the helper on first use. The macOS app includes the helper.
+
 ### Network access
 
 The commands below apply to source and wheel installations. The macOS app
@@ -168,7 +179,7 @@ For an interrupted restore, stop the application and run
 Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20+, and Corepack.
 
 ```bash
-uv sync --extra dev    # add --extra audio_macos for Apple Silicon GPU transcription
+uv sync --extra dev    # add --extra audio_macos for MLX Whisper transcription
 corepack enable
 pnpm --dir web install
 uv run ./scripts/dev.sh dev

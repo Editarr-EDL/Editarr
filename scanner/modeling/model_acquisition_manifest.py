@@ -383,6 +383,7 @@ def artifact_ids_for_backend(
     mapping = {
         "whisper": ("faster-whisper-base",),
         "mlx_whisper": ("mlx-whisper-base",),
+        "apple_speech": (),
         "image_safety_gate": (
             f"wd-{wd_variant}-tagger-v3",
             "stable-diffusion-safety-checker",

@@ -17,6 +17,7 @@ export function ScanCapabilityDisclosure({
 }) {
   const capability = capabilities?.model_capabilities?.find((item) => item.id === backendId);
   const download = capability?.download;
+  const usesAppleSpeech = scanType === "audio" && backendId === "apple_speech";
   const qwenGap = scanType === "video" && capabilities?.model_capabilities?.some(
     (item) => item.enrichment_behavior === "detector_findings_only",
   );
@@ -25,7 +26,8 @@ export function ScanCapabilityDisclosure({
   );
   return <>
     {includeScanName && <label className="field"><span>Scan name (optional)</span><input aria-label="Scan name (optional)" defaultValue="" /></label>}
-    {(!download && !qwenGap && !languageQwenUnavailable) ? null : <div className="scan-capability-disclosure" role="status">
+    {(!download && !usesAppleSpeech && !qwenGap && !languageQwenUnavailable) ? null : <div className="scan-capability-disclosure" role="status">
+    {usesAppleSpeech && <p>Apple Speech runs on the Editarr server. macOS may download speech assets for the selected track’s language.</p>}
     {download?.state === "not_downloaded" && <p>This scan will download {capability?.display_name || backendId} ({formatBytes(download.bytes_total)}) before inference starts.</p>}
     {download?.state === "downloading" && <p>{capability?.display_name || backendId} is downloading. The scan starts after the model is ready; download progress is separate from inference progress.</p>}
     {download?.state === "failed" && <p className="form-error">Model download needs attention: {download.error_detail || download.error_code || "retry in Models"}.</p>}
