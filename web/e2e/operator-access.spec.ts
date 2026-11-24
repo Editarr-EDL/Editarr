@@ -75,13 +75,38 @@ for (const width of [320, 1440]) {
       await page.getByRole("link", { name: "Inspect report-1", exact: true }).click();
       await expect(page.getByRole("region", { name: "Resource inspection" }).getByText("<script>window.hostileTextExecuted=true</script>", { exact: true })).toBeVisible();
       expect(await page.evaluate(() => (window as Window & { hostileTextExecuted?: boolean }).hostileTextExecuted)).toBeUndefined();
-      for (const name of ["Contributions", "Operations", "Audit history", "Backup status"]) {
+      for (const name of ["Versions", "Alias suggestions", "Operations", "Audit history", "Resource lookup", "Recompute", "Backup status"]) {
         await page.getByRole("link", { name, exact: true }).click();
         await expect(page.getByText("Service snapshot loaded")).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
       }
       await expect(page.getByRole("heading", { name: "Backup and recovery" })).toBeVisible();
       expect(requests).toEqual([]);
+      expect(await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze().then(result => result.violations)).toEqual([]);
+    });
+    test("version inspection with master filters, submissions and catalog action dialogs", async ({ page }) => {
+      await page.route("**/admin/v1/**", route => route.fulfill({ json: operatorFixture(new URL(route.request().url()).pathname) }));
+      await page.goto("/admin/#/versions?selected=version-1");
+      await expect(page.getByRole("region", { name: "Master filters", exact: true }).getByText("violence", { exact: true })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Submissions", exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+      expect(await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze().then(result => result.violations)).toEqual([]);
+      await page.screenshot({ path: `test-results/operator-version-${width}.png`, fullPage: true });
+      await page.getByRole("button", { name: "Merge into another version", exact: true }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByLabel("Target version ID (same work)")).toBeVisible();
+      expect(await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze().then(result => result.violations)).toEqual([]);
+      await page.screenshot({ path: `test-results/operator-merge-${width}.png` });
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.goto("/admin/#/aliases?selected=suggestion-1");
+      await page.getByRole("button", { name: "Approve alias", exact: true }).click();
+      await dialog.getByLabel("Create a new alias").check();
+      await expect(dialog.getByLabel("New alias label")).toBeVisible();
+      expect(await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze().then(result => result.violations)).toEqual([]);
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.goto("/admin/#/recompute");
+      await expect(page.getByRole("button", { name: "Recompute all versions" })).toBeDisabled();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
       expect(await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze().then(result => result.violations)).toEqual([]);
     });
     test("bounded pagination, stale refresh, expired-session recovery and missing resource", async ({ page }) => {
@@ -120,7 +145,7 @@ for (const width of [320, 1440]) {
     });
     test("reasoned moderation, cancel, retained evidence, vote reversal and report review", async ({ page }) => {
       const actions: Record<string, unknown>[] = [];
-      let contributorState = "active", revisionState = "published", excluded = 0, reportState = "open", revision = 2;
+      let contributorState = "active", filterQuarantined = 0, excluded = 0, reportState = "open", revision = 2;
       await page.route("**/admin/v1/**", route => {
         const request = route.request(), path = new URL(request.url()).pathname;
         if (request.method() === "POST") {
@@ -128,25 +153,23 @@ for (const width of [320, 1440]) {
           const body = request.postDataJSON(); actions.push(body); revision += 1;
           if (body.command === "suspend") contributorState = "suspended";
           if (body.command === "unsuspend") contributorState = "active";
-          if (body.command === "quarantine") revisionState = "quarantined";
-          if (body.command === "restore") revisionState = "published";
+          if (body.command === "quarantine") filterQuarantined = 1;
+          if (body.command === "restore") filterQuarantined = 0;
           if (body.command === "exclude_vote") excluded = 1;
           if (body.command === "restore_vote") excluded = 0;
           if (body.command === "resolve_report") reportState = "resolved";
-          const kind = body.command.endsWith("_vote") ? "vote" : body.command === "resolve_report" ? "report" :
-            ["suspend", "unsuspend"].includes(body.command) ? "contributor" : "revision";
           return route.fulfill({ json: { version: 1, actionId: body.actionId,
-            resource: `${kind}:${body.targetId}${body.revisionId ? `:${body.revisionId}` : ""}`, revision: body.expectedRevision + 1, outcome: "applied" } });
+            resource: `${body.resource}:${body.targetId}${body.contributorId ? `:${body.contributorId}` : ""}`, revision: body.expectedRevision + 1, outcome: "applied" } });
         }
         if (path.startsWith("/admin/v1/moderation/")) {
-          const [, , , , kind, id, revisionId] = path.split("/");
-          const state = kind === "vote" ? { contributorId: id, revisionId, value: "like", excluded } :
-            kind === "contributor" ? { contributorId: id, displayName: contributorFixture.displayName, state: contributorState } :
+          const [, , , , kind, id, contributorId] = path.split("/");
+          const state = kind === "vote" ? { filterId: id, contributorId, vote: "down", excluded, updatedAt: 1 } :
+            kind === "contributor" ? { contributorId: id, displayName: contributorFixture.displayName, state: contributorState, quarantined: 0 } :
             kind === "report" ? { ...reportFixture, state: reportState } :
-            { revisionId: id, contributorId: "contributor-1", state: revisionState, authorState: contributorState, imports: 1, likes: 1 - excluded, dislikes: 0 };
+            { filterId: id, versionId: "version-1", state: "active", mergedInto: null, quarantined: filterQuarantined, served: 1, confidence: 0.5, contributorCount: 2 };
           const audit = actions.filter(action => action.targetId === id).slice(-20).map(action => ({ actionId: action.actionId,
             actor: "fixture-operator", command: action.command, reason: action.reason, outcome: "applied", expectedRevision: action.expectedRevision, createdAt: Date.now() }));
-          return route.fulfill({ json: { version: 1, resource: `${kind}:${id}${revisionId ? `:${revisionId}` : ""}`, revision, state, audit } });
+          return route.fulfill({ json: { version: 1, resource: `${kind}:${id}${contributorId ? `:${contributorId}` : ""}`, revision, state, audit } });
         }
         return route.fulfill({ json: operatorFixture(path) });
       });
@@ -168,22 +191,23 @@ for (const width of [320, 1440]) {
         await dialog.getByRole("button", { name: "Confirm action" }).click(); await expect(dialog).toHaveCount(0);
         await expect(page.getByText("Service snapshot loaded")).toBeVisible();
       }
-      await page.getByLabel("Revision ID", { exact: true }).fill("revision-1");
-      await page.getByRole("button", { name: "Inspect vote", exact: true }).click();
+      await page.getByRole("link", { name: "Look up a vote by this contributor", exact: true }).click();
+      await page.getByLabel("Filter ID", { exact: true }).fill("filter-1");
+      await page.getByRole("button", { name: "Inspect resource", exact: true }).click();
       for (const label of ["Exclude vote", "Restore vote"]) {
         await page.getByRole("button", { name: label, exact: true }).click();
         await dialog.getByLabel("Operator reason").fill("Reviewed individual abusive vote");
         await dialog.getByRole("button", { name: "Confirm action" }).click(); await expect(dialog).toHaveCount(0);
       }
-      await page.goto("/admin/#/contributions?selected=revision-1");
-      for (const label of ["Quarantine revision", "Restore revision"]) {
+      await page.goto("/admin/#/inspect?kind=filter&selected=filter-1");
+      for (const label of ["Quarantine filter", "Restore filter"]) {
         await page.getByRole("button", { name: label, exact: true }).click();
-        await dialog.getByLabel("Operator reason").fill("Reviewed revision evidence");
+        await dialog.getByLabel("Operator reason").fill("Reviewed filter evidence");
         await dialog.getByRole("button", { name: "Confirm action" }).click(); await expect(dialog).toHaveCount(0);
         await expect(page.getByText("Service snapshot loaded")).toBeVisible();
       }
       await page.goto("/admin/#/reports?selected=report-1");
-      await expect(page.getByRole("link", { name: "Inspect reported revision" })).toHaveAttribute("href", "#/contributions?selected=revision-1");
+      await expect(page.getByRole("link", { name: "Inspect reported filter" })).toHaveAttribute("href", "#/inspect?selected=filter-1&kind=filter");
       await page.getByRole("button", { name: "Resolve report", exact: true }).click();
       await expect(dialog.getByText(/does not quarantine/)).toBeVisible();
       await dialog.getByLabel("Operator reason").fill("Report reviewed; no further action required");

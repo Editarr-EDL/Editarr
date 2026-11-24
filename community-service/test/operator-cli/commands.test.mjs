@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { moderate, retry, page } from '../../scripts/operator/commands.mjs';
+import { list, moderate, recompute, retry, page } from '../../scripts/operator/commands.mjs';
 import { CliError } from '../../scripts/operator/transport.mjs';
 import { transferPage } from '../../scripts/operator/transfer.mjs';
 import { withCheckpoint } from '../../scripts/operator/state.mjs';
@@ -163,4 +163,75 @@ test('unsafe, symlinked or locked checkpoints fail closed; no reset shortcut is 
   await assert.rejects(withCheckpoint(linked, false, () => assert.fail()), /unsafe_checkpoint/);
   await writeFile(join(checkpoint, 'lock'), '{}', { mode: 0o600 });
   await assert.rejects(withCheckpoint(checkpoint, false, () => assert.fail()), /checkpoint_exists_or_locked/);
+});
+test('catalog actions bind their command-specific fields and reject incomplete or mixed extras', async () => {
+  const cases = [[{ command: 'confirm_version', resource: 'version' }, {}],
+    [{ command: 'merge_version', resource: 'version', intoVersionId: 'version-2' }, { intoVersionId: 'version-2' }],
+    [{ command: 'approve_alias', resource: 'alias_suggestion', aliasId: 'theatrical' }, { aliasId: 'theatrical' }],
+    [{ command: 'approve_alias', resource: 'alias_suggestion', newAliasId: 'remastered', label: 'Remastered' },
+      { newAliasId: 'remastered', label: 'Remastered' }],
+    [{ command: 'reject_alias', resource: 'alias_suggestion' }, {}]];
+  for (const [input, fields] of cases) {
+    const request = async path => {
+      assert.equal(path, `/admin/v1/moderation/${input.resource}/target-1`);
+      return { ...snapshot, resource: `${input.resource}:target-1` };
+    };
+    const preview = await moderate(request, origin, { ...options, ...input, target: 'target-1' });
+    assert.deepEqual({ ...preview.action, actionId: 'id' }, { version: 1, actionId: 'id', command: input.command, resource: input.resource,
+      targetId: 'target-1', expectedRevision: 2, reason: options.reason, ...fields });
+  }
+  for (const invalid of [{ command: 'merge_version', resource: 'version' },
+    { command: 'merge_version', resource: 'version', intoVersionId: 'target-1' },
+    { command: 'approve_alias', resource: 'alias_suggestion' },
+    { command: 'approve_alias', resource: 'alias_suggestion', aliasId: 'theatrical', newAliasId: 'other', label: 'Other' },
+    { command: 'approve_alias', resource: 'alias_suggestion', newAliasId: 'remastered' },
+    { command: 'approve_alias', resource: 'alias_suggestion', aliasId: 'Not Valid' },
+    { command: 'confirm_version', resource: 'version', intoVersionId: 'version-2' },
+    { command: 'confirm_version', resource: 'alias_suggestion' }, { intoVersionId: 'version-2' }])
+    await assert.rejects(moderate(fixture(() => assert.fail()), origin, { ...options, target: 'target-1', ...invalid }), /invalid_operator_data/);
+});
+
+test('recompute is dry-run by default and journals one exact action for each confirmed batch', async context => {
+  const checkpoint = await temporary(context);
+  const preview = await recompute(async () => assert.fail('dry-run must not request'), origin, { versionIds: ['v1', 'v2'], reason: 'Policy changed' });
+  assert.equal(preview.dryRun, true);
+  assert.deepEqual(preview.action.versionIds, ['v1', 'v2']);
+  for (const invalid of [{ versionIds: ['all', 'v1'] }, { versionIds: ['v1', 'v1'] }, { versionIds: ['v1'], after: 'v0' },
+    { versionIds: ['../x'] }, { versionIds: ['all'], reason: ' ' }])
+    await assert.rejects(recompute(async () => assert.fail(), origin, { reason: 'r', ...invalid }), /invalid_arguments|invalid_operator_data/);
+  await assert.rejects(recompute(async () => assert.fail(), origin, { versionIds: ['all'], reason: 'r', confirm: true }), /checkpoint_required/);
+  let sent;
+  const request = async (path, body) => {
+    if (path === '/admin/v1/session') return identity;
+    assert.equal(path, '/admin/v1/recompute');
+    if (!sent) { sent = body; throw new CliError('operator_transport_unavailable'); }
+    assert.deepEqual(body, sent);
+    return { version: 1, jobId: body.actionId, complete: false, nextAfter: 'v200' };
+  };
+  await assert.rejects(recompute(request, origin, { versionIds: ['all'], after: 'v0', reason: 'Policy changed', confirm: true, checkpoint }),
+    /operator_transport_unavailable/);
+  assert.deepEqual(sent, { version: 1, actionId: sent.actionId, versionIds: 'all', after: 'v0', reason: 'Policy changed' });
+  const result = await retry(request, origin, checkpoint, true);
+  assert.equal(result.result.nextAfter, 'v200');
+  assert.deepEqual(await retry(async path => path === '/admin/v1/session' ? identity : assert.fail('applied batch must not resend'),
+    origin, checkpoint, true), result);
+  const listed = await temporary(context);
+  await assert.rejects(recompute(async (path, body) => path === '/admin/v1/session' ? identity :
+    { version: 1, actionId: body.actionId, versions: [] }, origin, { versionIds: ['v1'], reason: 'r', confirm: true, checkpoint: listed }),
+  /invalid_operator_data/);
+});
+
+test('version and alias suggestion lists pass their filter and validate their keyed pages', async () => {
+  const paths = [];
+  const request = async path => {
+    paths.push(path);
+    return path.startsWith('/admin/v1/versions') ? { version: 1, versions: [{ versionId: 'v1' }], nextCursor: null }
+      : { version: 1, suggestions: [], nextCursor: null };
+  };
+  assert.equal((await list(request, 'versions', undefined, 'v0', 'candidate')).versions.length, 1);
+  await list(request, 'alias-suggestions', undefined, undefined, 'pending');
+  assert.deepEqual(paths, ['/admin/v1/versions?status=candidate&after=v0', '/admin/v1/alias-suggestions?state=pending']);
+  await assert.rejects(list(request, 'versions', undefined, undefined, 'pending'), /invalid_arguments/);
+  await assert.rejects(list(request, 'contributors', undefined, undefined, 'active'), /invalid_arguments/);
+  await assert.rejects(list(async () => ({ version: 1, items: [], nextCursor: null }), 'versions'), /invalid_operator_data/);
 });

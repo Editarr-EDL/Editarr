@@ -3,12 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OperatorAccess } from "./operator-access";
 import { readOperatorOverview, readOperatorPage } from "../../api/api-community-operator";
-import { operatorFixture, contributorFixture, pageFixture, overviewFixture, operationFixture } from "./test-fixtures";
+import { operatorFixture, contributorFixture, pageFixture, overviewFixture, operationFixture, versionRowFixture } from "./test-fixtures";
 
 beforeEach(() => { window.history.replaceState(null, "", "/admin/#/overview"); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function installFetch() {
-  const fetcher = vi.fn((path: string) => Promise.resolve(Response.json(operatorFixture(new URL(path, "https://operator.test").pathname))));
+  const fetcher = vi.fn((path: string, _options?: RequestInit) => Promise.resolve(Response.json(operatorFixture(new URL(path, "https://operator.test").pathname))));
   vi.stubGlobal("fetch", fetcher);
   return fetcher;
 }
@@ -116,4 +116,68 @@ it("distinguishes identical operation IDs scoped to different kinds", async () =
   window.history.pushState(null, "", `/admin/${href}`);
   window.dispatchEvent(new HashChangeEvent("hashchange"));
   await waitFor(() => expect(within(screen.getByRole("region", { name: "Resource inspection" })).getByText("vote")).toBeInTheDocument());
+});
+it("lists versions by status and inspects a version's filters, counts and submissions", async () => {
+  const fetcher = installFetch(); navigate("versions?filter=candidate"); render(<OperatorAccess />);
+  await screen.findByText("Service snapshot loaded");
+  expect(fetcher.mock.calls.map(([path]) => path)).toContain("/admin/v1/versions?status=candidate");
+  const table = screen.getByRole("region", { name: "Versions table" });
+  for (const value of ["Remastered", "candidate", "0.5", "Served filters"]) expect(within(table).getByText(value)).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "candidate" })).toHaveAttribute("aria-current", "true");
+  navigate("versions?filter=candidate&selected=version-1");
+  const filters = await screen.findByRole("region", { name: "Master filters" });
+  expect(within(filters).getByRole("link", { name: /Inspect/ })).toHaveAttribute("href", "#/inspect?selected=filter-1&kind=filter");
+  expect(within(screen.getByRole("region", { name: "Submissions" })).getByRole("link", { name: /Inspect/ }))
+    .toHaveAttribute("href", "#/inspect?selected=submission-1&kind=submission");
+  const actions = screen.getByRole("region", { name: "Moderation actions" });
+  expect(within(actions).getAllByRole("button").map(button => button.textContent))
+    .toEqual(["Confirm version", "Merge into another version", "Quarantine version", "Recompute version"]);
+  expect(fetcher.mock.calls.map(([path]) => path)).toEqual(expect.arrayContaining(["/admin/v1/moderation/version/version-1",
+    "/admin/v1/dashboard/versions/version-1/filters", "/admin/v1/dashboard/versions/version-1/submissions"]));
+});
+
+it("links a report to its filter target and inspects filters through the lookup view", async () => {
+  installFetch(); navigate("reports?selected=report-1"); render(<OperatorAccess />);
+  const link = await screen.findByRole("link", { name: "Inspect reported filter" });
+  expect(link).toHaveAttribute("href", "#/inspect?selected=filter-1&kind=filter");
+  navigate("inspect?selected=filter-1&kind=filter");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Quarantine filter" })).toBeInTheDocument());
+  expect(screen.getByRole("link", { name: "Inspect version" })).toHaveAttribute("href", "#/versions?selected=version-1");
+  expect(screen.getByLabelText("ID")).toHaveValue("filter-1");
+  fireEvent.change(screen.getByLabelText("Resource type"), { target: { value: "vote" } });
+  expect(screen.getByRole("button", { name: "Inspect resource" })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("Voting contributor ID"), { target: { value: "contributor-1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Inspect resource" }));
+  expect(window.location.hash).toBe("#/inspect?selected=filter-1&kind=vote&contributor=contributor-1");
+});
+
+it("defaults alias suggestions to the pending queue", async () => {
+  const fetcher = installFetch(); navigate("aliases"); render(<OperatorAccess />);
+  await screen.findByText("Service snapshot loaded");
+  expect(fetcher.mock.calls.map(([path]) => path)).toContain("/admin/v1/alias-suggestions?state=pending");
+  expect(screen.getByRole("link", { name: "pending" })).toHaveAttribute("aria-current", "true");
+});
+
+it("recomputes all versions in batches and continues from the returned cursor", async () => {
+  const fetcher = installFetch(); navigate("recompute"); render(<OperatorAccess />);
+  await screen.findByText("Service snapshot loaded");
+  fetcher.mockImplementation((path: string, options?: RequestInit) => {
+    if (options?.method !== "POST") return Promise.resolve(Response.json(operatorFixture(path)));
+    const body = JSON.parse(String(options.body));
+    return Promise.resolve(Response.json({ version: 1, jobId: body.actionId, complete: !!body.after, nextAfter: body.after ? null : "version-200" }));
+  });
+  fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: "Policy changed" } });
+  fireEvent.click(screen.getByRole("button", { name: "Recompute all versions" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Continue after version-200" }));
+  await screen.findByText(/Recompute complete/);
+  const bodies = fetcher.mock.calls.filter(([, options]) => options?.method === "POST").map(([, options]) => JSON.parse(String(options?.body)));
+  expect(bodies).toEqual([{ version: 1, actionId: expect.any(String), versionIds: "all", reason: "Policy changed" },
+    { version: 1, actionId: expect.any(String), versionIds: "all", reason: "Policy changed", after: "version-200" }]);
+  expect(bodies[0].actionId).not.toBe(bodies[1].actionId);
+});
+
+it("rejects version rows with unexpected fields", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ version: 1, nextCursor: null,
+    versions: [{ ...versionRowFixture, matchKeys: "private" }] })));
+  await expect(readOperatorPage("versions", null, new AbortController().signal)).rejects.toThrow();
 });
