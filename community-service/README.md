@@ -124,6 +124,10 @@ pnpm operator -- list operations --origin https://operator-host
 pnpm operator -- inspect filter filter-id --origin https://operator-host
 pnpm operator -- moderate quarantine filter filter-id --expected-revision 2 --reason 'Reviewed evidence' --origin https://operator-host
 pnpm operator -- moderate exclude_vote vote filter-id --contributor contributor-id --expected-revision 0 --reason 'Reviewed evidence' --origin https://operator-host
+pnpm operator -- list versions --status candidate --origin https://operator-host
+pnpm operator -- moderate merge_version version version-id --into target-version-id --expected-revision 1 --reason 'Duplicate cut' --origin https://operator-host
+pnpm operator -- moderate approve_alias alias_suggestion suggestion-id --alias theatrical --expected-revision 0 --reason 'Common spelling' --origin https://operator-host
+pnpm operator -- recompute all --reason 'MASTER_POLICY changed' --origin https://operator-host
 ```
 
 Values above are placeholders. `EDITARR_OPERATOR_ORIGIN` may replace `--origin`.
@@ -137,6 +141,11 @@ to approve and durably save the exact UUID/body before sending. Keep these priva
 0700/0600 directories outside the checkout. `retry --checkpoint DIRECTORY --confirm`
 reuses an uncertain intent; stale/conflicting actions require fresh review. Applied
 retries read current state rather than resend or project historical state.
+`approve_alias` takes `--alias ALIAS_ID`, or `--new-alias ALIAS_ID --label TEXT` to create
+an alias. `recompute <VERSION_ID...|all>` is also a dry-run until `--confirm --checkpoint`;
+an `all` batch recomputes up to 200 versions and returns `nextAfter`, which the next
+run passes as `--after`. A recompute retry resends the same action, which changes
+nothing when no input changed.
 `page operations --checkpoint NEW_DIRECTORY` saves one bounded inspection page;
 repeat with `--resume` to advance. These are not backups or consistent snapshots.
 After hard termination, verify no writer is active before manually removing only
@@ -166,12 +175,16 @@ procedure. The former `pnpm operator -- restore` command for legacy hosted archi
 was removed with the revision-era schema; those archives cannot be restored into the
 `community-master-1` lineage.
 
-## Read-Only Operator Dashboard
+## Operator Dashboard
 
-The dashboard includes overview/usage, reports, contributors/keys, operations and a
-combined moderation audit. `GET /admin/v1/dashboard/{contributors|operations|audit}`
-and the per-contributor `keys` and `usage` routes return 20 rows per page with opaque
-cursors. Overview storage is the stored submission bytes in `artifact_storage_usage`;
+The dashboard includes overview/usage, versions (with their master filters and
+submissions), the alias suggestion queue, reports on filters and versions,
+contributors/keys, operations, a combined moderation audit, a resource lookup for
+filters, attestations, submissions and votes, and an all-versions recompute with
+continuation. Every action uses the reasoned, fresh-inspection confirmation of §7.8.
+`GET /admin/v1/dashboard/{contributors|operations|audit}`, the per-contributor `keys`
+and `usage` routes and the per-version `filters` and `submissions` routes return 20
+rows per page with opaque cursors; filters show attestation counts only. Overview storage is the stored submission bytes in `artifact_storage_usage`;
 database size, provider usage and backups are reported as unavailable. The dashboard
 cannot see operator-owned backup files.
 

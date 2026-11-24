@@ -23,7 +23,9 @@ export async function listVersions(db: SqlDatabase, params: URLSearchParams) {
   const rows = await db.prepare(`SELECT v.version_id AS versionId, v.work_id AS workId, v.status, v.alias_id AS aliasId,
     v.label_text AS labelText, v.merged_into AS mergedInto, v.runtime_ms AS runtimeMs, v.trust, v.revision,
     v.quarantined, v.created_at AS createdAt,
-    (SELECT count(DISTINCT c.contributor_id) FROM version_counted_acceptances c WHERE c.version_id = v.version_id) AS contributorCount
+    (SELECT count(DISTINCT c.contributor_id) FROM version_counted_acceptances c WHERE c.version_id = v.version_id) AS contributorCount,
+    (SELECT count(*) FROM master_filters f WHERE f.version_id = v.version_id) AS filterCount,
+    (SELECT count(*) FROM master_filters f WHERE f.version_id = v.version_id AND f.served = 1) AS servedFilterCount
     FROM versions v WHERE (?1 IS NULL OR v.status = ?1) AND v.version_id > ?2 ORDER BY v.version_id LIMIT ${PAGE + 1}`)
     .bind(query.value, query.after).all<{ versionId: string }>();
   return { version: 1, versions: rows.results.slice(0, PAGE),

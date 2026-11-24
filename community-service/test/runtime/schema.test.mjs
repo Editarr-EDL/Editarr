@@ -51,6 +51,9 @@ test('the baseline contains only the kept and master-set tables', () => {
       'filter_attestations', 'filter_votes', 'master_revisions', 'master_revision_filters', 'download_receipts', 'sync_runs'])
       assert.ok(tables.includes(kept), kept);
     assert.throws(() => database.exec("UPDATE schema_lineage SET lineage = 'other'"), /CHECK|immutable_schema_lineage/);
+    const columns = name => database.prepare(`SELECT name FROM pragma_index_info('${name}') ORDER BY seqno`).all().map(row => row.name);
+    assert.deepEqual(columns('idx_filter_registry_version_page'), ['version_id', 'filter_id']);
+    assert.deepEqual(columns('idx_submissions_version_page'), ['version_id', 'submission_id']);
   } finally { database.close(); }
 });
 

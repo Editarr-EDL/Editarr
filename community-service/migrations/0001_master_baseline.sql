@@ -414,6 +414,7 @@ CREATE TABLE submissions (
   created_at INTEGER NOT NULL CHECK (created_at >= 0)
 );
 CREATE INDEX idx_submissions_version ON submissions(version_id, contributor_id, accepted_seq);
+CREATE INDEX idx_submissions_version_page ON submissions(version_id, submission_id);
 CREATE INDEX idx_submissions_contributor ON submissions(contributor_id, created_at);
 CREATE TRIGGER guard_submission_update BEFORE UPDATE OF submission_id, digest, contributor_id, installation_id, key_id,
   accepted_seq, artifact_bytes, manifest_bytes, envelope_bytes, match_keys_json, alignment_hint_json, created_at ON submissions
@@ -477,6 +478,7 @@ CREATE TABLE filter_registry (
   quarantined INTEGER NOT NULL DEFAULT 0 CHECK (quarantined IN (0, 1))
 );
 CREATE INDEX idx_filter_registry_version ON filter_registry(version_id);
+CREATE INDEX idx_filter_registry_version_page ON filter_registry(version_id, filter_id);
 CREATE TABLE master_filters (
   filter_id TEXT PRIMARY KEY NOT NULL REFERENCES filter_registry(filter_id),
   version_id TEXT NOT NULL REFERENCES versions(version_id),
