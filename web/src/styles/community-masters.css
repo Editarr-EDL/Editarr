@@ -1,0 +1,93 @@
+/* Community master filter sets: find cards, master view, alignment, update review and sync entry. */
+.community-masters { display: grid; gap: 12px; margin-block: 12px 20px; min-width: 0; }
+.community-masters > h2 { margin: 0; font-size: 1.15rem; }
+.master-link { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid #3b4351; border-radius: 8px; background: #1c2027; min-width: 0; }
+.master-link-header, .master-link-title, .master-version-card-title, .master-update-heading, .master-update-group-heading {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0;
+}
+.master-link-header { justify-content: space-between; }
+.master-link-header .button-row { margin: 0; gap: 6px; flex-wrap: wrap; }
+.master-link-title h3, .master-version-card-title h4, .master-update-group-heading h4 { margin: 0; font-size: 1rem; }
+
+.master-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #4a5568; border-radius: 999px;
+  color: #c8d2e2; background: #232a35; font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.master-match-strong { border-color: #3f7a5f; color: #a0dfbe; }
+.master-unconfirmed { border-color: #8a7440; color: #ffd28e; background: #2b261b; cursor: help; }
+.master-unconfirmed:hover, .master-unconfirmed[aria-expanded="true"], .master-unconfirmed:focus-visible { background: #3a3220; }
+.master-low-confidence { border-color: #8a5a40; color: #ffc19e; }
+.master-touched { border-color: #58709a; color: #b9d6ff; }
+.master-verified-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
+  color: #a0dfbe; background: transparent; cursor: help; }
+.master-verified-icon svg { width: 16px; height: 16px; }
+.master-verified-icon:hover, .master-verified-icon:focus-visible, .master-verified-icon[aria-expanded="true"] { background: #243a30; }
+
+.master-update-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 9px 12px; border-left: 3px solid #6b8fd6; border-radius: 4px; background: #1f2a3d; }
+
+.master-preferences { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-bottom: 8px; }
+.master-threshold { display: inline-flex; align-items: center; gap: 8px; }
+.master-threshold input { width: min(220px, 50vw); }
+.master-threshold output { min-width: 3.5em; color: #c8d2e2; font-variant-numeric: tabular-nums; }
+.master-toggle { display: inline-flex; align-items: center; gap: 6px; }
+
+.master-filter-list { display: grid; gap: 8px; min-width: 0; }
+.master-filter-list > p { margin: 0; }
+.master-filter-table th[scope="row"] { font-weight: 600; text-align: left; }
+.master-filter-table th[scope="row"] small, .master-status small { display: block; font-weight: 400; }
+.master-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.master-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.master-row-inactive td, .master-row-inactive th { opacity: .65; }
+.master-votes { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.master-inline-error { color: #ffc2bd; font-size: 12px; }
+
+.master-find { display: grid; gap: 12px; margin-top: 10px; padding-top: 16px; border-top: 1px solid #3b4351; min-width: 0; }
+.master-find p { margin: 0; }
+.master-version-picker { display: grid; gap: 8px; max-width: 420px; }
+.master-version-picker .field { display: grid; gap: 4px; }
+.master-version-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.master-version-card { display: grid; align-content: start; gap: 6px; padding: 12px; border: 1px solid #3b4351; border-radius: 8px; background: #1c2027; }
+.master-version-card > button { justify-self: start; }
+
+.master-alignment, .master-update-review { display: grid; gap: 10px; padding: 12px; border: 1px solid #3b4351; border-radius: 8px; background: #181c22; min-width: 0; }
+.master-alignment h4 { margin: 0; }
+.master-alignment p { margin: 0; }
+.master-alignment-mode { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; border: 0; }
+.master-alignment-mode legend { margin-bottom: 4px; font-weight: 600; }
+.master-alignment-mode label { display: inline-flex; align-items: center; gap: 6px; }
+.master-alignment-preview { display: grid; gap: 8px; }
+
+.master-update-group { display: grid; gap: 6px; }
+.master-update-group-heading { justify-content: space-between; }
+.master-update-group > p { margin: 0; }
+.master-update-rows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.master-update-row { display: grid; gap: 6px; padding: 10px; border: 1px solid #333b48; border-radius: 6px; }
+.master-update-touched { border-color: #58709a; }
+.master-update-actions { margin: 0; gap: 6px; flex-wrap: wrap; }
+
+.master-timeline { display: grid; gap: 3px; }
+.master-timeline-track { display: grid; grid-template-columns: 3.5em minmax(80px, 1fr) auto; align-items: center; gap: 8px; font-size: 12px; }
+.master-timeline-label { color: #a4adbb; }
+.master-timeline-lane { position: relative; height: 8px; border-radius: 4px; background: #2a303b; }
+.master-timeline-bar { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.master-timeline-old { background: #7d8798; }
+.master-timeline-new { background: #6b9bff; }
+.master-timeline-mine { background: #a0dfbe; }
+.master-timeline-range { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.master-share-preview { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid #3b4351; border-radius: 8px; }
+.master-share-preview p { margin: 0; }
+
+.community-updates-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px;
+  border-radius: 9px; color: #0f1520; background: #8baeff; font-size: 11px; font-weight: 700; }
+.community-updates-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.community-updates-list .sidebar-link { display: grid; justify-content: stretch; gap: 1px; }
+.community-updates-list small { color: #9098a7; font-size: 11px; }
+.community-update-unread span { font-weight: 700; color: #edf3ff; }
+
+@media (max-width: 600px) {
+  .master-link { padding: 10px; }
+  .master-timeline-track { grid-template-columns: 3em minmax(60px, 1fr); }
+  .master-timeline-range { grid-column: 2; }
+  .master-preferences { align-items: stretch; flex-direction: column; }
+  .master-update-actions > button, .master-version-card > button { min-height: 44px; }
+}

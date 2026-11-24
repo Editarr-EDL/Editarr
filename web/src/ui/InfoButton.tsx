@@ -9,11 +9,16 @@ export interface InfoButtonHost {
   activeDismiss: RefObject<(() => void) | null>;
 }
 
-/** Show details outside scrollable content on hover, focus, or tap. */
-export function InfoButton({ label, host, children }: {
+/**
+ * Show details outside scrollable content on hover, focus, or tap. `content` replaces the default "i"
+ * glyph and `className` the default button style, so labels and icons can carry the same tooltip.
+ */
+export function InfoButton({ label, host, children, content = "i", className = "scan-options-button" }: {
   label: string;
   host?: InfoButtonHost;
   children: ReactNode;
+  content?: ReactNode;
+  className?: string;
 }) {
   const localDismiss = useRef<(() => void) | null>(null);
   const activeDismiss = host?.activeDismiss ?? localDismiss;
@@ -128,7 +133,7 @@ export function InfoButton({ label, host, children }: {
   return <>
     <button
       ref={trigger}
-      className="scan-options-button"
+      className={className}
       type="button"
       aria-label={label}
       aria-expanded={open}
@@ -141,7 +146,7 @@ export function InfoButton({ label, host, children }: {
       }}
       onFocus={preview}
       onBlur={() => { if (!pointerInTooltip.current) close(); }}
-    >i</button>
+    >{content}</button>
     {open && createPortal(
       <span
         ref={tooltip}

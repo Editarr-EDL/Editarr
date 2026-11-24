@@ -75,6 +75,7 @@ import type { LookupInput } from "../api/api-community-lookup";
 import { useCommunityDownloads } from "../scans/use-community-downloads";
 import { communityReviewScans } from "../review/community-review-scans";
 import { useCan } from "../auth/auth-gate";
+import { CommunityMasterPanel } from "../scans/community-master-panel";
 
 export type Breadcrumb = { label: string; route?: string };
 
@@ -406,7 +407,9 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       onSourceChange={selectReviewVersion} onManageLegacyExports={mayDeleteLegacy && Object.values(legacyExports(activeExportStatus)).some((status) => status.present)
         ? () => setShowManageExports(true) : undefined} />
     {message && <p className="form-status" role="status">{message}</p>}
+    <CommunityMasterPanel target={{ source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId }} />
     {filters.open && <FindFiltersDialog candidates={filters.candidates} results={filters.results} selectedIds={filters.selectedIds} associating={filters.associating} onSelect={filters.select} onAssociate={() => void filters.associate()} onClose={() => { filters.close(); setFindFiltersActive(false); }} returnFocusRef={findFiltersTriggerRef}
+      masterTarget={maySearchCommunity ? { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId } : undefined}
       community={{ lookup: filters.community, downloads, tracks: { inventory: lookupTracks.inventory, selection: lookupTracks.selection,
         loading: lookupTracks.loading, error: lookupTracks.error, disabled: filters.associating,
         onChange: lookupTracks.onChange, onRetry: lookupTracks.onRetry } }} />}

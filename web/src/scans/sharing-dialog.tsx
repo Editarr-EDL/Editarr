@@ -12,6 +12,7 @@ import { SharingPreviewDetails } from "./sharing-preview";
 import { sharingAccessLost, sharingErrorCode, useSharingSummary } from "./use-sharing-summary";
 import { useCan, useOptionalAuthenticationGate, usePrincipal } from "../auth/auth-gate";
 import { useCommunityLifetime } from "../settings/community/community-access";
+import { MasterShareAction } from "./master-share-dialog";
 import "../styles/community-sharing.css";
 
 const messages: Record<string, string> = {
@@ -276,5 +277,6 @@ export function ShareAction({ source, name, disabled = false }: { source: Sharin
   if (!(source.kind === "scan" ? publishScan : publishOwn || publishOther) && !checkOwn && !checkOther) return null;
   return <><button type="button" ref={trigger} className="btn-secondary compact-button" disabled={disabled}
     aria-label={`Share ${name}`} onClick={() => setOpen(true)}>Share</button>
+    <MasterShareAction source={source} name={name} disabled={disabled} />
     {open && <SharingDialog key={source.kind + ":" + source.id} source={source} initialName={name} returnFocusRef={trigger} onClose={() => setOpen(false)} />}</>;
 }

@@ -3,6 +3,8 @@ import { ModalDialog } from "../ui/ModalDialog";
 import type { FilterCandidate, FilterResult } from "./use-find-filters";
 import { CommunityFilterResults, type CommunityResultsProps } from "./community-filter-results";
 import { audioTrackLabel } from "./audio-track-field";
+import type { MasterTarget } from "../api/api-community-master-types";
+import { MasterFindResults } from "./master-find-results";
 
 export function FindFiltersDialog({
   candidates,
@@ -14,6 +16,7 @@ export function FindFiltersDialog({
   returnFocusRef,
   results,
   community,
+  masterTarget,
 }: {
   candidates: FilterCandidate[];
   selectedIds: string[];
@@ -24,6 +27,7 @@ export function FindFiltersDialog({
   returnFocusRef?: RefObject<HTMLElement | null>;
   results?: FilterResult[];
   community?: CommunityResultsProps;
+  masterTarget?: MasterTarget;
 }) {
   return <ModalDialog labelledBy="filter-candidates-heading" className="find-filters-dialog" onClose={associating ? undefined : onClose} returnFocusRef={returnFocusRef}>
     <h2 id="filter-candidates-heading">Found Filters</h2>
@@ -63,5 +67,6 @@ export function FindFiltersDialog({
       </button>
     </div>
     {community && <CommunityFilterResults {...community} />}
+    {masterTarget && <MasterFindResults target={masterTarget} />}
   </ModalDialog>;
 }
