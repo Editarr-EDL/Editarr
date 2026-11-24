@@ -158,6 +158,16 @@ account.
 
 ## Local community API
 
+> **Master filter sets:** The [local community API](community-local-api.md)
+> defines the routes for finding, downloading, applying, voting on, sharing and
+> updating community master filter sets. Under
+> [ADR 0002](adr/0002-community-master-filter-sets.md), it supersedes the
+> revision-based subsections below: Target lookup, Community Downloads,
+> Import Acknowledgments, Hosted Votes, Revision Quality Ranking, Local
+> Revision Feedback, and the artifact-v2 parts of Publication jobs and
+> Manual Sharing. They will be removed in the removal phase. Connection,
+> enrollment, profile and key routes are unchanged.
+
 Community access is disabled unless `EDITARR_COMMUNITY_SERVICE_URL` (canonical
 HTTPS origin, no trailing slash) and `EDITARR_COMMUNITY_SERVICE_AUDIENCE` (exact
 authority) are configured. No community request starts merely on startup.
@@ -507,7 +517,7 @@ generation. When that evidence is unavailable, the original version stays in
 history and can be used in the existing verification flow. Signed Community
 artifacts keep their existing fingerprint and signature formats.
 
-See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts).
+See [works, versions, aliases and match keys](community-scan-service-contracts.md#3-works-versions-aliases-and-match-keys).
 
 ## Named review API
 
@@ -959,7 +969,7 @@ does not prove analysis. Historical/imported unknown input stays null. Stale or
 missing queued inputs and unverifiable audio checkpoints stop without substitution.
 Device-bound audio selection tokens expire. Start a new scan and choose the audio
 track again if a queued selection can no longer be verified.
-See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts)
+See [match key types](community-scan-service-contracts.md#32-match-key-types)
 for how selected tracks affect community matching.
 
 ### Scan naming
