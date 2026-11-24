@@ -766,6 +766,30 @@ Reference values (`S`, `Neg` → confidence):
 | 1, 9 | 0.046964148 (dropped) |
 | 3, 0 | 0.375528264 |
 
+### 6.11 Clarifications
+
+The reference engine (`community-service/src/filters`) resolves these details
+as follows:
+
+- **Implicit coverage negatives** are suppressed when the contributor has any
+  cue on the filter. Cues include duplicate and unverified re-shared support,
+  and quarantined attestations. A quarantined attestation never counts as a
+  signal.
+- **Derived ID collision:** if the derived ID is already claimed by an earlier
+  cluster in the same recompute, derive from the next member in canonical
+  order. If every member collides, append the decimal counter `"1"`, `"2"`, …
+  as an extra framed field of the first member.
+- **`mergedInto`** requires a strict majority (more than half) of the retired
+  ID's counted former members, including duplicates, to be in one cluster.
+  With no counted former members, the previous `mergedInto` is kept. Chains
+  are collapsed to point at the current filter.
+- **Votes across retired IDs:** when one contributor has votes on several IDs
+  that resolve to the same filter, the vote on the current ID counts.
+  Otherwise the vote on the ASCII-smallest ID counts.
+- **Quarantined version:** the revision and its served content stay unchanged
+  while the version is quarantined. A restore advances the revision only if
+  the content then differs.
+
 ## 7. Service endpoints
 
 General rules:
