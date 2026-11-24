@@ -161,7 +161,6 @@ class MasterService:
             path,
             identity=identity,
             response_bytes=MASTER_RESPONSE_BYTES,
-            verify_response_digest=True,
         )
         try:
             return verify_master_response(

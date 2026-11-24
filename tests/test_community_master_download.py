@@ -148,6 +148,12 @@ def test_check_marks_gone_versions(setup, response, state):
         stored = db.get(CommunityMasterLinkRow, link.id)
         assert stored.link_state == state
         assert stored.merged_into == ("v_9" if state == "merged" else None)
+    if state == "unavailable":
+        unchanged = {"version": 1, "changed": False, "versionId": "v_1", "revision": 1}
+        master_route(service, "v_1", {1: unchanged})
+        assert asyncio.run(masters.check(link.id))["changed"] is False
+        with factory() as db:
+            assert db.get(CommunityMasterLinkRow, link.id).link_state == "active"
 
 
 def test_completed_scans_and_user_confirmation_refresh_local_verification(setup):

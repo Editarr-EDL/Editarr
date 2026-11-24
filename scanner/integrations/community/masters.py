@@ -146,20 +146,23 @@ class MasterSets:
         except CommunityFailure as error:
             self._mark_gone(link_id, error)
             raise
+        if not isinstance(master, (VerifiedMaster, MasterUnchanged)):
+            raise CommunityFailure("invalid_response")
         changed = False
         self._clean()
-        if isinstance(master, VerifiedMaster):
-            try:
-                with write_lock(self.db):
+        try:
+            with write_lock(self.db):
+                if isinstance(master, VerifiedMaster):
                     changed = store_latest_snapshot(
                         self.db, self.owner_id, link_id, verified_snapshot(master)
                     )
-                    self.db.commit()
-            except BaseException:
-                self.db.rollback()
-                raise
-        elif not isinstance(master, MasterUnchanged):
-            raise CommunityFailure("invalid_response")
+                if require_link(self.db, self.owner_id, link_id).link_state == "unavailable":
+                    # A restored version is served again, so the link follows it again.
+                    mark_link_state(self.db, self.owner_id, link_id, "active")
+                self.db.commit()
+        except BaseException:
+            self.db.rollback()
+            raise
         link = require_link(self.db, self.owner_id, link_id)
         result = {
             "version": 1,

@@ -8,14 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
-
 
 @pytest.mark.skipif(
     not all(shutil.which(command) for command in ("node", "age", "expect")),
     reason="Community E2E requires Node >=24, age and Expect; see community-service/README.md",
 )
-@RETIRED_REVISION_PROTOCOL
 def test_independent_editarr_instances_against_real_community_http_and_sqlite():
     root = Path(__file__).resolve().parents[1]
     environment = dict(os.environ, COMMUNITY_E2E_PYTHON=sys.executable)

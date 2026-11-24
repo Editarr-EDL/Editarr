@@ -19,12 +19,14 @@ from scanner.security.community_artifact_signatures import (
 
 BOUNDS = ResourceBounds(4096, 16384, 10, 256, 12)
 FIXTURES = Path(__file__).resolve().parents[1] / "community-service/test/fixtures"
+# The retired v1 artifacts the service no longer ships; the signature framing is unchanged.
+LEGACY = Path(__file__).resolve().parent / "fixtures/community"
 VECTORS = json.loads((FIXTURES / "artifact-signatures-v1.json").read_text())
 
 
 def original_bytes():
     artifact_bytes = base64.b64decode(
-        json.loads((FIXTURES / "artifact-v1-gzip.json").read_text())["base64"]
+        json.loads((LEGACY / "artifact-v1-gzip.json").read_text())["base64"]
     )
     artifact = parse_artifact(artifact_bytes, bounds=BOUNDS, compressed=True)
     manifest_bytes = json.dumps(
@@ -46,7 +48,7 @@ def original_bytes():
 
 def derived_bytes():
     original, _ = original_bytes()
-    payload = json.loads((FIXTURES / "artifact-v1.json").read_text())
+    payload = json.loads((LEGACY / "artifact-v1.json").read_text())
     parent = {"submission_id": "submission-1", "digest": hashlib.sha256(original).hexdigest()}
     payload["submission_id"] = "derived-1"
     payload["kind"] = "derived"

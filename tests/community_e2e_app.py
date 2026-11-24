@@ -176,10 +176,10 @@ class SyntheticJellyfin:
 
 
 def serve_synthetic_jellyfin(api):
-    from scanner.integrations.community import lookup_targets
+    from scanner.integrations.community import find_targets
 
     api.JellyfinClient = SyntheticJellyfin
-    lookup_targets.JellyfinClient = SyntheticJellyfin
+    find_targets.JellyfinClient = SyntheticJellyfin
     api._test_jellyfin_connection = lambda *_args: None
     jellyfin = FakeJellyfin()
     jellyfin_setup_api.setup_transport = jellyfin.transport()
@@ -195,6 +195,11 @@ class ReadyServer(uvicorn.Server):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "master":
+        from tests.community_e2e_masters import run
+
+        run()
+        return
     if len(sys.argv) > 1 and sys.argv[1] == "request":
         from scanner.integrations.community.transport import ServiceEndpoint
         from scanner.security.community_identity import load_or_create_installation_identity
@@ -211,7 +216,8 @@ def main():
                 body=json.dumps(value["body"], separators=(",", ":")).encode()
                 if value["body"] is not None
                 else b"",
-                operation_id=str(uuid.uuid4()) if value["method"] != "GET" else None,
+                operation_id=value.get("operation_id")
+                or (str(uuid.uuid4()) if value["method"] != "GET" else None),
             )
         )
         print(json.dumps(result))

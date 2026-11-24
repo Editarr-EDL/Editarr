@@ -30,6 +30,7 @@ from scanner.modeling.community_filter_proposals import (
 from scanner.modeling.community_master_state import intervals_overlap
 from scanner.modeling.community_match_keys import FileKey, HashKey
 from scanner.modeling.community_work_identity import WorkIdentity
+from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
 
 MAX_ENTRIES = 2000
 MAX_INTERVALS = 512
@@ -114,7 +115,11 @@ def _cues(data: dict, kind: str, duration_ms: int, warnings: list[str]):
             continue
         category, subcategory = _value(row.get("category")), row.get("subcategory")
         severity, end = _value(row.get("severity")), row.get("end_seconds")
-        if not (category and subcategory and severity) or end is None:
+        if (
+            not (category and subcategory and severity)
+            or end is None
+            or _value(MCF_CATEGORY_TO_FAMILY.get(subcategory)) != category
+        ):
             warnings.append("unclassified_cue_skipped")
             continue
         start_ms, end_ms = _ms(row["start_seconds"], duration_ms), _ms(end, duration_ms)
