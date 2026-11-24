@@ -8,7 +8,8 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from .community_signatures import _url_components
+from .community_framing import framed
+from .community_signatures import url_components
 
 
 class ReceiptError(ValueError):
@@ -66,19 +67,10 @@ def parse_receipt_keys(value: object) -> tuple[ReceiptKey, ...]:
         raise ReceiptError("invalid_receipt_keys") from exc
 
 
-def _framed(domain: str, fields: tuple[str, ...]) -> bytes:
-    encoded = tuple(field.encode("utf-8") for field in fields)
-    return (
-        domain.encode("ascii")
-        + b"\0"
-        + b"".join(len(field).to_bytes(4, "big") + field for field in encoded)
-    )
-
-
 def receipt_identity(service: str, contributor_id: str, revision_id: str, digest: str) -> str:
     """Return the stable receipt identity, excluding issue time and service signing key."""
     return hashlib.sha256(
-        _framed(
+        framed(
             "editarr-community-download-identity-v1", (service, contributor_id, revision_id, digest)
         )
     ).hexdigest()
@@ -86,7 +78,7 @@ def receipt_identity(service: str, contributor_id: str, revision_id: str, digest
 
 def receipt_signing_bytes(receipt: ReceiptFields) -> bytes:
     """Encode CSS-42's seven UTF-8 fields and unsigned Unix seconds exactly."""
-    return _framed(
+    return framed(
         "editarr-community-download-receipt-v1",
         (
             receipt.schema_version,
@@ -113,7 +105,7 @@ def verify_download_receipt(
     try:
         envelope = DownloadReceipt.model_validate(value, strict=True)
         receipt = envelope.receipt
-        _, authority, path, query = _url_components(receipt.service)
+        _, authority, path, query = url_components(receipt.service)
         if receipt.service != f"https://{authority}" or path != "/" or query != "?":
             raise ValueError
         if (
