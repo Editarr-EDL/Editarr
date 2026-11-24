@@ -55,14 +55,16 @@ export async function signedPost(key: SigningKey, path: string, body: string, op
     origin + path, { body, operationId, nonce });
 }
 
-export async function signedRead(key: SigningKey, path: string, timestamp = now) {
+export async function signedRead(key: SigningKey, target: string, timestamp = now,
+  nonce = 'AQIDBAUGBwgJCgsMDQ4PEA') {
+  const [path, query] = target.split('?');
   const contentDigest = 'sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:';
   const signatureInput = `editarr=("@method" "@scheme" "@authority" "@path" "@query" "content-digest");` +
-    `created=${timestamp - 10};expires=${timestamp + 50};nonce="AQIDBAUGBwgJCgsMDQ4PEA";` +
+    `created=${timestamp - 10};expires=${timestamp + 50};nonce="${nonce}";` +
     `keyid="${key.keyId}";alg="ed25519";tag="editarr-community-request-v1"`;
   const base = `"@method": GET\n"@scheme": https\n"@authority": community.example\n"@path": ${path}\n` +
-    `"@query": ?\n"content-digest": ${contentDigest}\n"@signature-params": ${signatureInput.slice(8)}`;
+    `"@query": ?${query ?? ''}\n"content-digest": ${contentDigest}\n"@signature-params": ${signatureInput.slice(8)}`;
   const signature = new Uint8Array(await crypto.subtle.sign('Ed25519', key.privateKey, new TextEncoder().encode(base)));
-  return new Request(origin + path, { headers: { 'content-digest': contentDigest, 'signature-input': signatureInput,
+  return new Request(origin + target, { headers: { 'content-digest': contentDigest, 'signature-input': signatureInput,
     signature: `editarr=:${btoa(String.fromCharCode(...signature))}:` } });
 }

@@ -1035,6 +1035,15 @@ Errors:
 
 A contributor gets `versionChecksPerHour` requests (default 60).
 
+**Clarifications.** `knownRevision` is optional and appears at most once as a
+canonical non-negative decimal; any other query parameter is
+`400 invalid_master_request`. The limit counts every authenticated request to this
+route, including unchanged answers, in fixed one-hour windows, and returns
+`429 rate_limited` with `Retry-After`. Both signatures use the issuing time of the
+response as `issuedAt`; the stored receipt keeps the time of its first issue. Each
+issued receipt records the snapshot's filter IDs and their `mergedIds` in
+`master_revision_filters` for vote and report eligibility.
+
 ### 7.4 `POST /v1/filters/{filterId}/votes`
 
 Body: `{"version":1,"vote":"up"|"down"|"none","receiptId":"<64 hex>"}`. Use

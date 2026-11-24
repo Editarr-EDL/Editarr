@@ -14,7 +14,7 @@ import { contributorVersionCatalog } from './http/match';
 import { operatorService } from './admin/service';
 import { RETENTION_BATCH_SIZE } from './retention/transient';
 import { pruneRateWindows } from './retention/windows';
-import { receiptKeysSchema } from './security/service-signer';
+import { loadReceiptSigner, receiptKeysSchema } from './security/service-signer';
 import { contributorMasterRead } from './http/master';
 import { contributorSubmission } from './http/submissions';
 import { submissionLimitsSchema } from './submissions/input';
@@ -57,6 +57,18 @@ export default {
       catch { return jsonResponse(503, 'service_unavailable'); }
       return contributorWork(request, env, (db, authority, now, membership) =>
         contributorMasterRead(request, db, authority, now, membership, { receiptKeys: keys }));
+    }
+    if (/^\/v1\/versions\/[^/]+\/master$/.test(url.pathname)) {
+      return contributorWork(request, env, async (db, authority, now, membership) => {
+        let keys, signer, policy;
+        try {
+          policy = masterPolicy(env);
+          keys = receiptKeysSchema.parse(JSON.parse(env.DOWNLOAD_RECEIPT_KEYS ?? ''));
+          signer = await loadReceiptSigner(env.DOWNLOAD_RECEIPT_PRIVATE_KEY ?? '', keys);
+        } catch { return jsonResponse(503, 'service_unavailable'); }
+        return contributorMasterRead(request, db, authority, now, membership,
+          { receiptKeys: keys, signer, versionChecksPerHour: policy.versionChecksPerHour });
+      });
     }
     if (url.pathname === '/v1/match' || url.pathname === '/v1/aliases') {
       return contributorWork(request, env, (db, authority, now, membership) =>
