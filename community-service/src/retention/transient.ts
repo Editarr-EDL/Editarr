@@ -42,6 +42,12 @@ const selections = {
   profileNameEvents: { table: 'profile_name_changes', key: '(contributor_id, operation_id)',
     sql: 'SELECT contributor_id, operation_id FROM profile_name_changes WHERE changed_at <= ? ORDER BY changed_at LIMIT ?',
     values: (now: number) => [now - 3_600_000] },
+  rateCounters: { table: 'rate_counters', key: '(scope, window_start)',
+    sql: 'SELECT scope, window_start FROM rate_counters WHERE window_start < ? ORDER BY window_start LIMIT ?',
+    values: (now: number) => [Math.floor(now / 1000) - 172_800] },
+  syncRuns: { table: 'sync_runs', key: '(installation_id, run_id)',
+    sql: 'SELECT installation_id, run_id FROM sync_runs WHERE started_at < ? ORDER BY started_at LIMIT ?',
+    values: (now: number) => [Math.floor(now / 1000) - 172_800] },
 } satisfies Record<string, Selection>;
 
 export type TransientCategory = keyof typeof selections;

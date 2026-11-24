@@ -1,25 +1,16 @@
 import { env } from './helpers/environment';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, expect, it } from 'vitest';
 import { recoverInstallation, pruneRecoveryAuthorizations } from '../src/identity/recovery';
 import { completeEnrollmentProof } from '../src/identity/enrollment-proof';
 import { confirmationHash } from '../src/identity/confirmation';
 import { signedEnrollment } from './helpers/enrollment-signatures';
-import migration1 from '../migrations/0001_identity_operations.sql?raw';
-import migration2 from '../migrations/0002_budget_ledger.sql?raw';
-import migration3 from '../migrations/0003_quotas.sql?raw';
-import migration4 from '../migrations/0004_request_admission.sql?raw';
-import migration5 from '../migrations/0005_discord_oauth.sql?raw';
-import migration6 from '../migrations/0006_oauth_usage.sql?raw';
-import migration7 from '../migrations/0007_membership.sql?raw';
-import migration8 from '../migrations/0008_enrollment_profiles.sql?raw';
 
 const db = env.CATALOG_DB;
 const now = 1_700_000_030_000;
 const authority = 'community.example';
-const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8];
 beforeAll(async () => {
-  for (const migration of migrations) await db.exec(migration.replace(/\s*\n\s*/g, ' '));
-  await db.prepare('UPDATE quota_policy SET enabled = 1').run();
+  await applyBaseline(db);
 });
 
 async function fixture() {
@@ -76,7 +67,6 @@ it('reconciles concurrent identical completions without recharging', async () =>
   const results = await Promise.all([fixtureData.request(), fixtureData.request()].map(async (request) =>
     recoverInstallation(await request, db, authority, now, async () => {})));
   expect(results[1]).toEqual(results[0]);
-  expect((await db.prepare('SELECT * FROM quota_charges WHERE contributor_id = ?').bind(fixtureData.contributorId).all()).results).toHaveLength(0);
 });
 
 it.each(['foreign', 'suspended', 'secret', 'expired', 'membership', 'signature'])('rejects %s recovery without consuming authority', async (kind) => {
@@ -106,14 +96,11 @@ it('recovers a revoked key but never reactivates a revoked replacement through r
 it('status is read-only and historical caps cannot block replacement', async () => {
   const fixtureData = await fixture();
   expect(await recoverInstallation(await fixtureData.request(true), db, authority, now, async () => {})).toEqual({ version: 1, state: 'not_committed', result: null });
-  await db.prepare("UPDATE quota_caps SET cap = 2 WHERE resource = 'worker_requests'").run();
-  await db.prepare("INSERT INTO quota_charges VALUES (?, ?, 'worker_requests', ?, 1, ?)").bind(crypto.randomUUID(), fixtureData.contributorId,
-    new Date(now).toISOString().slice(0, 10), now).run();
   try {
     await expect(recoverInstallation(await fixtureData.request(), db, authority, now, async () => {})).resolves.toMatchObject({ state: 'completed' });
     expect(await db.prepare('SELECT state FROM installation_keys WHERE key_id = ?').bind(fixtureData.oldKeyId).first()).toEqual({ state: 'retired' });
     expect(await db.prepare('SELECT consumed_at FROM enrollment_states WHERE state_id = ?').bind(fixtureData.stateId).first()).toEqual({ consumed_at: now });
-  } finally { await db.prepare("UPDATE quota_caps SET cap = 1800 WHERE resource = 'worker_requests'").run(); }
+  } finally { /* nothing to restore */ }
 });
 
 it('cannot consume recovery authority through ordinary enrollment', async () => {

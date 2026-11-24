@@ -19,14 +19,14 @@ export function workIdentifiers(work: SubmissionWork): IdentifierRow[] {
 }
 
 export async function identifiedWork(db: SqlDatabase, row: IdentifierRow): Promise<string | null> {
-  return (await db.prepare(`SELECT work_id FROM master_work_identifiers WHERE provider = ? AND kind = ? AND value = ?
+  return (await db.prepare(`SELECT work_id FROM work_identifiers WHERE provider = ? AND kind = ? AND value = ?
     AND season = ? AND episode = ? AND last_episode = ?`)
     .bind(row.provider, row.kind, row.value, row.season, row.episode, row.lastEpisode).first<{ work_id: string }>())?.work_id ?? null;
 }
 
 /** Errors that mean a concurrent catalog write won; re-plan and retry the operation. */
 export function isCatalogWriteConflict(error: unknown): boolean {
-  return /catalog_write_conflict|version_label_conflict|UNIQUE constraint failed: (?:master_work_identifiers|versions\.created_seq|version_acceptances\.accepted_seq|version_match_keys)/
+  return /catalog_write_conflict|version_label_conflict|UNIQUE constraint failed: (?:work_identifiers|versions\.created_seq|version_acceptances\.accepted_seq|version_match_keys)/
     .test(String(error));
 }
 
@@ -36,9 +36,9 @@ export function isCatalogWriteConflict(error: unknown): boolean {
  * read; a concurrent writer makes the batch abort with `catalog_write_conflict`.
  */
 export async function workWriteGuard(db: SqlDatabase, workId: string): Promise<SqlStatement> {
-  const row = await db.prepare('SELECT catalog_seq FROM master_works WHERE work_id = ?').bind(workId).first<{ catalog_seq: number }>();
+  const row = await db.prepare('SELECT catalog_seq FROM works WHERE work_id = ?').bind(workId).first<{ catalog_seq: number }>();
   if (!row) throw new Error('work_not_found');
-  return db.prepare('UPDATE master_works SET catalog_seq = ? WHERE work_id = ?').bind(row.catalog_seq + 1, workId);
+  return db.prepare('UPDATE works SET catalog_seq = ? WHERE work_id = ?').bind(row.catalog_seq + 1, workId);
 }
 
 /**
@@ -57,7 +57,7 @@ export async function planWork(db: SqlDatabase, work: SubmissionWork, submission
   const existing = found.find(workId => workId !== null) ?? null;
   const workId = existing ?? newId('w');
   const statements: SqlStatement[] = [existing ? await workWriteGuard(db, workId)
-    : db.prepare('INSERT INTO master_works (work_id, kind, catalog_seq, created_at) VALUES (?, ?, 0, ?)').bind(workId, work.kind, now)];
+    : db.prepare('INSERT INTO works (work_id, kind, catalog_seq, created_at) VALUES (?, ?, 0, ?)').bind(workId, work.kind, now)];
   let conflicts = 0;
   rows.forEach((row, index) => {
     if (found[index] === workId) return;
@@ -68,7 +68,7 @@ export async function planWork(db: SqlDatabase, work: SubmissionWork, submission
         .bind(newId('wc'), submissionId, row.provider, row.value, found[index], now));
       return;
     }
-    statements.push(db.prepare(`INSERT INTO master_work_identifiers
+    statements.push(db.prepare(`INSERT INTO work_identifiers
       (provider, kind, value, season, episode, last_episode, work_id) VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .bind(row.provider, row.kind, row.value, row.season, row.episode, row.lastEpisode, workId));
   });

@@ -1,9 +1,6 @@
 import { env } from './helpers/environment';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, describe, expect, it } from 'vitest';
-import migration from '../migrations/0001_identity_operations.sql?raw';
-import budgetMigration from '../migrations/0002_budget_ledger.sql?raw';
-import quotaMigration from '../migrations/0003_quotas.sql?raw';
-import admissionMigration from '../migrations/0004_request_admission.sql?raw';
 import { completeEnrollmentProof } from '../src/identity/enrollment-proof';
 import { RequestSignatureTimeError } from '../src/security/request-signatures';
 import { signedEnrollment, type SigningOptions } from './helpers/enrollment-signatures';
@@ -17,9 +14,9 @@ const policy = { authority, now, maxLifetimeSeconds: 120, maxClockSkewSeconds: 5
 const nonce = 'AQIDBAUGBwgJCgsMDQ4PEA';
 
 beforeAll(async () => {
-  for (const sql of [migration, budgetMigration, quotaMigration, admissionMigration]) {
-    await db.exec(sql.replace(/\s*\n\s*/g, ' '));
-  }
+  await applyBaseline(db);
+  // These cases exercise the unconfirmed registration path, which stores no profile name key.
+  await db.exec('DROP TRIGGER guard_profile_name_insert; DROP INDEX uq_contributors_display_name;');
 });
 
 async function stage(subject = crypto.randomUUID()) {
@@ -116,8 +113,8 @@ describe('internal signed enrollment handoff', () => {
   it('rolls back grant and nonce on conflicting registration', async () => {
     const grant = await stage();
     await db.batch([
-      db.prepare(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, created_at)
-        VALUES ('existing-fixture', 'existing-subject', 'Existing', ?)`).bind(now),
+      db.prepare(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, created_at, display_name_key)
+        VALUES ('existing-fixture', 'existing-subject', 'Existing', ?, lower(hex(randomblob(8))))`).bind(now),
       db.prepare(`INSERT INTO installations (installation_id, contributor_id, created_at)
         VALUES (?, 'existing-fixture', ?)`).bind(grant.installationId, now),
     ]);

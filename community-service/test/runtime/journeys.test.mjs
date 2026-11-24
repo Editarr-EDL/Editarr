@@ -9,7 +9,7 @@ import { SqliteDatabase } from '../../src/runtime/sqlite.mjs';
 import { operatorAssets } from '../../src/runtime/http.mjs';
 import { migrationsDirectory } from '../../src/runtime/schema.mjs';
 
-for (const name of ['identity', 'sharing', 'operator', 'cleanup', ...(process.env.COMMUNITY_RUNTIME_IMAGE ? ['restart'] : ['multi-instance'])]) {
+for (const name of ['identity', 'operator', 'cleanup', ...(process.env.COMMUNITY_RUNTIME_IMAGE ? ['restart'] : ['multi-instance'])]) {
   test(`Node HTTP/SQLite ${name} journey with mocked external providers`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'community-journey-'));
     const output = join(directory, 'fixture.mjs');
@@ -37,7 +37,7 @@ for (const name of ['identity', 'sharing', 'operator', 'cleanup', ...(process.en
             try {
               for (const name of readdirSync('/app/migrations').filter(name => name.endsWith('.sql')).sort())
                 database.connection.exec(readFileSync('/app/migrations/' + name, 'utf8'));
-              database.connection.exec('PRAGMA user_version = 18');
+              database.connection.exec('PRAGMA user_version = 1');
               database.lockWriter();
               await exercise(database, { service, validateEnvironment, createHttpServer, readConfiguration, startMaintenance, serverPath: '/app/dist/runtime/server.mjs', assets: operatorAssets(new URL('file:///app/dist/runtime/assets/')) });
             } finally { database.close(); }`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 });

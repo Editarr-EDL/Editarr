@@ -1,14 +1,12 @@
 import type { SqlDatabase } from '../src/runtime/contracts';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import usageMigration from '../migrations/0006_oauth_usage.sql?raw';
-import migration from '../migrations/0007_membership.sql?raw';
 import { createBotMembership, pruneBotMembership } from '../src/integrations/discord/membership';
 import { config, db, initializeOAuthDb, now, userId } from './helpers/discord-oauth';
 
 const at = Math.floor(now / 1000);
 beforeAll(async () => {
   await initializeOAuthDb();
-  for (const sql of [usageMigration, migration]) await db.exec(sql.replace(/\s*\n\s*/g, ' '));
   await db.prepare('UPDATE contributors SET discord_user_id = ? WHERE contributor_id = ?')
     .bind(userId, 'pre-oauth').run();
 });

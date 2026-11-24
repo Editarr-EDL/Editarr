@@ -10,24 +10,32 @@ import { pruneProfileNames } from './identity/rename';
 import { contributorKeys } from './http/key-lifecycle';
 import { contributorRecovery } from './http/recovery';
 import { pruneRecoveryAuthorizations } from './identity/recovery';
-import { contributorPublication } from './http/publication';
-import { publicationLimits } from './contributions/publication-input';
-import { contributorCatalog } from './http/catalog';
 import { contributorVersionCatalog } from './http/match';
-import { searchLimits } from './catalog/search-input';
-import { contributorDownload } from './http/download';
-import { downloadLimits } from './contributions/download';
-import { loadReceiptSigner, receiptKeysSchema } from './contributions/receipts';
-import { contributorImport, importLimits } from './http/imports';
-import { contributorVote } from './http/votes';
-import { voteLimits } from './contributions/votes';
 import { operatorService } from './admin/service';
-import { contributorReport } from './http/reports';
-import { reportLimits } from './contributions/reports';
 import { RETENTION_BATCH_SIZE } from './retention/transient';
+import { pruneRateWindows } from './retention/windows';
+import { receiptKeysSchema } from './security/service-signer';
+import { contributorMasterRead } from './http/master';
+import type { SqlDatabase } from './runtime/contracts';
+import type { MembershipCheck } from './security/contributor-auth';
 
 function jsonResponse(status: number, code: string): Response {
   return Response.json({ error: { code } }, { status, headers: { 'Cache-Control': 'no-store' } });
+}
+
+/**
+ * Run a signed `/v1` route behind edge admission with the shared configuration checks: a
+ * database, origin and policy version are required, and requests must target the public origin.
+ */
+function contributorWork(request: Request, env: Env,
+  handler: (db: SqlDatabase, authority: string, now: number, membership: MembershipCheck) => Promise<Response>) {
+  if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION || new URL(request.url).origin !== env.PUBLIC_ORIGIN)
+    return jsonResponse(503, 'service_unavailable');
+  return admittedDiscordWork(request, env, async (db, admit) => {
+    const allowed = await admit(request);
+    if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
+    return handler(db, new URL(env.PUBLIC_ORIGIN!).host, Math.floor(Date.now() / 1000), createBotMembership({ ...env, CATALOG_DB: db }));
+  });
 }
 
 export default {
@@ -39,100 +47,17 @@ export default {
     if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
       return operatorService(request, env);
     }
-    if (/^\/v1\/contributions\/[^/]+\/reports$/.test(url.pathname)) {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION || !env.REPORT_LIMITS ||
-          url.origin !== env.PUBLIC_ORIGIN) return jsonResponse(503, 'service_unavailable');
-      let limits;
-      try { limits = reportLimits.parse(JSON.parse(env.REPORT_LIMITS)); }
+    if (url.pathname === '/v1/receipt-keys') {
+      if (!env.DOWNLOAD_RECEIPT_KEYS) return jsonResponse(503, 'service_unavailable');
+      let keys;
+      try { keys = receiptKeysSchema.parse(JSON.parse(env.DOWNLOAD_RECEIPT_KEYS)); }
       catch { return jsonResponse(503, 'service_unavailable'); }
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        return contributorReport(request, db, new URL(env.PUBLIC_ORIGIN!).host, Math.floor(Date.now() / 1000),
-          createBotMembership({ ...env, CATALOG_DB: db }), limits);
-      });
-    }
-    if (/^\/v1\/contributions\/[^/]+\/votes?$/.test(url.pathname)) {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION || !env.VOTE_LIMITS ||
-          url.origin !== env.PUBLIC_ORIGIN) return jsonResponse(503, 'service_unavailable');
-      let limits;
-      try { limits = voteLimits.parse(JSON.parse(env.VOTE_LIMITS)); }
-      catch { return jsonResponse(503, 'service_unavailable'); }
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        return contributorVote(request, db, new URL(env.PUBLIC_ORIGIN!).host, Math.floor(Date.now() / 1000),
-          createBotMembership({ ...env, CATALOG_DB: db }), limits);
-      });
-    }
-    if (url.pathname === '/v1/import-receipts') {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION || !env.IMPORT_LIMITS ||
-          !env.DOWNLOAD_RECEIPT_KEYS || url.origin !== env.PUBLIC_ORIGIN) return jsonResponse(503, 'service_unavailable');
-      let limits, keys;
-      try { limits = importLimits.parse(JSON.parse(env.IMPORT_LIMITS)); keys = receiptKeysSchema.parse(JSON.parse(env.DOWNLOAD_RECEIPT_KEYS)); }
-      catch { return jsonResponse(503, 'service_unavailable'); }
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        return contributorImport(request, db, new URL(env.PUBLIC_ORIGIN!).host, Math.floor(Date.now() / 1000),
-          createBotMembership({ ...env, CATALOG_DB: db }), limits, keys);
-      });
-    }
-    if (/^\/v1\/contributions\/[^/]+\/artifact$/.test(url.pathname) || url.pathname === '/v1/receipt-keys') {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION || !env.DOWNLOAD_LIMITS ||
-          !env.DOWNLOAD_RECEIPT_PRIVATE_KEY || !env.DOWNLOAD_RECEIPT_KEYS || url.origin !== env.PUBLIC_ORIGIN)
-        return jsonResponse(503, 'service_unavailable');
-      let limits;
-      try { limits = downloadLimits(JSON.parse(env.DOWNLOAD_LIMITS)); }
-      catch { return jsonResponse(503, 'service_unavailable'); }
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        let signer, keys;
-        try {
-          keys = receiptKeysSchema.parse(JSON.parse(env.DOWNLOAD_RECEIPT_KEYS!));
-          signer = await loadReceiptSigner(env.DOWNLOAD_RECEIPT_PRIVATE_KEY!, keys);
-        }
-        catch { return jsonResponse(503, 'service_unavailable'); }
-        return contributorDownload(request, db, new URL(env.PUBLIC_ORIGIN!).host, Math.floor(Date.now() / 1000),
-          createBotMembership({ ...env, CATALOG_DB: db }), limits, signer, env.CATALOG_DB, keys);
-      });
-    }
-    if (['/v1/availability/batch', '/v1/matches'].includes(url.pathname)) {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION ||
-          !env.LOOKUP_LIMITS || url.origin !== env.PUBLIC_ORIGIN) return jsonResponse(503, 'service_unavailable');
-      let limits;
-      try { limits = searchLimits(JSON.parse(env.LOOKUP_LIMITS)); }
-      catch { return jsonResponse(503, 'service_unavailable'); }
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        return contributorCatalog(request, db, new URL(env.PUBLIC_ORIGIN!).host,
-          Math.floor(Date.now() / 1000), createBotMembership({ ...env, CATALOG_DB: db }), limits, env.POLICY_VERSION!, env.CATALOG_DB);
-      });
+      return contributorWork(request, env, (db, authority, now, membership) =>
+        contributorMasterRead(request, db, authority, now, membership, { receiptKeys: keys }));
     }
     if (url.pathname === '/v1/match' || url.pathname === '/v1/aliases') {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION || url.origin !== env.PUBLIC_ORIGIN)
-        return jsonResponse(503, 'service_unavailable');
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        return contributorVersionCatalog(request, db, new URL(env.PUBLIC_ORIGIN!).host,
-          Math.floor(Date.now() / 1000), createBotMembership({ ...env, CATALOG_DB: db }));
-      });
-    }
-    if (url.pathname === '/v1/contributions' || url.pathname.startsWith('/v1/publication-operations/')) {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION ||
-          !env.PUBLICATION_LIMITS || url.origin !== env.PUBLIC_ORIGIN) return jsonResponse(503, 'service_unavailable');
-      let limits;
-      try { limits = publicationLimits(JSON.parse(env.PUBLICATION_LIMITS)); }
-      catch { return jsonResponse(503, 'service_unavailable'); }
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        return contributorPublication(request, db, new URL(env.PUBLIC_ORIGIN!).host,
-          Math.floor(Date.now() / 1000), createBotMembership({ ...env, CATALOG_DB: db }), limits);
-      });
+      return contributorWork(request, env, (db, authority, now, membership) =>
+        contributorVersionCatalog(request, db, authority, now, membership));
     }
     if (url.pathname.startsWith('/v1/discord/')) {
       return discordService(request, env);
@@ -141,14 +66,7 @@ export default {
     if (['/v1/keys/recover', '/v1/keys/recovery-status'].includes(url.pathname)) return contributorRecovery(request, env);
     if (['/v1/keys/rotate', '/v1/keys/revoke', '/v1/keys/rotation-status'].includes(url.pathname) ||
         url.pathname.startsWith('/v1/key-operations/')) {
-      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION ||
-          url.origin !== env.PUBLIC_ORIGIN) return jsonResponse(503, 'service_unavailable');
-      return admittedDiscordWork(request, env, async (db, admit) => {
-        const allowed = await admit(request);
-        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
-        return contributorKeys(request, db, new URL(env.PUBLIC_ORIGIN!).host,
-          Math.floor(Date.now() / 1000), createBotMembership({ ...env, CATALOG_DB: db }));
-      });
+      return contributorWork(request, env, (db, authority, now, membership) => contributorKeys(request, db, authority, now, membership));
     }
     if (url.pathname === '/v1/identity') {
       if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION ||
@@ -186,6 +104,7 @@ export default {
       () => pruneOAuthUsage(db, now, RETENTION_BATCH_SIZE),
       () => pruneBotMembership(db, seconds, RETENTION_BATCH_SIZE),
       () => pruneProfileNames(db, now, RETENTION_BATCH_SIZE),
+      () => pruneRateWindows(db, now, RETENTION_BATCH_SIZE),
     ]) {
       try { await prune(); } catch (error) { errors.push(error); }
     }

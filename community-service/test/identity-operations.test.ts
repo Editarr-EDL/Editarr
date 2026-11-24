@@ -1,16 +1,18 @@
 import type { SqlDatabase, SqlStatement } from '../src/runtime/contracts';
+import { applyBaseline } from './helpers/schema';
 import { env } from './helpers/environment';
 import { beforeAll, describe, expect, it } from 'vitest';
-import migration from '../migrations/0001_identity_operations.sql?raw';
 import { enroll, replaceInstallationKey } from '../src/identity/repository';
-import { completeOperation, pruneExpiredAuthenticationState, reserveNonce,
+import { completeOperation, pruneExpiredAuthenticationState, 
   reserveOperation } from '../src/operations/repository';
 
 const db = env.CATALOG_DB;
 const key = new Uint8Array([1, 2, 3]);
 
 beforeAll(async () => {
-  await db.exec(migration.replace(/\s*\n\s*/g, ' '));
+  await applyBaseline(db);
+  // These cases exercise the unconfirmed registration path, which stores no profile name key.
+  await db.exec('DROP TRIGGER guard_profile_name_insert; DROP INDEX uq_contributors_display_name;');
 });
 
 async function stage(installationId: string, keyId: string, subject: string, now = 100) {
@@ -196,10 +198,12 @@ describe('SQLite identity and operation persistence', () => {
     await expect(enroll(db, input)).rejects.toThrow('enrollment_state_invalid');
     await db.prepare('UPDATE enrollment_states SET provider_subject = ? WHERE state_id = ?')
       .bind(discordUserId, stateId).run();
-    await enroll(db, input);
+    const enrolled = await enroll(db, input);
     const nonce = crypto.randomUUID();
-    await reserveNonce(db, keyId, nonce, 120);
-    await expect(reserveNonce(db, keyId, nonce, 120)).rejects.toThrow();
+    const reserve = () => db.prepare('INSERT INTO request_nonces (key_id, nonce, expires_at, contributor_id) VALUES (?, ?, ?, ?)')
+      .bind(keyId, nonce, 120, enrolled.contributor_id).run();
+    await reserve();
+    await expect(reserve()).rejects.toThrow();
     await pruneExpiredAuthenticationState(db, 121, 1);
     expect(await db.prepare('SELECT 1 FROM request_nonces WHERE key_id = ? AND nonce = ?')
       .bind(keyId, nonce).first()).toBeNull();

@@ -35,14 +35,14 @@ export async function operatorModeration(request: Request, env: Env, subject: st
         if ([...url.searchParams.keys()].some(key => key !== 'after') || url.searchParams.getAll('after').length > 1)
           throw new Error('invalid_moderation');
         if (after !== null) resourceId.parse(after);
-        const rows = await db.prepare(`SELECT report_id AS reportId, contributor_id AS contributorId, revision_id AS revisionId,
-          reason, note, created_at AS createdAt FROM reports WHERE state = 'open' AND report_id > ? ORDER BY report_id LIMIT 21`)
+        const rows = await db.prepare(`SELECT report_id AS reportId, contributor_id AS contributorId, target_type AS targetType,
+          target_id AS targetId, reason, note, created_at AS createdAt FROM reports WHERE state = 'open' AND report_id > ? ORDER BY report_id LIMIT 21`)
           .bind(after ?? '').all();
         output = Response.json({ version: 1, reports: rows.results.slice(0, 20),
           nextCursor: rows.results.length > 20 ? rows.results[19].reportId : null });
       }
     } else {
-      const match = path.match(/^\/admin\/v1\/moderation\/(revision|contributor|vote|report|version|alias_suggestion)\/([A-Za-z0-9_.-]{1,128})(?:\/([A-Za-z0-9_.-]{1,128}))?$/);
+      const match = path.match(/^\/admin\/v1\/moderation\/(contributor|vote|report|version|alias_suggestion)\/([A-Za-z0-9_.-]{1,128})(?:\/([A-Za-z0-9_.-]{1,128}))?$/);
       if (!match) output = failure(404, 'not_found');
       else if (request.method !== 'GET') output = failure(405, 'method_not_allowed');
       else if (url.search) output = failure(400, 'invalid_moderation');
@@ -56,9 +56,10 @@ export async function operatorModeration(request: Request, env: Env, subject: st
     else if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof TypeError || String(error).includes('invalid_moderation')) output = failure(400, 'invalid_moderation');
     else if (error instanceof CatalogModerationError) output = failure(error.code === 'resource_not_found' ? 404 :
       error.code === 'moderation_ineligible' ? 403 : error.code === 'invalid_moderation' ? 400 : 409, error.code);
-    else if (error instanceof ModerationError) output = failure(error.code === 'resource_not_found' ? 404 : error.code === 'moderation_ineligible' ? 403 : 409, error.code);
+    else if (error instanceof ModerationError) output = failure(error.code === 'resource_not_found' ? 404 :
+      error.code === 'moderation_ineligible' ? 403 : error.code === 'invalid_moderation' ? 400 : 409, error.code);
     else if (String(error).includes('operator_rate_limited')) output = failure(429, 'operator_rate_limited');
-    else if (String(error).includes('download_query_limit')) output = failure(413, 'moderation_query_limit');
+    else if (String(error).includes('query_limit')) output = failure(413, 'moderation_query_limit');
     else output = failure(503, 'service_unavailable');
   }
   return output;

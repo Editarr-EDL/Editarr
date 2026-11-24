@@ -92,10 +92,10 @@ describe('version acceptance service', () => {
   });
 
   it('rejects unknown aliases and missing work identity without writing', async () => {
-    const before = await db.prepare('SELECT count(*) AS n FROM master_works').first();
+    const before = await db.prepare('SELECT count(*) AS n FROM works').first();
     await expect(accept({ version: { choice: 'alias', aliasId: 'nope' } })).rejects.toEqual(new VersionAcceptanceError('unknown_alias'));
     await expect(accept({ work: { ...submission().work, tmdb: null } })).rejects.toEqual(new VersionAcceptanceError('work_identity_required'));
-    expect(await db.prepare('SELECT count(*) AS n FROM master_works').first()).toEqual(before);
+    expect(await db.prepare('SELECT count(*) AS n FROM works').first()).toEqual(before);
   });
 
   it('promotes a candidate once three contributors attach tier 1–3 evidence, counting the founder', async () => {
@@ -149,7 +149,7 @@ describe('version acceptance service', () => {
   it('plans statements for the submission batch without writing', async () => {
     const plan = await planVersionAcceptance(db, submission({ work: { ...submission().work, tmdb: '400' } }), { policy, now, newId });
     expect(plan.statements.length).toBeGreaterThan(3);
-    expect(await db.prepare("SELECT count(*) AS n FROM master_work_identifiers WHERE value = '400'").first('n')).toBe(0);
+    expect(await db.prepare("SELECT count(*) AS n FROM work_identifiers WHERE value = '400'").first('n')).toBe(0);
   });
 });
 

@@ -1,10 +1,6 @@
 import { env } from './environment';
+import { applyBaseline } from './schema';
 import { expect, vi } from 'vitest';
-import identityMigration from '../../migrations/0001_identity_operations.sql?raw';
-import budgetMigration from '../../migrations/0002_budget_ledger.sql?raw';
-import quotaMigration from '../../migrations/0003_quotas.sql?raw';
-import admissionMigration from '../../migrations/0004_request_admission.sql?raw';
-import oauthMigration from '../../migrations/0005_discord_oauth.sql?raw';
 import { discordOAuth as broker } from '../../src/integrations/discord/oauth';
 
 export const db = env.CATALOG_DB;
@@ -21,12 +17,9 @@ export const discordOAuth: typeof broker = (input, bindings, at, client) =>
   broker(input, bindings, at, client, async () => 'allowed');
 
 export async function initializeOAuthDb() {
-  for (const migration of [identityMigration, budgetMigration, quotaMigration, admissionMigration]) {
-    await db.exec(migration.replace(/\s*\n\s*/g, ' '));
-  }
-  await db.prepare(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, created_at)
-    VALUES ('pre-oauth', 'pre-oauth-user', 'Preserved', 1)`).run();
-  await db.exec(oauthMigration.replace(/\s*\n\s*/g, ' '));
+  await applyBaseline(db);
+  await db.prepare(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, created_at, display_name_key)
+    VALUES ('pre-oauth', 'pre-oauth-user', 'Preserved', 1, lower(hex(randomblob(8))))`).run();
 }
 
 export async function start(at = now, host = origin, publicKey = key) {

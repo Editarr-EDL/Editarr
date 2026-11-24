@@ -15,8 +15,8 @@ const nullable = (value: number) => value === -1 ? null : value;
 export async function workSummaries(db: SqlDatabase, workIds: readonly string[]): Promise<Map<string, WorkSummary>> {
   const ids = JSON.stringify([...new Set(workIds)]);
   const [works, identifiers, titles] = await db.batch<Record<string, unknown>>([
-    db.prepare('SELECT work_id, kind FROM master_works WHERE work_id IN (SELECT value FROM json_each(?))').bind(ids),
-    db.prepare(`SELECT work_id, provider, value, season, episode, last_episode FROM master_work_identifiers
+    db.prepare('SELECT work_id, kind FROM works WHERE work_id IN (SELECT value FROM json_each(?))').bind(ids),
+    db.prepare(`SELECT work_id, provider, value, season, episode, last_episode FROM work_identifiers
       WHERE work_id IN (SELECT value FROM json_each(?)) ORDER BY provider, length(value), value, season, episode, last_episode`).bind(ids),
     db.prepare(`SELECT work_id, title, year FROM work_titles WHERE work_id IN (SELECT value FROM json_each(?))
       ORDER BY observations DESC, title, year`).bind(ids),

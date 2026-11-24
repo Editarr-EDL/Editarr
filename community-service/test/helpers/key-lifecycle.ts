@@ -1,12 +1,5 @@
 import type { SqlDatabase } from '../../src/runtime/contracts';
-import identityMigration from '../../migrations/0001_identity_operations.sql?raw';
-import budgetMigration from '../../migrations/0002_budget_ledger.sql?raw';
-import quotaMigration from '../../migrations/0003_quotas.sql?raw';
-import admissionMigration from '../../migrations/0004_request_admission.sql?raw';
-import oauthMigration from '../../migrations/0005_discord_oauth.sql?raw';
-import usageMigration from '../../migrations/0006_oauth_usage.sql?raw';
-import membershipMigration from '../../migrations/0007_membership.sql?raw';
-import profileMigration from '../../migrations/0008_enrollment_profiles.sql?raw';
+import { applyBaseline } from './schema';
 import { publicKeyId, rotationProofBytes, type RotationIntent } from '../../src/identity/rotation-proof';
 import { signedEnrollment } from './enrollment-signatures';
 
@@ -15,11 +8,7 @@ export const now = 1_700_000_030;
 export type SigningKey = { keyId: string; publicKey: Uint8Array; privateKey: CryptoKey };
 
 export async function prepareKeyDatabase(db: import('./environment').FixtureDatabase) {
-  for (const migration of [identityMigration, budgetMigration, quotaMigration, admissionMigration,
-    oauthMigration, usageMigration, membershipMigration, profileMigration]) {
-    await db.exec(migration.replace(/\s*\n\s*/g, ' '));
-  }
-  await db.prepare('UPDATE quota_policy SET enabled = 1').run();
+  await applyBaseline(db);
 }
 
 export async function signingKey(): Promise<SigningKey> {

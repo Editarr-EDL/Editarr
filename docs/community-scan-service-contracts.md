@@ -1207,15 +1207,38 @@ Each raw submission is stored exactly once, as BLOBs, with no expanded copies
 except `submission_entries`. Those rows are derived from the artifact and can
 be rebuilt from it.
 
-**Interim catalog migration:** until the baseline rebase lands, the catalog
-tables ship as the additive migration `0018_master_catalog.sql` on the
-existing lineage. It changes no existing row. Because the old schema already
-has `works` and `work_identifiers`, the new tables are named `master_works`
-(with a `catalog_seq` optimistic write guard) and `master_work_identifiers`.
-It also adds `version_acceptances` with the `version_counted_acceptances`
-view (counted inputs for promotion, runtime and trust) and the
-`catalog_moderation_actions` audit for the version and alias commands. The
-rebase may rename or fold these tables into the baseline.
+**Baseline details.** The rebased baseline resolves these storage details
+conservatively; none changes a wire format:
+
+- **Lineage:** the single-row, immutable `schema_lineage` table holds
+  `community-master-1`. The offline runner and the server refuse a store whose
+  lineage is missing or different with `unsupported_database_lineage`, before any
+  version check, and print that reason.
+- **Catalog:** the interim `master_works` (with its `catalog_seq` optimistic write
+  guard) and `master_work_identifiers` are renamed `works` and
+  `work_identifiers`. `version_acceptances` with the `version_counted_acceptances`
+  view, and the `catalog_moderation_actions` audit for the version and alias
+  commands, are kept. `submissions.submission_id` references
+  `version_acceptances`, and a merge moves both rows.
+- **Derived submission columns:** `submissions.match_keys_json` holds the
+  artifact's tier 1–3 keys, which the merge needs for identity alignment (§6.2).
+  Like `submission_entries` and `submission_coverage`, it is derived from, and can
+  be rebuilt from, the stored artifact.
+- **Moderation state:** `contributors.quarantined` records contributor quarantine,
+  which is separate from `state` (suspension). `moderation_actions` adds
+  `error_code` and the `recompute` command; the separate account, report and vote
+  triggers of the old schema are replaced by one audit trigger that advances the
+  resource's moderation revision.
+- **Limits:** `rate_counters (scope, window_start, requests)` holds the fixed
+  one-hour windows for `versionChecksPerHour`. `submissionsPerDay` counts the
+  contributor's accepted `submissions` in the rolling 24 hours before the request.
+  `sync_runs` is keyed by `(installation_id, run_id)`, so a run ID is scoped to its
+  installation.
+- **Stored bytes:** `artifact_storage_policy` and `artifact_storage_usage` are kept.
+  Inserting a submission charges its three raw buffers and is refused beyond the
+  global (350,000,000 bytes) or per-contributor (7,000,000 bytes) cap.
+- **Snapshot bytes:** when a newer revision is stored, older revisions without an
+  issued receipt keep their digest and drop `snapshot_bytes`.
 
 ### 8.1 Operator configuration
 

@@ -73,7 +73,7 @@ export async function exercise(database, runtime) {
       replay = await patch(alice, { displayName: 'Restart Preserved Name' }, crypto.randomUUID(), nonce);
       expectStatus(await localSend(replay.clone()));
       const inspected = expectStatus(await admin(`/admin/v1/moderation/contributor/${bob.contributorId}`));
-      expectStatus(await admin('/admin/v1/moderation', { version: 1, command: 'suspend', actionId: crypto.randomUUID(),
+      expectStatus(await admin('/admin/v1/moderation', { version: 1, command: 'suspend', resource: 'contributor', actionId: crypto.randomUUID(),
         targetId: bob.contributorId, expectedRevision: inspected.revision, reason: 'Synthetic persistent moderation' }));
       copyFileSync(configuration.configPath, join(directory, 'config.json'));
       copyFileSync(configuration.secretsPath, join(directory, 'secrets.json'));

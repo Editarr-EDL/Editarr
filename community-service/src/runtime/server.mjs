@@ -1,6 +1,6 @@
 import service, { validateEnvironment } from './service.mjs';
 import { readConfiguration, tunnelActor } from './environment.mjs';
-import { openDatabase } from './schema.mjs';
+import { openDatabase, REPORTED_REFUSALS } from './schema.mjs';
 import { createHttpServer, operatorAssets } from './http.mjs';
 import { startMaintenance } from './maintenance.mjs';
 
@@ -54,4 +54,8 @@ async function main() {
   }
 }
 
-main().catch(() => { console.error('community_startup_refused'); process.exitCode = 1; });
+main().catch(error => {
+  const reason = REPORTED_REFUSALS.has(error?.message) ? ` reason=${error.message}` : '';
+  console.error(`community_startup_refused${reason}`);
+  process.exitCode = 1;
+});

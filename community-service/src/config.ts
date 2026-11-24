@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { SqlDatabase, AssetFetcher } from './runtime/contracts';
 import { parseMasterPolicy, type MasterPolicy } from './filters/policy';
 export interface Env {
@@ -7,10 +8,6 @@ export interface Env {
   TRUSTED_ACTOR_KEY?: (request: Request) => string | null;
   PUBLIC_ORIGIN?: string;
   POLICY_VERSION?: string;
-  PUBLICATION_LIMITS?: string;
-  LOOKUP_LIMITS?: string;
-  DOWNLOAD_LIMITS?: string;
-  IMPORT_LIMITS?: string;
   VOTE_LIMITS?: string;
   REPORT_LIMITS?: string;
   MODERATION_LIMITS?: string;
@@ -58,3 +55,8 @@ export function masterPolicy(env: Pick<Env, 'MASTER_POLICY'>): MasterPolicy {
   }
   return parsedPolicy.policy;
 }
+
+/** `VOTE_LIMITS` and `REPORT_LIMITS`: request body and handler query bounds. */
+export const routeLimits = z.strictObject({ requestBytes: z.number().int().min(1).max(8192),
+  maxQueries: z.number().int().min(1).max(64) });
+export type RouteLimits = z.infer<typeof routeLimits>;
