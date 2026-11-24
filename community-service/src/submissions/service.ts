@@ -41,12 +41,15 @@ async function replay(db: SqlDatabase, identity: AuthenticatedContributor, reque
 }
 
 /** The state of the version a plan accepts into, with the pending acceptance and submission applied. */
-async function pendingState(db: SqlDatabase, plan: AcceptancePlan, stored: StoredSubmission): Promise<VersionState> {
+async function pendingState(db: SqlDatabase, plan: AcceptancePlan, stored: StoredSubmission): Promise<VersionState | null> {
   const acceptance = plan.result, keys = stored.artifact.media.matchKeys.map(storedKey);
   const seq = (await db.prepare('SELECT coalesce(max(accepted_seq), 0) + 1 AS next FROM version_acceptances').first<{ next: number }>())!.next;
   let state: VersionState;
   if (acceptance.disposition === 'attached') {
-    state = (await loadVersionState(db, acceptance.versionId))!;
+    // Null when the version was merged after planning; the caller plans again.
+    const loaded = await loadVersionState(db, acceptance.versionId);
+    if (!loaded) return null;
+    state = loaded;
   } else {
     const labels = await db.prepare('SELECT alias_id, label FROM aliases').all<{ alias_id: string; label: string }>();
     state = { versionId: acceptance.versionId, workId: acceptance.workId, status: acceptance.versionStatus,
@@ -62,6 +65,25 @@ async function pendingState(db: SqlDatabase, plan: AcceptancePlan, stored: Store
   state.workRows = withPendingWork(state.workRows, acceptance.workId, plan.work.kind, plan.work.attached, plan.work.title);
   state.submissions = [...state.submissions, submissionInput(stored, seq)];
   return state;
+}
+
+/** Refuse with `429 rate_limited` when the contributor accepted `submissionsPerDay` in the last 24 hours. */
+async function refuseOverDailyLimit(db: SqlDatabase, contributorId: string, options: SubmissionOptions) {
+  const window = await db.prepare(`SELECT count(*) AS count, min(created_at) AS oldest FROM submissions
+    WHERE contributor_id = ? AND created_at > ?`).bind(contributorId, options.now - 86_400).first<{ count: number; oldest: number | null }>();
+  if (window && window.count >= options.policy.submissionsPerDay)
+    throw new RouteError(429, 'rate_limited', {}, { 'Retry-After': String(Math.max(1, window.oldest! + 86_400 - options.now)) });
+}
+
+/**
+ * Re-check the daily limit inside the submission batch: over the limit it writes a zero count,
+ * which the `rate_counters` CHECK refuses, so concurrent uploads cannot exceed it.
+ */
+function dailyLimitGuard(db: SqlDatabase, contributorId: string, options: SubmissionOptions) {
+  return db.prepare(`INSERT INTO rate_counters (scope, window_start, requests) VALUES ('submission-guard:' || ?1, 0,
+      CASE WHEN (SELECT count(*) FROM submissions WHERE contributor_id = ?1 AND created_at > ?2) >= ?3 THEN 0 ELSE 1 END)
+    ON CONFLICT(scope, window_start) DO UPDATE SET requests = excluded.requests`)
+    .bind(contributorId, options.now - 86_400, options.policy.submissionsPerDay);
 }
 
 function outcome(result: MergeResult, submissionId: string, registry: readonly string[]): SubmissionResult['outcome'] {
@@ -98,10 +120,7 @@ export async function acceptSubmission(db: SqlDatabase, identity: AuthenticatedC
     { contributorId: identity.contributorId, keyId: identity.keyId, publicKey: new Uint8Array(signer.public_key) },
     artifactBounds(options.limits));
   if (decoded.artifact.submissionId !== request.submissionId) throw new ArtifactV3Error('invalid_submission');
-  const window = await db.prepare(`SELECT count(*) AS count, min(created_at) AS oldest FROM submissions
-    WHERE contributor_id = ? AND created_at > ?`).bind(identity.contributorId, options.now - 86_400).first<{ count: number; oldest: number | null }>();
-  if (window && window.count >= options.policy.submissionsPerDay)
-    throw new RouteError(429, 'rate_limited', {}, { 'Retry-After': String(Math.max(1, window.oldest! + 86_400 - options.now)) });
+  await refuseOverDailyLimit(db, identity.contributorId, options);
   const artifact = decoded.artifact;
   const input = { submissionId: artifact.submissionId, contributorId: identity.contributorId, work: artifact.work,
     version: artifact.version, durationMs: artifact.media.durationMs, matchKeys: artifact.media.matchKeys };
@@ -117,6 +136,10 @@ export async function acceptSubmission(db: SqlDatabase, identity: AuthenticatedC
       tier: plan.result.tier === null ? null : Number(plan.result.tier) as 1 | 2 | 3, artifact,
       artifactBytes: request.artifactBytes, manifestBytes: request.manifestBytes, envelopeBytes: request.envelopeBytes };
     const state = await pendingState(db, plan, stored);
+    if (!state) {
+      if (attempt >= 5) throw new Error('catalog_write_conflict');
+      continue;
+    }
     const previous = state.submissions.filter(item => item.contributorId === identity.contributorId &&
       item.submissionId !== stored.submissionId && !state.quarantinedSubmissions.includes(item.submissionId))
       .sort((a, b) => b.acceptedSeq - a.acceptedSeq)[0];
@@ -130,13 +153,15 @@ export async function acceptSubmission(db: SqlDatabase, identity: AuthenticatedC
     try {
       await db.batch([
         ...completionStatements(db, identity, 'submission', identity.contentDigest, result, options.now),
-        ...plan.statements, ...submissionStatements(db, stored, options.now), ...recompute.statements,
+        ...plan.statements, dailyLimitGuard(db, identity.contributorId, options),
+        ...submissionStatements(db, stored, options.now), ...recompute.statements,
       ]);
       return result;
     } catch (error) {
       const raced = await replay(db, identity, request).catch(() => null);
       if (raced) return raced;
       const text = String(error);
+      await refuseOverDailyLimit(db, identity.contributorId, options);
       if (text.includes('artifact_storage_exhausted')) throw new RouteError(503, 'service_unavailable');
       if (/UNIQUE constraint failed: (submissions|version_acceptances)\.(submission_id|digest)/.test(text) ||
           text.includes('operation_conflict')) throw new RouteError(409, 'submission_conflict');

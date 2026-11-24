@@ -61,3 +61,7 @@ export function masterPolicy(env: Pick<Env, 'MASTER_POLICY'>): MasterPolicy {
 export const routeLimits = z.strictObject({ requestBytes: z.number().int().min(1).max(8192),
   maxQueries: z.number().int().min(1).max(64) });
 export type RouteLimits = z.infer<typeof routeLimits>;
+
+/** `VOTE_LIMITS`: the route bounds plus `votesPerHour` per contributor (default 120, §7.4). */
+export const voteLimits = routeLimits.extend({ votesPerHour: z.number().int().min(1).max(100_000).default(120) });
+export type VoteLimits = z.infer<typeof voteLimits>;

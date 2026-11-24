@@ -64,6 +64,7 @@ All `variables` values are strings. Supply the existing service contract values:
 - `MASTER_POLICY`, with every key of contract §8.1. Startup refuses a missing
   or invalid value.
 
+`VOTE_LIMITS` may add `votesPerHour` (default 120 votes per contributor per hour).
 The revision-era `PUBLICATION_LIMITS`, `LOOKUP_LIMITS`, `DOWNLOAD_LIMITS` and
 `IMPORT_LIMITS` variables were removed with their routes; configuration that still
 names them is refused.

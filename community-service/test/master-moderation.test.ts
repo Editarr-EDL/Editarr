@@ -101,8 +101,8 @@ describe('master-set moderation (§7.8)', () => {
     const versionId = (await submitWork(alice, '503')).versionId;
     const { snapshot, receiptId } = await download(carol, versionId);
     const filterId = snapshot.filters[0].filterId;
-    await contributorVotes(await post(carol, `/v1/filters/${filterId}/votes`, { version: 1, vote: 'up', receiptId }), db,
-      'community.example', now, eligible, { policy, limits: { requestBytes: 8192, maxQueries: 64 } });
+    await contributorVotes(await post(carol, `/v1/filters/${filterId}/votes`, { version: 1, vote: 'up', receiptId }, `vote-${crypto.randomUUID()}`), db,
+      'community.example', now, eligible, { policy, limits: { requestBytes: 8192, maxQueries: 64, votesPerHour: 1000 } });
     const upvotes = async () => (await content(versionId)).served.filters[0].support.upvotes;
     expect(await upvotes()).toBe(1);
     await act('exclude_vote', 'vote', filterId, { contributorId: carol.contributorId });
@@ -119,8 +119,8 @@ describe('catalog moderation recompute hook', () => {
       entries: [support('s1', 1_500_000, 1_505_000)] })).versionId;
     const { snapshot, receiptId } = await download(carol, source);
     const sourceFilter = snapshot.filters[0].filterId;
-    const votes = (body: unknown) => post(carol, `/v1/filters/${sourceFilter}/votes`, body).then(async request =>
-      reply(await contributorVotes(request, db, 'community.example', now, eligible, { policy, limits: { requestBytes: 8192, maxQueries: 64 } })));
+    const votes = (body: unknown) => post(carol, `/v1/filters/${sourceFilter}/votes`, body, `vote-${crypto.randomUUID()}`).then(async request =>
+      reply(await contributorVotes(request, db, 'community.example', now, eligible, { policy, limits: { requestBytes: 8192, maxQueries: 64, votesPerHour: 1000 } })));
     expect((await votes({ version: 1, vote: 'up', receiptId })).status).toBe(200);
     const merged = await admin('/admin/v1/moderation', { version: 1, actionId: crypto.randomUUID(), command: 'merge_version',
       resource: 'version', targetId: source, intoVersionId: target, expectedRevision: 0, reason: 'Same cut' });
@@ -168,8 +168,12 @@ describe('POST /admin/v1/recompute', () => {
     expect(await action(['v_missing'])).toMatchObject({ status: 404, body: { error: { code: 'resource_not_found' } } });
     expect(await action('everything')).toMatchObject({ status: 400, body: { error: { code: 'invalid_moderation' } } });
     const all = await action('all');
-    expect(all.body).toEqual({ version: 1, jobId: expect.any(String) });
+    expect(all.body).toEqual({ version: 1, jobId: expect.any(String), complete: true, nextAfter: null });
+    expect((await admin('/admin/v1/recompute', { version: 1, actionId: crypto.randomUUID(), versionIds: 'all', after: 'zzzz',
+      reason: 'Continue' })).body).toMatchObject({ complete: true, nextAfter: null });
+    expect((await admin('/admin/v1/recompute', { version: 1, actionId: crypto.randomUUID(), versionIds: [versionId], after: 'v',
+      reason: 'Continue' })).status).toBe(400);
     expect((await content(versionId)).served.filters).toHaveLength(1);
-    expect(await db.prepare("SELECT count(*) AS n FROM moderation_actions WHERE command = 'recompute'").first()).toEqual({ n: 3 });
+    expect(await db.prepare("SELECT count(*) AS n FROM moderation_actions WHERE command = 'recompute'").first()).toEqual({ n: 4 });
   });
 });

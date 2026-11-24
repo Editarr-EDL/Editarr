@@ -1,5 +1,5 @@
 import type { SqlDatabase } from '../runtime/contracts';
-import type { RouteLimits } from '../config';
+import type { VoteLimits } from '../config';
 import type { MasterPolicy } from '../filters/policy';
 import type { MembershipCheck } from '../security/contributor-auth';
 import { castVote, ownVotes } from '../master/votes';
@@ -13,7 +13,7 @@ const RECOMPUTE_QUERIES = 40;
 
 /** Serve `POST /v1/filters/{filterId}/votes` and `GET /v1/versions/{versionId}/votes` (§7.4). */
 export async function contributorVotes(request: Request, db: SqlDatabase, authority: string, now: number,
-  membership: MembershipCheck, options: { policy: MasterPolicy; limits: RouteLimits }): Promise<Response> {
+  membership: MembershipCheck, options: { policy: MasterPolicy; limits: VoteLimits }): Promise<Response> {
   const path = new URL(request.url).pathname, cast = FILTER_VOTE.exec(path), list = VERSION_VOTES.exec(path);
   if (!cast && !list) return failure(404, 'not_found');
   return contributorRoute(request, db, { authority, now, membership, method: cast ? 'POST' : 'GET',
@@ -24,7 +24,8 @@ export async function contributorVotes(request: Request, db: SqlDatabase, author
     if (list) return json(await ownVotes(context.db, context.identity, id));
     let body: unknown;
     try { body = jsonBody(context.body); } catch { throw new RouteError(400, 'invalid_vote'); }
-    const result = await castVote(context.db, context.identity, id, body, { service: `https://${authority}`, policy: options.policy, now });
+    const result = await castVote(context.db, context.identity, id, body,
+      { service: `https://${authority}`, policy: options.policy, now, votesPerHour: options.limits.votesPerHour });
     return json({ version: 1, state: 'completed', result });
   });
 }

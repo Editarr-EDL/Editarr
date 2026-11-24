@@ -8,9 +8,12 @@ const token = z.string().regex(/^[A-Za-z0-9_.-]{1,128}$/);
 /** `POST /admin/v1/recompute` (§7.8). */
 export const recomputeInput = z.strictObject({ version: z.literal(1), actionId: z.string().uuid(),
   versionIds: z.union([z.literal('all'), z.array(token).min(1).max(100).refine(ids => new Set(ids).size === ids.length)]),
-  reason: privateNote.refine(value => value.trim().length > 0) });
+  after: token.optional(), reason: privateNote.refine(value => value.trim().length > 0),
+}).refine(input => input.after === undefined || input.versionIds === 'all');
 /** Versions recomputed per page of an `all` job. */
 export const RECOMPUTE_BATCH = 20;
+/** Versions one `all` call recomputes before it answers with a continuation cursor. */
+export const RECOMPUTE_ALL_LIMIT = 200;
 
 export class RecomputeError extends Error {
   constructor(public code: 'action_conflict' | 'resource_not_found') { super(code); }
@@ -18,9 +21,10 @@ export class RecomputeError extends Error {
 
 /**
  * Recompute versions deterministically under the current `MASTER_POLICY` and record one audit
- * row. A list returns each version's resulting revision; `all` pages through every non-merged
- * version in bounded batches and returns the action ID as its `jobId`. A retry of the same action
- * recomputes again, which changes nothing when no input changed.
+ * row. A list returns each version's resulting revision. `all` recomputes at most
+ * `RECOMPUTE_ALL_LIMIT` non-merged versions after `after` in ID order before answering, with
+ * `nextAfter` to continue in a new action. A retry recomputes again, which changes nothing when no
+ * input changed.
  */
 export async function recomputeAction(db: SqlDatabase, actor: string, value: unknown, context: MasterModerationContext) {
   const input = recomputeInput.parse(value), body = JSON.stringify(input);
@@ -44,12 +48,15 @@ export async function recomputeAction(db: SqlDatabase, actor: string, value: unk
     }
     return { version: 1, actionId: input.actionId, versions };
   }
-  for (let after = ''; ;) {
+  let after = input.after ?? '', done = 0;
+  while (done < RECOMPUTE_ALL_LIMIT) {
     const page = await db.prepare(`SELECT version_id FROM versions WHERE status != 'merged_into' AND version_id > ?
       ORDER BY version_id LIMIT ${RECOMPUTE_BATCH}`).bind(after).all<{ version_id: string }>();
     for (const row of page.results) await recomputeVersion(db, row.version_id, context);
-    if (page.results.length < RECOMPUTE_BATCH) break;
+    done += page.results.length;
+    if (page.results.length < RECOMPUTE_BATCH) return { version: 1, jobId: input.actionId, complete: true, nextAfter: null };
     after = page.results.at(-1)!.version_id;
   }
-  return { version: 1, jobId: input.actionId };
+  const more = await db.prepare(`SELECT 1 AS more FROM versions WHERE status != 'merged_into' AND version_id > ? LIMIT 1`).bind(after).first();
+  return { version: 1, jobId: input.actionId, complete: !more, nextAfter: more ? after : null };
 }

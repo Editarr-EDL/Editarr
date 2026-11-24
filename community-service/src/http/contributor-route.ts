@@ -78,8 +78,8 @@ function routeFailure(error: unknown, invalid: string): Response {
   if (error instanceof BodyLimitError) return failure(413, 'body_too_large');
   if (error instanceof ContributorAuthError) return failure(error.code === 'membership_unavailable' ? 503 :
     error.code === 'membership_ineligible' ? 403 : 401, error.code);
-  if (error instanceof SyntaxError || error instanceof TypeError || error instanceof z.ZodError)
-    return failure(400, invalid);
+  // Only validation failures are the route's 400; other errors are internal and stay 503.
+  if (error instanceof z.ZodError) return failure(400, invalid);
   const text = String(error);
   if (text.includes('key_inactive')) return failure(401, 'key_inactive');
   if (text.includes('operation_conflict')) return failure(409, 'operation_conflict');

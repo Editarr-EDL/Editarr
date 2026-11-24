@@ -11,6 +11,7 @@ export interface RecomputeOptions {
   now: number;
 }
 export interface RecomputePlan {
+  versionId: string;
   result: MergeResult;
   /** The revision the version has after the batch commits. */
   revision: number;
@@ -24,6 +25,22 @@ async function sha256Hex(bytes: Uint8Array) {
 }
 
 const json = (value: unknown) => JSON.stringify(value);
+
+/**
+ * Bound retained snapshot bytes (§8): besides the latest revision, a version keeps the bytes of
+ * at most `olderRevisions` earlier revisions, and only while a receipt for that revision was
+ * issued within `receiptSeconds`. Digests, receipts and `master_revision_filters` are kept.
+ */
+export const SNAPSHOT_RETENTION = Object.freeze({ olderRevisions: 8, receiptSeconds: 7 * 86_400 });
+
+/** Drop superseded snapshot bytes outside `SNAPSHOT_RETENTION`; `latest` is the newest stored revision. */
+export function supersededSnapshots(db: SqlDatabase, versionId: string, latest: number, now: number) {
+  return db.prepare(`UPDATE master_revisions SET snapshot_bytes = NULL WHERE version_id = ?1 AND revision < ?2
+    AND snapshot_bytes IS NOT NULL AND (NOT EXISTS (SELECT 1 FROM download_receipts r WHERE r.version_id = ?1
+      AND r.revision = master_revisions.revision AND r.issued_at > ?3)
+    OR revision NOT IN (SELECT revision FROM master_revisions WHERE version_id = ?1 AND revision < ?2
+      ORDER BY revision DESC LIMIT ?4))`).bind(versionId, latest, now - SNAPSHOT_RETENTION.receiptSeconds, SNAPSHOT_RETENTION.olderRevisions);
+}
 
 /**
  * Recompute a version (§6) from `state` and return the statements that persist the master set:
@@ -85,11 +102,9 @@ export async function recomputeStatements(db: SqlDatabase, state: VersionState, 
     statements.push(
       db.prepare(`INSERT INTO master_revisions (version_id, revision, snapshot_digest, generated_at, snapshot_bytes)
         VALUES (?, ?, ?, ?, ?)`).bind(versionId, result.revision.revision, await sha256Hex(bytes), options.now, bytes),
-      db.prepare(`UPDATE master_revisions SET snapshot_bytes = NULL WHERE version_id = ? AND revision < ? AND snapshot_bytes IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM download_receipts r WHERE r.version_id = master_revisions.version_id
-          AND r.revision = master_revisions.revision)`).bind(versionId, result.revision.revision));
+      supersededSnapshots(db, versionId, result.revision.revision, options.now));
   }
-  return { result, revision: result.revision.revision, changed: result.revision.changed, statements };
+  return { versionId, result, revision: result.revision.revision, changed: result.revision.changed, statements };
 }
 
 /** A change committed with a recompute: `change` applies it to the loaded state, `extra` writes it. */
@@ -101,16 +116,21 @@ export interface PendingChange {
 /**
  * Recompute one stored version in its own guarded batch, planning again after a concurrent
  * catalog write. A pending change (for example a vote) is applied to the loaded inputs and its
- * statements join the same batch.
+ * statements join the same batch. `target` may resolve the version on each attempt.
  */
-export async function recomputeVersion(db: SqlDatabase, versionId: string, options: RecomputeOptions,
+export async function recomputeVersion(db: SqlDatabase, target: string | (() => Promise<string>), options: RecomputeOptions,
   pending: PendingChange = {}, attempts = 5) {
   for (let attempt = 1; ; attempt++) {
+    const versionId = typeof target === 'string' ? target : await target();
     const row = await db.prepare('SELECT work_id FROM versions WHERE version_id = ?').bind(versionId).first<{ work_id: string }>();
     if (!row) throw new Error('version_not_found');
     const guard = await workWriteGuard(db, row.work_id);
     const state = await loadVersionState(db, versionId);
-    if (!state) throw new Error('version_not_found');
+    // A version merged since `target` was resolved: resolve and plan again.
+    if (!state) {
+      if (typeof target === 'string' || attempt >= attempts) throw new Error('version_not_found');
+      continue;
+    }
     pending.change?.(state);
     const plan = await recomputeStatements(db, state, options);
     try {

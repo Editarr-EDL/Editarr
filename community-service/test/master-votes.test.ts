@@ -2,15 +2,16 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { tunnelActor } from '../src/runtime/environment.mjs';
 import service from '../src/index';
 import { contributorVotes } from '../src/http/votes';
-import { contributor, nonce, support, type Contributor } from './helpers/submissions';
+import { recomputeVersion } from '../src/master/recompute';
+import { contributor, nonce, service as serviceOrigin, support, type Contributor } from './helpers/submissions';
 import { download, eligible, post, reply, submitWork } from './helpers/master';
 import { signedRead } from './helpers/key-lifecycle';
 import { db, now, policy, setupVersionCatalog } from './helpers/versions';
 
-const limits = { requestBytes: 8192, maxQueries: 64 };
-const handle = async (request: Request) =>
-  reply(await contributorVotes(request, db, 'community.example', now, eligible, { policy, limits }));
-const vote = async (who: Contributor, filterId: string, value: unknown, operationId?: string) =>
+const limits = { requestBytes: 8192, maxQueries: 64, votesPerHour: 1000 };
+const handle = async (request: Request, votesPerHour = limits.votesPerHour) =>
+  reply(await contributorVotes(request, db, 'community.example', now, eligible, { policy, limits: { ...limits, votesPerHour } }));
+const vote = async (who: Contributor, filterId: string, value: unknown, operationId = `vote-${crypto.randomUUID()}`) =>
   handle(await post(who, `/v1/filters/${filterId}/votes`, value, operationId));
 const filter = async (filterId: string) => db.prepare('SELECT upvotes, downvotes, confidence FROM master_filters WHERE filter_id = ?')
   .bind(filterId).first<{ upvotes: number; downvotes: number; confidence: number }>();
@@ -67,13 +68,47 @@ describe('POST /v1/filters/{filterId}/votes', () => {
     expect(await vote(bob, filterId, value)).toMatchObject({ status: 400, body: { error: { code: 'invalid_vote' } } });
   });
 
+  it('accepts a retired filter ID listed in the receipt snapshot and resolves its merge chain for self votes', async () => {
+    const retired = 'f_retired_example', older = 'f_retired_older';
+    await db.batch([
+      db.prepare(`INSERT INTO filter_registry (filter_id, version_id, created_seq, state, merged_into, quarantined)
+        VALUES (?, ?, 90, 'retired', ?, 0)`).bind(retired, versionId, filterId),
+      db.prepare(`INSERT INTO filter_registry (filter_id, version_id, created_seq, state, merged_into, quarantined)
+        VALUES (?, ?, 91, 'retired', ?, 0)`).bind(older, versionId, retired),
+    ]);
+    await recomputeVersion(db, versionId, { service: serviceOrigin, policy, now });
+    const erin = await contributor();
+    const { snapshot, receiptId: erinReceipt } = await download(erin, versionId);
+    expect(snapshot.filters.find(item => item.filterId === filterId)!.mergedIds).toEqual([retired, older].sort());
+    const before = (await filter(filterId))!.upvotes;
+    expect((await vote(erin, older, { version: 1, vote: 'up', receiptId: erinReceipt })).body.result).toMatchObject({ filterId: older, vote: 'up' });
+    expect((await filter(filterId))!.upvotes).toBe(before + 1);
+    const own = await download(alice, versionId);
+    expect(await vote(alice, older, { version: 1, vote: 'up', receiptId: own.receiptId })).toMatchObject({ status: 403,
+      body: { error: { code: 'vote_ineligible', reason: 'self_vote' } } });
+  });
+
+  it('limits votes per contributor per hour and requires a vote- operation key', async () => {
+    const hal = await contributor();
+    const { receiptId: halReceipt } = await download(hal, versionId);
+    const cast = async (value: string, votesPerHour: number, operationId = `vote-${crypto.randomUUID()}`) =>
+      handle(await post(hal, `/v1/filters/${filterId}/votes`, { version: 1, vote: value, receiptId: halReceipt }, operationId), votesPerHour);
+    expect((await cast('up', 2)).status).toBe(200);
+    expect((await cast('down', 2)).status).toBe(200);
+    const limited = await cast('none', 2);
+    expect([limited.status, limited.body]).toEqual([429, { error: { code: 'rate_limited' } }]);
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect(await cast('up', 1000, crypto.randomUUID())).toMatchObject({ status: 400, body: { error: { code: 'invalid_vote' } } });
+  });
+
   it('keeps a moderator exclusion when the voter changes or removes the vote', async () => {
     const dave = await contributor();
     const { receiptId: daveReceipt } = await download(dave, versionId);
+    const upvotes = (await filter(filterId))!.upvotes;
     await vote(dave, filterId, { version: 1, vote: 'down', receiptId: daveReceipt });
     await db.prepare('UPDATE filter_votes SET excluded = 1 WHERE filter_id = ? AND contributor_id = ?').bind(filterId, dave.contributorId).run();
     await vote(dave, filterId, { version: 1, vote: 'up', receiptId: daveReceipt });
-    expect(await filter(filterId)).toMatchObject({ upvotes: 0 });
+    expect(await filter(filterId)).toMatchObject({ upvotes });
     await vote(dave, filterId, { version: 1, vote: 'none', receiptId: daveReceipt });
     expect(await db.prepare('SELECT excluded FROM filter_votes WHERE filter_id = ? AND contributor_id = ?')
       .bind(filterId, dave.contributorId).first()).toEqual({ excluded: 1 });

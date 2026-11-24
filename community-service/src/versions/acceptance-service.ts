@@ -48,7 +48,7 @@ export interface AcceptancePlan {
  * commits atomically with the stored submission. The first statement is a work write guard,
  * so derived runtime, trust and promotion computed from this plan's reads can only commit
  * when no concurrent catalog write intervened. When the batch fails with an error for which
- * `isCatalogWriteConflict` is true, plan again and retry.
+ * `isCatalogWriteConflict` is true, plan again and retry. `POST /v1/submissions` is the only writer.
  */
 export async function planVersionAcceptance(db: SqlDatabase, input: VersionAcceptanceInput,
   options: AcceptanceOptions): Promise<AcceptancePlan> {
@@ -108,18 +108,4 @@ export async function planVersionAcceptance(db: SqlDatabase, input: VersionAccep
     result: { workId: work.workId, versionId, versionStatus: derived.promoted ? 'confirmed' : status,
     disposition: decision.disposition, tier: decision.disposition === 'attached' ? String(tier) as '1' | '2' | '3' : null,
     promoted: derived.promoted, identifierConflicts: work.conflicts, label, aliasSuggestion } };
-}
-
-/** Plan and commit version acceptance on its own, retrying a bounded number of write races. */
-export async function acceptVersionForSubmission(db: SqlDatabase, input: VersionAcceptanceInput,
-  options: AcceptanceOptions, attempts = 5): Promise<VersionAcceptance> {
-  for (let attempt = 1; ; attempt++) {
-    const plan = await planVersionAcceptance(db, input, options);
-    try {
-      await db.batch(plan.statements);
-      return plan.result;
-    } catch (error) {
-      if (attempt >= attempts || !isCatalogWriteConflict(error)) throw error;
-    }
-  }
 }

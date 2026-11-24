@@ -450,7 +450,7 @@ submitter's file playback timeline.
 | Field | Type and rule |
 | --- | --- |
 | `schemaVersion` | Literal `community-artifact-3` |
-| `submissionId` | Token. A client-generated unique token, equal to manifest `submission_id` |
+| `submissionId` | Token of at most 121 characters, so that `submit-<submissionId>` fits the 128-character operation ID (§2). A client-generated unique token, equal to manifest `submission_id` |
 | `createdAt` | Integer Unix seconds |
 | `author.contributorId`, `author.keyId` | Must equal the manifest and the signing request's key |
 | `work.kind` | `movie` or `episode` |
@@ -923,6 +923,7 @@ Each contributor may accept `submissionsPerDay` submissions (default 50).
 **Clarifications.** The service resolves these details as follows:
 
 - The `Idempotency-Key` must be exactly `submit-<submissionId>`; any other key is
+  `400 invalid_submission`. A `submissionId` longer than 121 characters is
   `400 invalid_submission`. A retry with the same operation and bytes returns the
   stored result. A different upload that reuses a stored `submissionId`, from any
   contributor, is `409 submission_conflict`.
@@ -938,7 +939,11 @@ Each contributor may accept `submissionsPerDay` submissions (default 50).
 - `403 upload_suspended` refuses a contributor under moderator quarantine (§7.8).
   A suspended contributor already fails request authentication.
 - Past the daily limit the service returns `429 rate_limited` with `Retry-After`. The
-  limit counts accepted submissions in the rolling 24 hours before the request.
+  limit counts accepted submissions in the rolling 24 hours before the request, and is
+  checked again inside the submission's write transaction, so concurrent uploads
+  cannot exceed it.
+- A recompute that finds the accepted version merged meanwhile plans the submission
+  again.
 - A submission that would exceed the stored-byte caps (§8) is refused with
   `503 service_unavailable`, and nothing is stored.
 
@@ -1081,12 +1086,16 @@ Errors:
 
 It returns at most 4,000 votes.
 
-**Clarifications.** A vote may name a retired filter ID listed in the receipt
-snapshot's `mergedIds`; the self-vote check uses the filter it resolves to. Changing
-or removing a vote keeps a moderator's `exclude_vote`. The vote list returns
+**Clarifications.** The `Idempotency-Key` must start with `vote-`; any other key
+is `400 invalid_vote`. A contributor may cast `votesPerHour` votes (from
+`VOTE_LIMITS`, default 120) in fixed one-hour windows; beyond that the route returns
+`429 rate_limited` with `Retry-After`. Retries of a completed vote are not counted.
+A vote may name a retired filter ID listed in the receipt snapshot's `mergedIds`;
+the self-vote check follows the whole `mergedInto` chain to the current filter.
+Changing or removing a vote keeps a moderator's `exclude_vote`. A vote on a filter
+whose version is merged meanwhile is recomputed on the target. The vote list returns
 `404 version_not_found`, `409 version_merged` and `410 version_unavailable` like
-§7.3. An `Idempotency-Key` of the form `vote-<client id>` is recommended, not
-required.
+§7.3.
 
 ### 7.5 `POST /v1/sync/revisions` (read)
 
@@ -1221,8 +1230,11 @@ Each returns 20 items per page with `nextCursor`.
 - A `versionIds` list holds 1–100 unique non-merged versions, otherwise
   `404 resource_not_found`. It returns
   `{"version":1,"actionId":"…","versions":[{"versionId","revision","changed"}]}`.
-  `all` pages through every non-merged version, 20 per batch, before it answers, and
-  `jobId` is the `actionId`. Reusing an `actionId` with a different body is
+  `all` runs synchronously: it recomputes at most 200 non-merged versions in version
+  ID order, 20 per batch, and answers
+  `{"version":1,"jobId":"<actionId>","complete":bool,"nextAfter":"<versionId>"|null}`.
+  To continue, send a new action with `"versionIds":"all","after":"<nextAfter>"`;
+  `after` is allowed only with `all`. Reusing an `actionId` with a different body is
   `409 action_conflict`. A retry recomputes again, which changes nothing when no
   input changed. Recompute audit rows use `command: "recompute"` and need no
   `expectedRevision`.
@@ -1232,6 +1244,7 @@ Admin errors:
 | Status | Code |
 | --- | --- |
 | 400 | `invalid_moderation` |
+| 403 | `moderation_ineligible` (the action would not change state, for example quarantining a quarantined filter) |
 | 404 | `resource_not_found` |
 | 409 | `moderation_conflict` (stale `expectedRevision`), `alias_conflict`, `merge_invalid` |
 | 429 | `operator_rate_limited` |
@@ -1312,15 +1325,21 @@ conservatively; none changes a wire format:
   triggers of the old schema are replaced by one audit trigger that advances the
   resource's moderation revision.
 - **Limits:** `rate_counters (scope, window_start, requests)` holds the fixed
-  one-hour windows for `versionChecksPerHour`. `submissionsPerDay` counts the
-  contributor's accepted `submissions` in the rolling 24 hours before the request.
+  one-hour windows for `versionChecksPerHour` and `votesPerHour`. `submissionsPerDay`
+  counts the contributor's accepted `submissions` in the rolling 24 hours before the
+  request; the submission batch re-checks it through a `rate_counters` guard row whose
+  `requests > 0` check aborts the batch over the limit.
   `sync_runs` is keyed by `(installation_id, run_id)`, so a run ID is scoped to its
   installation.
 - **Stored bytes:** `artifact_storage_policy` and `artifact_storage_usage` are kept.
   Inserting a submission charges its three raw buffers and is refused beyond the
   global (350,000,000 bytes) or per-contributor (7,000,000 bytes) cap.
-- **Snapshot bytes:** when a newer revision is stored, older revisions without an
-  issued receipt keep their digest and drop `snapshot_bytes`.
+- **Snapshot bytes:** the latest stored revision of a version always keeps
+  `snapshot_bytes`. An older revision keeps them only while a receipt for it was
+  first issued within the last 7 days, and at most 8 older revisions per version keep
+  them; others keep their digest, receipts and `master_revision_filters` but drop the
+  bytes. The check runs when a revision is stored and in the hourly maintenance. Old
+  snapshots are never served, so this bounds storage without changing any response.
 
 ### 8.1 Operator configuration
 
@@ -1344,9 +1363,11 @@ conservatively; none changes a wire format:
 | `versionChecksPerHour` | 60 | `GET …/master` per contributor |
 | `submissionsPerDay` | 50 | Per contributor |
 
-`SUBMISSION_LIMITS` holds the request, manifest and artifact bounds (§5.2).
-`VOTE_LIMITS`, `REPORT_LIMITS` and `DOWNLOAD_RECEIPT_KEYS` keep their existing
-shapes. Changing `MASTER_POLICY` takes effect only after an
+`SUBMISSION_LIMITS` holds the request, manifest and artifact bounds (§5.2):
+`{"requestBytes","manifestBytes","artifact":{"compressedBytes","expandedBytes","depth","stringBytes"}}`,
+each at most its §5.2 value. `VOTE_LIMITS` keeps `requestBytes` and `maxQueries` and
+adds an optional `votesPerHour` (default 120) per contributor (§7.4).
+`REPORT_LIMITS` and `DOWNLOAD_RECEIPT_KEYS` keep their existing shapes. Changing `MASTER_POLICY` takes effect only after an
 `/admin/v1/recompute`.
 
 ## 9. Removed features

@@ -119,6 +119,31 @@ describe('POST /v1/submissions', () => {
     expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
   });
 
+  it('refuses retired and revoked signing keys, oversized bodies and over-long submission IDs', async () => {
+    for (const state of ['retired', 'revoked']) {
+      const frank = await contributor();
+      const request = await submitRequest(frank, await encode(artifact(frank), frank));
+      await db.prepare('UPDATE installation_keys SET state = ?, retired_at = 1 WHERE key_id = ?').bind(state, frank.keyId).run();
+      const response = await handle(request);
+      expect([response.status, await response.json()]).toEqual([401, { error: { code: 'key_inactive' } }]);
+    }
+    const oversized = await handle(await submitRequest(alice, await encode(artifact(alice), alice),
+      { text: 'x'.repeat(DEFAULT_SUBMISSION_LIMITS.requestBytes + 1) }));
+    expect([oversized.status, await oversized.json()]).toEqual([413, { error: { code: 'body_too_large' } }]);
+    const encoded = await encode(artifact(alice), alice);
+    const long = await handle(await submitRequest(alice, encoded, { text: body(encoded, 's'.repeat(122)), operationId: 'submit-long' }));
+    expect([long.status, await long.json()]).toEqual([400, { error: { code: 'invalid_submission' } }]);
+    expect((await submit(alice, artifact(alice, { submissionId: 's'.repeat(121) }))).status).toBe(200);
+  });
+
+  it('enforces the daily limit inside the batch for concurrent uploads', async () => {
+    const gina = await contributor();
+    const limit = { submissionsPerDay: 1 };
+    const replies = await Promise.all([submit(gina, undefined, { policy: limit }), submit(gina, undefined, { policy: limit })]);
+    expect(replies.map(item => item.status).sort()).toEqual([200, 429]);
+    expect(await count('SELECT count(*) AS n FROM submissions WHERE contributor_id = ?', gina.contributorId)).toBe(1);
+  });
+
   it('replans after a concurrent catalog write and commits the submission exactly once', async () => {
     const work = { ...artifact(alice).work, tmdb: '104' };
     const seeded = await submit(alice, artifact(alice, { work }));

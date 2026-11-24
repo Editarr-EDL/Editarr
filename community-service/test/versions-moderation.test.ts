@@ -2,17 +2,16 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyGetKey } from 'jose';
 import { tunnelActor } from '../src/runtime/environment.mjs';
 import { operatorService } from '../src/admin/service';
-import { acceptVersionForSubmission } from '../src/versions/acceptance-service';
 import { listAliases } from '../src/versions/labels';
 import { CatalogModerationError, moderateCatalog } from '../src/versions/moderation';
-import { db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
+import { acceptPlanned, db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
 
 const env = { APP_ENV: 'local', TRUSTED_ACTOR_KEY: tunnelActor, CATALOG_DB: db, OPERATOR_ORIGIN: 'https://operator.example.test',
   PUBLIC_ORIGIN: 'https://community.example',
   ACCESS_ISSUER: 'https://test.cloudflareaccess.com', ACCESS_AUDIENCE: 'operator-app', OPERATOR_SUBJECTS: '["operator-subject"]',
   MODERATION_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }), MASTER_POLICY: JSON.stringify(policy) };
 let jwt: string, resolver: JWTVerifyGetKey, signer: CryptoKey;
-const accept = (overrides: Parameters<typeof submission>[0]) => acceptVersionForSubmission(db, submission(overrides), { policy, now, newId });
+const accept = (overrides: Parameters<typeof submission>[0]) => acceptPlanned(submission(overrides), { policy, now, newId });
 const work = (tmdb: string) => ({ ...submission().work, tmdb, title: `Work ${tmdb}` });
 const action = (fields: Record<string, unknown>) => ({ version: 1, actionId: crypto.randomUUID(), expectedRevision: 0,
   reason: 'Reviewed evidence', ...fields });

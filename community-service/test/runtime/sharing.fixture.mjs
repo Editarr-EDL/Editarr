@@ -34,7 +34,8 @@ export async function exercise(database, runtime) {
     const voted = expectStatus(await post(reader, `/v1/filters/${filterId}/votes`, { version: 1, vote: 'up', receiptId }, voteOperation));
     assert.equal(voted.result.revision, 2);
     assert.deepEqual(expectStatus(await post(reader, `/v1/filters/${filterId}/votes`, { version: 1, vote: 'up', receiptId }, voteOperation)), voted);
-    assert.equal(expectStatus(await post(author, `/v1/filters/${filterId}/votes`, { version: 1, vote: 'up', receiptId }), 403).error.reason,
+    assert.equal(expectStatus(await post(author, `/v1/filters/${filterId}/votes`, { version: 1, vote: 'up', receiptId },
+      `vote-${crypto.randomUUID()}`), 403).error.reason,
       'receipt_required');
     assert.deepEqual(expectStatus(await read(reader, `/v1/versions/${submitted.versionId}/votes`)).votes, [{ filterId, vote: 'up' }]);
     expectStatus(await post(reader, '/v1/reports', { version: 1, target: { type: 'filter', id: filterId }, reason: 'inaccurate' }));

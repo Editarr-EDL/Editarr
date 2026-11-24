@@ -1,16 +1,16 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { decideVersion, deriveVersionState, integerMedian, versionTrust, wilson, type ExistingVersion } from '../src/versions/acceptance';
-import { acceptVersionForSubmission, isCatalogWriteConflict, planVersionAcceptance, VersionAcceptanceError } from '../src/versions/acceptance-service';
+import { isCatalogWriteConflict, planVersionAcceptance, VersionAcceptanceError } from '../src/versions/acceptance-service';
 import { storedKey } from '../src/versions/keys';
 import { normalize } from '../src/versions/normalize';
 import { acceptanceQuarantineStatements, refreshVersionStatements } from '../src/versions/repository';
 import { ConfigurationError, masterPolicy } from '../src/config';
 import { DEFAULT_MASTER_POLICY } from '../src/filters/policy';
-import { db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
+import { acceptPlanned, db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
 
 beforeAll(() => setupVersionCatalog(['c1', 'c2', 'c3', 'c4', 'c5']));
 const accept = (overrides: Parameters<typeof submission>[0]) =>
-  acceptVersionForSubmission(db, submission(overrides), { policy, now, newId });
+  acceptPlanned(submission(overrides), { policy, now, newId });
 const theatrical = { aliasId: 'theatrical', labelText: null };
 const existing = (versionId: string, overrides: Partial<ExistingVersion> = {}): ExistingVersion =>
   ({ versionId, status: 'confirmed', trust: 0.2, label: theatrical, keys: [], ...overrides });
@@ -116,9 +116,9 @@ describe('version acceptance service', () => {
   it('does not count a keyless founder and recomputes after quarantine', async () => {
     const work = { ...submission().work, tmdb: '300', title: 'Keyless' };
     const single = { candidatePromotionContributors: 1 };
-    const founder = await acceptVersionForSubmission(db, submission({ work, version: { choice: 'other', text: null } }),
+    const founder = await acceptPlanned(submission({ work, version: { choice: 'other', text: null } }),
       { policy: single, now, newId });
-    const keyed = await acceptVersionForSubmission(db, submission({ work, contributorId: 'c2', durationMs: 1000,
+    const keyed = await acceptPlanned(submission({ work, contributorId: 'c2', durationMs: 1000,
       version: { choice: 'other', text: null }, matchKeys: [keys.full('3')] }), { policy: single, now, newId });
     expect([founder, keyed].map(item => [item.disposition, item.versionStatus, item.promoted]))
       .toEqual([['created_candidate', 'candidate', false], ['created_candidate', 'confirmed', true]]);

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_ARTIFACT_BOUNDS, type ArtifactBounds } from '../artifact/v3';
+import { DEFAULT_ARTIFACT_BOUNDS, SUBMISSION_ID, type ArtifactBounds } from '../artifact/v3';
 
 /** Protocol maxima (§5.2); `SUBMISSION_LIMITS` may lower but never raise them. */
 const PROTOCOL = { requestBytes: 1_500_000, ...DEFAULT_ARTIFACT_BOUNDS };
@@ -41,7 +41,7 @@ export function parseSubmissionRequest(value: unknown, limits: SubmissionLimits)
   const input = value as Record<string, unknown> | null;
   if (!input || typeof input !== 'object' || Array.isArray(input) ||
       Object.keys(input).sort().join(',') !== 'artifact,envelope,manifest,submissionId,version' || input.version !== 1 ||
-      typeof input.submissionId !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(input.submissionId)) throw new Error('invalid_submission');
+      typeof input.submissionId !== 'string' || !SUBMISSION_ID.test(input.submissionId)) throw new Error('invalid_submission');
   return { submissionId: input.submissionId, artifactBytes: decode(input.artifact, limits.artifact.compressedBytes),
     manifestBytes: decode(input.manifest, limits.manifestBytes), envelopeBytes: decode(input.envelope, 256) };
 }

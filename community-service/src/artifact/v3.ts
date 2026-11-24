@@ -23,6 +23,9 @@ const families = taxonomy as Record<string, string[]>;
 const familyOf = new Map(Object.entries(families).flatMap(([family, tokens]) => tokens.map(token => [token, family] as const)));
 const MAX_DURATION_MS = 86_400_000;
 const token = z.string().regex(/^[A-Za-z0-9_.-]{1,128}$/);
+/** A submission ID leaves room for its `submit-` idempotency key within 128 characters (§7.2). */
+export const SUBMISSION_ID = /^[A-Za-z0-9_.-]{1,121}$/;
+const submissionId = z.string().regex(SUBMISSION_ID);
 const keyId = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 const providerId = z.string().regex(/^[0-9]{1,12}$/).nullable();
 const safe = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -30,7 +33,7 @@ const interval = z.strictObject({ startMs: safe, endMs: safe });
 
 export const artifactV3Schema = z.strictObject({
   schemaVersion: z.literal(ARTIFACT_V3_SCHEMA),
-  submissionId: token,
+  submissionId,
   createdAt: safe,
   author: z.strictObject({ contributorId: token, keyId }),
   work: z.strictObject({
@@ -65,7 +68,7 @@ export type ArtifactV3 = z.infer<typeof artifactV3Schema>;
 export const manifestV3Schema = z.strictObject({
   schema_version: z.literal(MANIFEST_SCHEMA), artifact_format: z.literal('gzip-json'),
   artifact_schema_version: z.literal(ARTIFACT_V3_SCHEMA), artifact_digest: z.string().regex(/^[0-9a-f]{64}$/),
-  submission_id: token, contributor_id: token, key_id: keyId, summary: z.record(z.string(), z.unknown()),
+  submission_id: submissionId, contributor_id: token, key_id: keyId, summary: z.record(z.string(), z.unknown()),
 });
 export type ManifestV3 = z.infer<typeof manifestV3Schema>;
 

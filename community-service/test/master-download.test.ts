@@ -9,6 +9,8 @@ import { issueMasterReceipt, receiptIdentity, receiptSigningBytes, signSnapshot,
   verifyServiceSignature } from '../src/master/signing';
 import { loadReceiptSigner, type ReceiptSigner } from '../src/security/service-signer';
 import { contributorSubmission } from '../src/http/submissions';
+import { SNAPSHOT_RETENTION, supersededSnapshots } from '../src/master/recompute';
+import { pruneSnapshotBytes } from '../src/retention/windows';
 import { artifact, contributor, encode, nonce, submitRequest, type Contributor } from './helpers/submissions';
 import { signedRead } from './helpers/key-lifecycle';
 import { db, now, policy, setupVersionCatalog } from './helpers/versions';
@@ -141,3 +143,23 @@ describe('GET /v1/versions/{versionId}/master', () => {
     } finally { vi.unstubAllGlobals(); }
   });
 });
+
+describe('retained snapshot bytes (§8)', () => {
+  it('keeps the latest snapshot, at most eight older receipted ones, and drops them after the receipt window', async () => {
+    const versionId = (await submit(alice, '210')).versionId;
+    const bytes = new TextEncoder().encode('{}');
+    for (let revision = 2; revision <= 12; revision++) await db.batch([
+      db.prepare(`INSERT INTO master_revisions (version_id, revision, snapshot_digest, generated_at, snapshot_bytes)
+        VALUES (?, ?, ?, ?, ?)`).bind(versionId, revision, 'c'.repeat(64), now, bytes),
+      db.prepare(`INSERT INTO download_receipts VALUES (?, ?, ?, ?, ?, 'key', ?)`)
+        .bind(revision.toString(16).padStart(64, '0'), bob.contributorId, versionId, revision, 'c'.repeat(64), now),
+    ]);
+    const kept = async () => (await db.prepare(`SELECT revision FROM master_revisions WHERE version_id = ? AND snapshot_bytes IS NOT NULL
+      ORDER BY revision`).bind(versionId).all<{ revision: number }>()).results.map(row => row.revision);
+    await supersededSnapshots(db, versionId, 12, now).run();
+    expect(await kept()).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    await pruneSnapshotBytes(db, (now + SNAPSHOT_RETENTION.receiptSeconds + 1) * 1000, 1000);
+    expect(await kept()).toEqual([12]);
+  });
+});
+

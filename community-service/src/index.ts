@@ -1,4 +1,4 @@
-import { masterPolicy, missingConfig, routeLimits, type Env } from './config';
+import { masterPolicy, missingConfig, routeLimits, voteLimits, type Env } from './config';
 import { contributorIdentity } from './http/identity';
 import { contributorEnrollment } from './http/enrollment';
 import { admittedDiscordWork, discordService } from './integrations/discord/service';
@@ -13,7 +13,7 @@ import { pruneRecoveryAuthorizations } from './identity/recovery';
 import { contributorVersionCatalog } from './http/match';
 import { operatorService } from './admin/service';
 import { RETENTION_BATCH_SIZE } from './retention/transient';
-import { pruneRateWindows } from './retention/windows';
+import { pruneRateWindows, pruneSnapshotBytes } from './retention/windows';
 import { loadReceiptSigner, receiptKeysSchema } from './security/service-signer';
 import { contributorMasterRead } from './http/master';
 import { contributorSubmission } from './http/submissions';
@@ -79,7 +79,7 @@ export default {
     }
     if (/^\/v1\/filters\/[^/]+\/votes$/.test(url.pathname) || /^\/v1\/versions\/[^/]+\/votes$/.test(url.pathname)) {
       let policy, limits;
-      try { policy = masterPolicy(env); limits = routeLimits.parse(JSON.parse(env.VOTE_LIMITS ?? '')); }
+      try { policy = masterPolicy(env); limits = voteLimits.parse(JSON.parse(env.VOTE_LIMITS ?? '')); }
       catch { return jsonResponse(503, 'service_unavailable'); }
       return contributorWork(request, env, (db, authority, now, membership) =>
         contributorVotes(request, db, authority, now, membership, { policy, limits }));
@@ -150,6 +150,7 @@ export default {
       () => pruneBotMembership(db, seconds, RETENTION_BATCH_SIZE),
       () => pruneProfileNames(db, now, RETENTION_BATCH_SIZE),
       () => pruneRateWindows(db, now, RETENTION_BATCH_SIZE),
+      () => pruneSnapshotBytes(db, now, RETENTION_BATCH_SIZE),
     ]) {
       try { await prune(); } catch (error) { errors.push(error); }
     }
