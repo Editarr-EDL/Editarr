@@ -3,6 +3,7 @@ import { CommunityApiError } from "./api-community";
 import type { MediaIdentity, EntityType, IdentityProvider, EpisodeNumber } from "./api-media-identity";
 import type { AudioTrack } from "./api-audio-tracks";
 import { runtimeApiBasePath } from "../shared/runtime-urls";
+import type { MasterSharingSummary, VersionChoice } from "./api-community-master-types";
 
 export type SharingSource = { kind: "scan" | "review"; id: string };
 export type PublicationJob = {
@@ -26,7 +27,7 @@ export type SharingFinding = {
   channel: string; category: string | null; subcategory: string | null; note: string | null;
   manual?: { added: boolean | null; edited: boolean | null } | null;
 };
-export type SharingPreview = {
+export type SharingPreview = Partial<MasterSharingSummary> & {
   previewId: string; expiresAt: number; terms: { version: string; text: string };
   preview: {
     artifact: {
@@ -49,6 +50,9 @@ export type PublicMediaReference = {
 export type SharingDraft = {
   name: string; identity_confirmed: boolean; media: PublicMediaReference | null;
   audio_source_scan_id: string | null;
+  /** Master set to project against; null uses the account's link for the source's local version. */
+  link_id: string | null;
+  version_choice: VersionChoice;
 };
 
 async function request<Result>(path: string, init?: RequestInit): Promise<Result> {

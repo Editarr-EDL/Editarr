@@ -1,0 +1,97 @@
+{
+  "description": "normalize() per contract §3.3; titleYear keys are normalize + NUL + year",
+  "cases": [
+    {
+      "input": "Director’s Cut",
+      "normalized": "directors cut"
+    },
+    {
+      "input": "  EXTENDED   Edition!",
+      "normalized": "extended edition"
+    },
+    {
+      "input": "Amélie",
+      "normalized": "amelie"
+    },
+    {
+      "input": "Spider-Man: No Way Home",
+      "normalized": "spider man no way home"
+    },
+    {
+      "input": "Ⅲ",
+      "normalized": "iii"
+    },
+    {
+      "input": "Director's Cut",
+      "normalized": "directors cut"
+    },
+    {
+      "input": "Directorʼs`Cut",
+      "normalized": "directorscut"
+    },
+    {
+      "input": "ＡＢＣ　１２３",
+      "normalized": "abc 123"
+    },
+    {
+      "input": "Straße",
+      "normalized": "straße"
+    },
+    {
+      "input": "İstanbul",
+      "normalized": "istanbul"
+    },
+    {
+      "input": "Ǆemal",
+      "normalized": "dzemal"
+    },
+    {
+      "input": "Crème Brûlée",
+      "normalized": "creme brulee"
+    },
+    {
+      "input": "Léon: The Professional",
+      "normalized": "leon the professional"
+    },
+    {
+      "input": "WALL·E",
+      "normalized": "wall e"
+    },
+    {
+      "input": "Se7en",
+      "normalized": "se7en"
+    },
+    {
+      "input": "東京物語",
+      "normalized": "東京物語"
+    },
+    {
+      "input": "Ελληνικά",
+      "normalized": "ελληνικα"
+    },
+    {
+      "input": "",
+      "normalized": ""
+    },
+    {
+      "input": "!!!",
+      "normalized": ""
+    },
+    {
+      "input": "á̧",
+      "normalized": "a"
+    }
+  ],
+  "titleYear": [
+    {
+      "title": "The Matrix",
+      "year": 1999,
+      "key": "the matrix\u00001999"
+    },
+    {
+      "title": "Amélie",
+      "year": 2001,
+      "key": "amelie\u00002001"
+    }
+  ]
+}

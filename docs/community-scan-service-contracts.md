@@ -243,6 +243,12 @@ The service runs these steps in order, inside the submission transaction.
    - their `aliasId` values match, treating null and `theatrical` as the same;
    - when both have no `aliasId`, their `labelText` values match, and a
      null `labelText` matches only another null.
+
+   A null `aliasId` means Theatrical only when `labelText` is also null. A
+   label with a null `aliasId` and a non-null `labelText` (unresolved Other
+   text) is **not** Theatrical: it never equals a label that has an
+   `aliasId`, and equals another label only when both have a null `aliasId`
+   and the same `labelText`.
 4. **Find tier 1–3 matches.** Compute the tier 1–3 matches (§4) between the
    submission keys and each non-merged version of the work with an equal
    label.
@@ -318,6 +324,9 @@ at least one key with the query. For each version, the tier is the best
   `sha256_full` doesn't cancel an equal `md5_quick`.
 - Multiple keys don't add up. Only the best tier counts.
 - `matchedKeys` lists every key type that satisfied the reported tier.
+  For `runtime_mismatch` and `other_version`, it lists every identity key
+  type that matched the work at tier 4 or 5 (`tmdb`, `tvdb` and
+  `title_year`), in that order.
 
 **Result order:**
 
@@ -765,6 +774,30 @@ Reference values (`S`, `Neg` → confidence):
 | 1, 8 | 0.051366601 |
 | 1, 9 | 0.046964148 (dropped) |
 | 3, 0 | 0.375528264 |
+
+### 6.11 Clarifications
+
+The reference engine (`community-service/src/filters`) resolves these details
+as follows:
+
+- **Implicit coverage negatives** are suppressed when the contributor has any
+  cue on the filter. Cues include duplicate and unverified re-shared support,
+  and quarantined attestations. A quarantined attestation never counts as a
+  signal.
+- **Derived ID collision:** if the derived ID is already claimed by an earlier
+  cluster in the same recompute, derive from the next member in canonical
+  order. If every member collides, append the decimal counter `"1"`, `"2"`, …
+  as an extra framed field of the first member.
+- **`mergedInto`** requires a strict majority (more than half) of the retired
+  ID's counted former members, including duplicates, to be in one cluster.
+  With no counted former members, the previous `mergedInto` is kept. Chains
+  are collapsed to point at the current filter.
+- **Votes across retired IDs:** when one contributor has votes on several IDs
+  that resolve to the same filter, the vote on the current ID counts.
+  Otherwise the vote on the ASCII-smallest ID counts.
+- **Quarantined version:** the revision and its served content stay unchanged
+  while the version is quarantined. A restore advances the revision only if
+  the content then differs.
 
 ## 7. Service endpoints
 

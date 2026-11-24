@@ -26,7 +26,10 @@ for (const width of [320, 1440]) {
     const associations: unknown[] = [];
     const communityRequests: string[] = [];
     page.on("request", (request) => {
-      if (request.url().includes("/api/community/")) communityRequests.push(request.url());
+      // The daily sync and the item page's own master-set list are background reads, not filter lookups.
+      if (request.url().includes("/api/community/") && !/\/api\/community\/(sync\/run|masters\?)/.test(request.url())) {
+        communityRequests.push(request.url());
+      }
     });
     await page.route("**/api/scans/history", (route) => json(route, associated ? [existing, scan] : [existing]));
     await page.route("**/api/media/audio-tracks?*", (route) => json(route, {

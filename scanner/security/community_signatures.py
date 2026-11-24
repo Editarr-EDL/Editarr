@@ -22,7 +22,8 @@ class SignatureProfileError(ValueError):
     """A request cannot be represented unambiguously in the signing profile."""
 
 
-def _url_components(url: str) -> tuple[str, str, str, str]:
+def url_components(url: str) -> tuple[str, str, str, str]:
+    """Split a canonical HTTPS URI into scheme, authority, path and `?query`, or raise."""
     parts = urlsplit(url)
     if (not url.startswith("https://") or not parts.hostname
             or parts.username or parts.password
@@ -46,6 +47,15 @@ def _url_components(url: str) -> tuple[str, str, str, str]:
             or re.search(r"%2[eEfF]|(^|/)\.\.?(/|$)", path)):
         raise SignatureProfileError("Ambiguous target path")
     return "https", authority, path, "?" + parts.query
+
+
+def is_canonical_service_origin(service: str) -> bool:
+    """Return whether `service` is exactly `https://authority` with no path or query."""
+    try:
+        _, authority, path, query = url_components(service)
+    except SignatureProfileError:
+        return False
+    return service == f"https://{authority}" and path == "/" and query == "?"
 
 
 def sign_request(
@@ -84,7 +94,7 @@ def sign_request(
         raise SignatureProfileError("Read request must have empty body and no content metadata")
     if content_encoding not in {None, "gzip"}:
         raise SignatureProfileError("Unsupported content encoding")
-    scheme, authority, path, query = _url_components(url)
+    scheme, authority, path, query = url_components(url)
     digest = "sha-256=:" + base64.b64encode(hashlib.sha256(body).digest()).decode("ascii") + ":"
     components = (*WRITE_COMPONENTS, "content-encoding") if content_encoding else (
         WRITE_COMPONENTS if mutation else READ_COMPONENTS

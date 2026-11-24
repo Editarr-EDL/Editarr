@@ -1,0 +1,51 @@
+{
+  "description": "Newer-revision master response with snapshot signature and receipt (§7.3)",
+  "servicePrivateKeySeedHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+  "receiptKeys": [
+    {
+      "keyId": "sha256:65b60673d6ed884bf01c2c222d82ada0740f29ac3355d6a925c81f17f47a27b8",
+      "publicKey": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
+      "status": "active"
+    }
+  ],
+  "request": {
+    "service": "https://community.example",
+    "contributorId": "c_7f3a",
+    "versionId": "v_12ab",
+    "knownRevision": 12
+  },
+  "snapshotJson": "{\"schemaVersion\":\"community-master-snapshot-1\",\"service\":\"https://community.example\",\"versionId\":\"v_12ab\",\"revision\":13,\"generatedAt\":1795553600,\"work\":{\"workId\":\"w_77\",\"kind\":\"movie\",\"tmdb\":\"603\",\"tvdb\":null,\"season\":null,\"episode\":null,\"lastEpisode\":null,\"title\":\"The Matrix\",\"year\":1999},\"versionInfo\":{\"status\":\"confirmed\",\"aliasId\":\"theatrical\",\"label\":\"Theatrical\",\"labelText\":null,\"runtimeMs\":8160500,\"trust\":0.41},\"filters\":[{\"filterId\":\"f_9c1d\",\"mergedIds\":[],\"category\":\"violence\",\"subcategory\":\"punching\",\"severity\":\"high\",\"action\":\"skip\",\"startMs\":600000,\"endMs\":605050,\"spread\":{\"startMs\":300,\"endMs\":350},\"confidence\":0.393857102,\"contributorCount\":4,\"support\":{\"attestations\":4,\"upvotes\":1},\"negative\":{\"downvotes\":1,\"disputes\":0,\"coverageNegatives\":1},\"lowConfidence\":false},{\"filterId\":\"f_77aa\",\"mergedIds\":[\"f_old\"],\"category\":\"language\",\"subcategory\":\"swearing\",\"severity\":\"medium\",\"action\":\"mute\",\"startMs\":1200000,\"endMs\":1203000,\"spread\":{\"startMs\":0,\"endMs\":0},\"confidence\":0.117618231,\"contributorCount\":1,\"support\":{\"attestations\":1,\"upvotes\":0},\"negative\":{\"downvotes\":0,\"disputes\":2,\"coverageNegatives\":0},\"lowConfidence\":true}]}",
+  "snapshotDigest": "52d2587583910495dd0e84ea6aa9bd5c5015aa8cdd5e1a276ef57c7caf7477c7",
+  "snapshotSigningBytesHex": "656469746172722d636f6d6d756e6974792d6d61737465722d736e617073686f742d7631000000001c636f6d6d756e6974792d6d61737465722d7369676e61747572652d310000001968747470733a2f2f636f6d6d756e6974792e6578616d706c65000000477368613235363a3635623630363733643665643838346266303163326332323264383261646130373430663239616333333535643661393235633831663137663437613237623800000006765f313261620000000231330000004035326432353837353833393130343935646430653834656136616139626435633530313561613863646435653161323736656635376337636166373437376337000000006b05f970",
+  "receiptId": "fcff61d18755bf4997afc9775b306bc9acc15e4444aa125e9d15cf9c64a06b8c",
+  "receiptSigningBytesHex": "656469746172722d636f6d6d756e6974792d6d61737465722d726563656970742d7631000000001a636f6d6d756e6974792d6d61737465722d726563656970742d310000001968747470733a2f2f636f6d6d756e6974792e6578616d706c65000000477368613235363a3635623630363733643665643838346266303163326332323264383261646130373430663239616333333535643661393235633831663137663437613237623800000006635f3766336100000006765f3132616200000002313300000040353264323538373538333931303439356464306538346561366161396264356335303135616138636464356531613237366566353763376361663734373763370000004066636666363164313837353562663439393761666339373735623330366263396163633135653434343461613132356539643135636639633634613036623863000000006b05f970",
+  "response": {
+    "version": 1,
+    "changed": true,
+    "snapshot": "eyJzY2hlbWFWZXJzaW9uIjoiY29tbXVuaXR5LW1hc3Rlci1zbmFwc2hvdC0xIiwic2VydmljZSI6Imh0dHBzOi8vY29tbXVuaXR5LmV4YW1wbGUiLCJ2ZXJzaW9uSWQiOiJ2XzEyYWIiLCJyZXZpc2lvbiI6MTMsImdlbmVyYXRlZEF0IjoxNzk1NTUzNjAwLCJ3b3JrIjp7IndvcmtJZCI6IndfNzciLCJraW5kIjoibW92aWUiLCJ0bWRiIjoiNjAzIiwidHZkYiI6bnVsbCwic2Vhc29uIjpudWxsLCJlcGlzb2RlIjpudWxsLCJsYXN0RXBpc29kZSI6bnVsbCwidGl0bGUiOiJUaGUgTWF0cml4IiwieWVhciI6MTk5OX0sInZlcnNpb25JbmZvIjp7InN0YXR1cyI6ImNvbmZpcm1lZCIsImFsaWFzSWQiOiJ0aGVhdHJpY2FsIiwibGFiZWwiOiJUaGVhdHJpY2FsIiwibGFiZWxUZXh0IjpudWxsLCJydW50aW1lTXMiOjgxNjA1MDAsInRydXN0IjowLjQxfSwiZmlsdGVycyI6W3siZmlsdGVySWQiOiJmXzljMWQiLCJtZXJnZWRJZHMiOltdLCJjYXRlZ29yeSI6InZpb2xlbmNlIiwic3ViY2F0ZWdvcnkiOiJwdW5jaGluZyIsInNldmVyaXR5IjoiaGlnaCIsImFjdGlvbiI6InNraXAiLCJzdGFydE1zIjo2MDAwMDAsImVuZE1zIjo2MDUwNTAsInNwcmVhZCI6eyJzdGFydE1zIjozMDAsImVuZE1zIjozNTB9LCJjb25maWRlbmNlIjowLjM5Mzg1NzEwMiwiY29udHJpYnV0b3JDb3VudCI6NCwic3VwcG9ydCI6eyJhdHRlc3RhdGlvbnMiOjQsInVwdm90ZXMiOjF9LCJuZWdhdGl2ZSI6eyJkb3dudm90ZXMiOjEsImRpc3B1dGVzIjowLCJjb3ZlcmFnZU5lZ2F0aXZlcyI6MX0sImxvd0NvbmZpZGVuY2UiOmZhbHNlfSx7ImZpbHRlcklkIjoiZl83N2FhIiwibWVyZ2VkSWRzIjpbImZfb2xkIl0sImNhdGVnb3J5IjoibGFuZ3VhZ2UiLCJzdWJjYXRlZ29yeSI6InN3ZWFyaW5nIiwic2V2ZXJpdHkiOiJtZWRpdW0iLCJhY3Rpb24iOiJtdXRlIiwic3RhcnRNcyI6MTIwMDAwMCwiZW5kTXMiOjEyMDMwMDAsInNwcmVhZCI6eyJzdGFydE1zIjowLCJlbmRNcyI6MH0sImNvbmZpZGVuY2UiOjAuMTE3NjE4MjMxLCJjb250cmlidXRvckNvdW50IjoxLCJzdXBwb3J0Ijp7ImF0dGVzdGF0aW9ucyI6MSwidXB2b3RlcyI6MH0sIm5lZ2F0aXZlIjp7ImRvd252b3RlcyI6MCwiZGlzcHV0ZXMiOjIsImNvdmVyYWdlTmVnYXRpdmVzIjowfSwibG93Q29uZmlkZW5jZSI6dHJ1ZX1dfQ==",
+    "snapshotSignature": {
+      "schemaVersion": "community-master-signature-1",
+      "service": "https://community.example",
+      "serviceKeyId": "sha256:65b60673d6ed884bf01c2c222d82ada0740f29ac3355d6a925c81f17f47a27b8",
+      "versionId": "v_12ab",
+      "revision": 13,
+      "snapshotDigest": "52d2587583910495dd0e84ea6aa9bd5c5015aa8cdd5e1a276ef57c7caf7477c7",
+      "issuedAt": 1795553648,
+      "signature": "ybylqrikTdJ87nJCGVS84krXIjgzdznH9py1kvT1X0hO0Enj01UQbzMEhNNAI5uA0I8SyehF8XaWaCYrS2dDDQ=="
+    },
+    "receipt": {
+      "receipt": {
+        "schemaVersion": "community-master-receipt-1",
+        "service": "https://community.example",
+        "serviceKeyId": "sha256:65b60673d6ed884bf01c2c222d82ada0740f29ac3355d6a925c81f17f47a27b8",
+        "contributorId": "c_7f3a",
+        "versionId": "v_12ab",
+        "revision": 13,
+        "snapshotDigest": "52d2587583910495dd0e84ea6aa9bd5c5015aa8cdd5e1a276ef57c7caf7477c7",
+        "receiptId": "fcff61d18755bf4997afc9775b306bc9acc15e4444aa125e9d15cf9c64a06b8c",
+        "issuedAt": 1795553648
+      },
+      "signature": "+dZ0IykmckNj9i74lj/qP27qYRv65kFvQMrwkX0McF5mkTaSQcRWNUcDvcvxH+Q1l0D1ZadfdJv0Bw0Wn8/yDw=="
+    }
+  }
+}

@@ -9,7 +9,7 @@ import { applicationAssetUrl } from "../shared/runtime-urls";
 
 const compactSidebar = "(max-width: 760px)";
 
-export function AppSidebar({ principal, route, libraries, settings, error, onRetry, onNavigate }: {
+export function AppSidebar({ principal, route, libraries, settings, error, onRetry, onNavigate, notifications }: {
   principal: Principal;
   route: Route;
   libraries: JellyfinLibrary[];
@@ -17,6 +17,8 @@ export function AppSidebar({ principal, route, libraries, settings, error, onRet
   error: string | null;
   onRetry: () => void;
   onNavigate: (route: string) => boolean;
+  /** Optional notification entry shown below the libraries, such as community filter updates. */
+  notifications?: ReactNode;
 }) {
   const [compact, setCompact] = useState(() => window.matchMedia?.(compactSidebar).matches ?? false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -65,6 +67,7 @@ export function AppSidebar({ principal, route, libraries, settings, error, onRet
           aria-current={route.kind === "library" && route.libraryId === library.id ? "page" : undefined}
         >{library.name}</button>)}
       </SidebarDisclosure>}
+      {notifications}
       <div className="settings-link">
         <SidebarDisclosure label="Settings" expanded={settingsExpanded} onToggle={() => setSettingsExpanded((value) => !value)}>
           {settingsSections.map((section) => <button
