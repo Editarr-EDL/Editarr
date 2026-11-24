@@ -61,6 +61,8 @@ All `variables` values are strings. Supply the existing service contract values:
 - `ACCESS_ISSUER`, `ACCESS_AUDIENCE`, `OPERATOR_ORIGIN`, `OPERATOR_SUBJECTS`.
 - `PUBLICATION_LIMITS`, `LOOKUP_LIMITS`, `DOWNLOAD_LIMITS`, `IMPORT_LIMITS`,
   `VOTE_LIMITS`, `REPORT_LIMITS`, `MODERATION_LIMITS`, `DOWNLOAD_RECEIPT_KEYS`.
+- `MASTER_POLICY`, with every key of contract §8.1. Startup refuses a missing
+  or invalid value.
 
 Structured variables are JSON serialized into strings, as in the existing binding
 contract. Limits and the receipt key ring are validated with the shared service

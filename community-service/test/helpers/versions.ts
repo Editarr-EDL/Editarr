@@ -1,11 +1,12 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { env } from './environment';
+import { DEFAULT_MASTER_POLICY } from '../../src/filters/policy';
 import type { VersionAcceptanceInput } from '../../src/versions/acceptance-service';
 import type { EvidenceKey } from '../../src/versions/keys';
 
 export const db = env.CATALOG_DB;
 export const now = 1_700_000_030;
-export const policy = { candidatePromotionContributors: 3 };
+export const policy = DEFAULT_MASTER_POLICY;
 const directory = new URL('../../migrations/', import.meta.url);
 
 /** Apply every service migration in order and register plain contributors for acceptance rows. */

@@ -24,6 +24,23 @@ export async function identifiedWork(db: SqlDatabase, row: IdentifierRow): Promi
     .bind(row.provider, row.kind, row.value, row.season, row.episode, row.lastEpisode).first<{ work_id: string }>())?.work_id ?? null;
 }
 
+/** Errors that mean a concurrent catalog write won; re-plan and retry the operation. */
+export function isCatalogWriteConflict(error: unknown): boolean {
+  return /catalog_write_conflict|version_label_conflict|UNIQUE constraint failed: (?:master_work_identifiers|versions\.created_seq|version_acceptances\.accepted_seq|version_match_keys)/
+    .test(String(error));
+}
+
+/**
+ * Optimistic write guard for one work. Every catalog write that depends on a work's versions
+ * (acceptance, confirm, merge, relabel, quarantine) advances `catalog_seq` from the value it
+ * read; a concurrent writer makes the batch abort with `catalog_write_conflict`.
+ */
+export async function workWriteGuard(db: SqlDatabase, workId: string): Promise<SqlStatement> {
+  const row = await db.prepare('SELECT catalog_seq FROM master_works WHERE work_id = ?').bind(workId).first<{ catalog_seq: number }>();
+  if (!row) throw new Error('work_not_found');
+  return db.prepare('UPDATE master_works SET catalog_seq = ? WHERE work_id = ?').bind(row.catalog_seq + 1, workId);
+}
+
 /**
  * §3.5 step 1: find the work by any provider identifier or create it. When TMDB and TVDB
  * resolve to different works the TMDB work wins and the TVDB identifier is recorded as a
@@ -39,9 +56,8 @@ export async function planWork(db: SqlDatabase, work: SubmissionWork, submission
   const found = await Promise.all(rows.map(row => identifiedWork(db, row)));
   const existing = found.find(workId => workId !== null) ?? null;
   const workId = existing ?? newId('w');
-  const statements: SqlStatement[] = [];
-  if (!existing) statements.push(db.prepare('INSERT INTO master_works (work_id, kind, created_at) VALUES (?, ?, ?)')
-    .bind(workId, work.kind, now));
+  const statements: SqlStatement[] = [existing ? await workWriteGuard(db, workId)
+    : db.prepare('INSERT INTO master_works (work_id, kind, catalog_seq, created_at) VALUES (?, ?, 0, ?)').bind(workId, work.kind, now)];
   let conflicts = 0;
   rows.forEach((row, index) => {
     if (found[index] === workId) return;

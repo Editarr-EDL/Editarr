@@ -1,6 +1,7 @@
 import type { SqlDatabase, SqlStatement } from '../runtime/contracts';
 import { deriveVersionState, type AcceptanceRow, type ExistingVersion } from './acceptance';
 import type { EvidenceKeyType, EvidenceTier, StoredKey } from './keys';
+import { workWriteGuard } from './works';
 
 export interface VersionRow {
   version_id: string; work_id: string; alias_id: string | null; label_text: string | null;
@@ -59,13 +60,16 @@ export function derivedStatements(db: SqlDatabase, versionId: string, rows: read
 
 /**
  * Recompute runtime, trust and promotion of a version from its stored acceptances, for
- * example after a policy change. The statements join the caller's batch.
+ * example after a policy change. The statements join the caller's batch and start with a
+ * work write guard; retry when the batch fails with a catalog write conflict.
  */
 export async function refreshVersionStatements(db: SqlDatabase, versionId: string,
   promotionContributors: number): Promise<SqlStatement[]> {
   const version = await readVersion(db, versionId);
   if (!version) throw new Error('version_not_found');
-  return derivedStatements(db, versionId, await acceptanceRows(db, [versionId]), version.status, promotionContributors).statements;
+  const guard = await workWriteGuard(db, version.work_id);
+  return [guard, ...derivedStatements(db, versionId, await acceptanceRows(db, [versionId]), version.status,
+    promotionContributors).statements];
 }
 
 /**
@@ -74,11 +78,12 @@ export async function refreshVersionStatements(db: SqlDatabase, versionId: strin
  */
 export async function acceptanceQuarantineStatements(db: SqlDatabase, submissionId: string, quarantined: boolean,
   promotionContributors: number): Promise<SqlStatement[]> {
-  const row = await db.prepare(`SELECT a.version_id, v.status FROM version_acceptances a JOIN versions v USING (version_id)
-    WHERE a.submission_id = ?`).bind(submissionId).first<{ version_id: string; status: string }>();
+  const row = await db.prepare(`SELECT a.version_id, v.work_id, v.status FROM version_acceptances a JOIN versions v USING (version_id)
+    WHERE a.submission_id = ?`).bind(submissionId).first<{ version_id: string; work_id: string; status: string }>();
   if (!row) throw new Error('submission_not_found');
+  const guard = await workWriteGuard(db, row.work_id);
   const rows = (await acceptanceRows(db, [row.version_id]))
     .map(item => item.submissionId === submissionId ? { ...item, quarantined } : item);
-  return [db.prepare('UPDATE version_acceptances SET quarantined = ? WHERE submission_id = ?').bind(Number(quarantined), submissionId),
+  return [guard, db.prepare('UPDATE version_acceptances SET quarantined = ? WHERE submission_id = ?').bind(Number(quarantined), submissionId),
     ...derivedStatements(db, row.version_id, rows, row.status, promotionContributors).statements];
 }

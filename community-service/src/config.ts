@@ -1,6 +1,5 @@
 import type { SqlDatabase, AssetFetcher } from './runtime/contracts';
-import { z } from 'zod';
-
+import { parseMasterPolicy, type MasterPolicy } from './filters/policy';
 export interface Env {
   CATALOG_DB?: SqlDatabase;
   APP_ENV?: string;
@@ -32,21 +31,30 @@ export interface Env {
 export function missingConfig(env: Env): string[] {
   const required: (keyof Env)[] = ['CATALOG_DB', 'POLICY_VERSION'];
   if (env.APP_ENV !== 'local') {
-    required.push('APP_ENV', 'PUBLIC_ORIGIN', 'DISCORD_CLIENT_ID',
+    required.push('APP_ENV', 'PUBLIC_ORIGIN', 'MASTER_POLICY', 'DISCORD_CLIENT_ID',
       'DISCORD_CLIENT_SECRET', 'DISCORD_GUILD_ID', 'ACCESS_AUDIENCE',
       'ACCESS_ISSUER', 'OPERATOR_ORIGIN', 'OPERATOR_SUBJECTS', 'OPERATOR_ASSETS');
   }
   return required.filter((key) => !env[key]);
 }
 
-/** Version catalog keys of `MASTER_POLICY` (§8.1); the merge keys are parsed by their owner. */
-export interface CatalogPolicy { candidatePromotionContributors: number }
-export const CATALOG_POLICY_DEFAULTS: Readonly<CatalogPolicy> = Object.freeze({ candidatePromotionContributors: 3 });
-const catalogPolicySchema = z.looseObject({ candidatePromotionContributors: z.number().int().min(1).max(1000) });
+/** A missing or invalid required configuration value; routes answer 503. */
+export class ConfigurationError extends Error {
+  constructor(public code: 'master_policy_missing' | 'master_policy_invalid') { super(code); }
+}
 
-/** Read the catalog keys of `MASTER_POLICY`; an unset value uses the §8.1 defaults. */
-export function catalogPolicy(env: Pick<Env, 'MASTER_POLICY'>): CatalogPolicy {
-  if (env.MASTER_POLICY === undefined) return { ...CATALOG_POLICY_DEFAULTS };
-  const parsed = catalogPolicySchema.parse(JSON.parse(env.MASTER_POLICY));
-  return { candidatePromotionContributors: parsed.candidatePromotionContributors };
+let parsedPolicy: { source: string; policy: MasterPolicy } | undefined;
+
+/**
+ * The strict `MASTER_POLICY` (§8.1), parsed once per configured value. Startup validation
+ * parses it first; a missing or invalid value fails closed with `ConfigurationError`.
+ */
+export function masterPolicy(env: Pick<Env, 'MASTER_POLICY'>): MasterPolicy {
+  const source = env.MASTER_POLICY;
+  if (!source) throw new ConfigurationError('master_policy_missing');
+  if (parsedPolicy?.source !== source) {
+    try { parsedPolicy = { source, policy: parseMasterPolicy(JSON.parse(source)) }; }
+    catch { throw new ConfigurationError('master_policy_invalid'); }
+  }
+  return parsedPolicy.policy;
 }

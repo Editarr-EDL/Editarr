@@ -1,8 +1,9 @@
 import type { SqlDatabase, SqlStatement } from '../runtime/contracts';
 import { z } from 'zod';
-import type { CatalogPolicy } from '../config';
+import type { MasterPolicy } from '../filters/policy';
 import type { AcceptanceRow } from './acceptance';
 import { acceptanceRows, derivedStatements, readVersion } from './repository';
+import { isCatalogWriteConflict, workWriteGuard } from './works';
 
 const resourceId = z.string().regex(/^[A-Za-z0-9_.-]{1,128}$/);
 const aliasId = z.string().regex(/^[a-z0-9_]{1,64}$/);
@@ -31,9 +32,10 @@ export type CatalogModerationCode = 'moderation_conflict' | 'moderation_ineligib
 export class CatalogModerationError extends Error {
   constructor(public code: CatalogModerationCode) { super(code); }
 }
+export type CatalogModerationPolicy = Pick<MasterPolicy, 'candidatePromotionContributors'>;
 export interface CatalogActionPlan { statements: SqlStatement[]; affectedVersionIds: string[] }
 export interface CatalogModerationOptions {
-  policy: CatalogPolicy;
+  policy: CatalogModerationPolicy;
   /** Extra statements for the same batch, such as the master-set recompute of affected versions. */
   extend?: (db: SqlDatabase, plan: CatalogActionPlan) => Promise<SqlStatement[]>;
 }
@@ -52,18 +54,30 @@ async function savedAction(db: SqlDatabase, actionId: string) {
 const bumpVersion = (db: SqlDatabase, versionId: string) => db.prepare(`INSERT INTO moderation_versions VALUES (?, 1)
   ON CONFLICT(resource) DO UPDATE SET revision = revision + 1`).bind(`version:${versionId}`);
 
-async function planMerge(db: SqlDatabase, input: CatalogModerationInput, policy: CatalogPolicy): Promise<CatalogActionPlan> {
-  const source = await readVersion(db, input.targetId);
-  if (!source) throw new CatalogModerationError('resource_not_found');
-  const target = await readVersion(db, input.intoVersionId!);
+async function guardedVersion(db: SqlDatabase, versionId: string) {
+  const first = await readVersion(db, versionId);
+  if (!first) return null;
+  const guard = await workWriteGuard(db, first.work_id);
+  return { guard, version: (await readVersion(db, versionId))! };
+}
+
+/**
+ * Plan `merge_version`. The work write guard aborts the batch if either version changed after
+ * these reads, and the `guard_version_merge_target` trigger refuses a merged or cross-work target.
+ */
+async function planMerge(db: SqlDatabase, input: CatalogModerationInput, policy: CatalogModerationPolicy): Promise<CatalogActionPlan> {
+  const guarded = await guardedVersion(db, input.targetId);
+  if (!guarded) throw new CatalogModerationError('resource_not_found');
+  const source = guarded.version, target = await readVersion(db, input.intoVersionId!);
   if (!target || target.version_id === source.version_id || target.work_id !== source.work_id ||
       source.status === 'merged_into' || target.status === 'merged_into') throw new CatalogModerationError('merge_invalid');
   const [from, into] = [source.version_id, target.version_id];
   const rows: AcceptanceRow[] = [...(await acceptanceRows(db, [from])).map(row => ({ ...row, tier: null })),
     ...await acceptanceRows(db, [into])];
-  return { affectedVersionIds: [into, from], statements: [
+  return { affectedVersionIds: [into, from], statements: [guarded.guard,
     db.prepare('UPDATE versions SET merged_into = ? WHERE merged_into = ?').bind(into, from),
-    db.prepare(`UPDATE versions SET status = 'merged_into', merged_into = ? WHERE version_id = ?`).bind(into, from),
+    db.prepare(`UPDATE versions SET status = 'merged_into', merged_into = ? WHERE version_id = ? AND status != 'merged_into'`)
+      .bind(into, from),
     db.prepare(`INSERT INTO version_match_keys (version_id, type, algorithm, value, size_bytes, is_reference, observations)
       SELECT ?, type, algorithm, value, size_bytes, 0, observations FROM version_match_keys WHERE version_id = ?
       ON CONFLICT(version_id, type, algorithm, value, size_bytes) DO UPDATE SET observations = observations + excluded.observations`)
@@ -88,31 +102,37 @@ async function planApproval(db: SqlDatabase, input: CatalogModerationInput, now:
   if (input.aliasId !== undefined && !existing) throw new CatalogModerationError('invalid_moderation');
   if ((input.newAliasId !== undefined && existing) || await db.prepare('SELECT 1 AS found FROM alias_spellings WHERE normalized = ?')
     .bind(suggestion.normalized).first()) throw new CatalogModerationError('alias_conflict');
-  const affected = await db.prepare('SELECT version_id FROM versions WHERE alias_id IS NULL AND label_text = ? ORDER BY version_id')
-    .bind(suggestion.normalized).all<{ version_id: string }>();
-  return { affectedVersionIds: affected.results.map(row => row.version_id), statements: [
+  const affected = await db.prepare(`SELECT version_id, work_id FROM versions WHERE alias_id IS NULL AND label_text = ?
+    ORDER BY version_id`).bind(suggestion.normalized).all<{ version_id: string; work_id: string }>();
+  const guards = await Promise.all([...new Set(affected.results.map(row => row.work_id))].map(work => workWriteGuard(db, work)));
+  return { affectedVersionIds: affected.results.map(row => row.version_id), statements: [...guards,
     ...(input.newAliasId === undefined ? [] : [db.prepare('INSERT INTO aliases (alias_id, label, created_at) VALUES (?, ?, ?)')
       .bind(alias, input.label!, now)]),
     db.prepare(`INSERT INTO alias_spellings (normalized, alias_id, source) VALUES (?, ?, 'moderator')`).bind(suggestion.normalized, alias),
     db.prepare(`UPDATE alias_suggestions SET state = 'approved', alias_id = ? WHERE suggestion_id = ? AND state = 'pending'`)
       .bind(alias, input.targetId),
-    db.prepare('UPDATE versions SET alias_id = ? WHERE alias_id IS NULL AND label_text = ?').bind(alias, suggestion.normalized),
+    db.prepare(`INSERT INTO moderation_versions SELECT 'version:' || version_id, 1 FROM versions
+      WHERE alias_id IS NULL AND label_text = ? AND status != 'merged_into'
+      ON CONFLICT(resource) DO UPDATE SET revision = revision + 1`).bind(suggestion.normalized),
+    db.prepare(`UPDATE versions SET alias_id = ?, revision = revision + (status != 'merged_into')
+      WHERE alias_id IS NULL AND label_text = ?`).bind(alias, suggestion.normalized),
   ] };
 }
 
-async function planAction(db: SqlDatabase, input: CatalogModerationInput, policy: CatalogPolicy, now: number): Promise<CatalogActionPlan> {
+async function planAction(db: SqlDatabase, input: CatalogModerationInput, policy: CatalogModerationPolicy, now: number): Promise<CatalogActionPlan> {
   if (input.command === 'merge_version') return planMerge(db, input, policy);
   if (input.command !== 'confirm_version') return planApproval(db, input, now);
-  const version = await readVersion(db, input.targetId);
-  if (!version) throw new CatalogModerationError('resource_not_found');
-  if (version.status !== 'candidate') throw new CatalogModerationError('moderation_ineligible');
-  return { affectedVersionIds: [version.version_id], statements: [db.prepare(`UPDATE versions SET status = 'confirmed'
-    WHERE version_id = ? AND status = 'candidate'`).bind(version.version_id)] };
+  const guarded = await guardedVersion(db, input.targetId);
+  if (!guarded) throw new CatalogModerationError('resource_not_found');
+  if (guarded.version.status !== 'candidate') throw new CatalogModerationError('moderation_ineligible');
+  return { affectedVersionIds: [input.targetId], statements: [guarded.guard, db.prepare(`UPDATE versions SET status = 'confirmed'
+    WHERE version_id = ? AND status = 'candidate'`).bind(input.targetId)] };
 }
 
 /**
  * Apply one reasoned version or alias action (§7.8) atomically with its audit row. Retries of
  * the same `actionId` and bytes replay the stored outcome; a stale `expectedRevision` fails.
+ * A concurrent catalog write aborts the batch and the action is planned again.
  */
 export async function moderateCatalog(db: SqlDatabase, actor: string, value: unknown, now: number,
   options: CatalogModerationOptions) {
@@ -133,22 +153,26 @@ export async function moderateCatalog(db: SqlDatabase, actor: string, value: unk
     catch (error) { const raced = await savedAction(db, input.actionId); if (raced) return reply(raced); throw error; }
     throw new CatalogModerationError(code);
   };
-  const old = await savedAction(db, input.actionId);
-  if (old) return reply(old);
-  const current = await db.prepare('SELECT revision FROM moderation_versions WHERE resource = ?').bind(resource)
-    .first<{ revision: number }>();
-  if ((current?.revision ?? 0) !== input.expectedRevision) return refuse('moderation_conflict');
-  let plan: CatalogActionPlan;
-  try { plan = await planAction(db, input, options.policy, now); }
-  catch (error) { if (error instanceof CatalogModerationError) return refuse(error.code); throw error; }
-  const extra = options.extend ? await options.extend(db, plan) : [];
-  try { await db.batch([audit(null), ...plan.statements, ...extra]); }
-  catch (error) {
-    const raced = await savedAction(db, input.actionId);
-    if (raced) return reply(raced);
-    if (String(error).includes('moderation_conflict')) return refuse('moderation_conflict');
-    if (String(error).includes('UNIQUE constraint failed: alias')) return refuse('alias_conflict');
-    throw error;
+  for (let attempt = 1; ; attempt++) {
+    const old = await savedAction(db, input.actionId);
+    if (old) return reply(old);
+    const current = await db.prepare('SELECT revision FROM moderation_versions WHERE resource = ?').bind(resource)
+      .first<{ revision: number }>();
+    if ((current?.revision ?? 0) !== input.expectedRevision) return refuse('moderation_conflict');
+    let plan: CatalogActionPlan;
+    try { plan = await planAction(db, input, options.policy, now); }
+    catch (error) { if (error instanceof CatalogModerationError) return refuse(error.code); throw error; }
+    const extra = options.extend ? await options.extend(db, plan) : [];
+    try {
+      await db.batch([audit(null), ...plan.statements, ...extra]);
+      return reply((await savedAction(db, input.actionId))!);
+    } catch (error) {
+      const raced = await savedAction(db, input.actionId);
+      if (raced) return reply(raced);
+      if (String(error).includes('moderation_conflict')) return refuse('moderation_conflict');
+      if (String(error).includes('merge_invalid')) return refuse('merge_invalid');
+      if (String(error).includes('UNIQUE constraint failed: alias')) return refuse('alias_conflict');
+      if (attempt >= 3 || !isCatalogWriteConflict(error)) throw error;
+    }
   }
-  return reply((await savedAction(db, input.actionId))!);
 }

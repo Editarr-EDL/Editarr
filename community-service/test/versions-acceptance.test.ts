@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { decideVersion, deriveVersionState, integerMedian, versionTrust, wilson, type ExistingVersion } from '../src/versions/acceptance';
-import { acceptVersionForSubmission, planVersionAcceptance, VersionAcceptanceError } from '../src/versions/acceptance-service';
+import { acceptVersionForSubmission, isCatalogWriteConflict, planVersionAcceptance, VersionAcceptanceError } from '../src/versions/acceptance-service';
 import { storedKey } from '../src/versions/keys';
 import { normalize } from '../src/versions/normalize';
 import { acceptanceQuarantineStatements, refreshVersionStatements } from '../src/versions/repository';
-import { catalogPolicy } from '../src/config';
+import { ConfigurationError, masterPolicy } from '../src/config';
+import { DEFAULT_MASTER_POLICY } from '../src/filters/policy';
 import { db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
 
 beforeAll(() => setupVersionCatalog(['c1', 'c2', 'c3', 'c4', 'c5']));
@@ -167,10 +168,51 @@ describe('seeds and policy', () => {
       .then(r => r.results)).toEqual(expected);
   });
 
-  it('reads candidatePromotionContributors from MASTER_POLICY with a default', () => {
-    expect(catalogPolicy({})).toEqual({ candidatePromotionContributors: 3 });
-    expect(catalogPolicy({ MASTER_POLICY: JSON.stringify({ candidatePromotionContributors: 5, matchToleranceMs: 500 }) }))
-      .toEqual({ candidatePromotionContributors: 5 });
-    expect(() => catalogPolicy({ MASTER_POLICY: '{"matchToleranceMs":500}' })).toThrow();
+  it('reads candidatePromotionContributors from the strict MASTER_POLICY and fails closed', () => {
+    const source = JSON.stringify({ ...DEFAULT_MASTER_POLICY, candidatePromotionContributors: 5 });
+    expect(masterPolicy({ MASTER_POLICY: source }).candidatePromotionContributors).toBe(5);
+    expect(masterPolicy({ MASTER_POLICY: source })).toBe(masterPolicy({ MASTER_POLICY: source }));
+    expect(() => masterPolicy({})).toThrow(new ConfigurationError('master_policy_missing'));
+    const { candidatePromotionContributors: _, ...partial } = DEFAULT_MASTER_POLICY;
+    for (const invalid of [JSON.stringify(partial), JSON.stringify({ ...DEFAULT_MASTER_POLICY, extra: 1 }), '{', JSON.stringify(
+      { ...DEFAULT_MASTER_POLICY, candidatePromotionContributors: 0 })])
+      expect(() => masterPolicy({ MASTER_POLICY: invalid })).toThrow(new ConfigurationError('master_policy_invalid'));
+  });
+});
+
+describe('concurrent acceptance', () => {
+  it('serializes concurrent attaches so promotion is not lost', async () => {
+    const work = { ...submission().work, tmdb: '700', title: 'Concurrent' };
+    const founder = await accept({ work, version: { choice: 'other', text: 'Race Cut' }, matchKeys: [keys.md5('7')] });
+    const results = await Promise.all(['c2', 'c3'].map(contributorId =>
+      accept({ work, contributorId, version: { choice: 'other', text: 'race cut' }, matchKeys: [keys.md5('7')] })));
+    expect(results.map(item => item.versionId)).toEqual([founder.versionId, founder.versionId]);
+    expect(results.filter(item => item.promoted)).toHaveLength(1);
+    expect(await db.prepare('SELECT status, trust FROM versions WHERE version_id = ?').bind(founder.versionId).first())
+      .toEqual({ status: 'confirmed', trust: wilson(3, 0) });
+  });
+
+  it('aborts a stale plan with a catalog write conflict', async () => {
+    const work = { ...submission().work, tmdb: '701', title: 'Stale' };
+    await accept({ work, matchKeys: [keys.full('7')] });
+    const stale = await planVersionAcceptance(db, submission({ work, contributorId: 'c2', matchKeys: [keys.full('7')] }),
+      { policy, now, newId });
+    await accept({ work, contributorId: 'c3', matchKeys: [keys.full('7')] });
+    const error = await db.batch(stale.statements).then(() => null, (failure: unknown) => failure);
+    expect(isCatalogWriteConflict(error)).toBe(true);
+  });
+
+  it('never creates two confirmed versions with the same label under one work', async () => {
+    const work = { ...submission().work, tmdb: '702', title: 'Labels' };
+    await accept({ work, version: { choice: 'alias', aliasId: 'extended' } });
+    const results = await Promise.all(['c2', 'c3'].map((contributorId, index) =>
+      accept({ work, contributorId, matchKeys: [keys.full(String(index + 1))] })));
+    expect(results.map(item => item.disposition).sort()).toEqual(['created_candidate', 'created_confirmed']);
+    const workId = results[0].workId;
+    await expect(db.prepare(`INSERT INTO versions (version_id, work_id, alias_id, label_text, status, trust, revision,
+      created_seq, created_at) VALUES ('v_dup', ?, NULL, NULL, 'confirmed', 0, 1, 99999, 0)`).bind(workId).run())
+      .rejects.toThrow('version_label_conflict');
+    expect(await db.prepare(`SELECT count(*) AS n FROM versions WHERE work_id = ? AND status = 'confirmed'
+      AND coalesce(alias_id, 'theatrical') = 'theatrical'`).bind(workId).first('n')).toBe(1);
   });
 });

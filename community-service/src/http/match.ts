@@ -29,10 +29,9 @@ export async function contributorVersionCatalog(request: Request, db: SqlDatabas
     const identity = await authenticateContributor(request, db, authority, now, membership,
       { body, maxBodyBytes: MATCH_REQUEST_BYTES });
     contributorId = identity.contributorId;
-    if (!match && body.length) return failure(400, invalid);
-    const result = match ? { version: 1, results: await matchVersions(db, parseMatchRequest(body), options) }
-      : { version: 1, aliases: await listAliases(db) };
-    output = Response.json(result, { headers });
+    if (!match && body.length) output = failure(400, invalid);
+    else output = Response.json(match ? { version: 1, results: await matchVersions(db, parseMatchRequest(body), options) }
+      : { version: 1, aliases: await listAliases(db) }, { headers });
   } catch (error) {
     if (error instanceof BodyLimitError) output = failure(413, 'body_too_large');
     else if (error instanceof ContributorAuthError) output = failure(error.code === 'membership_unavailable' ? 503 :

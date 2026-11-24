@@ -237,8 +237,9 @@ The service runs these steps in order, inside the submission transaction.
      submission fails with `422 unknown_alias`.
    - **Other choice:** set `labelText = normalize(text)` (null when blank).
      If the text equals an approved spelling, also set `aliasId`, but the
-     choice is still Other. Non-blank text records a pending alias
-     suggestion.
+     choice is still Other. Non-blank text that is not already an approved
+     spelling records a pending alias suggestion; text that resolves to an
+     approved spelling records none.
 3. **Labels are equal when both of these hold:**
    - their `aliasId` values match, treating null and `theatrical` as the same;
    - when both have no `aliasId`, their `labelText` values match, and a
@@ -272,7 +273,19 @@ When a submission attaches, its tier 1–3 keys are added to
   `candidatePromotionContributors` (default 3) distinct contributors have a
   counted submission (§6.1) attached at tier 1–3.
 - The founding contributor counts, because its keys define the candidate.
+  A founder that supplied no tier 1–3 keys does not count.
+- Submissions moved in by `merge_version` (§7.8) keep counting toward
+  runtime and trust but lose their evidence tier, so they never count toward
+  promotion: their keys matched the source version, not the target.
 - Promotion doesn't change `versionId`.
+
+**Concurrency:** acceptance plans from reads and commits in the submission
+transaction behind an optimistic per-work guard. Any concurrent catalog write
+to the same work (another acceptance, confirm, merge, relabel or quarantine)
+aborts the transaction, and the service plans it again. The store also refuses
+to insert a confirmed version when a non-merged version of the work already
+has an equal label, so concurrent alias submissions cannot create two
+confirmed versions for one label.
 
 A moderator can also confirm a candidate or merge any version into another
 (§7.8). Several versions under a work may share a label. They are ranked by
@@ -1108,8 +1121,8 @@ The list is ordered as in §3.4. `GET /v1/receipt-keys` is unchanged.
 | `command` | `resource` | Extra fields | Effect |
 | --- | --- | --- | --- |
 | `confirm_version` | `version` | — | Changes a candidate to confirmed |
-| `merge_version` | `version` | `intoVersionId` | Sets the source to `merged_into`. Moves its submissions, keys, votes and receipts' eligibility to the target, then recomputes the target. Same-work only. |
-| `approve_alias` | `alias_suggestion` | `aliasId` (existing) or `newAliasId` + `label` | Adds the suggestion as a spelling, or creates an alias. Rejected with `409 alias_conflict` if the spelling is taken. |
+| `merge_version` | `version` | `intoVersionId` | Sets the source to `merged_into`. Moves its submissions, keys, votes and receipts' eligibility to the target, then recomputes the target. Same-work only, and neither version may already be merged. Moved submissions lose their evidence tier (§3.5). Versions previously merged into the source are repointed to the target. |
+| `approve_alias` | `alias_suggestion` | `aliasId` (existing) or `newAliasId` + `label` | Adds the suggestion as a spelling, or creates an alias. Rejected with `409 alias_conflict` if the spelling is taken. Every version whose `aliasId` is null and whose `labelText` equals the approved spelling is relabeled to that alias; each non-merged relabeled version advances its master `revision` (its `versionInfo` changes) and its moderation revision. |
 | `reject_alias` | `alias_suggestion` | — | Rejects the suggestion |
 | `quarantine` / `restore` | `filter`, `attestation` (`targetId = submissionId:entryId`), `submission`, `contributor`, `version` | — | Changes visibility and recomputes every affected version |
 | `suspend` / `unsuspend` | `contributor` | — | Unchanged |
@@ -1193,6 +1206,16 @@ The service migrations are **rebased** to a new baseline,
 Each raw submission is stored exactly once, as BLOBs, with no expanded copies
 except `submission_entries`. Those rows are derived from the artifact and can
 be rebuilt from it.
+
+**Interim catalog migration:** until the baseline rebase lands, the catalog
+tables ship as the additive migration `0018_master_catalog.sql` on the
+existing lineage. It changes no existing row. Because the old schema already
+has `works` and `work_identifiers`, the new tables are named `master_works`
+(with a `catalog_seq` optimistic write guard) and `master_work_identifiers`.
+It also adds `version_acceptances` with the `version_counted_acceptances`
+view (counted inputs for promotion, runtime and trust) and the
+`catalog_moderation_actions` audit for the version and alias commands. The
+rebase may rename or fold these tables into the baseline.
 
 ### 8.1 Operator configuration
 

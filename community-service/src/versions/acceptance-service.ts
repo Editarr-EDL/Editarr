@@ -1,12 +1,12 @@
 import type { SqlDatabase, SqlStatement } from '../runtime/contracts';
-import type { CatalogPolicy } from '../config';
+import type { MasterPolicy } from '../filters/policy';
 import { decideVersion, type AcceptanceRow, type Disposition } from './acceptance';
 import { KEY_TIER, storedKey, type EvidenceKey, type EvidenceTier } from './keys';
 import { aliasExists, resolveText, spellingLookup, type Label } from './labels';
 import { acceptanceRows, derivedStatements, serviceId, workVersions } from './repository';
-import { planWork, VersionAcceptanceError, type SubmissionWork } from './works';
+import { isCatalogWriteConflict, planWork, VersionAcceptanceError, type SubmissionWork } from './works';
 
-export { VersionAcceptanceError, type SubmissionWork } from './works';
+export { isCatalogWriteConflict, VersionAcceptanceError, type SubmissionWork } from './works';
 
 /** The parts of a validated `community-artifact-3` submission that version acceptance uses. */
 export interface VersionAcceptanceInput {
@@ -31,7 +31,7 @@ export interface VersionAcceptance {
   aliasSuggestion: AliasSuggestion | null;
 }
 export interface AcceptanceOptions {
-  policy: CatalogPolicy;
+  policy: Pick<MasterPolicy, 'candidatePromotionContributors'>;
   /** Unix seconds. */
   now: number;
   newId?: (prefix: string) => string;
@@ -41,8 +41,10 @@ export interface AcceptancePlan { result: VersionAcceptance; statements: SqlStat
 /**
  * Run D13 version acceptance (§3.5) and return the result with the write statements. The
  * submissions service appends these statements to its own submission batch so acceptance
- * commits atomically with the stored submission. A unique-constraint failure means a
- * concurrent writer changed the catalog; plan again and retry.
+ * commits atomically with the stored submission. The first statement is a work write guard,
+ * so derived runtime, trust and promotion computed from this plan's reads can only commit
+ * when no concurrent catalog write intervened. When the batch fails with an error for which
+ * `isCatalogWriteConflict` is true, plan again and retry.
  */
 export async function planVersionAcceptance(db: SqlDatabase, input: VersionAcceptanceInput,
   options: AcceptanceOptions): Promise<AcceptancePlan> {
@@ -105,15 +107,14 @@ export async function planVersionAcceptance(db: SqlDatabase, input: VersionAccep
 
 /** Plan and commit version acceptance on its own, retrying a bounded number of write races. */
 export async function acceptVersionForSubmission(db: SqlDatabase, input: VersionAcceptanceInput,
-  options: AcceptanceOptions, attempts = 3): Promise<VersionAcceptance> {
+  options: AcceptanceOptions, attempts = 5): Promise<VersionAcceptance> {
   for (let attempt = 1; ; attempt++) {
     const plan = await planVersionAcceptance(db, input, options);
     try {
       await db.batch(plan.statements);
       return plan.result;
     } catch (error) {
-      if (attempt >= attempts || !/UNIQUE constraint failed: (?:master_work_identifiers|versions\.created_seq|version_acceptances\.accepted_seq|version_match_keys)/
-        .test(String(error))) throw error;
+      if (attempt >= attempts || !isCatalogWriteConflict(error)) throw error;
     }
   }
 }

@@ -3,7 +3,7 @@ import type { Env } from '../config';
 import { BodyLimitError, readBoundedBytes } from '../http/bounded-body';
 import { inspectModeration, moderate, ModerationError, resourceId } from './moderation';
 import { operatorReadAdmission, operatorFailure as failure } from './admission';
-import { catalogPolicy } from '../config';
+import { ConfigurationError, masterPolicy } from '../config';
 import { CatalogModerationError, isCatalogCommand, moderateCatalog } from '../versions/moderation';
 import { inspectCatalogResource, listAliasSuggestions, listVersions } from '../versions/admin-reads';
 export { moderationLimits } from './admission';
@@ -21,7 +21,7 @@ export async function operatorModeration(request: Request, env: Env, subject: st
         const body = await readBoundedBytes(request, requestBytes);
         const input: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
         output = Response.json(isCatalogCommand(input)
-          ? await moderateCatalog(db, subject, input, now, { policy: catalogPolicy(env) })
+          ? await moderateCatalog(db, subject, input, now, { policy: masterPolicy(env) })
           : await moderate(db, subject, input, now));
       }
     } else if (path === '/admin/v1/versions' || path === '/admin/v1/alias-suggestions') {
@@ -51,7 +51,8 @@ export async function operatorModeration(request: Request, env: Env, subject: st
       else output = Response.json(await inspectModeration(db, match[1], match[2], match[3]));
     }
   } catch (error) {
-    if (error instanceof BodyLimitError) output = failure(413, 'body_too_large');
+    if (error instanceof ConfigurationError) output = failure(503, 'moderation_not_configured');
+    else if (error instanceof BodyLimitError) output = failure(413, 'body_too_large');
     else if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof TypeError || String(error).includes('invalid_moderation')) output = failure(400, 'invalid_moderation');
     else if (error instanceof CatalogModerationError) output = failure(error.code === 'resource_not_found' ? 404 :
       error.code === 'moderation_ineligible' ? 403 : error.code === 'invalid_moderation' ? 400 : 409, error.code);

@@ -9,8 +9,8 @@ import { db, keys, newId, now, policy, setupVersionCatalog, submission } from '.
 
 const env = { APP_ENV: 'local', TRUSTED_ACTOR_KEY: tunnelActor, CATALOG_DB: db, OPERATOR_ORIGIN: 'https://operator.example.test',
   ACCESS_ISSUER: 'https://test.cloudflareaccess.com', ACCESS_AUDIENCE: 'operator-app', OPERATOR_SUBJECTS: '["operator-subject"]',
-  MODERATION_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }) };
-let jwt: string, resolver: JWTVerifyGetKey;
+  MODERATION_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }), MASTER_POLICY: JSON.stringify(policy) };
+let jwt: string, resolver: JWTVerifyGetKey, signer: CryptoKey;
 const accept = (overrides: Parameters<typeof submission>[0]) => acceptVersionForSubmission(db, submission(overrides), { policy, now, newId });
 const work = (tmdb: string) => ({ ...submission().work, tmdb, title: `Work ${tmdb}` });
 const action = (fields: Record<string, unknown>) => ({ version: 1, actionId: crypto.randomUUID(), expectedRevision: 0,
@@ -22,12 +22,14 @@ function request(path = '/admin/v1/moderation', body?: unknown) {
     'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin',
   }, ...(body ? { body: JSON.stringify(body) } : {}) });
 }
-const handle = (input: Request) => operatorService(input, env, resolver, new Date(now * 1000));
+const handle = (input: Request, settings: Record<string, unknown> = env) =>
+  operatorService(input, settings, resolver, new Date(now * 1000));
 const failure = async (promise: Promise<unknown>) => promise.then(() => null, (error: CatalogModerationError) => error.code);
 
 beforeAll(async () => {
   await setupVersionCatalog();
   const pair = await generateKeyPair('RS256', { extractable: true });
+  signer = pair.privateKey;
   resolver = createLocalJWKSet({ keys: [{ ...await exportJWK(pair.publicKey), kid: 'fixture', alg: 'RS256' }] });
   jwt = await new SignJWT({ sub: 'operator-subject', iss: env.ACCESS_ISSUER, aud: env.ACCESS_AUDIENCE,
     exp: now + 60, iat: now - 60, type: 'app' }).setProtectedHeader({ alg: 'RS256', kid: 'fixture' }).sign(pair.privateKey);
@@ -116,7 +118,10 @@ describe('alias suggestions', () => {
       [imax, again, cut, junk].map(item => item.aliasSuggestion!.suggestionId)));
     expect(await moderate({ command: 'approve_alias', resource: 'alias_suggestion', targetId: imax.aliasSuggestion!.suggestionId,
       newAliasId: 'imax', label: 'IMAX Enhanced' })).toMatchObject({ outcome: 'applied' });
-    expect(await db.prepare('SELECT alias_id FROM versions WHERE version_id = ?').bind(imax.versionId).first('alias_id')).toBe('imax');
+    expect(await db.prepare('SELECT alias_id, revision FROM versions WHERE version_id = ?').bind(imax.versionId).first())
+      .toEqual({ alias_id: 'imax', revision: 2 });
+    expect(await db.prepare('SELECT revision FROM moderation_versions WHERE resource = ?').bind(`version:${again.versionId}`)
+      .first('revision')).toBe(1);
     expect((await listAliases(db)).map(alias => alias.aliasId)).toEqual(['theatrical', 'directors_cut', 'extended', 'imax', 'unrated']);
     expect(await failure(moderate({ command: 'approve_alias', resource: 'alias_suggestion',
       targetId: again.aliasSuggestion!.suggestionId, aliasId: 'extended' }))).toBe('alias_conflict');
@@ -150,5 +155,47 @@ describe('admin version lists', () => {
     expect(second.versions[0].versionId > first.nextCursor).toBe(true);
     for (const path of ['/admin/v1/versions?status=bogus', '/admin/v1/versions?other=1', '/admin/v1/alias-suggestions?state=a&state=b'])
       expect((await handle(request(path))).status).toBe(400);
+  });
+});
+
+describe('admin safety', () => {
+  it('serializes concurrent A→B and B→C merges without merging into a merged version', async () => {
+    const a = await accept({ work: work('60') });
+    const b = await accept({ work: work('60'), contributorId: 'c2', version: { choice: 'other', text: null } });
+    const c = await accept({ work: work('60'), contributorId: 'c3', version: { choice: 'other', text: null } });
+    const outcomes = await Promise.allSettled([
+      moderate({ command: 'merge_version', resource: 'version', targetId: a.versionId, intoVersionId: b.versionId }),
+      moderate({ command: 'merge_version', resource: 'version', targetId: b.versionId, intoVersionId: c.versionId })]);
+    expect(outcomes.filter(item => item.status === 'fulfilled')).toHaveLength(1);
+    const rejected = outcomes.find(item => item.status === 'rejected') as PromiseRejectedResult;
+    expect(['moderation_conflict', 'merge_invalid']).toContain((rejected.reason as CatalogModerationError).code);
+    expect(await db.prepare(`SELECT count(*) AS n FROM versions v JOIN versions t ON t.version_id = v.merged_into
+      WHERE t.status = 'merged_into'`).first('n')).toBe(0);
+    await expect(db.prepare(`UPDATE versions SET status = 'merged_into', merged_into = ? WHERE version_id = ?`)
+      .bind(a.versionId, c.versionId).run()).rejects.toThrow(/merge_invalid|immutable_version/);
+  });
+
+  it('fails closed with 503 when MASTER_POLICY is missing or invalid', async () => {
+    const candidate = await accept({ work: work('61'), version: { choice: 'other', text: null } });
+    const body = () => action({ command: 'confirm_version', resource: 'version', targetId: candidate.versionId });
+    for (const settings of [{ ...env, MASTER_POLICY: undefined }, { ...env, MASTER_POLICY: '{"matchToleranceMs":500}' }]) {
+      const response = await handle(request(undefined, body()), settings);
+      expect([response.status, await response.json()]).toEqual([503, { error: { code: 'moderation_not_configured' } }]);
+    }
+    expect(await db.prepare('SELECT status FROM versions WHERE version_id = ?').bind(candidate.versionId).first('status')).toBe('candidate');
+  });
+
+  it('requires operator authorization on list and inspection routes', async () => {
+    const other = await new SignJWT({ sub: 'someone-else', iss: env.ACCESS_ISSUER, aud: env.ACCESS_AUDIENCE, exp: now + 60,
+      iat: now - 60, type: 'app' }).setProtectedHeader({ alg: 'RS256', kid: 'fixture' }).sign(signer);
+    for (const path of ['/admin/v1/versions', '/admin/v1/alias-suggestions', '/admin/v1/moderation/version/v_x',
+      '/admin/v1/moderation/alias_suggestion/as_x']) {
+      const anonymous = request(path);
+      anonymous.headers.delete('Cf-Access-Jwt-Assertion');
+      expect((await handle(anonymous)).status).toBe(401);
+      const forbidden = request(path);
+      forbidden.headers.set('Cf-Access-Jwt-Assertion', other);
+      expect((await handle(forbidden)).status).toBe(403);
+    }
   });
 });

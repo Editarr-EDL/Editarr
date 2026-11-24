@@ -1,5 +1,5 @@
 import service from '../index';
-import type { Env } from '../config';
+import { masterPolicy, type Env } from '../config';
 import { operatorConfig } from '../admin/auth/access';
 import { moderationLimits } from '../admin/admission';
 import { publicationLimits } from '../contributions/publication-input';
@@ -25,6 +25,7 @@ export async function validateEnvironment(env: Env) {
   voteLimits.parse(JSON.parse(env.VOTE_LIMITS ?? ''));
   reportLimits.parse(JSON.parse(env.REPORT_LIMITS ?? ''));
   moderationLimits.parse(JSON.parse(env.MODERATION_LIMITS ?? ''));
+  masterPolicy(env);
   const keys = receiptKeysSchema.parse(JSON.parse(env.DOWNLOAD_RECEIPT_KEYS ?? ''));
   await loadReceiptSigner(env.DOWNLOAD_RECEIPT_PRIVATE_KEY ?? '', keys);
 }

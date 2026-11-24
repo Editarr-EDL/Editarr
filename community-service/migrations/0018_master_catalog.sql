@@ -1,8 +1,12 @@
 CREATE TABLE master_works (
   work_id TEXT PRIMARY KEY NOT NULL CHECK (length(work_id) BETWEEN 1 AND 128 AND work_id NOT GLOB '*[^A-Za-z0-9_.-]*'),
   kind TEXT NOT NULL CHECK (kind IN ('movie', 'episode')),
+  catalog_seq INTEGER NOT NULL DEFAULT 0 CHECK (catalog_seq >= 0),
   created_at INTEGER NOT NULL CHECK (created_at >= 0)
 );
+CREATE TRIGGER guard_master_work_catalog_seq BEFORE UPDATE OF catalog_seq ON master_works
+WHEN NEW.catalog_seq != OLD.catalog_seq + 1
+BEGIN SELECT RAISE(ABORT, 'catalog_write_conflict'); END;
 CREATE TABLE master_work_identifiers (
   provider TEXT NOT NULL CHECK (provider IN ('tmdb', 'tvdb')),
   kind TEXT NOT NULL CHECK (kind IN ('movie', 'episode')),
@@ -96,6 +100,19 @@ CREATE TRIGGER guard_version_identity BEFORE UPDATE ON versions
 WHEN NEW.version_id != OLD.version_id OR NEW.work_id != OLD.work_id OR NEW.created_seq != OLD.created_seq
   OR NEW.created_at != OLD.created_at OR NEW.revision < OLD.revision OR OLD.status = 'merged_into' AND NEW.status != 'merged_into'
 BEGIN SELECT RAISE(ABORT, 'immutable_version'); END;
+CREATE TRIGGER guard_version_confirmed_label BEFORE INSERT ON versions
+WHEN NEW.status = 'confirmed' AND EXISTS (SELECT 1 FROM versions v WHERE v.work_id = NEW.work_id
+  AND v.status != 'merged_into' AND (
+    coalesce(v.alias_id, CASE WHEN v.label_text IS NULL THEN 'theatrical' END)
+      = coalesce(NEW.alias_id, CASE WHEN NEW.label_text IS NULL THEN 'theatrical' END)
+    OR (coalesce(v.alias_id, CASE WHEN v.label_text IS NULL THEN 'theatrical' END) IS NULL
+      AND coalesce(NEW.alias_id, CASE WHEN NEW.label_text IS NULL THEN 'theatrical' END) IS NULL
+      AND v.label_text = NEW.label_text)))
+BEGIN SELECT RAISE(ABORT, 'version_label_conflict'); END;
+CREATE TRIGGER guard_version_merge_target BEFORE UPDATE OF merged_into ON versions
+WHEN NEW.merged_into IS NOT NULL AND NOT EXISTS (SELECT 1 FROM versions t WHERE t.version_id = NEW.merged_into
+  AND t.status != 'merged_into' AND t.work_id = NEW.work_id)
+BEGIN SELECT RAISE(ABORT, 'merge_invalid'); END;
 CREATE TABLE version_match_keys (
   version_id TEXT NOT NULL REFERENCES versions(version_id),
   type TEXT NOT NULL CHECK (type IN ('sha256_full', 'sha256_sampled', 'md5_quick', 'audio_stream', 'video_stream')),

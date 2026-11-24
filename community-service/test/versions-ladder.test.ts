@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalize, normalizedTitle } from '../src/versions/normalize';
+import fixture from './fixtures/community-v3/normalize.json';
 import { labelsEqual } from '../src/versions/labels';
 import { compareMatches, runtimeAgreement, scoreVersion, type RankedMatch, type VersionEvidence } from '../src/matching/ladder';
 import type { EvidenceKeyType } from '../src/versions/keys';
@@ -10,6 +11,12 @@ describe('normalize (§3.3)', () => {
     ['Spider-Man: No Way Home', 'spider man no way home'], ['Ⅲ', 'iii'], ["Director's Cut", 'directors cut'],
     ['Directorʼs `Cut`', 'directors cut'], ['', ''], ['  !!  ', ''], ['ＡＢＣ　１２３', 'abc 123'],
   ])('normalizes %j to %j', (input, expected) => expect(normalize(input)).toBe(expected));
+
+  it('matches every shared community-v3 normalize fixture case', () => {
+    expect(fixture.cases.length).toBeGreaterThan(5);
+    for (const item of fixture.cases) expect([item.input, normalize(item.input)]).toEqual([item.input, item.normalized]);
+    for (const item of fixture.titleYear) expect(`${normalizedTitle(item.title)}\u0000${item.year}`).toBe(item.key);
+  });
 
   it('bounds titles to 1–256 code points', () => {
     expect(normalizedTitle('?!')).toBeNull();
