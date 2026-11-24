@@ -70,6 +70,7 @@ from .audio_words import (
 )
 from .processes import run_command
 from .qwen_language import categorize_language_findings
+from .qwen_language_trace import LanguageDecisionAttempt
 
 
 @dataclass
@@ -271,6 +272,7 @@ def scan_audio(
     provenance_callback: Callable[[str], None] | None = None,
     *,
     audio_padding_seconds: float | None = None,
+    decision_callback: Callable[[LanguageDecisionAttempt], None] | None = None,
 ) -> list[FindingCreate]:
     """
     Transcribe audio and detect profanity with timestamps.
@@ -386,6 +388,7 @@ def scan_audio(
             audio_padding_seconds=padding,
             video_id=video_id,
             **({"provenance_callback": provenance_callback} if provenance_callback else {}),
+            **({"decision_callback": decision_callback} if decision_callback else {}),
             progress_callback=(
                 (lambda fraction, message: progress_callback(0.8 + fraction * 0.2, message))
                 if progress_callback

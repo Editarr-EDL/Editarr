@@ -48,6 +48,81 @@ The prompt-file option is optional. Without it, the command uses the current
 built-in prompt. It prints regenerated findings as JSON. Replay bundles are
 development artifacts and can be deleted when no longer needed.
 
+### Qwen language prompt replay
+
+Run the Qwen audio filter directly from this checkout with an existing Editarr
+Python environment on an Apple silicon Mac. Start with a short extracted WAV
+containing the speech and context you want to test.
+
+For the local web interface, launch the replay server from the checkout.
+
+```bash
+.venv/bin/python -m scanner.commands.qwen_language_replay_web
+```
+
+Open `http://127.0.0.1:8767`. For an existing extract on this Mac, expand
+**Use local path**, paste the path to the WAV, and click **Use this file**.
+Replay reads the original file directly. **Browse** uploads files up to
+512 MiB when you prefer to use the file picker. Run **Baseline** after
+selecting your audio.
+Edit and save the prompt in the checkout, then run **Candidate** with the same
+clip and options. The comparison lists flagged phrases side by side in
+timestamp order. A blank cell means that run has no matching finding.
+The server keeps both reports for the selected clip across reloads and
+restarts. Download the JSON reports to keep a copy before replacing the
+clip. The server runs locally and loads the current source on each run.
+
+Click a comparison timestamp to open **Inspect decision** and choose the
+baseline or candidate. Ask Qwen about the flagged span or the missed phrase,
+then review its suggested prompt edit. You can try the edit in the inspector
+and rerun just that batch using the run's model and timed transcript. The test
+result stays in the inspector. After a rerun, **Ask Qwen** uses the latest
+tested instructions, model reply, and validation outcome for that decision.
+Edit the draft and rerun again to give Qwen a new test result to review.
+Later full runs read the prompt files in the checkout.
+
+New reports record the original prompt and response for inspection. Older
+reports use the cached transcript and available prompt source to reconstruct
+the batch. The inspector identifies reconstructed evidence.
+
+The replay model selector includes Qwen3.5-9B (4-bit MLX). The first run with
+this model downloads about 6 GB into the Editarr model cache. To use it
+from the terminal, pass `--qwen-model qwen35-9b-4bit` to `run`.
+
+You can run the same workflow from the terminal.
+
+```bash
+.venv/bin/python -m scanner.commands.qwen_language_replay_cli run /path/to/extract.wav \
+  --output /tmp/editarr-qwen-baseline.json
+
+# Save your prompt changes in the checkout, then run the same extract again.
+.venv/bin/python -m scanner.commands.qwen_language_replay_cli run /path/to/extract.wav \
+  --output /tmp/editarr-qwen-candidate.json
+
+.venv/bin/python -m scanner.commands.qwen_language_replay_cli compare \
+  /tmp/editarr-qwen-baseline.json /tmp/editarr-qwen-candidate.json
+```
+
+Edit `_LANGUAGE_POLICY` or `_language_prompt` in
+[`qwen_language.py`](../scanner/pipeline/qwen_language.py), or edit
+`_detection_prompt` in
+[`qwen_language_detection.py`](../scanner/pipeline/qwen_language_detection.py).
+By default, replay tests discovery across the transcript. To also test the
+classification prompt for pre-flagged words, pass `--deny-word WORD` on both
+runs. You can repeat the flag for multiple words.
+
+The first run transcribes the clip and caches its timed words. Later runs reuse
+that transcript for the same audio content and transcription model and run Qwen
+with the instructions currently saved in the checkout. By default, transcripts
+are stored in the `qwen-language-replays` subdirectory of the Editarr cache.
+Use `--cache-dir` on both runs to choose a different location.
+
+Keep the Qwen model, audio padding, and any pre-flagged words fixed between
+runs to isolate prompt changes. Use `--qwen-model` and `--audio-padding-seconds`
+to fix the model and padding explicitly. The comparison shows changes in time
+ranges, words or phrases, MCF categories, and severity. It requires matching
+transcripts and completed runs.
+
 ### MCF subcategory evaluation
 
 Qwen prose is currently enrichment evidence only. It does not replace a detector's MCF

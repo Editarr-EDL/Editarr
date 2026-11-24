@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Qwen language replay · Editarr</title>
+    <link rel="stylesheet" href="/replay.css">
+    <script type="module" src="/replay.js"></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="page-width masthead-content">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="brand">Editarr</span>
+        <span class="masthead-label">Model development</span>
+      </div>
+    </header>
+
+    <main class="page-width">
+      <div class="page-heading">
+        <h1>Qwen language replay</h1>
+        <p>Compare prompt edits against the same audio extract.</p>
+      </div>
+      <p id="page-error" class="notice error" role="alert" hidden></p>
+
+      <div class="workspace">
+        <section class="panel setup" aria-labelledby="setup-heading">
+          <h2 id="setup-heading">Replay setup</h2>
+          <fieldset id="settings" disabled>
+            <legend class="visually-hidden">Replay input and models</legend>
+            <div class="audio-field">
+              <p class="field-label">Audio extract</p>
+              <div id="audio-picker" class="audio-picker">
+                <span class="audio-icon" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                <div class="audio-information">
+                  <strong id="audio-name">Choose an audio file</strong>
+                  <span id="audio-description">A short WAV works best</span>
+                </div>
+                <label class="upload-button" for="audio-file">
+                  <span id="upload-label">Browse</span>
+                  <input id="audio-file" type="file" accept="audio/*,.wav,.wave,.flac,.mp3,.m4a,.aac,.ogg,.opus,.aif,.aiff" aria-label="Browse for an audio file" aria-describedby="audio-description">
+                </label>
+              </div>
+              <audio id="audio-preview" controls preload="metadata" aria-label="Audio extract preview" hidden></audio>
+              <details class="local-audio">
+                <summary>Use local path</summary>
+                <form id="local-audio-form">
+                  <div class="field">
+                    <label for="audio-path">Audio file path</label>
+                    <input id="audio-path" type="text" required autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="audio-path-help audio-path-error" placeholder="/path/to/audio.wav">
+                  </div>
+                  <p id="audio-path-help" class="help">Enter an absolute path or one starting with ~/.</p>
+                  <p id="audio-path-error" class="field-error" role="alert" hidden></p>
+                  <button type="submit">Use this file</button>
+                </form>
+              </details>
+            </div>
+            <div class="field">
+              <label for="audio-model">Transcription model</label>
+              <select id="audio-model"><option>Loading…</option></select>
+            </div>
+            <div class="field">
+              <label for="qwen-model">Qwen model</label>
+              <select id="qwen-model"><option>Loading…</option></select>
+            </div>
+            <details class="advanced">
+              <summary>Advanced options</summary>
+              <div class="advanced-fields">
+                <div class="field">
+                  <label for="padding">Audio padding (seconds)</label>
+                  <input type="number" id="padding" min="0" step="any" placeholder="Use Editarr setting">
+                </div>
+                <div class="field">
+                  <label for="deny-words">Deny words</label>
+                  <textarea id="deny-words" rows="2" aria-describedby="deny-help" placeholder="Optional"></textarea>
+                </div>
+                <p id="deny-help" class="help">Separate words with commas or new lines to test classification of pre-flagged words.</p>
+              </div>
+            </details>
+          </fieldset>
+        </section>
+
+        <div class="output">
+          <section class="panel runs" aria-labelledby="runs-heading">
+            <div class="section-heading">
+              <h2 id="runs-heading">Runs</h2>
+              <p>Run a baseline, save your prompt edits in the checkout, then run a candidate.</p>
+            </div>
+            <div class="run-grid">
+              <article class="run-card" data-slot="baseline" aria-labelledby="baseline-heading">
+                <div class="run-heading">
+                  <h3 id="baseline-heading">Baseline</h3>
+                  <span class="pill" data-run-status>Waiting</span>
+                </div>
+                <p data-run-summary>Choose an audio extract to start.</p>
+                <div class="run-actions">
+                  <button type="button" id="run-baseline" data-run-button disabled>Run baseline</button>
+                  <a class="report-link" data-report-link href="/api/reports/baseline" download="qwen-baseline.json" hidden>Download JSON<span class="visually-hidden"> for baseline</span></a>
+                </div>
+                <details class="run-findings" data-findings hidden>
+                  <summary>View baseline findings</summary>
+                  <ul data-finding-list></ul>
+                </details>
+              </article>
+              <article class="run-card" data-slot="candidate" aria-labelledby="candidate-heading">
+                <div class="run-heading">
+                  <h3 id="candidate-heading">Candidate</h3>
+                  <span class="pill" data-run-status>Waiting</span>
+                </div>
+                <p data-run-summary>Choose an audio extract to start.</p>
+                <div class="run-actions">
+                  <button type="button" id="run-candidate" data-run-button disabled>Run candidate</button>
+                  <a class="report-link" data-report-link href="/api/reports/candidate" download="qwen-candidate.json" hidden>Download JSON<span class="visually-hidden"> for candidate</span></a>
+                </div>
+                <details class="run-findings" data-findings hidden>
+                  <summary>View candidate findings</summary>
+                  <ul data-finding-list></ul>
+                </details>
+              </article>
+            </div>
+            <div id="activity" class="activity" hidden>
+              <p id="activity-label" role="status"></p>
+              <progress id="run-progress" max="100" aria-label="Replay progress"></progress>
+            </div>
+          </section>
+
+          <section class="panel comparison" aria-labelledby="comparison-heading">
+            <div class="section-heading">
+              <h2 id="comparison-heading">Comparison</h2>
+              <p id="comparison-status" role="status">Complete both runs to see what changed.</p>
+            </div>
+            <ul id="comparison-notes" class="comparison-notes" hidden></ul>
+            <p id="comparison-inspect-help" class="comparison-inspect-help" hidden>Select a timestamp to inspect either run.</p>
+            <div id="comparison-table-scroll" class="comparison-table-scroll" role="region" aria-label="Flagged phrases" tabindex="0" hidden>
+              <table id="comparison-table" class="comparison-table">
+                <thead>
+                  <tr>
+                    <th scope="col" aria-sort="ascending">Timestamp</th>
+                    <th scope="col">Baseline</th>
+                    <th scope="col">Candidate</th>
+                  </tr>
+                </thead>
+                <tbody id="comparison-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <dialog id="decision-inspector" class="decision-inspector" aria-labelledby="inspector-heading">
+      <header class="inspector-header">
+        <div>
+          <h2 id="inspector-heading">Inspect decision</h2>
+          <p id="inspector-timestamp"></p>
+          <p id="inspector-status" class="inspector-status" role="status" hidden></p>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="inspector-secondary">Close</button>
+        </form>
+      </header>
+      <div class="inspector-content">
+        <fieldset id="inspector-side" class="inspector-side">
+          <legend>Run to inspect</legend>
+          <button type="button" data-inspector-slot="baseline" aria-pressed="false">Baseline</button>
+          <button type="button" data-inspector-slot="candidate" aria-pressed="false">Candidate</button>
+        </fieldset>
+        <p id="inspector-observation" class="inspector-observation"></p>
+        <p id="inspector-error" class="notice error inspector-error" role="alert" hidden></p>
+        <div id="inspector-context" class="inspector-context" hidden>
+          <section aria-labelledby="inspector-evidence-heading">
+            <h3 id="inspector-evidence-heading">Batch evidence</h3>
+            <p id="inspector-evidence" class="inspector-meta"></p>
+            <ul id="inspector-transcript" class="inspector-transcript"></ul>
+            <details class="inspector-details">
+              <summary>View exact inputs and recorded response</summary>
+              <pre id="inspector-inputs" aria-label="Exact batch inputs"></pre>
+              <pre id="inspector-response" aria-label="Recorded model response"></pre>
+              <ul id="inspector-attempts" class="inspector-attempts" hidden></ul>
+            </details>
+          </section>
+          <form id="inspector-ask" class="inspector-section">
+            <h3>Ask Qwen</h3>
+            <p id="inspector-ask-evidence" class="inspector-meta" aria-live="polite"></p>
+            <div class="field">
+              <label for="inspector-question">Question</label>
+              <textarea id="inspector-question" rows="2" maxlength="2000" required></textarea>
+            </div>
+            <div class="inspector-actions"><button type="submit">Ask Qwen</button></div>
+            <div id="inspector-answer-panel" class="inspector-answer" hidden>
+              <h4>Qwen’s answer</h4>
+              <p id="inspector-answer" class="inspector-prose"></p>
+              <div id="inspector-suggestion-panel" hidden>
+                <h4>Suggested prompt edit</h4>
+                <p id="inspector-suggestion" class="inspector-prose"></p>
+                <button id="inspector-apply" type="button" class="inspector-secondary">Add suggestion to draft</button>
+              </div>
+            </div>
+          </form>
+          <form id="inspector-rerun" class="inspector-section">
+            <h3>Rerun this batch</h3>
+            <p class="inspector-meta">Edit the instructions below to test them against the same input. This draft is local to the inspector.</p>
+            <div class="field">
+              <label for="inspector-instructions">Prompt instructions</label>
+              <textarea id="inspector-instructions" rows="8" spellcheck="false" required></textarea>
+            </div>
+            <div class="inspector-actions">
+              <button type="submit">Rerun batch</button>
+              <button id="inspector-reset" type="button" class="inspector-secondary">Reset draft</button>
+            </div>
+            <div id="inspector-result" class="inspector-answer" hidden>
+              <h4>Batch test result</h4>
+              <p id="inspector-result-status" class="inspector-meta"></p>
+              <p id="inspector-result-original"></p>
+              <ul id="inspector-findings" class="inspector-transcript" hidden></ul>
+              <details class="inspector-details">
+                <summary>View test model response</summary>
+                <pre id="inspector-result-response" aria-label="Test model response"></pre>
+              </details>
+            </div>
+          </form>
+        </div>
+      </div>
+    </dialog>
+  </body>
+</html>

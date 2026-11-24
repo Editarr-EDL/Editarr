@@ -20,6 +20,7 @@ upstream sources, and license metadata.
 | SigLIP2 NSFW and violence heads | `khasinski/siglip2-moderation-heads@b88fe03369e3dc6aa9887cd3b4cd3e9b7cf76ee5` | 789,337 / 789,349 | Apache-2.0 declared |
 | Qwen3-VL 4B Instruct 4-bit | `mlx-community/Qwen3-VL-4B-Instruct-4bit@2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b` | 3,109,729,929 | Apache-2.0 declared |
 | Qwen3-VL 8B Instruct 4-bit | `mlx-community/Qwen3-VL-8B-Instruct-4bit@defcdea7cc7a4b0858fea563cbbce171d328e457` | 5,776,630,909 | Apache-2.0 declared |
+| Qwen3.5-9B 4-bit (language replay) | `mlx-community/Qwen3.5-9B-MLX-4bit@938d8919941c6e7efd3c7150eff7fe9d12afa631` | 5,977,071,067 | Apache-2.0 declared |
 | Shieldstral 1.0 3B INT8 (MLX) | `sahilchachra/Shieldstral-1.0-3B-INT8@accac83025f1164a388e0d704840809a4d46bffd` | 4,500,914,339 | Apache-2.0 declared |
 | d1-3B (BF16, transformers) | `LiquidAI/d1-3B@05b80faf55536582ad5ffb2da7456f6a653acf71` | 6,265,040,453 | LFM Open License v1.0 declared (`LicenseRef-LFM-1.0`) |
 

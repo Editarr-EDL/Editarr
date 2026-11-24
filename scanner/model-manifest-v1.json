@@ -246,6 +246,30 @@
       ]
     },
     {
+      "id": "qwen35-9b-4bit",
+      "backend_ids": ["qwen_language_replay"],
+      "backend_version": "3.5-9b-4bit",
+      "distribution": "huggingface",
+      "repository": "mlx-community/Qwen3.5-9B-MLX-4bit",
+      "revision": "938d8919941c6e7efd3c7150eff7fe9d12afa631",
+      "required_patterns": ["*.json", "*.jinja", "*.safetensors"],
+      "source_url": "https://huggingface.co/mlx-community/Qwen3.5-9B-MLX-4bit",
+      "license": {"spdx": "Apache-2.0", "status": "declared", "url": "https://huggingface.co/mlx-community/Qwen3.5-9B-MLX-4bit"},
+      "files": [
+        {"path": "chat_template.jinja", "size": 7756, "git_blob_sha1": "a585dec894e63da457d9440ec6aa7caa16d20860"},
+        {"path": "config.json", "size": 3331, "git_blob_sha1": "0435ae3f4b3c8b907f7359a2f8f7150d316f3435"},
+        {"path": "model-00001-of-00002.safetensors", "size": 5349771222, "sha256": "a68b87558c6ef43f74c2bd63ce7e9092ceddc3101f3def0030774bae5f42aadd"},
+        {"path": "model-00002-of-00002.safetensors", "size": 600449850, "sha256": "b0a770bf8469c7f3f18756a0e0283f1c1174344a83e059a4e483f6af4907352d"},
+        {"path": "model.safetensors.index.json", "size": 123592, "git_blob_sha1": "d366fa524ccd8f4ed93a67c7857597dc56172b92"},
+        {"path": "preprocessor_config.json", "size": 390, "git_blob_sha1": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"},
+        {"path": "processor_config.json", "size": 1300, "git_blob_sha1": "7ad6acdf4203f22b7b990e36ccc3a1fe38563d5e"},
+        {"path": "tokenizer.json", "size": 19989343, "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"},
+        {"path": "tokenizer_config.json", "size": 1139, "git_blob_sha1": "a068e2468cff426a9b105006e74e044030a6faf4"},
+        {"path": "video_preprocessor_config.json", "size": 385, "git_blob_sha1": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"},
+        {"path": "vocab.json", "size": 6722759, "git_blob_sha1": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"}
+      ]
+    },
+    {
       "id": "shieldstral-3b-int8",
       "backend_ids": ["shieldstral"],
       "backend_version": "1.0-3b-int8",

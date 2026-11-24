@@ -18,6 +18,7 @@ from scanner.model_acquisition import acquire_artifact
 from scanner.models import MCF_CATEGORY_REGISTRY, McfCategoryFamily
 from scanner.settings.capabilities import (
     DEFAULT_QWEN_MODEL,
+    SUPPORTED_QWEN_LANGUAGE_REPLAY_MODELS,
     SUPPORTED_QWEN_MODELS,
     require_available,
 )
@@ -145,10 +146,10 @@ def _require_dependency(import_name: str, install_hint: str):
 
 
 def _load_model(qwen_model: str = DEFAULT_QWEN_MODEL):
-    """Acquire and cache the selected Qwen model and processor for frame summaries."""
+    """Acquire and cache a Qwen model, processor, and configuration for inference."""
     require_available("qwen3_vl")
-    if qwen_model not in SUPPORTED_QWEN_MODELS:
-        raise ValueError(f"Unsupported Severity and Description model: {qwen_model}")
+    if qwen_model not in SUPPORTED_QWEN_LANGUAGE_REPLAY_MODELS:
+        raise ValueError(f"Unsupported Qwen model: {qwen_model}")
     if qwen_model in _CACHE:
         return _CACHE[qwen_model]
 

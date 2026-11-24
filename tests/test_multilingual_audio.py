@@ -15,13 +15,13 @@ from scanner.pipeline.qwen_language_detection import (
 )
 
 
-def _segment(words):
+def _segment(words, *, start=1):
     return {
         "text": "".join(words),
-        "start_seconds": 1,
-        "end_seconds": len(words) + 1,
+        "start_seconds": start,
+        "end_seconds": start + len(words),
         "words": [
-            {"word": word, "start_seconds": index + 1, "end_seconds": index + 1.5}
+            {"word": word, "start_seconds": start + index, "end_seconds": start + index + 0.5}
             for index, word in enumerate(words)
         ],
     }
@@ -210,13 +210,15 @@ def test_discovery_failure_does_not_claim_clean_success(monkeypatch, error, expe
 
 
 def test_discovery_reports_partial_after_valid_clean_batch(monkeypatch):
-    responses = iter(
-        [
-            json.dumps({"version": 1, "results": [{"id": i, "matches": []} for i in range(4)]}),
-            "invalid",
-        ]
-    )
-    _install_qwen(monkeypatch, lambda _: next(responses))
+    def generate(prompt):
+        inputs = json.loads(prompt.split("\nInputs: ", 1)[1])
+        if len(inputs) == 1:
+            return "invalid"
+        return json.dumps(
+            {"version": 1, "results": [{"id": window["id"], "matches": []} for window in inputs]}
+        )
+
+    _install_qwen(monkeypatch, generate)
     events = []
     qwen_language.categorize_language_findings(
         [],
@@ -226,6 +228,52 @@ def test_discovery_reports_partial_after_valid_clean_batch(monkeypatch):
         provenance_callback=events.append,
     )
     assert events[-1] == "partial"
+
+
+@pytest.mark.parametrize("recover_singleton", [True, False])
+def test_discovery_retries_rejected_batches_and_preserves_window_timing(
+    monkeypatch, recover_singleton
+):
+    segments = [
+        _segment([word], start=start)
+        for start, word in enumerate(["Merde!", "Bonjour", "Scheiße!", "Putain!", "Merci"], 10)
+    ]
+    failed_window_prompts, attempts, events, progress = [], [], [], []
+
+    def generate(prompt):
+        inputs = json.loads(prompt.split("\nInputs: ", 1)[1])
+        attempts.append(len(inputs))
+        if len(inputs) > 1:
+            return "invalid"
+        word = inputs[0]["words"][0]["text"]
+        if word == "Scheiße!":
+            failed_window_prompts.append(prompt)
+            if not recover_singleton or len(failed_window_prompts) == 1:
+                return "invalid"
+        return _response([] if word in {"Bonjour", "Merci"} else [_match()])
+
+    _install_qwen(monkeypatch, generate)
+    findings = qwen_language.categorize_language_findings(
+        [],
+        "qwen",
+        transcript_segments=segments,
+        video_id="scan-1",
+        audio_padding_seconds=0,
+        provenance_callback=events.append,
+        progress_callback=lambda fraction, _: progress.append(fraction),
+    )
+
+    expected = [("Merde!", 10, 10.5), ("Putain!", 13, 13.5)]
+    if recover_singleton:
+        expected.insert(1, ("Scheiße!", 12, 12.5))
+    assert [(item.label, item.start_seconds, item.end_seconds) for item in findings] == expected
+    assert events == ["started", "complete" if recover_singleton else "partial"]
+    assert attempts == [4, 2, 1, 1, 2, 1, 1, 1, 1]
+    assert progress == pytest.approx([0.8, 1.0])
+
+    initial, retry = failed_window_prompts
+    assert initial != retry
+    assert initial.split("\nInputs: ", 1)[1] == retry.split("\nInputs: ", 1)[1]
 
 
 def test_invalid_categorization_keeps_detector_and_reports_failure(monkeypatch):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from typing import Protocol
 
 from scanner.model_acquisition import AcquisitionCancelled
 from scanner.models import (
@@ -15,10 +16,15 @@ from scanner.models import (
     McfCategoryFamily,
     Severity,
 )
-from scanner.settings.capabilities import qwen_enrichment_capability
+from scanner.settings.capabilities import QWEN35_9B_MODEL, qwen_enrichment_capability
 
 from . import qwen_summary
 from .qwen_language_detection import detect_language_findings, transcript_windows
+from .qwen_language_trace import (
+    CLASSIFICATION_MAX_TOKENS,
+    DETECTION_MAX_TOKENS,
+    LanguageDecisionAttempt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +33,10 @@ _MAX_CONTEXT_LENGTH = 600
 _MAX_RESPONSE_LENGTH = 8_192
 _LANGUAGE = McfCategoryFamily.LANGUAGE
 _OPTIONS = ", ".join(token for token, _label in MCF_CATEGORY_REGISTRY[_LANGUAGE])
+
+
+class LanguageGenerator(Protocol):
+    def __call__(self, prompt: str, max_tokens: int = DETECTION_MAX_TOKENS) -> str: ...
 
 
 _LANGUAGE_POLICY = (
@@ -121,6 +131,25 @@ def _parse_language_response(
     return classified if set(classified) == expected_ids else None
 
 
+def load_language_generator(qwen_model: str) -> LanguageGenerator:
+    """Load the pinned model with the same chat formatting as an audio scan."""
+    mlx_vlm = qwen_summary._require_dependency("mlx_vlm", "mlx-vlm")
+    prompt_utils = qwen_summary._require_dependency("mlx_vlm.prompt_utils", "mlx-vlm")
+    model, processor, config = qwen_summary._load_model(qwen_model)
+    # Qwen3.5's reasoning output would break the strict JSON response parsers.
+    template_options = {"enable_thinking": False} if qwen_model == QWEN35_9B_MODEL else {}
+
+    def generate(prompt: str, max_tokens: int = DETECTION_MAX_TOKENS) -> str:
+        formatted = prompt_utils.apply_chat_template(
+            processor, config, prompt, num_images=0, **template_options
+        )
+        return mlx_vlm.generate(
+            model, processor, formatted, max_tokens=max_tokens, temperature=0.0, verbose=False
+        ).text
+
+    return generate
+
+
 def categorize_language_findings(
     findings: list[FindingCreate],
     qwen_model: str,
@@ -130,6 +159,7 @@ def categorize_language_findings(
     transcript_segments: list[dict] | None = None,
     video_id: str | None = None,
     audio_padding_seconds: float | None = None,
+    decision_callback: Callable[[LanguageDecisionAttempt], None] | None = None,
 ) -> list[FindingCreate]:
     """Classify detections and optionally discover missed expressions in a timed transcript."""
     keys = list(
@@ -151,9 +181,7 @@ def categorize_language_findings(
             if provenance_callback:
                 provenance_callback("unsupported")
             return findings
-        mlx_vlm = qwen_summary._require_dependency("mlx_vlm", "mlx-vlm")
-        prompt_utils = qwen_summary._require_dependency("mlx_vlm.prompt_utils", "mlx-vlm")
-        model, processor, config = qwen_summary._load_model(qwen_model)
+        generate = load_language_generator(qwen_model)
     except AcquisitionCancelled:
         raise
     except Exception:
@@ -164,7 +192,13 @@ def categorize_language_findings(
 
     if provenance_callback:
         provenance_callback("started")
+
     categories: dict[tuple[str, str], tuple[McfCategory, Severity]] = {}
+    seed_findings: dict[tuple[str, str], list[FindingCreate]] = {}
+    if decision_callback is not None:
+        for finding in findings:
+            if finding.category == _LANGUAGE and finding.label:
+                seed_findings.setdefault((finding.label, finding.details or ""), []).append(finding)
     failed = False
     classification_share = 0.5 if windows and keys else 1.0
     for start in range(0, len(keys), _BATCH_SIZE):
@@ -173,16 +207,29 @@ def categorize_language_findings(
             {"id": start + offset, "word": word[:80], "context": _context_near_word(text, word)}
             for offset, (word, text) in enumerate(batch)
         ]
+        prompt = _language_prompt(items)
+        classified_findings = (
+            {start + offset: seed_findings[key] for offset, key in enumerate(batch)}
+            if decision_callback is not None
+            else {}
+        )
         try:
-            prompt = prompt_utils.apply_chat_template(
-                processor, config, _language_prompt(items), num_images=0
-            )
-            response = mlx_vlm.generate(
-                model, processor, prompt, max_tokens=512, temperature=0.0, verbose=False
-            ).text
+            response = generate(prompt, max_tokens=CLASSIFICATION_MAX_TOKENS)
         except AcquisitionCancelled:
             raise
-        except Exception:
+        except Exception as error:
+            if decision_callback is not None:
+                decision_callback(
+                    LanguageDecisionAttempt(
+                        kind="classification",
+                        batch_index=start,
+                        prompt=prompt,
+                        accepted=False,
+                        error=type(error).__name__,
+                        max_tokens=CLASSIFICATION_MAX_TOKENS,
+                        classified_findings=classified_findings,
+                    )
+                )
             logger.warning(
                 "Qwen language categorization stopped; keeping detector categories",
                 exc_info=True,
@@ -190,6 +237,18 @@ def categorize_language_findings(
             failed = True
             break
         parsed = _parse_language_response(response, set(range(start, start + len(batch))))
+        if decision_callback is not None:
+            decision_callback(
+                LanguageDecisionAttempt(
+                    kind="classification",
+                    batch_index=start,
+                    prompt=prompt,
+                    response=response if isinstance(response, str) else None,
+                    accepted=parsed is not None,
+                    max_tokens=CLASSIFICATION_MAX_TOKENS,
+                    classified_findings=classified_findings,
+                )
+            )
         if parsed is None:
             logger.warning("Qwen language categorization returned invalid output")
             failed = True
@@ -214,13 +273,6 @@ def categorize_language_findings(
     ]
 
     if windows:
-
-        def generate(prompt: str) -> str:
-            formatted = prompt_utils.apply_chat_template(processor, config, prompt, num_images=0)
-            return mlx_vlm.generate(
-                model, processor, formatted, max_tokens=2048, temperature=0.0, verbose=False
-            ).text
-
         offset = classification_share if keys else 0.0
         findings, discovery_failed, completed = detect_language_findings(
             findings,
@@ -229,6 +281,7 @@ def categorize_language_findings(
             generate,
             _LANGUAGE_POLICY,
             audio_padding_seconds=audio_padding_seconds,
+            decision_callback=decision_callback,
             progress_callback=(
                 (
                     lambda fraction, message: progress_callback(

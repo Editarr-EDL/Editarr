@@ -143,6 +143,7 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
         "siglip2-moderation-head-violence",
         "qwen3-vl-4b-instruct-4bit",
         "qwen3-vl-8b-instruct-4bit",
+        "qwen35-9b-4bit",
         "shieldstral-3b-int8",
         "d1-3b",
     } == {item.id for item in downloaded}
