@@ -72,6 +72,24 @@ def test_run_command_terminates_on_cooperative_cancellation(monkeypatch):
     assert terminated == [process]
 
 
+def test_run_command_terminates_when_cancellation_check_loses_authority(monkeypatch):
+    process = FakeCommandProcess([])
+    process.poll = lambda: None
+    terminated: list[object] = []
+    monkeypatch.setattr(processes.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(processes, "terminate_process_tree", terminated.append)
+    refusal = PermissionError("Download permission revoked")
+
+    def require_authority():
+        raise refusal
+
+    with pytest.raises(PermissionError) as raised:
+        processes.run_command(["scanner"], should_cancel=require_authority)
+
+    assert raised.value is refusal
+    assert terminated == [process]
+
+
 def test_ffmpeg_retries_cpu_decode_after_videotoolbox_failure(monkeypatch):
     calls: list[tuple[list[str], object, object]] = []
     command = ["ffmpeg", "-ss", "2", "-i", "movie.mkv", "-y"]

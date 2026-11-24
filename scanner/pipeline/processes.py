@@ -105,8 +105,14 @@ def run_command(
                 output_callback(line)
 
     while process.poll() is None:
-        dispatch_output()
-        if should_cancel and should_cancel():
+        try:
+            dispatch_output()
+            cancelled = should_cancel and should_cancel()
+        except BaseException:
+            terminate_process_tree(process)
+            reader.join(timeout=1)
+            raise
+        if cancelled:
             terminate_process_tree(process)
             reader.join(timeout=1)
             dispatch_output()

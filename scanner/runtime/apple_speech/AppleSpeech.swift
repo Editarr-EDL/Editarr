@@ -18,8 +18,16 @@ private struct Segment: Encodable {
 
 private struct SpeechError: LocalizedError {
     let message: String
+    let exitCode: Int32
     var errorDescription: String? { message }
+
+    init(message: String, exitCode: Int32 = EXIT_FAILURE) {
+        self.message = message
+        self.exitCode = exitCode
+    }
 }
+
+private let speechAssetsMissingExit: Int32 = 2
 
 @main
 struct AppleSpeech {
@@ -30,9 +38,6 @@ struct AppleSpeech {
             return
         }
         do {
-            guard arguments.count == 4 else {
-                throw SpeechError(message: "Expected a locale, audio file and output file.")
-            }
             guard #available(macOS 26.0, *) else {
                 throw SpeechError(message: "Apple Speech requires macOS 26 or later.")
             }
@@ -45,20 +50,25 @@ struct AppleSpeech {
             parentExit.activate()
             defer { parentExit.cancel() }
             guard parent > 1, getppid() == parent else { exit(EXIT_FAILURE) }
+            if arguments.count == 3 && arguments[1] == "--install-assets" {
+                try await installAssets(localeIdentifier: arguments[2])
+                return
+            }
+            guard arguments.count == 4 else {
+                throw SpeechError(message: "Expected a locale, audio file and output file.")
+            }
             let segments = try await transcribe(
                 URL(fileURLWithPath: arguments[2]), localeIdentifier: arguments[1]
             )
             try JSONEncoder().encode(segments).write(to: URL(fileURLWithPath: arguments[3]))
         } catch {
             FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
-            exit(EXIT_FAILURE)
+            exit((error as? SpeechError)?.exitCode ?? EXIT_FAILURE)
         }
     }
 
     @available(macOS 26.0, *)
-    private static func transcribe(_ input: URL, localeIdentifier: String) async throws -> [Segment] {
-        let file = try AVAudioFile(forReading: input)
-        guard file.length > 0 else { return [] }
+    private static func makeTranscriber(localeIdentifier: String) async throws -> SpeechTranscriber {
         guard SpeechTranscriber.isAvailable else {
             throw SpeechError(message: "Apple Speech transcription is unavailable on this Mac.")
         }
@@ -66,19 +76,43 @@ struct AppleSpeech {
         guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
             throw SpeechError(message: "Apple Speech does not support the locale \(localeIdentifier).")
         }
-        let transcriber = SpeechTranscriber(
+        return SpeechTranscriber(
             locale: locale, transcriptionOptions: [], reportingOptions: [],
             attributeOptions: [.audioTimeRange]
         )
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            do {
+    }
+
+    @available(macOS 26.0, *)
+    private static func installAssets(localeIdentifier: String) async throws {
+        let transcriber = try await makeTranscriber(localeIdentifier: localeIdentifier)
+        do {
+            if let request = try await AssetInventory.assetInstallationRequest(
+                supporting: [transcriber]
+            ) {
                 try await request.downloadAndInstall()
-            } catch {
-                throw SpeechError(
-                    message: "Could not install the \(locale.identifier) Apple Speech assets: "
-                        + error.localizedDescription
-                )
             }
+        } catch {
+            throw SpeechError(
+                message: "Could not install the \(localeIdentifier) Apple Speech assets: "
+                    + error.localizedDescription
+            )
+        }
+    }
+
+    @available(macOS 26.0, *)
+    private static func transcribe(_ input: URL, localeIdentifier: String) async throws -> [Segment] {
+        let file = try AVAudioFile(forReading: input)
+        guard file.length > 0 else { return [] }
+        let transcriber = try await makeTranscriber(localeIdentifier: localeIdentifier)
+        let status = await AssetInventory.status(forModules: [transcriber])
+        if status == .supported || status == .downloading {
+            throw SpeechError(
+                message: "Apple Speech assets are missing for \(localeIdentifier).",
+                exitCode: speechAssetsMissingExit
+            )
+        }
+        guard status == .installed else {
+            throw SpeechError(message: "Apple Speech assets are unavailable for \(localeIdentifier).")
         }
 
         let analyzer = SpeechAnalyzer(modules: [transcriber])

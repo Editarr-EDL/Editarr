@@ -66,7 +66,8 @@ for details.
 
 On Apple Silicon with macOS 26 or later, choose **Apple Speech** under
 **New Scan > Transcriber**. Speech recognition runs on the Mac. On first use,
-macOS may download the speech assets for the selected audio track's language.
+macOS may download the speech assets for the selected audio track's language
+if the account starting the scan has permission to download models.
 Editarr uses US English for untagged tracks. Set the server environment variable
 `EDITARR_APPLE_SPEECH_LOCALE` to a locale such as `es-ES` to override the track language.
 Source and wheel installations need Xcode or Command Line Tools with the macOS 26 SDK

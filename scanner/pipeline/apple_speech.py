@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from scanner.modeling.model_acquisition_authority import require_acquisition
 from scanner.runtime.apple_speech.helper import MINIMUM_MACOS, resolve_helper
 from scanner.settings.config import settings
 from scanner.settings.model_runtime import version_at_least
@@ -18,6 +19,7 @@ from scanner.settings.model_runtime import version_at_least
 from .processes import ScanCancelledError, run_command
 
 _LOCALE = re.compile(r"[a-z]{2,3}(?:-[a-z0-9]{2,8}){0,3}")
+_SPEECH_ASSETS_MISSING_EXIT = 2
 
 
 def speech_locale(audio_language: str | None = None) -> str:
@@ -32,6 +34,29 @@ def speech_locale(audio_language: str | None = None) -> str:
 def transcript_revision(locale: str) -> str:
     """Version Apple's transcript format independently of Whisper checkpoint settings."""
     return f"v1.{locale}"
+
+
+def _transcribe_with_assets(
+    command: list[str], locale: str, should_cancel: Callable[[], bool] | None
+) -> None:
+    """Try installed assets first and authorize any separate installation."""
+    try:
+        run_command(command, should_cancel=should_cancel)
+        return
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode != _SPEECH_ASSETS_MISSING_EXIT:
+            raise
+
+    def cancel_install() -> bool:
+        if should_cancel and should_cancel():
+            return True
+        require_acquisition(download=True)
+        return False
+
+    if cancel_install():
+        raise ScanCancelledError("Scan cancelled")
+    run_command([command[0], "--install-assets", locale], should_cancel=cancel_install)
+    run_command(command, should_cancel=should_cancel)
 
 
 def transcribe(
@@ -51,9 +76,10 @@ def transcribe(
     with TemporaryDirectory(prefix="editarr-apple-speech-") as directory:
         output = Path(directory) / "transcript.json"
         try:
-            run_command(
+            _transcribe_with_assets(
                 [str(helper), locale, str(Path(audio_path).resolve()), str(output)],
-                should_cancel=should_cancel,
+                locale,
+                should_cancel,
             )
         except subprocess.CalledProcessError as exc:
             error = (exc.stderr or "").strip() or f"helper exited with code {exc.returncode}"
