@@ -18,6 +18,8 @@ export interface PreparedSubmission {
   identity: boolean;
   fit: Fit;
   entries: PreparedEntry[];
+  /** Quarantined entries: never a signal, but they still block implicit coverage negatives. */
+  blockers: PreparedEntry[];
 }
 
 /** Equality key for a tier 1–3 match key (§3.2). */
@@ -34,7 +36,10 @@ export function selectCounted(submissions: readonly SubmissionInput[], reference
   moderation: ModerationInput) {
   const quarantinedContributors = new Set(moderation.quarantinedContributors);
   const quarantinedSubmissions = new Set(moderation.quarantinedSubmissions);
-  const quarantinedEntries = new Set(moderation.quarantinedAttestations);
+  const quarantinedEntries = new Map<string, Set<string>>();
+  for (const { submissionId, entryId } of moderation.quarantinedAttestations) {
+    quarantinedEntries.set(submissionId, (quarantinedEntries.get(submissionId) ?? new Set()).add(entryId));
+  }
   const references = new Set(referenceKeys.map(matchKeyIdentity));
   const latest = new Map<string, SubmissionInput>();
   const excluded = (submission: SubmissionInput) =>
@@ -51,10 +56,15 @@ export function selectCounted(submissions: readonly SubmissionInput[], reference
   for (const input of [...latest.values()].sort((a, b) => compareAscii(a.submissionId, b.submissionId))) {
     const submission: PreparedSubmission = {
       input, identity: input.matchKeys.some(key => references.has(matchKeyIdentity(key))),
-      fit: { mode: 'none', offsetMs: 0, scale: 1, anchors: 0 }, entries: [],
+      fit: { mode: 'none', offsetMs: 0, scale: 1, anchors: 0 }, entries: [], blockers: [],
     };
+    const quarantined = quarantinedEntries.get(input.submissionId);
     for (const entry of input.entries) {
-      if (quarantinedEntries.has(`${input.submissionId}:${entry.entryId}`)) continue;
+      if (quarantined?.has(entry.entryId)) {
+        submission.blockers.push({ submission, entry, alignedStartMs: entry.startMs, alignedEndMs: entry.endMs,
+          weight: 0, ignoredReason: null });
+        continue;
+      }
       const unverified = entry.kind === 'support' && entry.origin === 'downloaded' && !entry.locallyVerified;
       submission.entries.push({ submission, entry, alignedStartMs: entry.startMs, alignedEndMs: entry.endMs,
         weight: entry.kind === 'support' && !unverified ? 1 : 0,

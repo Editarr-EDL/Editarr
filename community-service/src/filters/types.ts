@@ -59,12 +59,38 @@ export interface VoteInput {
   excluded: boolean;
 }
 
-/** Moderation exclusions (§7.8). Attestation targets are `submissionId:entryId`. */
+/** One attestation, identified by its submission and entry. */
+export interface AttestationRef {
+  submissionId: string;
+  entryId: string;
+}
+
+/** Moderation exclusions (§7.8). */
 export interface ModerationInput {
   versionQuarantined: boolean;
   quarantinedContributors: readonly string[];
   quarantinedSubmissions: readonly string[];
-  quarantinedAttestations: readonly string[];
+  quarantinedAttestations: readonly AttestationRef[];
+}
+
+/** Snapshot `work` (§7.3). */
+export interface SnapshotWork {
+  workId: string;
+  kind: 'movie' | 'episode';
+  tmdb: string | null;
+  tvdb: string | null;
+  season: number | null;
+  episode: number | null;
+  lastEpisode: number | null;
+  title: string;
+  year: number | null;
+}
+
+/** Snapshot fields outside the merge (§7.3); `runtimeMs` and `trust` come from the merge. */
+export interface SnapshotHeader {
+  service: string;
+  work: SnapshotWork;
+  versionInfo: { status: 'confirmed' | 'candidate'; aliasId: string | null; label: string | null; labelText: string | null };
 }
 
 /** One `filter_registry` row (§6.6). */
@@ -80,6 +106,8 @@ export interface RegistryEntry {
 
 export interface MergeInput {
   versionId: string;
+  /** Snapshot header; part of the served content compared for revisions. */
+  header: SnapshotHeader;
   /** Tier 1–3 keys of the founding submission (§6.2). */
   referenceKeys: readonly MatchKey[];
   submissions: readonly SubmissionInput[];
@@ -88,7 +116,7 @@ export interface MergeInput {
   registry: readonly RegistryEntry[];
   /** `createdSeq` for the first new registry ID. Defaults to the largest registry `createdSeq` + 1. */
   nextCreatedSeq?: number;
-  /** The current revision and its merge-derived served content (see `servedContent`). */
+  /** The current revision and its served content (`MergeResult.servedContent` when it was stored). */
   previous?: { revision: number; servedContent: string | null } | null;
 }
 
@@ -163,7 +191,11 @@ export interface MergeResult {
   runtimeMs: number | null;
   /** Version trust (§3.5). */
   trust: number;
-  /** Canonical merge-derived served content: runtime, trust and served filters. */
+  /**
+   * Canonical served content of the current revision: every snapshot field except
+   * `revision` and `generatedAt`. While the version is quarantined this is the
+   * previous content, so the stored revision is left untouched.
+   */
   servedContent: string;
   revision: { revision: number; changed: boolean };
 }

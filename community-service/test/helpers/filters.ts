@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { deriveFilterId, type EntryInput, type MatchKey, type MergeInput, type MergeResult, type SubmissionInput, type VoteInput } from '../../src/filters';
+import { deriveFilterId, type EntryInput, type MatchKey, type MergeInput, type MergeResult, type SnapshotHeader, type SubmissionInput, type VoteInput } from '../../src/filters';
 
 export const VERSION_ID = 'v_12ab';
 export const REFERENCE_KEY: MatchKey = { type: 'sha256_sampled', value: 'a'.repeat(64), sizeBytes: 4_823_749_120 };
@@ -32,8 +32,15 @@ export function vote(filterId: string, contributorId: string, value: 'up' | 'dow
   return { filterId, contributorId, vote: value, excluded };
 }
 
+export const HEADER: SnapshotHeader = {
+  service: 'https://community.example',
+  work: { workId: 'w_77', kind: 'movie', tmdb: '603', tvdb: null, season: null, episode: null, lastEpisode: null,
+    title: 'The Matrix', year: 1999 },
+  versionInfo: { status: 'confirmed', aliasId: 'theatrical', label: 'Theatrical', labelText: null },
+};
+
 export function mergeInput(submissions: SubmissionInput[], options: Partial<MergeInput> = {}): MergeInput {
-  return { versionId: VERSION_ID, referenceKeys: [REFERENCE_KEY], submissions, votes: [],
+  return { versionId: VERSION_ID, header: HEADER, referenceKeys: [REFERENCE_KEY], submissions, votes: [],
     moderation: { versionQuarantined: false, quarantinedContributors: [], quarantinedSubmissions: [], quarantinedAttestations: [] },
     registry: [], previous: null, ...options };
 }

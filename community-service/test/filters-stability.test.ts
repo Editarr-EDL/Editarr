@@ -20,7 +20,7 @@ function richInput(): MergeInput {
       submission('sub_Q', 'c_Q', [support('e1', 3_000_000, 3_004_000)], { acceptedSeq: 6 }),
     ],
     votes: [...base.votes, vote(workedExampleViolenceId, 'c_J', 'up', true), vote(workedExampleViolenceId, 'c_A', 'down')],
-    moderation: { ...base.moderation, quarantinedContributors: ['c_Q'], quarantinedAttestations: ['sub_B:e9'] },
+    moderation: { ...base.moderation, quarantinedContributors: ['c_Q'], quarantinedAttestations: [{ submissionId: 'sub_B', entryId: 'e9' }] },
   };
 }
 
@@ -49,7 +49,7 @@ describe('moderation recompute', () => {
 
   it('drops a quarantined attestation or submission and excludes moderated votes', () => {
     const input = workedExample();
-    const attestation = mergeVersion({ ...input, moderation: { ...input.moderation, quarantinedAttestations: ['sub_C:e1'] } });
+    const attestation = mergeVersion({ ...input, moderation: { ...input.moderation, quarantinedAttestations: [{ submissionId: 'sub_C', entryId: 'e1' }] } });
     expect(attestation.filters[0]).toMatchObject({ contributorCount: 3, subcategory: 'punching' });
     expect(attestation.filters[0].filterId).not.toBe(workedExampleViolenceId);
     const submissionOut = mergeVersion({ ...input, moderation: { ...input.moderation, quarantinedSubmissions: ['sub_G'] } });
@@ -96,6 +96,36 @@ describe('stable filter IDs (§6.6)', () => {
     const again = mergeVersion(persist(bridged, merged));
     expect(again.registry.find(row => row.filterId === absorbed)).toMatchObject({ state: 'retired', mergedInto: keep });
     expect(again.revision).toEqual({ revision: merged.revision.revision, changed: false });
+  });
+
+  it('leaves mergedInto null without a strict majority of former members', () => {
+    const registryRow = (filterId: string, createdSeq: number) => ({ filterId, createdSeq, incumbentSubcategory: null,
+      incumbentAction: null, state: 'active' as const, mergedInto: null, quarantined: false });
+    const member = (id: string, start: number, priorFilterId: string) =>
+      submission(`sub_${id}`, `c_${id}`, [support('e', start, start + 1000, { priorFilterId })]);
+    const input = mergeInput([member('1', 1000, 'f_x'), member('2', 1000, 'f_x'), member('3', 1000, 'f_z'),
+      member('4', 50_000, 'f_y'), member('5', 50_000, 'f_y'), member('6', 50_000, 'f_z')],
+    { registry: [registryRow('f_x', 1), registryRow('f_y', 2), registryRow('f_z', 3)] });
+    const split = mergeVersion(input);
+    expect(split.filters.map(filter => filter.filterId)).toEqual(['f_x', 'f_y']);
+    expect(split.registry.find(row => row.filterId === 'f_z')).toMatchObject({ state: 'retired', mergedInto: null });
+    const majority = mergeVersion({ ...input, submissions: [...input.submissions, member('7', 1000, 'f_z')] });
+    expect(majority.registry.find(row => row.filterId === 'f_z')).toMatchObject({ state: 'retired', mergedInto: 'f_x' });
+    expect(majority.filters[0].mergedIds).toEqual(['f_z']);
+  });
+
+  it('derives a different ID when the first member\'s derived ID is already claimed', () => {
+    const claimed = deriveFilterId(VERSION_ID, digestOf('sub_A'), 'e1');
+    const input = mergeInput([
+      submission('sub_B', 'c_B', [support('e', 1000, 2000, { priorFilterId: claimed })]),
+      submission('sub_A', 'c_A', [support('e1', 5000, 6000)]),
+    ], { registry: [{ filterId: claimed, createdSeq: 1, incumbentSubcategory: null, incumbentAction: null,
+      state: 'active', mergedInto: null, quarantined: false }] });
+    const counter = deriveFilterId(VERSION_ID, digestOf('sub_A'), 'e1', ['1']);
+    expect(mergeVersion(input).filters.map(filter => filter.filterId)).toEqual([claimed, counter]);
+    const withSecond = { ...input, submissions: [...input.submissions, submission('sub_C', 'c_C', [support('e', 5100, 6100)])] };
+    expect(mergeVersion(withSecond).filters.map(filter => filter.filterId))
+      .toEqual([claimed, deriveFilterId(VERSION_ID, digestOf('sub_C'), 'e')]);
   });
 
   it('advances the revision only when served content changes', () => {

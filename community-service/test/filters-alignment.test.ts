@@ -71,6 +71,18 @@ describe('alignment fit (§6.3)', () => {
     expect(fitOf(0.0001)).toEqual({ mode: 'offset', offsetMs: 1000, scale: 1, anchors: 3 });
   });
 
+  it('falls back to offset-only when the drift fit has fewer inlier anchors', () => {
+    // Starts imply a 1.002 slope, but the 300,000 ms durations already match, so drift
+    // stretches every aligned end 600 ms past its cluster while offset-only keeps all three.
+    const core = [99_600, 300_000, 500_400];
+    const fitWith = (durationMs: number) =>
+      fitted(core, [100_000, 300_000, 500_000].map((start, i) => support(`x${i}`, start, start + durationMs)), durationMs).fit;
+    expect(fitWith(300_000)).toEqual({ mode: 'offset', offsetMs: 0, scale: 1, anchors: 3 });
+    // With 200,000 ms durations the stretch is only 400 ms, so drift keeps all three inliers.
+    expect(fitWith(200_000)).toMatchObject({ mode: 'drift', offsetMs: -600, anchors: 3 });
+    expect(fitWith(200_000).scale).toBeCloseTo(1.002, 12);
+  });
+
   it('ignores outlier pairs when estimating the offset', () => {
     const starts = [100_000, 150_000, 200_000, 250_000];
     const entries = [...shifted(starts.slice(0, 3), 1200), support('x9', 240_000, 245_000)];

@@ -81,6 +81,16 @@ export function collectSignals(context: SignalContext) {
       best.set(row.filterId, perFilter);
     }
   }
+  for (const submission of context.counted) {
+    for (const blocker of submission.blockers) {
+      const { entry } = blocker;
+      const candidates = [context.resolve(entry.priorFilterId), context.resolve(entry.proposedFilterId),
+        finder(entry.category, blocker.alignedStartMs, blocker.alignedEndMs)];
+      for (const filterId of candidates) {
+        if (filterId !== null && byId.get(filterId)?.category === entry.category) touch(filterId, submission.input.contributorId);
+      }
+    }
+  }
   for (const perFilter of best.values()) for (const row of perFilter.values()) row.counted = true;
   const counts = new Map<string, SignalCounts>();
   for (const filter of context.filters) {

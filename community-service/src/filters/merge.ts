@@ -24,7 +24,7 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
   for (const submission of counted) {
     submission.fit = submission.identity ? { ...IDENTITY_FIT }
       : core.length === 0 ? { ...NO_FIT } : fitSubmission(supports(submission), core, policy);
-    for (const entry of submission.entries) {
+    for (const entry of [...submission.entries, ...submission.blockers]) {
       entry.alignedStartMs = alignTime(entry.entry.startMs, submission.fit);
       entry.alignedEndMs = alignTime(entry.entry.endMs, submission.fit);
     }
@@ -68,13 +68,16 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
 
   const runtimeMs = counted.length ? integerMedian(counted.map(submission => submission.input.durationMs)) : null;
   const trust = versionTrust(input, counted.map(submission => submission.input.contributorId), rows, quarantinedContributors);
-  const content = servedContent(runtimeMs, trust, servedFilters);
+  const computed = servedContent(input.versionId, input.header, runtimeMs, trust, servedFilters);
+  const frozen = moderation.versionQuarantined ? input.previous?.servedContent ?? null : null;
+  const content = frozen ?? computed;
   const fits = new Map(counted.map(submission => [submission.input.submissionId, submission.fit]));
   return {
     versionId: input.versionId, filters, servedFilters,
     registry: [...rows.values()].sort((a, b) => compareAscii(a.filterId, b.filterId)),
     submissions: states.map(state => ({ ...state, fit: fits.get(state.submissionId) ?? null })),
-    attestations, runtimeMs, trust, servedContent: content, revision: nextRevision(input.previous, content),
+    attestations, runtimeMs, trust, servedContent: content,
+    revision: nextRevision(input.previous, content, moderation.versionQuarantined),
   };
 }
 
