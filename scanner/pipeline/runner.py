@@ -294,8 +294,9 @@ def run_scan(
         for stage in ("audio_extract", "audio_scan", "audio_qwen"):
             stage_settings[stage]["audio_selection"] = asdict(audio_selection)
 
-    def record_stage(stage: str, state: str) -> None:
+    def record_stage(stage: str, state: str, **settings: object) -> None:
         if stage_callback:
+            stage_settings[stage].update(settings)
             stage_callback(stage, state, stage_settings[stage])
 
     def record_visual_enrichment(event: str) -> None:

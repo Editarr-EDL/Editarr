@@ -132,12 +132,15 @@ def resolve_audio_model_name(model_name: str | None = None) -> str:
 
 
 def transcription_cache_model_key(
-    model_name: str | None = None, *, audio_language: str | None = None
+    model_name: str | None = None,
+    *,
+    audio_language: str | None = None,
+    apple_speech_locale: str | None = None,
 ) -> str:
     """Scope the transcript cache to the backend and its transcription settings."""
     selected_model = resolve_audio_model_name(model_name)
     model_variant = (
-        transcript_revision(speech_locale(audio_language))
+        transcript_revision(apple_speech_locale or speech_locale(audio_language))
         if selected_model == APPLE_SPEECH_MODEL
         else resolve_whisper_model_name()
     )
@@ -289,6 +292,7 @@ def scan_audio(
     audio_padding_seconds: float | None = None,
     decision_callback: Callable[[LanguageDecisionAttempt], None] | None = None,
     audio_language: str | None = None,
+    apple_speech_locale: str | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> list[FindingCreate]:
     """
@@ -315,7 +319,7 @@ def scan_audio(
         transcribe = partial(
             _transcribe_serialized,
             model_name=model_name,
-            locale=speech_locale(audio_language),
+            locale=apple_speech_locale or speech_locale(audio_language),
             should_cancel=should_cancel,
         )
     transcript_segments = _transcription_with_cache(

@@ -29,7 +29,7 @@ def _scan_audio_worker(
     cancel_event,
     qwen_model: str | None = None,
     audio_padding_seconds: float | None = None,
-    audio_language: str | None = None,
+    apple_speech_locale: str | None = None,
 ) -> None:
     """Run audio scanning in a subprocess to avoid native dylib collisions."""
     from scanner.pipeline import runner as root
@@ -45,7 +45,7 @@ def _scan_audio_worker(
                 transcript_cache_path=transcript_cache_path_value,
                 qwen_model=qwen_model,
                 audio_padding_seconds=audio_padding_seconds,
-                audio_language=audio_language,
+                apple_speech_locale=apple_speech_locale,
                 should_cancel=cancel_event.is_set,
                 provenance_callback=lambda state: queue.put({"enrichment": state}),
                 progress_callback=lambda fraction, message: queue.put(
@@ -148,7 +148,7 @@ def _scan_audio_isolated(
     qwen_model: str | None = None,
     provenance_callback: Callable[[str], None] | None = None,
     audio_padding_seconds: float | None = None,
-    audio_language: str | None = None,
+    apple_speech_locale: str | None = None,
 ) -> list[FindingCreate]:
     """Execute audio scanning in a spawned process and return findings."""
     from scanner.pipeline import runner as root
@@ -169,7 +169,7 @@ def _scan_audio_isolated(
             cancel_event,
             qwen_model,
             audio_padding_seconds,
-            audio_language,
+            apple_speech_locale,
         ),
     )
     proc.start()

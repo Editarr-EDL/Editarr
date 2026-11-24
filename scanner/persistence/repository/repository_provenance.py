@@ -7,6 +7,29 @@ from sqlalchemy.orm import Session
 from scanner.db import ScanRow, ScanStageCoverageRow
 from scanner.settings.version_info import version_information
 
+from .repository_checkpoints import _checkpoint_state
+
+
+def completed_stage_settings(scan: ScanRow, stage: str) -> dict[str, object] | None:
+    """Read settings from the completed execution selected by the scan checkpoint."""
+    checkpoint = _checkpoint_state(scan)
+    entry = checkpoint.get(stage)
+    if (
+        checkpoint.get("format_version") != 1
+        or not isinstance(entry, dict)
+        or entry.get("completed") is not True
+        or not isinstance(execution_id := entry.get("execution_id"), str)
+    ):
+        return None
+    for row in scan.stage_coverage:
+        if row.stage == stage and row.execution_id == execution_id and row.status == "complete":
+            try:
+                settings = json.loads(row.effective_settings_json or "{}")
+            except (TypeError, json.JSONDecodeError):
+                return None
+            return settings if isinstance(settings, dict) else None
+    return None
+
 
 def record_scan_stage(
     db: Session,
