@@ -83,6 +83,32 @@ def test_resolve_helper_builds_once_and_rebuilds_after_swift_source_changes(
 
 
 @pytest.mark.parametrize(
+    "sdk_version",
+    [pytest.param("15.5\n", id="older-sdk"), pytest.param(None, id="missing-sdk")],
+)
+def test_resolve_helper_rejects_unusable_sdk_without_starting_build(
+    source_runtime, monkeypatch, sdk_version
+):
+    _source, cache, _probed = source_runtime
+
+    def probe(command, **_options):
+        if sdk_version is None:
+            raise subprocess.CalledProcessError(1, command)
+        return sdk_version
+
+    def compile_command(*_args, **_options):
+        pytest.fail("an unsupported or missing SDK must not start the compiler")
+
+    monkeypatch.setattr(helper.subprocess, "check_output", probe)
+    monkeypatch.setattr(helper, "run_command", compile_command)
+
+    assert not helper.runtime_available()
+    with pytest.raises(RuntimeError, match="Command Line Tools with a macOS 26 SDK"):
+        helper.resolve_helper(cache, should_cancel=None)
+    assert not cache.exists()
+
+
+@pytest.mark.parametrize(
     ("cancelled", "error_type", "error_message"),
     [
         (False, RuntimeError, "Could not build the Apple Speech helper: swiftc failed"),
