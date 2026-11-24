@@ -19,15 +19,19 @@ def stage_publication(
     author_key_id: str,
     source_kind: str = "scan",
     source_id: str | None = None,
+    kind: str = "submission",
     **intent,
 ) -> CommunityPublicationRow:
-    """Flush both records; the caller must commit before any network work."""
+    """Flush both records; the caller must commit before any network work.
+
+    New approvals are `submission` operations; `publish` is the retired revision kind.
+    """
     source_id = source_id or intent.get("scan_id")
     if source_kind not in {"scan", "review"} or not source_id:
         raise ValueError("Publication requires an explicit persisted source")
     operation = enqueue_operation(
         db,
-        kind="publish",
+        kind=kind,
         authored_review_id=source_id if source_kind == "review" else None,
         **intent,
     )

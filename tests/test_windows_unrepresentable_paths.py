@@ -15,34 +15,24 @@ import pytest
 from sqlalchemy.orm import Session
 
 from scanner.db import (
-    CommunityImportRow,
-    CommunityOperationRow,
     MediaItemRow,
     PathMappingRow,
     SavedReviewRow,
 )
 from scanner.http import catalog_access
-from scanner.integrations.community.transport import CommunityFailure
 from scanner.integrations.jellyfin_library_folders import parse_library_folders
 from scanner.persistence.repository import repository_paths
-from scanner.persistence.repository.community_imports import import_verified_download
 from scanner.security.access.identity import CredentialKind
 from scanner.security.access.records import AuditEvent, AuditOutcome
 from scanner.security.audit.actions import AuditAction
 from scanner.security.audit.store import stage_event
 from tests import catalog_access_http as fixture
 from tests.catalog_access_http import LOCAL
-from tests.community_identity_support import only_identity_ref
+from tests.community_master_support import master_database
 from tests.media_access_support import FAMILY, FAMILY_FILM, FEATURE, LATE_SHOW, MOVIES
 from tests.multi_user_access_support import ADMIN, OWNER, USER
 from tests.test_audit_history_http import NOW, get, history
 from tests.test_catalog_authorization_http import catalog
-from tests.test_community_verified_import import (
-    BOUNDS,
-    import_database,
-    local_target,
-    verified_input,
-)
 from tests.test_operations_access_contracts import start
 from tests.test_review_access_http import app as review_app
 from tests.test_review_access_http import seeded_review
@@ -217,31 +207,6 @@ def test_a_review_of_an_unnameable_file_reports_its_media_unavailable(review_app
         assert response.json()["detail"]["code"] == "media_unavailable"
 
 
-def test_a_stale_unnameable_stored_path_refuses_only_that_community_import(
-    import_database, tmp_path, monkeypatch
-):
-    downloaded = verified_input()
-    target = local_target(downloaded, tmp_path)
-    with Session(import_database) as db:
-        media = db.get(MediaItemRow, target.media_item_id)
-        media.path = "/media/a\\b.mkv"
-        db.commit()
-        before = db.query(CommunityOperationRow).count()
-        monkeypatch.setattr(repository_paths, "_HOST_PATHS", ntpath)
-        with pytest.raises(CommunityFailure) as refused:
-            import_verified_download(
-                db,
-                downloaded,
-                target,
-                bounds=BOUNDS,
-                confirm_uncertain=True,
-                credential_ref=only_identity_ref(db),
-            )
-        assert refused.value.code == "invalid_target"
-        assert db.query(CommunityImportRow).count() == 0
-        assert db.query(CommunityOperationRow).count() == before
-
-
 def test_a_mapping_may_replace_a_remote_folder_name_holding_a_backslash(start, tmp_path, windows):
     app = start()
     local = tmp_path / "A"
@@ -273,10 +238,17 @@ def test_a_mapping_may_replace_a_remote_folder_name_holding_a_backslash(start, t
     assert refused.status_code == 400
 
 
-def test_a_windows_host_joins_the_mapped_folder_in_its_own_spelling(import_database, monkeypatch):
+@pytest.fixture
+def path_database(tmp_path):
+    engine, _factory = master_database(tmp_path)
+    yield engine
+    engine.dispose()
+
+
+def test_a_windows_host_joins_the_mapped_folder_in_its_own_spelling(path_database, monkeypatch):
     monkeypatch.setattr(repository_paths, "_HOST_PATHS", ntpath)
     monkeypatch.setattr(repository_paths, "Path", PureWindowsPath)
-    with Session(import_database) as db:
+    with Session(path_database) as db:
         db.add(PathMappingRow(remote_path="/remote/a\\b", local_path="C:/Media/A", sort_order=0))
         db.commit()
         resolution = repository_paths.resolve_local_path(db, "/remote/a\\b/film.mkv")

@@ -63,12 +63,28 @@ class PublicReference(BaseModel):
         )
 
 
+class AliasChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    choice: Literal["alias"]
+    alias_id: str = Field(pattern=r"^[a-z0-9_]{1,64}$")
+
+
+class OtherChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    choice: Literal["other"]
+    text: str | None = Field(default=None, max_length=64)
+
+
 class PreviewInput(BaseModel):
+    """The manual-sharing draft plus the master link and required version choice (§7)."""
+
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=128)
     identity_confirmed: StrictBool
     media: PublicReference | None = None
     audio_source_scan_id: str | None = Field(default=None, max_length=128)
+    link_id: str | None = Field(default=None, max_length=64)
+    version_choice: AliasChoice | OtherChoice = Field(discriminator="choice")
 
 
 class PreviewApproval(BaseModel):
@@ -283,6 +299,8 @@ async def prepare_preview(
             name=body.name,
             media=media,
             audio_source_scan_id=body.audio_source_scan_id,
+            version_choice=body.version_choice.model_dump(),
+            link_id=body.link_id,
         )
 
     return await _result(lambda: run_in_threadpool(action))

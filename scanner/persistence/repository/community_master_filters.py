@@ -247,7 +247,11 @@ def set_filter_vote(
 
 def refresh_local_verification(db: Session, link: CommunityMasterLinkRow) -> None:
     """Set `locally_verified` for verified and adjusted rows, and for rows that overlap
-    a local model finding of the same category on the link's local version."""
+    a local model finding of the same category on the link's local version.
+
+    Overlap counts only once master bounds are on the local timeline, so a fuzzy link
+    still awaiting alignment is verified only by the user's own decisions (D21).
+    """
     findings = db.execute(
         select(ScanFindingRow.category, ScanFindingRow.start_seconds, ScanFindingRow.end_seconds)
         .join(ScanRow, ScanRow.id == ScanFindingRow.scan_id)
@@ -261,6 +265,8 @@ def refresh_local_verification(db: Session, link: CommunityMasterLinkRow) -> Non
     by_category: dict[str, list] = {}
     for category, start, end in findings:
         by_category.setdefault(getattr(category, "value", category), []).append((start, end))
+    if link.alignment_state == "required":
+        by_category = {}
     alignment = alignment_of(link)
     rows = db.scalars(
         select(CommunityMasterFilterRow).where(CommunityMasterFilterRow.link_id == link.id)
@@ -275,3 +281,31 @@ def refresh_local_verification(db: Session, link: CommunityMasterLinkRow) -> Non
         if bool(row.locally_verified) != verified:
             row.locally_verified = verified
     db.flush()
+
+
+def refresh_version_verification(db: Session, media_version_id: str) -> int:
+    """Refresh `locally_verified` on every live link of a local version, for any account.
+
+    Call it when local model findings change, such as when a scan of the version
+    completes. Returns the number of links refreshed.
+    """
+    links = list(
+        db.scalars(
+            select(CommunityMasterLinkRow).where(
+                CommunityMasterLinkRow.media_version_id == media_version_id,
+                CommunityMasterLinkRow.link_state != "replaced",
+            )
+        )
+    )
+    for link in links:
+        refresh_local_verification(db, link)
+    return len(links)
+
+
+def refresh_scan_verification(db: Session, scan_id: str) -> int:
+    """Refresh the links of the local version a scan is bound to; see
+    `refresh_version_verification`."""
+    version_id = db.scalar(
+        select(ScanMediaVersionRow.version_id).where(ScanMediaVersionRow.scan_id == scan_id)
+    )
+    return 0 if version_id is None else refresh_version_verification(db, version_id)

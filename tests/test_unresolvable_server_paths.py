@@ -36,6 +36,7 @@ from scanner.security.media_access.service import decide_media, load_subject
 from tests import catalog_access_http as fixture
 from tests import media_access_support
 from tests.catalog_access_http import LOCAL
+from tests.community_master_support import master_database
 from tests.media_access_support import (
     FAMILY,
     FAMILY_FILM,
@@ -49,7 +50,6 @@ from tests.multi_user_access_support import ADMIN, OWNER, USER
 from tests.scan_access_http import LIBRARY_A, guid
 from tests.test_audit_history_http import NOW, get, history
 from tests.test_catalog_authorization_http import catalog
-from tests.test_community_verified_import import import_database
 from tests.test_jellyfin_account_evidence import ScriptedAdapter, clock, linked
 from tests.test_operations_access_contracts import start
 from tests.test_review_access_http import app as review_app
@@ -71,6 +71,13 @@ REFUSED_FORMS = [
 
 def _tolerant(client) -> None:
     client._transport.raise_server_exceptions = False
+
+
+@pytest.fixture
+def import_database(tmp_path):
+    engine, _factory = master_database(tmp_path)
+    yield engine
+    engine.dispose()
 
 
 @pytest.mark.parametrize("path", REFUSED_FORMS)

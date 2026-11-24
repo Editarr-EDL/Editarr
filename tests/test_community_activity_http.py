@@ -21,6 +21,7 @@ from scanner.db import (
     ScanRow,
     UserCapabilityOverrideRow,
 )
+from scanner.formats.community.codec import ResourceBounds
 from scanner.http import (
     community_activity_access,
     community_api,
@@ -29,65 +30,77 @@ from scanner.http import (
 )
 from scanner.integrations.community.sharing import previews
 from scanner.integrations.community.transport import CommunityTransport, ServiceEndpoint
+from scanner.modeling.community_normalization import SEEDED_ALIASES
 from scanner.persistence.repository.repository_community import identity_connection
 from scanner.security.access.capability_ids import Capability as C
 from tests.community_identity_users_support import AUDIENCE, SERVICE, MockService
 from tests.multi_user_access_http import serve_access_fixture
 from tests.multi_user_access_support import ADMIN, PEER_USER, USER
 from tests.test_community_activity_access import activities as activities
-from tests.test_community_donations import BOUNDS
 from tests.test_community_identity_users import _enroll
 from tests.test_stream_fingerprints import generated_streams as generated_streams
 from tests.users_api_http_support import UsersApp
 
+BOUNDS = ResourceBounds(65536, 524288, 100, 4096, 24)
+ALIASES = [
+    {"aliasId": alias.alias_id, "label": alias.label, "spellings": list(alias.spellings)}
+    for alias in SEEDED_ALIASES
+]
+
 
 class ActivityService(MockService):
+    """Accept `POST /v1/submissions`, replaying the stored result for a repeated operation."""
+
     def __init__(self):
         super().__init__()
         self.posts = []
-        self.publications = {}
-        self.on_check = None
+        self.submissions = {}
 
     async def __call__(self, request):
-        path = request.url.path
-        if path.startswith("/v1/publication-operations/"):
+        if request.url.path == "/v1/aliases":
             self._signer(request)
-            if self.on_check is not None:
-                action, self.on_check = self.on_check, None
-                action()
-            operation = path.rsplit("/", 1)[1]
-            return (
-                httpx.Response(200, json=self.publications[operation])
-                if operation in self.publications
-                else httpx.Response(404, json={"error": {"code": "operation_not_found"}})
-            )
-        if path == "/v1/contributions":
+            return httpx.Response(200, json={"version": 1, "aliases": ALIASES})
+        if request.url.path == "/v1/submissions":
             installation = self._signer(request)
             contributor = self.contributors[installation]
             body = json.loads(request.content)
             artifact = gzip.decompress(base64.b64decode(body["artifact"]))
-            assert json.loads(artifact)["author"]["contributor_id"] == contributor
+            assert json.loads(artifact)["author"]["contributorId"] == contributor
             operation = request.headers["idempotency-key"]
+            assert operation == "submit-" + body["submissionId"]
             self.posts.append((contributor, operation))
-            self.publications.setdefault(
+            self.submissions.setdefault(
                 operation,
                 {
                     "version": 1,
                     "state": "completed",
-                    "publicationState": "published",
                     "result": {
                         "version": 1,
                         "operationId": operation,
-                        "contributionId": body["contributionId"],
-                        "revisionId": body["submissionId"],
-                        "committedAt": 1700000030,
-                        "artifactDigest": hashlib.sha256(
+                        "submissionId": body["submissionId"],
+                        "submissionDigest": hashlib.sha256(
                             base64.b64decode(body["artifact"])
                         ).hexdigest(),
+                        "workId": "w_1",
+                        "versionId": "v_1",
+                        "versionStatus": "confirmed",
+                        "disposition": "created_confirmed",
+                        "tier": None,
+                        "revision": 1,
+                        "supersedes": None,
+                        "outcome": {
+                            "newFilters": 1,
+                            "supports": 1,
+                            "disputes": 0,
+                            "coverageNegatives": 0,
+                            "ignored": 0,
+                            "unassigned": 0,
+                        },
+                        "aliasSuggestion": None,
                     },
                 },
             )
-            return httpx.Response(200, json=self.publications[operation])
+            return httpx.Response(200, json=self.submissions[operation])
         return await super().__call__(request)
 
 
@@ -179,6 +192,7 @@ def preview(app, user, kind, identifier):
             "name": "Synthetic public filters",
             "identity_confirmed": True,
             "media": {"provider": "tmdb", "entity_type": "movie", "reference": "123"},
+            "version_choice": {"choice": "alias", "alias_id": "theatrical"},
         },
     )
 
@@ -208,8 +222,8 @@ def test_admin_new_publication_and_retry_use_the_correct_contributors(community)
             db, homes[ADMIN].credential_ref, SERVICE
         ).contributor_id
     assert own_contributor != admin_contributor
-    assert own_preview["preview"]["artifact"]["author"]["contributor_id"] == own_contributor
-    assert admin_preview["preview"]["artifact"]["author"]["contributor_id"] == admin_contributor
+    assert own_preview["preview"]["artifact"]["author"]["contributorId"] == own_contributor
+    assert admin_preview["preview"]["artifact"]["author"]["contributorId"] == admin_contributor
     assert (own["ownerId"], own["contributorId"]) == (USER, own_contributor)
     assert (managed["ownerId"], managed["contributorId"]) == (ADMIN, admin_contributor)
     context = app.send("GET", f"/api/community/sharing/sources/review/{review}", ADMIN)
@@ -345,7 +359,7 @@ def test_check_only_context_conceals_scan_without_findings_access(community):
 
 
 @pytest.mark.parametrize("change", ["permission", "disconnect", "session"])
-def test_recheck_after_remote_lookup_prevents_a_queued_send(community, change):
+def test_recheck_before_sending_prevents_a_queued_send(community, change):
     app, service, homes, _scan, review = community
     _prepared, job = queue(app, USER, review)
 
@@ -367,7 +381,7 @@ def test_recheck_after_remote_lookup_prevents_a_queued_send(community, change):
                 identity_connection(db, homes[USER].credential_ref, SERVICE).contributor_id = None
             db.commit()
 
-    service.on_check = revoke
+    revoke()
     result = app.send(
         "POST", f"/api/community/publications/{job['operationId']}/retry", USER, {"confirmed": True}
     )
@@ -388,7 +402,7 @@ def test_transport_retry_rechecks_authority_before_second_send(community, monkey
     original = type(service).__call__
 
     async def flaky(self, request):
-        if request.url.path == "/v1/contributions":
+        if request.url.path == "/v1/submissions":
             attempts.append(request.headers["idempotency-key"])
             if len(attempts) == 1:
                 with app.accounts.factory() as db:
@@ -410,7 +424,7 @@ def test_transport_retry_rechecks_authority_before_second_send(community, monkey
         USER,
         {"confirmed": True},
     )
-    assert attempts == [job["operationId"]]
+    assert len(attempts) == 1 and attempts[0].startswith("submit-sub_")
     assert result.status_code == 403 and result.json()["code"] == "capability_denied"
     assert service.posts == []
     with app.accounts.factory() as db:

@@ -95,15 +95,6 @@ class ReviewNeedsRepair(RuntimeError):
         self.repair = repair
 
 
-class CommunityScanUnavailable(ReviewNeedsRepair):
-    code = "community_scan_unavailable"
-
-    def __init__(self, repair, reason, *, transient):
-        super().__init__(repair)
-        self.reason = reason
-        self.transient = transient
-
-
 def require_repaired(db, review_id):
     repair = repair_summary(db, review_id)
     if repair is not None:

@@ -21,11 +21,16 @@ from scanner.security.community_signatures import (
 
 
 class CommunityFailure(RuntimeError):
-    """Machine-readable failure with no remote payload, query or secret in its message."""
+    """Machine-readable failure with no remote payload, query or secret in its message.
 
-    def __init__(self, code: str, *, retryable: bool = False):
+    `details` carries only the bounded extra fields a contract error defines, such as
+    `mergedInto`, a `reason` token or a `retryAfter` delay in seconds.
+    """
+
+    def __init__(self, code: str, *, retryable: bool = False, details: dict | None = None):
         self.code = code
         self.retryable = retryable
+        self.details = dict(details or {})
         super().__init__(code)
 
 
@@ -47,8 +52,13 @@ class ServiceEndpoint:
             raise CommunityFailure("invalid_endpoint") from error
 
     def target(self, path: str) -> str:
+        """The signed URL for `path`; only a single `name=<decimal>` query is accepted."""
+        path, separator, query = path.partition("?")
+        if separator and not re.fullmatch(r"[A-Za-z]{1,32}=[0-9]{1,16}", query):
+            raise CommunityFailure("invalid_endpoint")
         if not path.startswith("/v1/") or "?" in path or "#" in path or "\\" in path:
             raise CommunityFailure("invalid_endpoint")
+        path += separator + query
         target = self.url + path
         try:
             url_components(target)
@@ -127,7 +137,40 @@ _REMOTE_CODES = {
     "vote_ineligible",
     "vote_query_limit",
     "revision_not_available",
+    "invalid_match",
+    "invalid_submission",
+    "upload_suspended",
+    "submission_conflict",
+    "work_identity_required",
+    "unknown_alias",
+    "invalid_taxonomy",
+    "invalid_bounds",
+    "key_mismatch",
+    "version_not_found",
+    "version_unavailable",
+    "version_merged",
+    "invalid_master_request",
+    "filter_not_found",
+    "sync_rate_limited",
+    "report_ineligible",
+    "report_already_open",
+    "invalid_sync",
+    "invalid_report",
 }
+_TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+
+
+def _error_details(error: dict, retry_after: str) -> dict:
+    """Keep only the contract-defined extra error fields, each a bounded token."""
+    details = {
+        name: error[name]
+        for name in ("mergedInto", "reason")
+        if isinstance(error.get(name), str) and _TOKEN.fullmatch(error[name])
+    }
+    if retry_after.isascii() and retry_after.isdigit() and len(retry_after) <= 9:
+        details["retryAfter"] = int(retry_after)
+    return details
+
 
 _RECOVERY_CANDIDATE_ROUTES = {
     ("POST", "/v1/keys/recovery-status"),
@@ -239,8 +282,6 @@ class CommunityTransport:
                 headers = {name: value for name, value in signed.items() if isinstance(value, str)}
                 headers["accept"] = "application/json"
                 headers["accept-encoding"] = "identity"
-                if method == "POST" and path == "/v1/matches":
-                    headers["editarr-filter-details"] = "1"
                 try:
                     async with client.stream(
                         method, target, content=body, headers=headers
@@ -276,21 +317,24 @@ class CommunityTransport:
                             ):
                                 raise CommunityFailure("invalid_response")
                             return payload
-                        code = (
-                            payload.get("error", {}).get("code")
-                            if (
-                                isinstance(payload, dict) and isinstance(payload.get("error"), dict)
-                            )
-                            else None
+                        error = (
+                            payload["error"]
+                            if isinstance(payload, dict) and isinstance(payload.get("error"), dict)
+                            else {}
                         )
+                        code = error.get("code")
                         code = (
                             code
                             if isinstance(code, str) and code in _REMOTE_CODES
                             else "remote_error"
                         )
                         retryable = response.status_code in {429, 502, 503, 504}
-                        failure = CommunityFailure(code, retryable=retryable)
                         retry_after = response.headers.get("retry-after", "")
+                        failure = CommunityFailure(
+                            code,
+                            retryable=retryable,
+                            details=_error_details(error, retry_after),
+                        )
                         if retry_after:
                             try:
                                 wait = float(retry_after)

@@ -20,7 +20,6 @@ from scanner.modeling.model_version_reuse import (
 from scanner.modeling.version_alignment import Alignment, TimedWord, transcript_anchors
 from scanner.models import JellyfinMediaItem
 from scanner.persistence.repository import media_identity_store as identity
-from scanner.persistence.repository.community_imports import _target_choices
 from scanner.persistence.repository.repository_audio_tracks import (
     record_analyzed_audio_selection,
     recorded_playback_offset,
@@ -98,17 +97,6 @@ def test_pending_import_remains_visible_but_ineligible_for_membership():
         row.origin = "imported"
         row.checkpoint_state = '{"identity_reuse_pending":true}'
         assert not _scan_is_available(db, row, media_item_id="media", media_source_id=None)
-
-
-def test_community_staging_keeps_approved_channels_and_never_promotes_pending():
-    evidence = {"selected_channels": ["video"]}
-    scan = SimpleNamespace(scan_audio=True, scan_video=True)
-    target = SimpleNamespace(selected_channels=("audio", "video"), stage_for_verification=True)
-    _target_choices(evidence, target, scan)
-    assert evidence == {"selected_channels": ["video"], "pending_channels": ["audio"]}
-    target.stage_for_verification = False
-    _target_choices(evidence, target, scan)
-    assert evidence == {"selected_channels": ["video"], "pending_channels": ["audio"]}
 
 
 def test_a_weak_historical_pin_cannot_verify_physical_evidence(tmp_path):

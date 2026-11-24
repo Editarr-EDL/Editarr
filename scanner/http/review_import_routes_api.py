@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from scanner import api as root
 from scanner.api import _import_error_responses
 from scanner.formats.edl import EdlParseError
-from scanner.integrations.community.local_downloads import drained_thread
 from scanner.mcf import (
     MAX_CONTENT_BYTES as MAX_MCF_CONTENT_BYTES,
 )
@@ -41,6 +40,7 @@ from scanner.runtime.media_fingerprints import SampledMediaFingerprint, sampled_
 from scanner.runtime.scan_version import ScanVersionChanged, file_generation
 from scanner.security.access.capability_ids import Capability as C
 
+from .drained_threads import drained_thread
 from .review_access import review_caller
 from .review_import_helpers_api import (
     _import_error_line,

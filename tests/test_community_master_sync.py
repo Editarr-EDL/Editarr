@@ -47,16 +47,17 @@ def test_a_run_is_due_once_a_day_and_not_while_running(db):
     assert sync_status(db, MEMBER, SERVICE, now=T0).due
 
 
-def test_a_failed_or_abandoned_run_stays_due(db):
+def test_a_failed_run_backs_off_and_an_abandoned_run_is_due_again(db):
     run = begin_sync(db, OWNER, SERVICE, contributor_id=None, now=T0)
     finish_sync(db, OWNER, SERVICE, run, error_code="service_unavailable", now=T0)
     status = sync_status(db, OWNER, SERVICE, now=T0)
-    assert (status.state, status.last_error, status.due) == ("failed", "service_unavailable", True)
-    begin_sync(db, OWNER, SERVICE, contributor_id=None, now=T0)
+    assert (status.state, status.last_error, status.due) == ("failed", "service_unavailable", False)
+    assert sync_status(db, OWNER, SERVICE, now=T0 + timedelta(hours=1)).due
+    assert begin_sync(db, OWNER, SERVICE, contributor_id=None, now=T0 + timedelta(hours=1))
     assert begin_sync(db, OWNER, SERVICE, contributor_id=None, now=T0 + timedelta(hours=2))
 
 
-def test_links_to_sync_are_the_accounts_active_links(db):
+def test_links_to_sync_are_the_accounts_followed_links(db):
     created = link(db, served("f_a"))
     link(db, served("f_a"), owner=MEMBER)
     assert [item.id for item in links_to_sync(db, OWNER, SERVICE)] == [created.id]

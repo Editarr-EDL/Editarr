@@ -4,9 +4,9 @@ import uuid
 
 from scanner import repository
 from scanner.db import MediaItemRow, ReviewFilterRow, ScanFindingRow, ScanRow
-from scanner.formats.community.codec import parse_artifact
-from scanner.integrations.community.donation_projection import project_source
-from scanner.integrations.community.donation_sources import SourceRef, canonical, capture_source
+from scanner.formats.community.codec import ResourceBounds
+from scanner.integrations.community.donation_sources import SourceRef, capture_source
+from scanner.integrations.community.submission_projection import project_submission
 from scanner.models import (
     EditAction,
     NewManualReviewFilter,
@@ -19,7 +19,9 @@ from scanner.models import (
 from tests.review_repository_support import review_db
 from tests.review_retime_request import _request
 from tests.review_retime_support import retime_review as retime_review
-from tests.test_community_donations import BOUNDS, options
+from tests.test_community_submission_projection import options
+
+BOUNDS = ResourceBounds(65536, 524288, 100, 4096, 24)
 
 
 def _create(db, **values):
@@ -64,10 +66,12 @@ def _counts(db, review):
     captured = capture_source(
         db.get_bind(), SourceRef("review", review.id), bounds=BOUNDS, source_limit=4
     )
-    artifact, *_ = project_source(
-        captured, options(duration_seconds=review.synchronization.end_seconds), bounds=BOUNDS
+    duration_ms = int(review.synchronization.end_seconds * 1000)
+    projection = project_submission(
+        captured.data(), "review", options(duration_ms=duration_ms), None
     )
-    return parse_artifact(canonical(artifact), bounds=BOUNDS).summary["manual_filter_counts"]
+    origins = [entry.evidence.origin for entry in projection.artifact.entries]
+    return {"manual": origins.count("manual"), "shared": len(origins)}
 
 
 def test_manual_additions_and_surviving_edits_roll_through_saves_and_duplicate(
@@ -99,7 +103,7 @@ def test_manual_additions_and_surviving_edits_roll_through_saves_and_duplicate(
             new_manual_filters=[draft],
         )
         assert _flags(db, review.id) == {1: (False, False), 2: (True, False)}
-        assert _counts(db, review) == {"added": 1, "edited": 0}
+        assert _counts(db, review) == {"manual": 1, "shared": 2}
 
         generated, manual = review.filters
         generated = generated.model_copy(update={"start_seconds": 1.25})
@@ -110,7 +114,7 @@ def test_manual_additions_and_surviving_edits_roll_through_saves_and_duplicate(
         manual = manual.model_copy(update={"start_seconds": 6.25})
         saved = _save(db, changed, [generated, manual])
         assert _flags(db, review.id) == {1: (False, True), 2: (True, True)}
-        assert _counts(db, saved) == {"added": 1, "edited": 1}
+        assert _counts(db, saved) == {"manual": 1, "shared": 1}
         copied = repository.duplicate_saved_review(
             db,
             saved.id,
@@ -123,7 +127,7 @@ def test_manual_additions_and_surviving_edits_roll_through_saves_and_duplicate(
         )
         assert _flags(db, copied.id) == _flags(db, saved.id)
         assert set(row.id for row in copied.filters).isdisjoint(x.id for x in saved.filters)
-        assert _counts(db, copied) == {"added": 1, "edited": 1}
+        assert _counts(db, copied) == {"manual": 1, "shared": 1}
 
 
 def test_first_save_detects_draft_edits_but_ignores_selection():
@@ -160,7 +164,7 @@ def test_pure_retime_keeps_legacy_unknown_and_draft_adjustment_is_recorded(retim
         mcf_document=retimed.mcf_document,
     )
     assert _flags(db, review.id) == {1: (None, None)}
-    assert _counts(db, saved) == {"added": None, "edited": None}
+    assert _counts(db, saved) == {"manual": 0, "shared": 1}
     draft = saved.filters[0].model_copy(update={"start_seconds": 25.5})
     _save(db, saved, [draft])
     assert _flags(db, review.id) == {1: (None, True)}
@@ -194,9 +198,10 @@ def test_saved_filters_report_label_edits_separately_from_other_edits():
             ],
         )
         assert echoed.filters[0].label_edited is False
-        assert "label_edited" not in ReviewFilterInput.model_validate(
-            echoed.filters[0].model_dump()
-        ).model_dump()
+        assert (
+            "label_edited"
+            not in ReviewFilterInput.model_validate(echoed.filters[0].model_dump()).model_dump()
+        )
 
 
 def _statements_for_detail(db, review_id):
@@ -232,9 +237,14 @@ def test_label_provenance_uses_a_constant_number_of_queries(monkeypatch):
             for index in range(findings - 1):
                 db.add(
                     ScanFindingRow(
-                        scan_id="scan", category="language", subcategory="swearing",
-                        start_seconds=3 + index * 0.01, end_seconds=3.005 + index * 0.01,
-                        label=f"word {index}", source="audio", selected=True,
+                        scan_id="scan",
+                        category="language",
+                        subcategory="swearing",
+                        start_seconds=3 + index * 0.01,
+                        end_seconds=3.005 + index * 0.01,
+                        label=f"word {index}",
+                        source="audio",
+                        selected=True,
                         edit_action="mute",
                     )
                 )

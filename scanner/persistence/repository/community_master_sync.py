@@ -21,6 +21,8 @@ from .community_master_links import utcnow
 SYNC_INTERVAL = timedelta(hours=24)
 # A run not finished after this long is treated as abandoned so a new one may start.
 STALE_RUN = timedelta(hours=1)
+# How long a failed run waits when the service gave no `Retry-After`.
+FAILED_RETRY = timedelta(hours=1)
 NOTIFICATION_LIMIT = 100
 NOTIFICATION_KINDS = ("changed", "merged", "unavailable")
 
@@ -51,10 +53,13 @@ def _running(row: CommunitySyncStateRow, now: datetime) -> bool:
 
 
 def sync_due(row: CommunitySyncStateRow | None, now: datetime) -> bool:
-    """Due unless the last success was under 24 hours ago or a run is in progress."""
+    """Due unless the last success was under 24 hours ago, a run is in progress, or a
+    failed run's retry time has not come."""
     if row is None:
         return True
     if _running(row, now):
+        return False
+    if row.state == "failed" and row.next_due_at is not None and now < row.next_due_at:
         return False
     return row.last_success_at is None or now - row.last_success_at >= SYNC_INTERVAL
 
@@ -106,9 +111,11 @@ def finish_sync(
     run_id: str,
     *,
     error_code: str | None = None,
+    retry_after: timedelta | None = None,
     now: datetime | None = None,
 ) -> bool:
-    """End the run `run_id`: success sets the next due time; failure keeps it due.
+    """End the run `run_id`: success sets the next due time 24 hours on; a failure is
+    due again after `retry_after` (one hour by default).
 
     Returns False, changing nothing, when another run has claimed the state since.
     """
@@ -121,19 +128,23 @@ def finish_sync(
         row.next_due_at = now + SYNC_INTERVAL
     else:
         row.state, row.last_error_code = "failed", error_code
+        row.next_due_at = now + (retry_after or FAILED_RETRY)
     db.flush()
     return True
 
 
 def links_to_sync(db: Session, owner_id: int, service_url: str) -> list[CommunityMasterLinkRow]:
-    """The account's active links with one service, in a stable order for batching."""
+    """The account's active and unavailable links with one service, in a stable order.
+
+    Unavailable links are checked too, so a restored version is followed again.
+    """
     return list(
         db.scalars(
             select(CommunityMasterLinkRow)
             .where(
                 CommunityMasterLinkRow.owner_id == owner_id,
                 CommunityMasterLinkRow.service_url == service_url,
-                CommunityMasterLinkRow.link_state == "active",
+                CommunityMasterLinkRow.link_state.in_(("active", "unavailable")),
             )
             .order_by(CommunityMasterLinkRow.id)
         )

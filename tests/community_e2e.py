@@ -1,9 +1,9 @@
-"""Two independent Editarr HTTP processes talking to a real community service."""
+"""Independent Editarr HTTP processes sharing and following master filter sets on a real
+community service."""
 
 import json
 import os
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -43,16 +43,6 @@ class Installation:
                     "depth": 24,
                 }
             ),
-            EDITARR_COMMUNITY_DOWNLOAD_BOUNDS=json.dumps(
-                {
-                    "compressed_bytes": 65536,
-                    "expanded_bytes": 524288,
-                    "events": 100,
-                    "text": 4096,
-                    "depth": 24,
-                }
-            ),
-            EDITARR_COMMUNITY_DOWNLOAD_RESPONSE_BYTES="131072",
         )
         self.environment = environment
         self.csrf = None
@@ -125,16 +115,27 @@ class Installation:
 
     def remote(self, method, path, body=None):
         """Use the real signing client for service operations without a local UI adapter."""
+        return self._run("request", {"method": method, "path": path, "body": body})
+
+    def master(self, action, **values):
+        """Run one master-set integration action (`tests.community_e2e_masters`)."""
+        return self._run("master", {"action": action, **values})
+
+    def _run(self, command, value):
         response = subprocess.run(
-            [sys.executable, "-m", "tests.community_e2e_app", "request"],
+            [sys.executable, "-m", "tests.community_e2e_app", command],
             env=self.environment,
-            input=json.dumps({"method": method, "path": path, "body": body}),
+            input=json.dumps(value),
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
         )
         assert response.returncode == 0, response.stderr
-        return json.loads(response.stdout)
+        result = json.loads(response.stdout.strip().splitlines()[-1])
+        if isinstance(result, dict) and "error" in result:
+            # Kept for failure messages; an expected refusal leaves the trace unused.
+            self.last_error_trace = response.stderr[-3000:]
+        return result
 
     def enroll(self, control, subject, *, setup=True):
         if setup:
@@ -244,91 +245,105 @@ def find_filters(application):
     application.request("POST", "/api/filter-candidates", TARGET)
 
 
-def donate(author, *, lose_response=False):
-    scan = author.request(
+THEATRICAL = {"choice": "alias", "alias_id": "theatrical"}
+MEDIA = {"provider": "tmdb", "entity_type": "movie", "reference": "123"}
+
+
+def scan(application, name, **options):
+    body = {
+        "jellyfin_item_id": JELLYFIN_ITEM,
+        "name": name,
+        "scan_audio": False,
+        "scan_video": True,
+        "video_model": "nudenet",
+    }
+    created = application.request("POST", "/api/scans", body | options, expected=201)
+    history = application.request("GET", "/api/scans/history")
+    assert next(item for item in history if item["id"] == created["id"])["status"] == "complete"
+    return created
+
+
+def preview(application, kind, source_id, **extra):
+    return application.request(
         "POST",
-        "/api/scans",
+        f"/api/community/sharing/sources/{kind}/{source_id}/preview",
         {
-            "jellyfin_item_id": JELLYFIN_ITEM,
-            "name": "Donor scan",
-            "scan_audio": False,
-            "scan_video": True,
-            "video_model": "nudenet",
-        },
-        expected=201,
-    )
-    history = author.request("GET", "/api/scans/history")
-    assert next(item for item in history if item["id"] == scan["id"])["status"] == "complete"
-    preview = author.request(
-        "POST",
-        f"/api/community/sharing/sources/scan/{scan['id']}/preview",
-        {
-            "name": "Public synthetic donation",
+            "name": "Public synthetic submission",
             "identity_confirmed": True,
-            "media": {"provider": "tmdb", "entity_type": "movie", "reference": "123"},
-        },
+            "media": MEDIA,
+            "version_choice": THEATRICAL,
+        }
+        | extra,
     )
-    approved = author.request(
+
+
+def approve(application, prepared):
+    approved = application.request(
         "POST",
-        f"/api/community/sharing/previews/{preview['previewId']}/approve",
+        f"/api/community/sharing/previews/{prepared['previewId']}/approve",
         {"confirmed": True},
     )
-    assert approved["state"] == "pending"
-    if lose_response:
-        author.lose_responses("/v1/contributions")
-    published = author.request(
-        "POST", f"/api/community/publications/{approved['operationId']}/retry", {"confirmed": True}
+    assert approved["state"] == "pending", approved
+    return approved
+
+
+def send(application, job):
+    return application.request(
+        "POST", f"/api/community/publications/{job['operationId']}/retry", {"confirmed": True}
     )
+
+
+def donate(author, *, lose_response=False):
+    """Share a scan; after lost responses the same bytes replay to the stored result."""
+    created = scan(author, "Donor scan")
+    prepared = preview(author, "scan", created["id"])
+    assert prepared["estimates"]["newFilters"] == len(prepared["preview"]["artifact"]["entries"])
+    job = approve(author, prepared)
+    if lose_response:
+        author.lose_responses("/v1/submissions")
+    published = send(author, job)
     if lose_response:
         assert published["state"] == "paused", published
-        attempts = author.wire("/v1/contributions")
+        attempts = author.wire("/v1/submissions")
         assert len(attempts) == 3 and len({item["digest"] for item in attempts}) == 1
-        assert len({item["operation"] for item in attempts}) == 1
+        assert {item["operation"] for item in attempts} == {job["operationId"]}
         author.restart()
-        published = author.request(
-            "POST", f"/api/community/publications/{approved['operationId']}/check"
+        assert (
+            author.request("POST", f"/api/community/publications/{job['operationId']}/check")[
+                "state"
+            ]
+            == "paused"
         )
-        assert len(author.wire("/v1/contributions")) == 3
+        assert len(author.wire("/v1/submissions")) == 3
+        published = send(author, job)
+        attempts = author.wire("/v1/submissions")
+        assert len(attempts) == 4 and len({item["digest"] for item in attempts}) == 1
     assert published["state"] == "published", published
+    assert published["result"]["disposition"] == "created_confirmed", published
     return published
 
 
-def find_and_download(reader):
-    lookup = {"target": TARGET}
-    find_filters(reader)
-    found = reader.request("POST", "/api/community/lookup", lookup)
-    assert found["pageError"] is None, found
-    (candidate,) = found["page"]["candidates"]
-    assert candidate["compatibility"]["selected"] is False
-    choice = {name: candidate[name] for name in ("contributionId", "revisionId", "artifactDigest")}
-    choice["channels"] = ["video"]
-    request = {
-        "lookup": lookup | {"target_key": found["targetKey"]},
-        "choice": choice,
-        "confirmed": True,
-    }
-    with sqlite3.connect(reader.directory / "scanner.db") as db:
-        assert db.execute("SELECT COUNT(*) FROM community_imports").fetchone()[0] == 0
-    for field, changed in (("contributionId", "wrong-root"), ("artifactDigest", "a" * 64)):
-        refused = reader.request(
-            "POST",
-            "/api/community/downloads",
-            request
-            | {
-                "choice": choice | {field: changed},
-            },
-            expected=409,
-        )
-        assert refused["code"] == "candidate_changed", refused
-    reader.lose_responses("/v1/import-receipts")
-    downloaded = reader.request("POST", "/api/community/downloads", request)
-    assert downloaded["status"] == "imported", downloaded
-    assert downloaded["receiptState"] == "submitted", downloaded
-    reused = reader.request("POST", "/api/community/downloads", request)
-    assert reused["status"] == "reused" and reused["scan"]["id"] == downloaded["scan"]["id"]
-    with sqlite3.connect(reader.directory / "scanner.db") as db:
-        assert db.execute("SELECT COUNT(*) FROM community_imports").fetchone()[0] == 1
-    return downloaded, candidate
+def find_and_download(application):
+    """Find the shared version by its file keys and apply its master set directly."""
+    find_filters(application)
+    outcome = application.master("find_download")
+    assert "error" not in outcome, outcome
+    found, link = outcome["found"], outcome["link"]
+    assert found["findKey"] and found["error"] is None, found
+    assert {"sha256_sampled", "md5_quick"} <= set(found["keysUsed"]), found
+    (result,) = found["results"]
+    assert (result["tier"], result["matchPercent"], result["alignmentRequired"]) == (
+        "2",
+        80,
+        False,
+    ), result
+    assert (link["tier"], link["alignmentState"], link["linkState"]) == (
+        "2",
+        "not_required",
+        "active",
+    )
+    assert link["filters"] and all(item["active"] for item in link["filters"]), link
+    return found, link
 
 
 def exercise(configuration):
@@ -351,29 +366,24 @@ def exercise(configuration):
         connect_jellyfin(author)
         connect_jellyfin(reader)
         publication = donate(author, lose_response=True)
-        imported, candidate = find_and_download(reader)
-        assert candidate["attribution"]["contributorId"] == first["profile"]["contributorId"]
-        assert imported["scan"]["community_provenance"]["revision_id"] == candidate["revisionId"]
+        found, link = find_and_download(reader)
+        assert found["results"][0]["communityVersionId"] == publication["result"]["versionId"]
         from tests.community_e2e_backups import backup_roundtrips
         from tests.community_e2e_workflows import (
             authority_and_recovery,
-            feedback_and_review,
-            selected_audio_and_derivation,
+            contributions_and_updates,
+            feedback,
             sibling_and_storage,
         )
 
-        feedback_and_review(
-            configuration, author, reader, publication, imported, candidate, recipient_media
-        )
+        feedback(configuration, author, reader, link)
         sibling = Installation(Path(directory) / "sibling", configuration["local"])
         stack.callback(sibling.close)
         sibling.enroll(configuration["control"], "1554889314549243999")
-        backup_roundtrips(configuration, reader, candidate, recipient_media, Installation)
-        authority_and_recovery(configuration, author, reader, candidate, recipient_media)
-        sibling_and_storage(configuration, author, reader, sibling, candidate, donor_media)
-        selected_audio_and_derivation(
-            configuration, author, reader, donor_media, recipient_media, candidate
-        )
+        backup_roundtrips(configuration, reader, link, Installation)
+        authority_and_recovery(configuration, reader, link)
+        sibling_and_storage(configuration, author, reader, sibling, link, donor_media)
+        contributions_and_updates(configuration, author, reader, link)
     print(json.dumps({"instances": 3, "backupRestores": 2}))
 
 
