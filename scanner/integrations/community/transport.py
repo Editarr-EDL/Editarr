@@ -15,8 +15,8 @@ import httpx
 from scanner.security.community_identity import InstallationIdentity
 from scanner.security.community_signatures import (
     SignatureProfileError,
-    _url_components,
     sign_request,
+    url_components,
 )
 
 
@@ -38,7 +38,7 @@ class ServiceEndpoint:
         try:
             if not isinstance(self.url, str) or not isinstance(self.audience, str):
                 raise ValueError("Expected configured endpoint and audience")
-            _, authority, path, query = _url_components(self.url)
+            _, authority, path, query = url_components(self.url)
             if path != "/" or query != "?" or self.url != f"https://{authority}":
                 raise ValueError("Expected service origin")
             if authority != self.audience:
@@ -51,7 +51,7 @@ class ServiceEndpoint:
             raise CommunityFailure("invalid_endpoint")
         target = self.url + path
         try:
-            _url_components(target)
+            url_components(target)
         except SignatureProfileError as error:
             raise CommunityFailure("invalid_endpoint") from error
         return target

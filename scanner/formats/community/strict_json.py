@@ -83,24 +83,69 @@ def parse_strict_json(
     return value
 
 
-def _canonical_numbers(value: object) -> object:
-    if isinstance(value, dict):
-        return {key: _canonical_numbers(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_canonical_numbers(item) for item in value]
-    if isinstance(value, float) and value.is_integer():
-        # Match JavaScript number spelling so an integral float such as 1.0 encodes as 1.
-        return int(value)
-    return value
+def js_number(value: float) -> str:
+    """Spell a finite double exactly as ECMAScript `Number::toString` (radix 10) does."""
+    if not math.isfinite(value):
+        raise StrictJsonError("Nonfinite number in JSON")
+    if value == 0:
+        return "0"
+    if value < 0:
+        return "-" + js_number(-value)
+    # repr gives the shortest round-tripping digits, which is what ECMAScript requires.
+    mantissa, _, exponent = repr(value).partition("e")
+    whole, _, fraction = mantissa.partition(".")
+    combined = whole + fraction
+    leading = len(combined) - len(combined.lstrip("0"))
+    digits = combined.strip("0")
+    k = len(digits)
+    n = len(whole) - leading + int(exponent or 0)
+    if k <= n <= 21:
+        return digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return "0." + "0" * -n + digits
+    power = n - 1
+    sign = "+" if power >= 0 else "-"
+    head = digits if k == 1 else digits[0] + "." + digits[1:]
+    return f"{head}e{sign}{abs(power)}"
+
+
+def _encode(value: object, parts: list[str]) -> None:
+    if value is None or isinstance(value, bool):
+        parts.append({None: "null", True: "true", False: "false"}[value])
+    elif isinstance(value, int):
+        parts.append(str(value))
+    elif isinstance(value, float):
+        parts.append(js_number(value))
+    elif isinstance(value, str):
+        parts.append(json.dumps(value, ensure_ascii=False))
+    elif isinstance(value, dict):
+        parts.append("{")
+        for index, (key, item) in enumerate(value.items()):
+            if not isinstance(key, str):
+                raise StrictJsonError("JSON object keys must be strings")
+            parts.append(("," if index else "") + json.dumps(key, ensure_ascii=False) + ":")
+            _encode(item, parts)
+        parts.append("}")
+    elif isinstance(value, (list, tuple)):
+        parts.append("[")
+        for index, item in enumerate(value):
+            if index:
+                parts.append(",")
+            _encode(item, parts)
+        parts.append("]")
+    else:
+        raise StrictJsonError(f"Unsupported JSON value: {type(value).__name__}")
 
 
 def canonical_json_bytes(value: object) -> bytes:
-    """Encode compact UTF-8 JSON preserving the caller's key order."""
+    """Encode compact UTF-8 JSON like JavaScript `JSON.stringify`, preserving key order."""
+    parts: list[str] = []
+    _encode(value, parts)
     try:
-        return json.dumps(
-            _canonical_numbers(value), ensure_ascii=False, separators=(",", ":"), allow_nan=False
-        ).encode("utf-8")
-    except (UnicodeError, ValueError) as exc:
+        return "".join(parts).encode("utf-8")
+    except UnicodeError as exc:
         raise StrictJsonError("Value cannot be encoded as strict UTF-8 JSON") from exc
 
 

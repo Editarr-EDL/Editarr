@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from scanner.formats.community.master_snapshot import (
@@ -19,8 +19,9 @@ from scanner.formats.community.master_snapshot import (
 )
 from scanner.formats.community.strict_json import MAX_SAFE_INTEGER
 
-from .community_download_receipts import ReceiptKey, _framed, parse_receipt_keys, public_bytes
-from .community_signatures import _url_components
+from .community_download_receipts import ReceiptKey, parse_receipt_keys, public_bytes
+from .community_framing import framed
+from .community_signatures import is_canonical_service_origin
 
 SNAPSHOT_DOMAIN = "editarr-community-master-snapshot-v1"
 RECEIPT_DOMAIN = "editarr-community-master-receipt-v1"
@@ -99,7 +100,7 @@ class MasterUnchanged:
 
 def snapshot_signing_bytes(signature: SnapshotSignature) -> bytes:
     """Return the framed snapshot-signature message with its u64 `issuedAt` suffix."""
-    return _framed(
+    return framed(
         SNAPSHOT_DOMAIN,
         (
             signature.schema_version,
@@ -109,7 +110,8 @@ def snapshot_signing_bytes(signature: SnapshotSignature) -> bytes:
             str(signature.revision),
             signature.snapshot_digest,
         ),
-    ) + signature.issued_at.to_bytes(8, "big")
+        signature.issued_at,
+    )
 
 
 def master_receipt_identity(
@@ -117,12 +119,12 @@ def master_receipt_identity(
 ) -> str:
     """Return the stable receipt ID, which excludes `issuedAt` and the service key."""
     fields = (service, contributor_id, version_id, str(revision), snapshot_digest)
-    return hashlib.sha256(_framed(RECEIPT_IDENTITY_DOMAIN, fields)).hexdigest()
+    return hashlib.sha256(framed(RECEIPT_IDENTITY_DOMAIN, fields)).hexdigest()
 
 
 def master_receipt_signing_bytes(receipt: MasterReceiptFields) -> bytes:
     """Return the framed receipt message with its u64 `issuedAt` suffix."""
-    return _framed(
+    return framed(
         RECEIPT_DOMAIN,
         (
             receipt.schema_version,
@@ -134,20 +136,8 @@ def master_receipt_signing_bytes(receipt: MasterReceiptFields) -> bytes:
             receipt.snapshot_digest,
             receipt.receipt_id,
         ),
-    ) + receipt.issued_at.to_bytes(8, "big")
-
-
-def sign_master_message(private_key: Ed25519PrivateKey, message: bytes) -> str:
-    """Sign a framed master message (used by tests and fixtures acting as the service)."""
-    return base64.b64encode(private_key.sign(message)).decode("ascii")
-
-
-def _canonical_service(service: str) -> bool:
-    try:
-        _, authority, path, query = _url_components(service)
-    except ValueError:
-        return False
-    return service == f"https://{authority}" and path == "/" and query == "?"
+        receipt.issued_at,
+    )
 
 
 def _verify(keys: tuple[ReceiptKey, ...], key_id: str, signature: str, message: bytes) -> None:
@@ -181,7 +171,7 @@ def verify_master_response(
     Follows the §7.3 client steps; any failure rejects the whole response.
     """
     try:
-        if not _canonical_service(service):
+        if not is_canonical_service_origin(service):
             raise ValueError("Expected a canonical service origin")
         if isinstance(value, dict) and value.get("changed") is False:
             unchanged = _Unchanged.model_validate(value, strict=True)

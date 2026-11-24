@@ -9,10 +9,12 @@ from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
 from .artifact_v3_models import (
     ALIAS_ID,
     MAX_DURATION_MS,
-    PROVIDER_ID,
     SafeInt,
     StrictCamelModel,
     Token,
+    Work,
+    WorkError,
+    check_work,
 )
 from .strict_json import MAX_SAFE_INTEGER, StrictJsonError, parse_strict_json
 
@@ -26,16 +28,10 @@ class MasterSnapshotError(ValueError):
     """Snapshot bytes are not a valid master snapshot."""
 
 
-class MasterWork(StrictCamelModel):
+class MasterWork(Work):
+    """A served work: the submission work rules plus the service `workId`."""
+
     work_id: Token
-    kind: Literal["movie", "episode"]
-    tmdb: str | None = Field(pattern=PROVIDER_ID)
-    tvdb: str | None = Field(pattern=PROVIDER_ID)
-    season: int | None = Field(ge=0, le=9999)
-    episode: int | None = Field(ge=0, le=9999)
-    last_episode: int | None = Field(ge=0, le=9999 + 15)
-    title: str = Field(min_length=1)
-    year: int | None = Field(ge=1870, le=2200)
 
 
 class VersionInfo(StrictCamelModel):
@@ -91,23 +87,6 @@ class MasterSnapshot(StrictCamelModel):
     filters: list[MasterFilter]
 
 
-def _check_work(work: MasterWork) -> None:
-    numbering = (work.season, work.episode, work.last_episode)
-    if work.tmdb is None and work.tvdb is None:
-        raise MasterSnapshotError("Snapshot work has no TMDB or TVDB identifier")
-    if work.kind == "movie" and numbering != (None, None, None):
-        raise MasterSnapshotError("Snapshot movie has episode numbering")
-    if work.kind == "episode" and (
-        work.season is None
-        or work.episode is None
-        or (
-            work.last_episode is not None
-            and not work.episode <= work.last_episode <= work.episode + 15
-        )
-    ):
-        raise MasterSnapshotError("Snapshot episode numbering is invalid")
-
-
 def _filter_order(item: MasterFilter) -> tuple:
     return (item.start_ms, item.end_ms, item.category.encode(), item.filter_id.encode())
 
@@ -133,15 +112,16 @@ def _check_filters(filters: list[MasterFilter], max_filters: int) -> None:
             raise MasterSnapshotError("contributorCount must equal support.attestations")
 
 
-def parse_master_snapshot(
-    raw: bytes, *, max_filters: int = DEFAULT_MAX_FILTERS
-) -> MasterSnapshot:
+def parse_master_snapshot(raw: bytes, *, max_filters: int = DEFAULT_MAX_FILTERS) -> MasterSnapshot:
     """Strictly parse exact snapshot bytes; callers verify the digest and signature first."""
     try:
         value = parse_strict_json(raw, max_bytes=MAX_SNAPSHOT_BYTES)
         snapshot = MasterSnapshot.model_validate(value, strict=True, by_alias=True, by_name=False)
     except (StrictJsonError, ValidationError) as exc:
         raise MasterSnapshotError(f"Invalid {MASTER_SNAPSHOT_SCHEMA}: {exc}") from exc
-    _check_work(snapshot.work)
+    try:
+        check_work(snapshot.work)
+    except WorkError as exc:
+        raise MasterSnapshotError(f"Invalid snapshot work: {exc}") from exc
     _check_filters(snapshot.filters, max_filters)
     return snapshot

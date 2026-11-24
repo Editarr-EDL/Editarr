@@ -2,27 +2,32 @@ import base64
 import copy
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from scanner.formats.community.master_snapshot import MasterSnapshotError, parse_master_snapshot
+from scanner.formats.community.strict_json import canonical_json_bytes
 from scanner.security.community_download_receipts import ReceiptKey
 from scanner.security.community_master_snapshots import (
-    MasterReceiptFields,
     MasterUnchanged,
     MasterVerificationError,
     SnapshotSignature,
     master_receipt_identity,
     master_receipt_signing_bytes,
-    sign_master_message,
     snapshot_signing_bytes,
     verify_master_response,
 )
+from scanner.testing.community_v3_vectors import master_response, vectors
 
-SERVICE = "https://community.example"
-SERVICE_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
+FIXTURES = Path(__file__).parents[1] / "community-service/test/fixtures/community-v3"
+VECTOR = json.loads((FIXTURES / "master-snapshot.json").read_text(encoding="utf-8"))
+SERVICE = VECTOR["request"]["service"]
+SERVICE_KEY = Ed25519PrivateKey.from_private_bytes(
+    bytes.fromhex(VECTOR["servicePrivateKeySeedHex"])
+)
 OTHER_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(2, 34)))
 
 
@@ -41,84 +46,23 @@ SERVICE_KEY_ID = key_record(SERVICE_KEY).key_id
 
 
 def snapshot_value() -> dict:
-    return {
-        "schemaVersion": "community-master-snapshot-1", "service": SERVICE,
-        "versionId": "v_12ab", "revision": 13, "generatedAt": 1795553600,
-        "work": {
-            "workId": "w_77", "kind": "movie", "tmdb": "603", "tvdb": None, "season": None,
-            "episode": None, "lastEpisode": None, "title": "The Matrix", "year": 1999,
-        },
-        "versionInfo": {
-            "status": "confirmed", "aliasId": "theatrical", "label": "Theatrical",
-            "labelText": None, "runtimeMs": 8160500, "trust": 0.41,
-        },
-        "filters": [
-            {
-                "filterId": "f_9c1d", "mergedIds": [], "category": "violence",
-                "subcategory": "punching", "severity": "high", "action": "skip",
-                "startMs": 600000, "endMs": 605050, "spread": {"startMs": 300, "endMs": 350},
-                "confidence": 0.393857102, "contributorCount": 4,
-                "support": {"attestations": 4, "upvotes": 1},
-                "negative": {"downvotes": 1, "disputes": 0, "coverageNegatives": 1},
-                "lowConfidence": False,
-            },
-            {
-                "filterId": "f_77aa", "mergedIds": ["f_old"], "category": "language",
-                "subcategory": "swearing", "severity": "medium", "action": "mute",
-                "startMs": 1200000, "endMs": 1203000, "spread": {"startMs": 0, "endMs": 0},
-                "confidence": 0.117618231, "contributorCount": 1,
-                "support": {"attestations": 1, "upvotes": 0},
-                "negative": {"downvotes": 0, "disputes": 2, "coverageNegatives": 0},
-                "lowConfidence": True,
-            },
-        ],
-    }
+    return json.loads(VECTOR["snapshotJson"])
 
 
 def encode(value: dict) -> bytes:
-    return json.dumps(value, separators=(",", ":")).encode()
+    return canonical_json_bytes(value)
 
 
-def response(
-    snapshot: bytes | None = None,
-    *,
-    signer: Ed25519PrivateKey = SERVICE_KEY,
-    contributor_id: str = "c_7f3a",
-    revision: int = 13,
-    receipt_changes: dict | None = None,
-) -> dict:
+def response(snapshot: bytes | None = None, *, signer=SERVICE_KEY, **changes) -> dict:
     snapshot = encode(snapshot_value()) if snapshot is None else snapshot
-    digest = hashlib.sha256(snapshot).hexdigest()
-    key_id = key_record(signer).key_id
-    signature_fields = {
-        "schemaVersion": "community-master-signature-1", "service": SERVICE,
-        "serviceKeyId": key_id, "versionId": "v_12ab", "revision": revision,
-        "snapshotDigest": digest, "issuedAt": 1795553648,
-    }
-    signed = SnapshotSignature.model_validate({**signature_fields, "signature": "A" * 88})
-    receipt = {
-        "schemaVersion": "community-master-receipt-1", "service": SERVICE,
-        "serviceKeyId": key_id, "contributorId": contributor_id, "versionId": "v_12ab",
-        "revision": revision, "snapshotDigest": digest,
-        "receiptId": master_receipt_identity(SERVICE, contributor_id, "v_12ab", revision, digest),
-        "issuedAt": 1795553648, **(receipt_changes or {}),
-    }
-    receipt_signature = sign_master_message(
-        signer, master_receipt_signing_bytes(MasterReceiptFields.model_validate(receipt))
-    )
-    return {
-        "version": 1, "changed": True, "snapshot": base64.b64encode(snapshot).decode(),
-        "snapshotSignature": {
-            **signature_fields,
-            "signature": sign_master_message(signer, snapshot_signing_bytes(signed)),
-        },
-        "receipt": {"receipt": receipt, "signature": receipt_signature},
-    }
+    return master_response(snapshot, signer=signer, **changes)
 
 
 def verify(value: object, known_revision: int | None = 12, **changes):
     arguments = {
-        "service": SERVICE, "contributor_id": "c_7f3a", "version_id": "v_12ab",
+        "service": SERVICE,
+        "contributor_id": "c_7f3a",
+        "version_id": "v_12ab",
         "known_revision": known_revision,
         "trusted_keys": (key_record(SERVICE_KEY), key_record(OTHER_KEY, "revoked")),
         **changes,
@@ -127,11 +71,18 @@ def verify(value: object, known_revision: int | None = 12, **changes):
 
 
 def test_signed_bytes_follow_the_framing():
-    signed = SnapshotSignature.model_validate({
-        "schemaVersion": "community-master-signature-1", "service": SERVICE,
-        "serviceKeyId": SERVICE_KEY_ID, "versionId": "v_12ab", "revision": 13,
-        "snapshotDigest": "a" * 64, "issuedAt": 1795553648, "signature": "A" * 88,
-    })
+    signed = SnapshotSignature.model_validate(
+        {
+            "schemaVersion": "community-master-signature-1",
+            "service": SERVICE,
+            "serviceKeyId": SERVICE_KEY_ID,
+            "versionId": "v_12ab",
+            "revision": 13,
+            "snapshotDigest": "a" * 64,
+            "issuedAt": 1795553648,
+            "signature": "A" * 88,
+        }
+    )
     message = snapshot_signing_bytes(signed)
     assert message.startswith(
         b"editarr-community-master-snapshot-v1\0\0\0\0\x1ccommunity-master-signature-1"
@@ -218,8 +169,9 @@ def snapshot_mutations():
         callback(value)
         return value
 
-    yield "duplicate key", encode(snapshot_value()).replace(
-        b'"revision":13', b'"revision":13,"revision":13'
+    yield (
+        "duplicate key",
+        encode(snapshot_value()).replace(b'"revision":13', b'"revision":13,"revision":13'),
     )
     yield "unknown field", encode(change(lambda v: v.update(extra=1)))
     yield "unsorted", encode(change(lambda v: v["filters"].reverse()))
@@ -232,7 +184,7 @@ def snapshot_mutations():
     yield "status", encode(change(lambda v: v["versionInfo"].update(status="merged_into")))
     yield "no identity", encode(change(lambda v: v["work"].update(tmdb=None)))
     yield "movie numbering", encode(change(lambda v: v["work"].update(season=1)))
-    yield "float revision", encode(change(lambda v: v.update(revision=13.0)))
+    yield "float revision", json.dumps(change(lambda v: v.update(revision=13.0))).encode()
     yield "too large", encode(snapshot_value()) + b" " * 2_000_000
 
 
@@ -247,3 +199,25 @@ def test_snapshot_filter_limit():
     assert len(parse_master_snapshot(raw).filters) == 2
     with pytest.raises(MasterSnapshotError):
         parse_master_snapshot(raw, max_filters=1)
+
+
+def test_cross_language_master_vector():
+    assert vectors()["master-snapshot.json"] == VECTOR
+    request = VECTOR["request"]
+    verified = verify_master_response(
+        VECTOR["response"],
+        service=request["service"],
+        contributor_id=request["contributorId"],
+        version_id=request["versionId"],
+        known_revision=request["knownRevision"],
+        trusted_keys=tuple(ReceiptKey.model_validate(key) for key in VECTOR["receiptKeys"]),
+    )
+    assert verified.snapshot_bytes.decode() == VECTOR["snapshotJson"]
+    assert hashlib.sha256(verified.snapshot_bytes).hexdigest() == VECTOR["snapshotDigest"]
+    assert (
+        snapshot_signing_bytes(verified.snapshot_signature).hex()
+        == (VECTOR["snapshotSigningBytesHex"])
+    )
+    receipt = verified.receipt.receipt
+    assert receipt.receipt_id == VECTOR["receiptId"]
+    assert master_receipt_signing_bytes(receipt).hex() == VECTOR["receiptSigningBytesHex"]

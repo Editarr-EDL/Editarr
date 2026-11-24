@@ -29,7 +29,14 @@ class SignedArtifact:
 
 
 class ArtifactSignatureError(ValueError):
-    """Original bytes or their trusted historical author binding cannot be verified."""
+    """Original bytes or their trusted historical author binding cannot be verified.
+
+    `code` is the service error the failure corresponds to (§7.2).
+    """
+
+    def __init__(self, message: str = "", code: str = "invalid_submission") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)

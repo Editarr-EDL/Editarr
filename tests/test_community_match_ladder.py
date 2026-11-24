@@ -1,5 +1,7 @@
 import hashlib
+import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -58,25 +60,37 @@ def version(**changes) -> VersionCandidate:
     return VersionCandidate(**{**values, **changes})
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("Director’s Cut", "directors cut"),
-        ("Director's Cut", "directors cut"),
-        ("Directorʼs`Cut", "directorscut"),
-        ("  EXTENDED   Edition!", "extended edition"),
-        ("Amélie", "amelie"),
-        ("Spider-Man: No Way Home", "spider man no way home"),
-        ("Ⅲ", "iii"),
-        ("ＡＢＣ　１２３", "abc 123"),
-        ("Straße", "straße"),
-        ("İ", "i"),
-        ("", ""),
-        ("!!!", ""),
-    ],
+NORMALIZE = json.loads(
+    (
+        Path(__file__).parents[1] / "community-service/test/fixtures/community-v3/normalize.json"
+    ).read_text(encoding="utf-8")
 )
-def test_normalize_contract_cases(value, expected):
-    assert normalize(value) == expected
+CONTRACT_TABLE = {
+    "Director’s Cut": "directors cut",
+    "  EXTENDED   Edition!": "extended edition",
+    "Amélie": "amelie",
+    "Spider-Man: No Way Home": "spider man no way home",
+    "Ⅲ": "iii",
+}
+
+
+def test_normalize_vectors_include_the_contract_table():
+    from scanner.testing.community_v3_vectors import normalize_vector
+
+    assert normalize_vector() == NORMALIZE
+    cases = {case["input"]: case["normalized"] for case in NORMALIZE["cases"]}
+    assert CONTRACT_TABLE.items() <= cases.items()
+    assert cases["İstanbul"] == "istanbul" and cases["!!!"] == ""
+
+
+@pytest.mark.parametrize("case", NORMALIZE["cases"], ids=lambda case: repr(case["input"]))
+def test_normalize_vectors(case):
+    assert normalize(case["input"]) == case["normalized"]
+
+
+def test_title_year_vectors():
+    for case in NORMALIZE["titleYear"]:
+        assert title_year_key(case["title"], case["year"]) == case["key"]
 
 
 def test_title_year_key():
@@ -103,18 +117,32 @@ def test_seeded_aliases_and_spelling_resolution():
         alias_spelling_index([*SEEDED_ALIASES, Alias("other", "Other", ("Extended",))])
 
 
+def alias_body(*extra: dict) -> dict:
+    seeded = [
+        {"aliasId": alias.alias_id, "label": alias.label, "spellings": list(alias.spellings)}
+        for alias in SEEDED_ALIASES
+    ]
+    return {"version": 1, "aliases": [*seeded, *extra]}
+
+
 def test_parse_alias_list():
-    body = {"version": 1, "aliases": [
-        {"aliasId": "theatrical", "label": "Theatrical", "spellings": ["theatrical"]},
-        {"aliasId": "imax", "label": "IMAX", "spellings": ["IMAX Edition"]},
-    ]}
+    imax = {"aliasId": "imax", "label": "IMAX Edition", "spellings": ["IMAX Edition"]}
+    body = alias_body()
+    body["aliases"].insert(3, imax)
     aliases = parse_alias_list(body)
-    assert aliases[1] == Alias("imax", "IMAX", ("imax edition",))
+    assert aliases[3] == Alias("imax", "IMAX Edition", ("imax edition",))
+    assert parse_alias_list(alias_body())[0].alias_id == THEATRICAL
+    seeded = alias_body()["aliases"]
     for bad in (
         {**body, "extra": 1},
-        {"version": 2, "aliases": []},
-        {"version": 1, "aliases": [{"aliasId": "BAD", "label": "x", "spellings": []}]},
-        {"version": 1, "aliases": [body["aliases"][0], body["aliases"][0]]},
+        {"version": 2, "aliases": seeded},
+        {"version": 1, "aliases": []},
+        alias_body({"aliasId": "BAD", "label": "Zed", "spellings": []}),
+        alias_body(seeded[1]),
+        alias_body(imax),
+        alias_body({"aliasId": "zed", "label": "Zed", "spellings": ["Extended"]}),
+        {"version": 1, "aliases": [seeded[1], seeded[0], *seeded[2:]]},
+        {"version": 1, "aliases": seeded[:3]},
     ):
         with pytest.raises(AliasListError):
             parse_alias_list(bad)
@@ -160,28 +188,66 @@ def test_runtime_agreement_boundaries(query_ms, expected):
     ("keys", "label", "runtime_ms", "tier", "percent", "matched", "agreement"),
     [
         ((FULL, MD5), None, None, "1", 100, ("sha256_full",), "not_applicable"),
-        ((SAMPLED, MD5, AUDIO), None, None, "2", 80, ("sha256_sampled", "md5_quick"),
-         "not_applicable"),
-        ((AUDIO, VIDEO, TMDB), ResolvedLabel("extended", None), RUNTIME + 99_999, "3", 65,
-         ("audio_stream", "video_stream"), "not_applicable"),
+        (
+            (SAMPLED, MD5, AUDIO),
+            None,
+            None,
+            "2",
+            80,
+            ("sha256_sampled", "md5_quick"),
+            "not_applicable",
+        ),
+        (
+            (AUDIO, VIDEO, TMDB),
+            ResolvedLabel("extended", None),
+            RUNTIME + 99_999,
+            "3",
+            65,
+            ("audio_stream", "video_stream"),
+            "not_applicable",
+        ),
         ((TMDB, TVDB, TITLE), None, RUNTIME + 2_000, "4", 30, ("tmdb", "tvdb"), "same_cut"),
         ((TMDB,), None, RUNTIME - 30_000, "4", 30, ("tmdb",), "possible_cut"),
         ((TITLE,), None, RUNTIME + 1, "5", 15, ("title_year",), "same_cut"),
         ((TITLE,), None, RUNTIME + 30_000, "5", 15, ("title_year",), "possible_cut"),
-        ((TMDB, TITLE), None, RUNTIME + 30_001, "runtime_mismatch", 5, ("tmdb", "title_year"),
-         "outside"),
+        (
+            (TMDB, TITLE),
+            None,
+            RUNTIME + 30_001,
+            "runtime_mismatch",
+            5,
+            ("tmdb", "title_year"),
+            "outside",
+        ),
         ((TITLE,), None, None, "runtime_mismatch", 5, ("title_year",), "unknown"),
-        ((TMDB,), ResolvedLabel("extended", None), RUNTIME, "other_version", 0, ("tmdb",),
-         "same_cut"),
-        ((TITLE,), ResolvedLabel(None, "fan edit"), None, "other_version", 0, ("title_year",),
-         "unknown"),
+        (
+            (TMDB,),
+            ResolvedLabel("extended", None),
+            RUNTIME,
+            "other_version",
+            0,
+            ("tmdb",),
+            "same_cut",
+        ),
+        (
+            (TITLE,),
+            ResolvedLabel(None, "fan edit"),
+            None,
+            "other_version",
+            0,
+            ("title_year",),
+            "unknown",
+        ),
     ],
 )
 def test_every_ladder_tier(keys, label, runtime_ms, tier, percent, matched, agreement):
     query = MatchQuery(keys, label or THEATRICAL_LABEL, runtime_ms)
     score = score_version(query, version())
     assert (score.tier, score.match_percent, score.matched_keys, score.runtime_agreement) == (
-        tier, percent, matched, agreement,
+        tier,
+        percent,
+        matched,
+        agreement,
     )
 
 
@@ -189,26 +255,37 @@ def test_key_equality_rules_and_no_shared_key():
     target = version()
     for key in (
         HashKey("md5_quick", "b" * 32, SIZE + 1),
-        StreamKey("audio_stream", "editarr-community-audio-pcm-s16le-16000-mono-sha256-1",
-                  "c" * 64),
+        StreamKey(
+            "audio_stream", "editarr-community-audio-pcm-s16le-16000-mono-sha256-1", "c" * 64
+        ),
         ProviderKey("tmdb", "episode", "603", 1, 1),
         ProviderKey("tvdb", "movie", "603"),
         TitleYearKey("The Matrix", None),
         TitleYearKey("The Matrix", 2000),
     ):
         assert score_version(MatchQuery((key,), runtime_ms=RUNTIME), target) is None
-    assert score_version(MatchQuery((TitleYearKey("the  MATRIX!", 1999),), runtime_ms=RUNTIME),
-                         target).tier == "5"
+    assert (
+        score_version(
+            MatchQuery((TitleYearKey("the  MATRIX!", 1999),), runtime_ms=RUNTIME), target
+        ).tier
+        == "5"
+    )
     mismatched = HashKey("sha256_full", "0" * 64, SIZE)
     assert score_version(MatchQuery((mismatched, MD5)), target).tier == "2"
     episode = ProviderKey("tvdb", "episode", "81189", 1, 2, 3)
-    assert score_version(
-        MatchQuery((episode,), runtime_ms=RUNTIME), version(work_keys=(episode,))
-    ).tier == "4"
-    assert score_version(
-        MatchQuery((ProviderKey("tvdb", "episode", "81189", 1, 2),), runtime_ms=RUNTIME),
-        version(work_keys=(episode,)),
-    ) is None
+    assert (
+        score_version(
+            MatchQuery((episode,), runtime_ms=RUNTIME), version(work_keys=(episode,))
+        ).tier
+        == "4"
+    )
+    assert (
+        score_version(
+            MatchQuery((ProviderKey("tvdb", "episode", "81189", 1, 2),), runtime_ms=RUNTIME),
+            version(work_keys=(episode,)),
+        )
+        is None
+    )
 
 
 def test_unknown_version_runtime_is_a_runtime_mismatch():

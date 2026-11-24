@@ -1,6 +1,7 @@
 """Sign and verify `community-artifact-3` submissions with the unchanged v1 envelope."""
 
 import base64
+import json
 from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidSignature
@@ -68,8 +69,13 @@ def build_signed_submission(
     )
 
 
-def submission_request_body(signed: SignedArtifact, submission_id: str) -> dict:
-    """Return the `POST /v1/submissions` JSON body for exact signed buffers (§7.2)."""
+def submission_request_body(signed: SignedArtifact) -> dict:
+    """Return the `POST /v1/submissions` JSON body for exact signed buffers (§7.2).
+
+    The submission ID is read from the signed manifest so the body cannot disagree with it.
+    """
+    manifest = json.loads(signed.manifest_bytes)
+    submission_id = manifest["submission_id"]
 
     def encode(value: bytes) -> str:
         return base64.b64encode(value).decode("ascii")
@@ -104,13 +110,14 @@ def verify_artifact_v3_signature(
         decoded = decode_artifact_v3(artifact_bytes, limits=limits)
         manifest = parse_manifest_v3(manifest_bytes, decoded=decoded, limits=limits)
     except ArtifactV3Error as exc:
-        raise ArtifactSignatureError(f"Invalid signed artifact: {exc}") from exc
-    if (
-        manifest.contributor_id != historical_key.contributor_id
-        or manifest.key_id != historical_key.key_id
-        or manifest.submission_id != expected_submission_id
+        raise ArtifactSignatureError(f"Invalid signed artifact: {exc}", exc.code) from exc
+    if (manifest.contributor_id, manifest.key_id) != (
+        historical_key.contributor_id,
+        historical_key.key_id,
     ):
-        raise ArtifactSignatureError("Historical key or submission binding mismatch")
+        raise ArtifactSignatureError("Author or key does not match the signer", "key_mismatch")
+    if manifest.submission_id != expected_submission_id:
+        raise ArtifactSignatureError("Submission binding mismatch")
     signature = decode_signature_envelope(envelope_bytes)
     try:
         Ed25519PublicKey.from_public_bytes(historical_key.public_key).verify(

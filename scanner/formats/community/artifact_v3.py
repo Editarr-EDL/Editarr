@@ -6,10 +6,16 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 
 from scanner.modeling.community_match_keys import FileKey, HashKey, StreamKey
-from scanner.modeling.community_normalization import normalize
 from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
 
-from .artifact_v3_models import ARTIFACT_V3_SCHEMA, ArtifactV3, FileHashKey, ManifestV3
+from .artifact_v3_models import (
+    ARTIFACT_V3_SCHEMA,
+    ArtifactV3,
+    FileHashKey,
+    ManifestV3,
+    WorkError,
+    check_work,
+)
 from .strict_json import (
     StrictJsonError,
     canonical_json_bytes,
@@ -61,21 +67,10 @@ def _bytes(value: str) -> int:
 
 
 def _check_work(artifact: ArtifactV3) -> None:
-    work = artifact.work
-    if work.tmdb is None and work.tvdb is None:
-        raise ArtifactV3Error("A TMDB or TVDB identifier is required", "work_identity_required")
-    numbering = (work.season, work.episode, work.last_episode)
-    if work.kind == "movie" and numbering != (None, None, None):
-        raise ArtifactV3Error("A movie has no season or episode numbering")
-    if work.kind == "episode":
-        if work.season is None or work.episode is None:
-            raise ArtifactV3Error("An episode requires season and episode")
-        if work.last_episode is not None and not (
-            work.episode <= work.last_episode <= work.episode + 15
-        ):
-            raise ArtifactV3Error("lastEpisode must be within episode..episode + 15")
-    if _bytes(work.title) > 512 or not normalize(work.title):
-        raise ArtifactV3Error("The title must be 1–512 bytes and normalize to non-empty text")
+    try:
+        check_work(artifact.work)
+    except WorkError as exc:
+        raise ArtifactV3Error(str(exc), exc.code) from exc
 
 
 def _check_media(artifact: ArtifactV3) -> None:
@@ -109,8 +104,9 @@ def _check_coverage(artifact: ArtifactV3) -> None:
         for interval in coverage.intervals:
             _check_bounds(interval.start_ms, interval.end_ms, artifact.media.duration_ms)
             if interval.start_ms < previous_end:
-                raise ArtifactV3Error("Coverage intervals must be sorted and non-overlapping",
-                                      "invalid_bounds")
+                raise ArtifactV3Error(
+                    "Coverage intervals must be sorted and non-overlapping", "invalid_bounds"
+                )
             previous_end = interval.end_ms
 
 

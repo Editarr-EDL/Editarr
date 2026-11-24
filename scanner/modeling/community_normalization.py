@@ -56,8 +56,11 @@ SEEDED_ALIASES: tuple[Alias, ...] = tuple(
             "Director's Cut",
             ("Director's Cut", "Directors Cut", "Director's Edition", "Director's Version"),
         ),
-        ("extended", "Extended Edition", ("Extended Edition", "Extended", "Extended Cut",
-                                          "Extended Version")),
+        (
+            "extended",
+            "Extended Edition",
+            ("Extended Edition", "Extended", "Extended Cut", "Extended Version"),
+        ),
         ("unrated", "Unrated", ("Unrated", "Unrated Cut", "Unrated Edition", "Unrated Version")),
     )
 )
@@ -106,6 +109,13 @@ def parse_alias_list(value: object) -> tuple[Alias, ...]:
         aliases.append(Alias(alias_id, label, tuple(normalize(s) for s in spellings)))
     if len({alias.alias_id for alias in aliases}) != len(aliases):
         raise AliasListError("Duplicate alias ID")
+    if not aliases or aliases[0].alias_id != THEATRICAL:
+        raise AliasListError("Theatrical must be the first alias")
+    if not {alias.alias_id for alias in SEEDED_ALIASES} <= {alias.alias_id for alias in aliases}:
+        raise AliasListError("A seeded alias is missing")
+    labels = [alias.label.encode("utf-8") for alias in aliases[1:]]
+    if labels != sorted(labels):
+        raise AliasListError("Aliases after Theatrical must be ordered by display label")
     alias_spelling_index(aliases)
     return tuple(aliases)
 

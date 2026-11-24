@@ -5,6 +5,7 @@ import hashlib
 import json
 import struct
 import zlib
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -21,7 +22,13 @@ from scanner.formats.community.artifact_v3 import (
     parse_manifest_v3,
 )
 from scanner.formats.community.artifact_v3_models import ArtifactV3
+from scanner.formats.community.strict_json import (
+    StrictJsonError,
+    canonical_json_bytes,
+    js_number,
+)
 from scanner.modeling.community_match_keys import HashKey, StreamKey
+from scanner.modeling.community_normalization import normalize
 from scanner.security.community_artifact_signatures import (
     ArtifactSignatureError,
     HistoricalKey,
@@ -34,62 +41,18 @@ from scanner.security.community_artifact_v3_signatures import (
     verify_artifact_v3_signature,
 )
 
-KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+FIXTURES = Path(__file__).parents[1] / "community-service/test/fixtures/community-v3"
+VECTOR = json.loads((FIXTURES / "artifact-v3.json").read_text(encoding="utf-8"))
+KEY = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(VECTOR["authorPrivateKeySeedHex"]))
 PUBLIC = KEY.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
-OTHER_PUBLIC = Ed25519PrivateKey.generate().public_key().public_bytes(
-    Encoding.Raw, PublicFormat.Raw
+OTHER_PUBLIC = (
+    Ed25519PrivateKey.generate().public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
 )
-KEY_ID = "sha256:" + hashlib.sha256(PUBLIC).hexdigest()
+KEY_ID = VECTOR["authorKeyId"]
 
 
 def artifact_value() -> dict:
-    return {
-        "schemaVersion": "community-artifact-3",
-        "submissionId": "sub_01J9Z3K5C6Q",
-        "createdAt": 1795553648,
-        "author": {"contributorId": "c_7f3a", "keyId": KEY_ID},
-        "work": {
-            "kind": "movie", "tmdb": "603", "tvdb": None, "season": None, "episode": None,
-            "lastEpisode": None, "title": "The Matrix", "year": 1999,
-        },
-        "version": {"choice": "alias", "aliasId": "theatrical"},
-        "media": {
-            "durationMs": 8160512,
-            "matchKeys": [
-                {"type": "sha256_sampled", "value": "a" * 64, "sizeBytes": 4823749120},
-                {"type": "md5_quick", "value": "b" * 32, "sizeBytes": 4823749120},
-                {
-                    "type": "audio_stream",
-                    "algorithm": "editarr-community-audio-pcm-s16le-16000-mono-sha256-1",
-                    "value": "c" * 64,
-                },
-            ],
-        },
-        "alignmentHint": {
-            "versionId": "v_12ab", "revision": 7, "offsetMs": -1200, "scale": 1.0, "anchors": 6,
-        },
-        "coverage": [{"category": "violence", "intervals": [{"startMs": 0, "endMs": 8160512}]}],
-        "entries": [
-            {
-                "entryId": "e1", "kind": "support", "proposedFilterId": "f_9c1d",
-                "startMs": 600000, "endMs": 605000, "category": "violence",
-                "subcategory": "punching", "severity": "medium", "action": "skip",
-                "evidence": {
-                    "origin": "downloaded", "manualReview": True, "locallyVerified": True,
-                    "modelVersion": None,
-                },
-            },
-            {
-                "entryId": "e2", "kind": "dispute", "proposedFilterId": "f_44aa",
-                "startMs": 1200000, "endMs": 1203000, "category": "language",
-                "subcategory": None, "severity": None, "action": None,
-                "evidence": {
-                    "origin": "downloaded", "manualReview": True, "locallyVerified": False,
-                    "modelVersion": None,
-                },
-            },
-        ],
-    }
+    return copy.deepcopy(VECTOR["artifact"])
 
 
 def raw_gzip(value: object) -> bytes:
@@ -131,8 +94,9 @@ def test_unicode_is_encoded_as_utf8_not_escaped():
 
 def test_episode_work_round_trips():
     value = artifact_value()
-    value["work"].update(kind="episode", tmdb=None, tvdb="81189", season=1, episode=2,
-                         lastEpisode=17)
+    value["work"].update(
+        kind="episode", tmdb=None, tvdb="81189", season=1, episode=2, lastEpisode=17
+    )
     decoded = decode_artifact_v3(raw_gzip(value))
     assert decoded.artifact.work.last_episode == 17
 
@@ -182,38 +146,55 @@ INVALID = {
     "empty normalized title": (mutate("work.title", "!!!"), "invalid_submission"),
     "year": (mutate("work.year", 1869), "invalid_submission"),
     "alias id": (mutate("version.aliasId", "Theatrical"), "invalid_submission"),
-    "other text too long": (mutate("version", {"choice": "other", "text": "x" * 65}),
-                            "invalid_submission"),
+    "other text too long": (
+        mutate("version", {"choice": "other", "text": "x" * 65}),
+        "invalid_submission",
+    ),
     "duration zero": (mutate("media.durationMs", 0), "invalid_submission"),
     "duration": (mutate("media.durationMs", 86_400_001), "invalid_submission"),
-    "duplicate key type": (mutate("media.matchKeys.1", {"type": "sha256_sampled",
-                                                         "value": "d" * 64,
-                                                         "sizeBytes": 4823749120}),
-                           "invalid_submission"),
+    "duplicate key type": (
+        mutate(
+            "media.matchKeys.1",
+            {"type": "sha256_sampled", "value": "d" * 64, "sizeBytes": 4823749120},
+        ),
+        "invalid_submission",
+    ),
     "size mismatch": (mutate("media.matchKeys.1.sizeBytes", 1), "invalid_submission"),
     "md5 length": (mutate("media.matchKeys.1.value", "b" * 64), "invalid_submission"),
-    "tier 4 key": (mutate("media.matchKeys.2", {"type": "tmdb", "value": "603"}),
-                   "invalid_submission"),
+    "tier 4 key": (
+        mutate("media.matchKeys.2", {"type": "tmdb", "value": "603"}),
+        "invalid_submission",
+    ),
     "stream algorithm": (mutate("media.matchKeys.2.algorithm", "x"), "invalid_submission"),
     "scale": (mutate("alignmentHint.scale", 1.2), "invalid_submission"),
     "revision": (mutate("alignmentHint.revision", 0), "invalid_submission"),
     "anchors": (mutate("alignmentHint.anchors", 2001), "invalid_submission"),
     "coverage category": (mutate("coverage.0.category", "gore"), "invalid_taxonomy"),
-    "coverage duplicate": (lambda v: v["coverage"].append(copy.deepcopy(v["coverage"][0])),
-                           "invalid_submission"),
+    "coverage duplicate": (
+        lambda v: v["coverage"].append(copy.deepcopy(v["coverage"][0])),
+        "invalid_submission",
+    ),
     "coverage empty": (mutate("coverage.0.intervals", []), "invalid_submission"),
     "coverage beyond": (mutate("coverage.0.intervals.0.endMs", 8160513), "invalid_bounds"),
-    "coverage overlap": (mutate("coverage.0.intervals", [{"startMs": 0, "endMs": 10},
-                                                         {"startMs": 5, "endMs": 20}]),
-                         "invalid_bounds"),
+    "coverage overlap": (
+        mutate("coverage.0.intervals", [{"startMs": 0, "endMs": 10}, {"startMs": 5, "endMs": 20}]),
+        "invalid_bounds",
+    ),
     "entry id": (mutate("entries.1.entryId", "e1"), "invalid_submission"),
     "entry id length": (mutate("entries.0.entryId", "e" * 33), "invalid_submission"),
     "entry kind": (mutate("entries.0.kind", "vote"), "invalid_submission"),
     "filter id reuse": (mutate("entries.1.proposedFilterId", "f_9c1d"), "invalid_submission"),
     "dispute without filter": (mutate("entries.1.proposedFilterId", None), "invalid_submission"),
     "coverage negative without filter": (
-        add_entry(kind="coverage_negative", subcategory=None, severity=None, action=None,
-                  proposedFilterId=None), "invalid_submission"),
+        add_entry(
+            kind="coverage_negative",
+            subcategory=None,
+            severity=None,
+            action=None,
+            proposedFilterId=None,
+        ),
+        "invalid_submission",
+    ),
     "support missing severity": (mutate("entries.0.severity", None), "invalid_submission"),
     "dispute classified": (mutate("entries.1.action", "skip"), "invalid_submission"),
     "entry category": (mutate("entries.0.category", "gore"), "invalid_taxonomy"),
@@ -221,10 +202,13 @@ INVALID = {
     "start equals end": (mutate("entries.0.endMs", 600000), "invalid_bounds"),
     "end beyond duration": (mutate("entries.0.endMs", 8160513), "invalid_bounds"),
     "origin": (mutate("entries.0.evidence.origin", "scan"), "invalid_submission"),
-    "model without version": (mutate("entries.0.evidence.origin", "model"),
-                              "invalid_submission"),
-    "model version length": (mutate("entries.0.evidence.modelVersion", "m" * 129),
-                             "invalid_submission"),
+    "model without version": (mutate("entries.0.evidence.origin", "model"), "invalid_submission"),
+    "model version length": (
+        mutate("entries.0.evidence.modelVersion", "m" * 129),
+        "invalid_submission",
+    ),
+    "title bytes": (mutate("work.title", "é" * 257), "invalid_submission"),
+    "normalized title code points": (mutate("work.title", "a b " * 64 + "c"), "invalid_submission"),
 }
 
 
@@ -269,10 +253,12 @@ def deflate_member(data: bytes, flags: int = 0, header_extra: bytes = b"") -> by
         lambda data: deflate_member(b"\xef\xbb\xbf" + data),
         lambda data: deflate_member(data.replace(b"\xc3\xa9", b"\xe9")),
         lambda data: deflate_member(data.replace(b'"createdAt":', b'"createdAt":1,"createdAt":')),
-        lambda data: deflate_member(data.replace(b'"createdAt":1795553648',
-                                                 b'"createdAt":1795553648e0')),
-        lambda data: deflate_member(data.replace(b'"createdAt":1795553648',
-                                                 b'"createdAt":9007199254740992')),
+        lambda data: deflate_member(
+            data.replace(b'"createdAt":1795553648', b'"createdAt":1795553648e0')
+        ),
+        lambda data: deflate_member(
+            data.replace(b'"createdAt":1795553648', b'"createdAt":9007199254740992')
+        ),
         lambda data: deflate_member(data.replace(b'"scale":1', b'"scale":NaN')),
         lambda data: data,
     ],
@@ -310,12 +296,15 @@ def test_resource_limits_are_enforced():
 def test_manifest_is_exact_and_bound_to_artifact():
     decoded = encode_artifact_v3(model())
     manifest = build_manifest_v3(decoded)
-    assert manifest == (
-        '{"schema_version":"community-manifest-1","artifact_format":"gzip-json",'
-        '"artifact_schema_version":"community-artifact-3",'
-        f'"artifact_digest":"{decoded.digest}","submission_id":"sub_01J9Z3K5C6Q",'
-        f'"contributor_id":"c_7f3a","key_id":"{KEY_ID}","summary":{{}}}}'
-    ).encode()
+    assert (
+        manifest
+        == (
+            '{"schema_version":"community-manifest-1","artifact_format":"gzip-json",'
+            '"artifact_schema_version":"community-artifact-3",'
+            f'"artifact_digest":"{decoded.digest}","submission_id":"sub_01J9Z3K5C6Q",'
+            f'"contributor_id":"c_7f3a","key_id":"{KEY_ID}","summary":{{}}}}'
+        ).encode()
+    )
     assert parse_manifest_v3(manifest, decoded=decoded).artifact_digest == decoded.digest
     original = json.loads(manifest)
     for change in (
@@ -333,8 +322,15 @@ def test_manifest_is_exact_and_bound_to_artifact():
 
 
 def historical(status: str = "active", **changes) -> HistoricalKey:
-    return HistoricalKey(**{"contributor_id": "c_7f3a", "key_id": KEY_ID, "public_key": PUBLIC,
-                            "status": status, **changes})
+    return HistoricalKey(
+        **{
+            "contributor_id": "c_7f3a",
+            "key_id": KEY_ID,
+            "public_key": PUBLIC,
+            "status": status,
+            **changes,
+        }
+    )
 
 
 def verify(signed, **changes):
@@ -365,19 +361,19 @@ def test_sign_and_verify_v3_submission():
         hashlib.sha256(signed.manifest_bytes).digest()
         + hashlib.sha256(signed.artifact_bytes).digest()
     )
-    again = sign_artifact_v3(private_key=KEY, artifact_bytes=signed.artifact_bytes,
-                             manifest_bytes=signed.manifest_bytes)
+    again = sign_artifact_v3(
+        private_key=KEY, artifact_bytes=signed.artifact_bytes, manifest_bytes=signed.manifest_bytes
+    )
     assert again == signed
-    body = submission_request_body(signed, "sub_01J9Z3K5C6Q")
+    body = submission_request_body(signed)
+    assert body["submissionId"] == "sub_01J9Z3K5C6Q"
     assert base64.b64decode(body["artifact"]) == signed.artifact_bytes
     assert list(body) == ["version", "submissionId", "artifact", "manifest", "envelope"]
 
 
 def test_tampered_or_untrusted_submissions_are_rejected():
     signed = build_signed_submission(model(), private_key=KEY)
-    other = build_signed_submission(
-        model().model_copy(update={"created_at": 1}), private_key=KEY
-    )
+    other = build_signed_submission(model().model_copy(update={"created_at": 1}), private_key=KEY)
     signature = json.loads(signed.envelope_bytes)["signature"]
     tampered_manifest = signed.manifest_bytes.replace(b"{}", b"{ }")
     for changes in (
@@ -385,13 +381,71 @@ def test_tampered_or_untrusted_submissions_are_rejected():
         {"manifest_bytes": tampered_manifest},
         {"envelope_bytes": other.envelope_bytes},
         {"envelope_bytes": signed.envelope_bytes.replace(b":", b": ", 1)},
-        {"envelope_bytes": json.dumps({"schema_version": "community-artifact-signature-1",
-                                       "signature": signature.rstrip("=")}).encode()},
+        {
+            "envelope_bytes": json.dumps(
+                {
+                    "schema_version": "community-artifact-signature-1",
+                    "signature": signature.rstrip("="),
+                }
+            ).encode()
+        },
         {"historical_key": historical("revoked")},
         {"historical_key": historical(public_key=OTHER_PUBLIC)},
-        {"historical_key": historical(contributor_id="c_other")},
-        {"historical_key": historical(key_id="sha256:" + "0" * 64)},
         {"expected_submission_id": "sub_other"},
     ):
-        with pytest.raises(ArtifactSignatureError):
+        with pytest.raises(ArtifactSignatureError) as error:
             verify(signed, **changes)
+        assert error.value.code == "invalid_submission"
+    for key in (historical(contributor_id="c_other"), historical(key_id="sha256:" + "0" * 64)):
+        with pytest.raises(ArtifactSignatureError) as error:
+            verify(signed, historical_key=key)
+        assert error.value.code == "key_mismatch"
+
+
+def test_normalized_title_may_have_exactly_256_code_points():
+    value = artifact_value()
+    value["work"]["title"] = "  " + "a b " * 63 + "abcd!!"
+    decoded = decode_artifact_v3(raw_gzip(value))
+    assert len(normalize(decoded.artifact.work.title)) == 256
+
+
+def test_empty_model_version_follows_the_contract():
+    entry = decode_artifact_v3(raw_gzip(artifact_value())).artifact.entries[1]
+    assert (entry.evidence.origin, entry.evidence.model_version) == ("model", "")
+
+
+def test_cross_language_artifact_vector():
+    from scanner.testing.community_v3_vectors import vectors
+
+    assert vectors()["artifact-v3.json"] == VECTOR
+    gzip_bytes = base64.b64decode(VECTOR["gzipBase64"])
+    manifest = VECTOR["manifest"].encode()
+    decoded = decode_artifact_v3(gzip_bytes)
+    assert decoded.json_bytes.decode() == VECTOR["canonicalJson"]
+    assert artifact_json_bytes(decoded.artifact).decode() == VECTOR["canonicalJson"]
+    assert canonical_json_bytes(VECTOR["artifact"]).decode() == VECTOR["canonicalJson"]
+    assert decoded.digest == VECTOR["artifactDigest"]
+    assert build_manifest_v3(decoded) == manifest
+    parsed = parse_manifest_v3(manifest, decoded=decoded)
+    assert signature_base(manifest, parsed).hex() == VECTOR["signatureBaseHex"]
+    public = base64.b64decode(VECTOR["authorPublicKeyBase64"])
+    verified = verify_artifact_v3_signature(
+        artifact_bytes=gzip_bytes,
+        manifest_bytes=manifest,
+        envelope_bytes=VECTOR["envelope"].encode(),
+        historical_key=HistoricalKey("c_7f3a", VECTOR["authorKeyId"], public, "active"),
+        expected_submission_id="sub_01J9Z3K5C6Q",
+    )
+    assert verified.decoded.artifact.submission_id == "sub_01J9Z3K5C6Q"
+
+
+def test_canonical_numbers_match_ecmascript_vectors():
+    cases = json.loads((FIXTURES / "json-numbers.json").read_text())["cases"]
+    assert len(cases) > 300
+    for case in cases:
+        value = struct.unpack(">d", bytes.fromhex(case["float64BigEndianHex"]))[0]
+        assert js_number(value) == case["js"]
+        assert canonical_json_bytes([value]) == f"[{case['js']}]".encode()
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(StrictJsonError):
+            canonical_json_bytes(bad)

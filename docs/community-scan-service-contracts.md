@@ -243,6 +243,12 @@ The service runs these steps in order, inside the submission transaction.
    - their `aliasId` values match, treating null and `theatrical` as the same;
    - when both have no `aliasId`, their `labelText` values match, and a
      null `labelText` matches only another null.
+
+   A null `aliasId` means Theatrical only when `labelText` is also null. A
+   label with a null `aliasId` and a non-null `labelText` (unresolved Other
+   text) is **not** Theatrical: it never equals a label that has an
+   `aliasId`, and equals another label only when both have a null `aliasId`
+   and the same `labelText`.
 4. **Find tier 1–3 matches.** Compute the tier 1–3 matches (§4) between the
    submission keys and each non-merged version of the work with an equal
    label.
@@ -318,6 +324,9 @@ at least one key with the query. For each version, the tier is the best
   `sha256_full` doesn't cancel an equal `md5_quick`.
 - Multiple keys don't add up. Only the best tier counts.
 - `matchedKeys` lists every key type that satisfied the reported tier.
+  For `runtime_mismatch` and `other_version`, it lists every identity key
+  type that matched the work at tier 4 or 5 (`tmdb`, `tvdb` and
+  `title_year`), in that order.
 
 **Result order:**
 

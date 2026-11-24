@@ -5,6 +5,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from scanner.modeling.community_normalization import normalize
+
 from .strict_json import MAX_SAFE_INTEGER
 
 ARTIFACT_V3_SCHEMA = "community-artifact-3"
@@ -39,7 +41,7 @@ class Author(StrictCamelModel):
 
 
 class Work(StrictCamelModel):
-    """Work identity; semantic rules (identifier, numbering, title) are checked by the codec."""
+    """Work identity; `check_work` applies the rules a schema cannot express."""
 
     kind: Literal["movie", "episode"]
     tmdb: str | None = Field(pattern=PROVIDER_ID)
@@ -49,6 +51,34 @@ class Work(StrictCamelModel):
     last_episode: int | None = Field(ge=0, le=9999 + 15)
     title: str = Field(min_length=1)
     year: int | None = Field(ge=1870, le=2200)
+
+
+class WorkError(ValueError):
+    """A work violates §5.2 identity, numbering or title rules; `code` is the service error."""
+
+    def __init__(self, message: str, code: str = "invalid_submission") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def check_work(work: Work) -> None:
+    """Require a provider ID, kind-consistent numbering and a 1–256 code point normalized title."""
+    if work.tmdb is None and work.tvdb is None:
+        raise WorkError("A TMDB or TVDB identifier is required", "work_identity_required")
+    numbering = (work.season, work.episode, work.last_episode)
+    if work.kind == "movie" and numbering != (None, None, None):
+        raise WorkError("A movie has no season or episode numbering")
+    if work.kind == "episode":
+        if work.season is None or work.episode is None:
+            raise WorkError("An episode requires season and episode")
+        if work.last_episode is not None and not (
+            work.episode <= work.last_episode <= work.episode + 15
+        ):
+            raise WorkError("lastEpisode must be within episode..episode + 15")
+    if len(work.title.encode("utf-8")) > 512:
+        raise WorkError("The title must be 1–512 bytes")
+    if not 1 <= len(normalize(work.title)) <= 256:
+        raise WorkError("The normalized title must contain 1–256 code points")
 
 
 class AliasVersion(StrictCamelModel):
@@ -117,7 +147,7 @@ class Evidence(StrictCamelModel):
     origin: Literal["model", "manual", "downloaded"]
     manual_review: bool
     locally_verified: bool
-    model_version: str | None = Field(min_length=1)
+    model_version: str | None
 
 
 class Entry(StrictCamelModel):
