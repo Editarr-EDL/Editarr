@@ -14,8 +14,7 @@ export function useCommunityAccount(target?: AccountSummary) {
   const profile = useCan(`community.identity.profile.${suffix}`);
   const keys = useCan(`community.identity.keys.${suffix}`);
   const disconnect = useCan(`community.identity.disconnect.${suffix}`);
-  const receipts = useCan(`community.receipts.recover.${suffix}`);
-  return { allowed: !protectedTarget, view, enroll, profile, keys, disconnect, receipts,
+  return { allowed: !protectedTarget, view, enroll, profile, keys, disconnect,
     userId: other ? target.id : undefined, other };
 }
 

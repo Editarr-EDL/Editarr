@@ -8,16 +8,16 @@ import type { MasterSharingSummary, VersionChoice } from "./api-community-master
 export type SharingSource = { kind: "scan" | "review"; id: string };
 export type PublicationJob = {
   ownerId: number | null; actorId: number | null; contributorId: string;
-  operationId: string; contributionId: string; revisionId: string; artifactDigest: string;
+  operationId: string; artifactDigest: string;
   state: "pending" | "paused" | "published" | "rejected" | "cancelled" | "cancel_pending";
   phase: string; cancelRequested: boolean; errorCode: string | null;
-  result: { committedAt: number; revisionId: string } | null;
+  result: { committedAt: number } | null;
 };
 export type SharingContext = {
   sourceOwnerId: number | null;
   name: string; mediaIdentity: MediaIdentity | null; durationSeconds: number | null;
   audioSources: { scanId: string; track: AudioTrack | null }[];
-  sourceTerms: { authorId: string; revisionId: string; termsVersion: string }[];
+  sourceTerms: { authorId: string; termsVersion: string }[];
   jobs: PublicationJob[]; terms: { version: string; text: string };
   accessVerified: boolean; accessError: string | null;
 };

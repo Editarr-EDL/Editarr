@@ -1,7 +1,6 @@
 import type { RefObject } from "react";
 import { ModalDialog } from "../ui/ModalDialog";
 import type { FilterCandidate, FilterResult } from "./use-find-filters";
-import { CommunityFilterResults, type CommunityResultsProps } from "./community-filter-results";
 import { audioTrackLabel } from "./audio-track-field";
 import type { MasterTarget } from "../api/api-community-master-types";
 import { MasterFindResults } from "./master-find-results";
@@ -15,7 +14,6 @@ export function FindFiltersDialog({
   onClose,
   returnFocusRef,
   results,
-  community,
   masterTarget,
 }: {
   candidates: FilterCandidate[];
@@ -26,7 +24,6 @@ export function FindFiltersDialog({
   onClose: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   results?: FilterResult[];
-  community?: CommunityResultsProps;
   masterTarget?: MasterTarget;
 }) {
   return <ModalDialog labelledBy="filter-candidates-heading" className="find-filters-dialog" onClose={associating ? undefined : onClose} returnFocusRef={returnFocusRef}>
@@ -49,7 +46,7 @@ export function FindFiltersDialog({
       </label>
       </div>)}
     </div> : <p className="muted-copy">No matching filter scans were found.</p>}
-    {results?.map((entry) => entry.source === "local" ? <details key={entry.candidate.id}>
+    {results?.map((entry) => <details key={entry.candidate.id}>
       <summary tabIndex={0}>Local provenance: {entry.candidate.label}</summary>
       <p>Created: {entry.match.scan.created_at}; filters: {entry.match.scan.finding_count}</p>
       <p>Editarr: {entry.match.scan.release_version || "Unknown"}; scanner: {entry.match.scan.scanner_behavior_version || "Unknown"}</p>
@@ -59,7 +56,7 @@ export function FindFiltersDialog({
         <p>{stage.stage}: {stage.model_id || "Unknown model"}; revision: {stage.model_revision || "Unknown"}</p>
         <p>Effective settings: {stage.effective_settings ? JSON.stringify(stage.effective_settings) : "Unknown"}</p>
       </div>)}
-    </details> : null)}
+    </details>)}
     <div className="button-row">
       <button className="btn-secondary" onClick={onClose} disabled={associating}>Cancel</button>
       <button className="btn-primary" onClick={onAssociate} disabled={associating || !selectedIds.length}>
@@ -67,6 +64,5 @@ export function FindFiltersDialog({
       </button>
     </div>
     {masterTarget && <MasterFindResults target={masterTarget} />}
-    {community && <CommunityFilterResults {...community} />}
   </ModalDialog>;
 }

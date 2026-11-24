@@ -1,16 +1,10 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as api from "../api/api-scans";
-import * as remoteApi from "../api/api-community-lookup";
-import { CommunityApiError } from "../api/api-community";
 import { completeScan } from "../test/app-test-fixtures";
 import { useFindFilters, type LocalFilterTarget } from "./use-find-filters";
 
-vi.mock("../auth/auth-gate", async (original) => ({ ...await original<typeof import("../auth/auth-gate")>(), useCan: () => true }));
 vi.mock("../api/api-scans", () => ({ findFilterCandidates: vi.fn(), associateFilterCandidates: vi.fn() }));
-vi.mock("../api/api-community-lookup", async (original) => ({
-  ...await original<typeof import("../api/api-community-lookup")>(), lookupCommunityFilters: vi.fn(),
-}));
 
 const target: LocalFilterTarget = {
   source: "jellyfin", item_id: "movie-1", library_id: "movies", source_path: "/media/movie.mkv",
@@ -136,21 +130,6 @@ it("announces loading and preserves quick-hash reason text", async () => {
   });
   expect(result.current.finding).toBe(false);
   expect(result.current.candidates[0].matchDescription).toBe("Found by quick hash + duration");
-});
-
-it("keeps local-first selection and associations usable during a failed remote query", async () => {
-  vi.mocked(remoteApi.lookupCommunityFilters).mockRejectedValue(new CommunityApiError("service_unavailable", true, 503));
-  const { result } = renderHook(() => useFindFilters({ target, onMessage, onAssociated,
-    communityInput: { target: { source: "jellyfin", item_id: "movie-1", media_source_id: "source-1" } } }));
-  await act(async () => { await result.current.find(); });
-  expect(result.current.open).toBe(true);
-  expect(result.current.community.error?.code).toBe("service_unavailable");
-  expect(result.current.selectedIds).toEqual(["new", "other", "filename"]);
-  expect(result.current.results.every((item) => item.source === "local")).toBe(true);
-  act(() => result.current.select("community:revision", true));
-  expect(result.current.selectedIds).not.toContain("community:revision");
-  await act(async () => { await result.current.associate(); });
-  expect(api.associateFilterCandidates).toHaveBeenCalledExactlyOnceWith("resolved-media", ["new", "other", "filename"]);
 });
 
 it("rejects out-of-order local discoveries after the selected target changes", async () => {

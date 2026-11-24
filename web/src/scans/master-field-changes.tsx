@@ -1,6 +1,5 @@
 import type { UpdateRow } from "../api/api-community-master-types";
-import { categoryLabel } from "./community-result-state";
-import { formatMs, percent } from "./community-master-format";
+import { categoryLabel, formatMs, percent } from "./community-master-format";
 
 type Values = Record<string, unknown> | null;
 

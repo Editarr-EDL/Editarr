@@ -160,7 +160,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
     }
   }, [item.id, item.library_id, mayReadHistory, mayReadLinkedScans, mayViewOwnJobs, mayViewOtherJobs, scanContext, selectedReviewMediaSourceId]);
   const filters = useMediaFilterFinding({ item, sourceId: selectedReviewMediaSourceId, version: selectedReviewVersion,
-    verifyImports: !!stableIdentity, loadScans, onMessage: setMessage, onVerify: openVerification });
+    verifyImports: !!stableIdentity, loadScans, onMessage: setMessage });
   const [identified, setIdentified] = useState<{ source: string; id: string } | null>(null);
   const currentVersion = identified?.source === scanContext ? identified.id
     : stableIdentity?.current_versions?.find((version) => version.item_id === item.id

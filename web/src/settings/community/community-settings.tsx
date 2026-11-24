@@ -7,7 +7,6 @@ import { useCommunityAccount } from "./community-access";
 import { CommunityProfileEditor } from "./community-profile";
 import { CommunityKeyRotation } from "./community-rotation";
 import { CommunityIdentityRecovery } from "./community-recovery";
-import { CommunityReceipts } from "./community-receipts";
 import { blocksIdentity, failureMessage, handoffState, useCommunityConnection } from "./community-state";
 
 export function CommunitySettings({ target }: { target?: AccountSummary } = {}) {
@@ -71,6 +70,5 @@ function CommunitySettingsBody({ target }: { target?: AccountSummary }) {
       <dl className="community-identity"><div><dt>Installation</dt><dd><code>{connection?.identity?.installationId ?? profile?.installationId ?? "Current installation"}</code></dd></div><div><dt>Signing key</dt><dd><code>{connection?.identity?.keyId ?? profile?.keyId ?? "Current signing key"}</code></dd></div><div><dt>Enrollment reference</dt><dd><code>{stateId}</code></dd></div></dl>
       <div className="button-row"><button className="btn-secondary" disabled={busy} onClick={() => setConfirming(false)}>Back</button><button className="btn-primary" disabled={busy} onClick={() => { setConfirming(false); void run((options) => completeCommunityEnrollment(stateId, options), true); }}>Confirm connection</button></div>
     </ModalDialog>}
-  </section>{connection && access.keys && <CommunityIdentityRecovery onChanged={refresh} userId={access.userId} mayManageKeys={access.keys} />}
-    {connection && access.receipts && <CommunityReceipts userId={access.userId} />}</>;
+  </section>{connection && access.keys && <CommunityIdentityRecovery onChanged={refresh} userId={access.userId} mayManageKeys={access.keys} />}</>;
 }

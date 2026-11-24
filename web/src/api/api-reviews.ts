@@ -78,12 +78,6 @@ export function recoverSavedReview(reviewId: string): Promise<SavedReviewSummary
   return jsonApi(`${runtimeApiBasePath()}/reviews/${encodeURIComponent(reviewId)}/repair/recover`, { method: "POST" }, "Unable to recover saved review");
 }
 
-export function redownloadReviewCommunityScan(reviewId: string, confirmed = false): Promise<SavedReviewSummary> {
-  return jsonApi(`${runtimeApiBasePath()}/reviews/${encodeURIComponent(reviewId)}/repair/community`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed }),
-  }, "Unable to retrieve the missing community scan");
-}
-
 export function saveSavedReview(reviewId: string, data: ReviewSave): Promise<SavedReview> {
   return jsonApi(`${runtimeApiBasePath()}/reviews/${encodeURIComponent(reviewId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }, "Unable to save saved review");
 }

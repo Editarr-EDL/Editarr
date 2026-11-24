@@ -25,49 +25,126 @@ and reputation, but separately registered installations have distinct keys. Rein
 rename and rotation do not reset those records. Restoring a portable identity retains
 its logical installation ID and key; it does not register a new installation.
 
-## Share an exact contribution
+## How community filters are organized
 
-Use **Share** on a completed scan or saved review. Confirm its media identity,
-source, coverage and selected channels. Preview the exact public payload, including free-text notes,
-original authors and changes, before confirming rights and standing reuse permission.
-Private file paths, credentials and alternate-track inventories are excluded.
+The community keeps one **master filter set** per version of a work. A work is a
+movie (TMDB or TVDB ID) or a TV episode (series ID plus season and episode). A
+version is a release or cut such as Theatrical, Director's Cut, Extended Edition
+or Unrated; Theatrical also means "no particular version". Every contributor's
+shared filters are merged into that version's master set, so contributions
+reinforce one set instead of competing. Each filter carries its own confidence
+and contributor count. Attribution is a count only, without names.
+
+## Find community filters
+
+Select the physical media version on the item page and open **Find Filters**.
+The dialog lists matching local scans first. Its **Community versions** section
+searches only when you choose **Find community versions**; local discovery stays
+available if the search fails. The first search uses Theatrical. Use the version
+picker to search a different version, or choose **Other** and an optional name.
+
+Each result card shows the version name, a **Match %** and the filter and
+contributor counts. Match % reflects the strongest evidence that links your file
+to that version:
+
+| Evidence | Match % |
+| --- | --- |
+| Full-file hash | 100% |
+| Sampled or quick hash | 80% |
+| Audio or video stream fingerprint | 65% |
+| TMDB/TVDB ID and version, runtime within tolerance | 30% |
+| Title, year and version, runtime within tolerance | 15% |
+| ID or title match with runtime outside tolerance | 5% |
+
+An **Unconfirmed** label marks a candidate version. Its filters come from
+contributors whose files could only be loosely matched (by ID, title or runtime).
+It becomes confirmed once several contributors with matching files submit for it,
+or after moderator review. Treat unconfirmed versions with extra care.
+
+## Apply and align a master set
+
+Choose **Use these filters** on a result card to download the service-signed
+master set and link it to this media version. Each account has one linked version
+per media version; choosing another version asks you to confirm the replacement.
+Nothing is applied to a saved review or exported automatically.
+
+Results at 65% or higher apply immediately. Lower matches show **Needs alignment
+with your file before it applies**: open the set's **Align before applying** step,
+add anchors that say where filters start on your file, previewing their clips (or
+enter an offset), choose
+**Preview alignment**, then **Approve alignment**. No filter from that set is active
+until alignment is approved.
+
+## Review the community filters
+
+The item page's **Community filters** section lists the linked set's filters with
+their time, category, severity, action, confidence and contributor count.
+
+- **Confirm** or **Reject** each filter. Your decisions are kept locally and are
+  never overwritten by updates; **Reset** returns a filter to the master values.
+- Filters with a **Locally verified** badge are ones you confirmed or adjusted,
+  or that overlap one of your own local findings of the same category.
+- A filter is **Low Confidence** when its negative signals (downvotes, disputes and
+  contributors whose coverage found nothing there) outweigh its support. Untouched
+  Low Confidence filters are not active unless you turn on **Show Low Confidence
+  filters**. **Minimum confidence** hides other untouched filters below your
+  threshold. Both preferences belong to your account; filters you touched ignore
+  them.
+- Use **Thumbs up** or **Thumbs down** to vote on an individual filter. Votes
+  require a current community connection and your downloaded copy of the set; you
+  cannot vote on your own filters. A vote that could not be sent stays pending with
+  **Retry vote**, which resends the same saved intent.
+
+## Share your filters
+
+Use **Share** on a completed scan or saved review. Choose the version your file
+represents with the version picker (Theatrical, another listed version, or
+**Other** with an optional name); no preview is prepared until a version is
+chosen. The work needs a TMDB or TVDB ID, plus season and episode for TV.
+
+The preview shows the exact public payload and an approximate summary such as
+"≈4 new, ≈27 confirmations, 3 adjustments, 1 dispute". The numbers are estimates
+because the service makes the final match. Your cues and coverage are shared;
+community filters you confirmed or adjusted count as confirmations or
+adjustments, and filters you rejected are shared as disputes. Untouched downloaded
+filters are not re-shared. Private file paths, credentials and alternate-track
+inventories are excluded. Confirm rights and standing reuse permission before
+approving.
 
 AI audio contributions describe only the actual analyzed track. A mixed review can
 require choosing one track and excluding other-track audio; this does not edit the
-saved review. Historical or partial evidence keeps its unknown/coverage labels.
-Do not promote it to a verified match by editing a description.
+saved review.
 
-Uploads retain their approved bytes and operation identity. Check a pending result
-before retrying; explicit retry sends the saved intent, not a newly created donation.
-Cancellation after submission can be uncertain, and a committed publication remains
-published. Standing permission permits retained public notes, attribution and change
-history. There is no author withdrawal command; operators can moderate visibility.
-Community sharing requires explicit approval for each contribution.
+Approved contributions keep their exact bytes and operation identity. Check a
+pending result before retrying; retry resends the saved intent, not a new
+contribution. Cancellation after submission can be uncertain, and a committed
+contribution remains published. There is no author withdrawal command; operators
+can moderate visibility.
 
-## Find, import and review
+## Daily update checks and update review
 
-Select the physical media version and, when applicable, its audio track. Open
-**Find Filters** and explicitly request community results. Local discovery stays
-available if the community lookup fails. No lookup or download implies enrollment,
-automatic selection, review edits or sidecar export.
+Editarr checks your linked versions for newer master-set revisions at most once a
+day when you open the web app. The sidebar's **Filter updates** entry shows
+unread notifications for changed, merged or unavailable versions and links to each
+item page; use **Mark all as read** to clear them. On an item page,
+**Check for filter updates** checks that set immediately without using the daily
+allowance.
 
-Compare video and audio compatibility separately. Compatibility is ordered before
-revision quality; the quality score does not prove a matching physical cut. Review
-required, uncertain and unknown-track results need explicit channel approval. Stream
-timing conflicts remain channel-specific; the duration tolerance does not authorize
-automatic cue retiming.
+A newer revision is downloaded but never applied on its own. Choose **Review** to
+see the changes grouped as **New**, **Changed**, **Removed** and **Now Low
+Confidence**, with the changed fields for each filter. For each row choose
+**Accept**, **Keep mine** or **Dismiss**, or use a group's **Accept all**. Accept all
+skips filters you edited, so decide those one at a time; they are never silently
+overwritten. Sets that needed alignment must have their
+alignment approved for the new revision before updates can be accepted.
+Confidence-only changes apply without review.
 
-Select the desired channels and download. Each queued item has its own outcome;
-completed imports survive another item's failure or cancellation. Reopening reconciles
-committed local results. Repeated import reuses verified evidence while preserving
-original signed bytes and attribution. Create or open a saved review, inspect cues
-and save changes before explicitly exporting EDL or MCF.
+## Earlier community imports
 
-Use **Check feedback** for current private eligibility and vote state. Voting requires
-an acknowledged import of that exact non-self revision and current membership.
-Pending votes retain their exact intent; retry does not overwrite a newer vote with
-a historical outcome. Download/import volume is not uploader trust. Reports have a
-service API, but the local report-submission control is not implemented.
+Scans imported under the earlier per-scan protocol remain ordinary local scans,
+with their original attribution, and can still be used in reviews and exports.
+They no longer support community votes, receipt recovery or re-download from a
+saved review's repair options; use **Recover the review** or delete it instead.
 
 ## Backup, transfer, rotation and recovery
 
@@ -110,8 +187,9 @@ Local scheduling is disabled until configured and never backs up the Docker serv
 
 Use the [Docker upgrade procedure](community-service-docker.md#persistence-and-recovery)
 with a verified pre-upgrade snapshot. Startup does not upgrade the database.
-Artifact v1/v2 verification retains exact gzip, manifest and signature bytes. Strict
-clients and service DTOs need coordinated releases; unknown versions/fields fail closed.
+The service accepts only master-set submissions; earlier artifact v1/v2 imports stay
+local. Strict clients and service DTOs need coordinated releases; unknown
+versions/fields fail closed.
 The About endpoint may report community/artifact identities as unknown; it is not a
 capability-negotiation endpoint. No additional compatibility grace window is selected.
 

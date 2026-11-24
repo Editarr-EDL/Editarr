@@ -1,7 +1,6 @@
 import type {
   MasterFilter, MasterPreferences, MasterSharingSummary, UpdateCounts, UpdateGroup, UpdateRow, VersionChoice,
 } from "../api/api-community-master-types";
-import { categoryLabel } from "./community-result-state";
 
 export const UNCONFIRMED_TOOLTIP = "This version hasn't been verified yet. Its filters come from contributors whose files "
   + "could only be loosely matched (by ID, title, or runtime). It becomes confirmed once several contributors with "
@@ -11,6 +10,12 @@ export const updateGroups: { id: UpdateGroup; label: string }[] = [
   { id: "new", label: "New" }, { id: "changed", label: "Changed" },
   { id: "removed", label: "Removed" }, { id: "nowLowConfidence", label: "Now Low Confidence" },
 ];
+
+/** Turn a taxonomy token such as `strong_language` or `sexContent` into a sentence-case label. */
+export function categoryLabel(value: string): string {
+  const spaced = value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
 /** Format milliseconds as `h:mm:ss.mmm` (hours only when present). */
 export function formatMs(ms: number) {

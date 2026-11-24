@@ -224,10 +224,6 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/settings/jellyfin" && method === "GET") {
       await json(route, { server_url: "http://jellyfin.test", api_key_configured: true, last_checked_at: null, last_error: null }); return;
     }
-    if (url.pathname === "/api/community/downloads/status") {
-      const body = route.request().postDataJSON();
-      await json(route, { version: 1, outcomes: body.choices.map((choice: { revisionId: string }) => ({ revisionId: choice.revisionId, status: "not_imported" })) }); return;
-    }
     if (url.pathname === "/api/mcf-registry") {
       await json(route, { families: [
         { token: "language", label: "Language", categories: [{ token: "swearing", label: "Swearing" }] },
