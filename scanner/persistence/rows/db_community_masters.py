@@ -233,7 +233,11 @@ class CommunitySyncNotificationRow(Base):
             name="ck_community_sync_notifications_kind",
         ),
         UniqueConstraint(
-            "owner_id", "link_id", "to_revision", name="uq_community_sync_notifications_revision"
+            "owner_id",
+            "link_id",
+            "kind",
+            "to_revision",
+            name="uq_community_sync_notifications_revision",
         ),
         Index("ix_community_sync_notifications_unread", "owner_id", "read_at"),
     )

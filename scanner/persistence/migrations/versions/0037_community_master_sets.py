@@ -241,7 +241,11 @@ def _create_account_state():
             name="ck_community_sync_notifications_kind",
         ),
         sa.UniqueConstraint(
-            "owner_id", "link_id", "to_revision", name="uq_community_sync_notifications_revision"
+            "owner_id",
+            "link_id",
+            "kind",
+            "to_revision",
+            name="uq_community_sync_notifications_revision",
         ),
     )
     op.create_index(

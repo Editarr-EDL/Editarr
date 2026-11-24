@@ -259,3 +259,14 @@ def test_merged_rows_rekey_and_keep_local_state(db):
     assert (row.state, row.effective["severity"]) == ("adjusted", "low")
     removed = _update(db, created)["f_1"]
     assert (removed.group, removed.merged_into) == ("removed", "f_m")
+
+
+def test_accept_all_applies_more_rows_than_one_decision_request(db):
+    created = link(db, served("f_seed"))
+    added = [served(f"f_{index:04d}", values(index * 10, index * 10 + 5)) for index in range(601)]
+    _store(db, created, 2, served("f_seed"), *added)
+    assert pending_counts(db, created.id)["new"] == 601
+    remaining = accept_all(db, OWNER, created.id, 2, "new", now=T0)
+    assert remaining.groups["new"] == []
+    assert created.applied_revision == 2
+    assert len(_rows(db, created)) == 602

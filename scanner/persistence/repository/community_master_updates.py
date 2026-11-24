@@ -272,10 +272,21 @@ def decide_updates(
     outside the row's `allowed` list, or Accept while it is disabled, is
     `decision_not_allowed`.
     """
-    now = now or utcnow()
     decisions = list(decisions)
     if len(decisions) > MAX_DECISIONS:
         raise ValueError(f"At most {MAX_DECISIONS} decisions per request")
+    return _decide(db, owner_id, link_id, to_revision, decisions, now or utcnow())
+
+
+def _decide(
+    db: Session,
+    owner_id: int,
+    link_id: str,
+    to_revision: int,
+    decisions: list[tuple[str, str]],
+    now: datetime,
+) -> UpdateView:
+    """Check every decision, then apply them all in the caller's transaction."""
     link = require_link(db, owner_id, link_id)
     if to_revision != link.latest_revision:
         raise CommunityMasterError("update_changed")
@@ -308,7 +319,10 @@ def accept_all(
     *,
     now: datetime | None = None,
 ) -> UpdateView:
-    """Accept every untouched row of an API group whose Accept is enabled."""
+    """Accept every untouched row of an API group whose Accept is enabled.
+
+    The per-request decision limit does not apply; all rows apply in one transaction.
+    """
     if group not in GROUPS.values():
         raise ValueError(f"Unknown group {group!r}")
     view = master_update(db, owner_id, link_id)
@@ -317,7 +331,7 @@ def accept_all(
     chosen = [
         (row.row_id, ACCEPT) for row in view.groups[group] if not row.touched and row.can_accept
     ]
-    return decide_updates(db, owner_id, link_id, to_revision, chosen, now=now)
+    return _decide(db, owner_id, link_id, to_revision, chosen, now or utcnow())
 
 
 __all__ = [

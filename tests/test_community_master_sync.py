@@ -85,3 +85,15 @@ def test_notifications_are_recorded_once_listed_newest_first_and_read(db):
     assert sync_status(db, OWNER, SERVICE, now=T0).unread_count == 0
     with pytest.raises(ValueError):
         mark_notifications_read(db, OWNER, [str(index) for index in range(101)])
+
+
+def test_merged_and_changed_notifications_can_share_a_revision(db):
+    created = link(db, served("f_a"))
+    changed = record_notification(
+        db, OWNER, created.id, "changed", from_revision=1, to_revision=2, now=T0
+    )
+    merged = record_notification(db, OWNER, created.id, "merged", to_revision=2, now=T0)
+    db.commit()
+    assert merged.id != changed.id
+    assert record_notification(db, OWNER, created.id, "merged", to_revision=2).id == merged.id
+    assert {row.kind for row in list_notifications(db, OWNER)} == {"changed", "merged"}
