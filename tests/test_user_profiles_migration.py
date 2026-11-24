@@ -18,9 +18,10 @@ from scanner.backup.archive import export_backup
 from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _upgrade
 from tests.community_identity_migration_support import no_network as no_network
+from tests.community_master_migration_support import retire_publications
 from tests.explicit_filter_modes_support import drop_0031_additions
-from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.jellyfin_sync_migration_support import drop_0018_additions
+from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_activity_migration import _assert_recoverable
 from tests.test_backup_activation import _fixture, _restore
@@ -66,7 +67,7 @@ def test_every_supported_revision_upgrades_with_every_row_kept(tmp_path, revisio
     drop_0018_additions(upgraded)
     drop_0031_additions(upgraded, original)
     if revision == RULES:
-        assert without_stable_media_identity(upgraded) == original
+        assert without_stable_media_identity(upgraded) == retire_publications(original, upgraded)
     assert adoption.upgrade_existing_database(path, path.parent) is None
     recovered = adoption.export_upgrade_recovery(path, path.parent, tmp_path / "recovered.db")
     assert generation.is_dir()

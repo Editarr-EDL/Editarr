@@ -12,7 +12,7 @@ files are written before this commit and its old files removed after it
 import json
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from sqlalchemy import delete, select, update
@@ -43,6 +43,7 @@ from scanner.security.jellyfin_accounts import blocks
 
 from ..write_lock import write_lock
 from . import account_transfer as transfers
+from .account_community_masters import delete_master_state, transfer_master_state
 from .account_consent import Outcome, canonical, result
 from .account_impact import (
     AccountDispositionConflict,
@@ -307,11 +308,17 @@ def apply_disposition(
     with ExitStack() as journals:
         if impact.mode is Disposition.DELETE:
             outcome = _delete(db, impact, choices, access, journals)
+            outcome = replace(
+                outcome, master_links_deleted=delete_master_state(db, impact.user_id)
+            )
         elif impact.mode is Disposition.TRANSFER:
             transfers.stage_transfer(db, transfer, impact.reviews, now)
             outcome = Outcome(
                 files_moved=tuple(move.export_id for move in transfer.moves),
                 policy_files=transfer.policy_exports,
+                master_links_transferred=transfer_master_state(
+                    db, impact.user_id, transfer.destination_id
+                ),
             )
         credentials = _release_credentials(
             db,

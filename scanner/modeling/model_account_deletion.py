@@ -74,6 +74,10 @@ class AccountDeletionCommunity(BaseModel):
     identity: bool
     operations: int
     pending: int
+    master_links: int = Field(0, description="Master-set links, including replaced history")
+    master_notifications: int = 0
+    master_preferences: bool = False
+    master_sync_states: int = 0
 
 
 class AccountDeletionBlocker(BaseModel):
@@ -151,6 +155,8 @@ class AccountDeletionResult(BaseModel):
     personal_files_kept: int
     community_operations_kept: int
     community_identity_kept: bool
+    community_master_links_deleted: int = 0
+    community_master_links_transferred: int = 0
     sessions_revoked: int
     api_key_revoked: bool
     identity_released: bool

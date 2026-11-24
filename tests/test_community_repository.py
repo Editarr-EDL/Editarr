@@ -107,34 +107,38 @@ def test_operation_retry_and_restore_reconciliation(engine):
                 ).operation_id
                 == row.operation_id
             )
-            receipt = enqueue_operation(
+            submission = enqueue_operation(
                 db,
-                operation_id="receipt-1",
-                service_url=SERVICE,
-                kind="receipt",
-                contributor_id="author-1",
-                installation_id="installation-1",
-                contribution_id="contribution-1",
-                revision_id="revision-1",
-                digest="sha256:123",
-                receipt="service-signed-receipt",
+                **(OPERATION | {"operation_id": "submission-1", "kind": "submission"}),
                 credential_ref=only_identity_ref(db),
             )
             vote = enqueue_operation(
                 db,
                 operation_id="vote-1",
                 service_url=SERVICE,
-                kind="vote",
+                kind="filter_vote",
                 contributor_id="author-1",
                 installation_id="installation-1",
-                contribution_id="contribution-1",
-                revision_id="revision-1",
-                digest="sha256:123",
+                community_version_id="v_1",
+                filter_id="f_1",
+                receipt_id="a" * 64,
+                receipt='{"version":1,"vote":"up"}',
                 vote="up",
                 credential_ref=only_identity_ref(db),
             )
-            assert receipt.receipt == "service-signed-receipt"
-            assert vote.vote == "up"
+            assert submission.kind == "submission"
+            assert (vote.vote, vote.filter_id, vote.receipt_id) == ("up", "f_1", "a" * 64)
+            with pytest.raises(ValueError, match="filter vote requires"):
+                enqueue_operation(
+                    db,
+                    operation_id="vote-2",
+                    service_url=SERVICE,
+                    kind="filter_vote",
+                    contributor_id="author-1",
+                    installation_id="installation-1",
+                    vote="like",
+                    credential_ref=only_identity_ref(db),
+                )
             with pytest.raises(ValueError, match="different intent"):
                 enqueue_operation(
                     db,
@@ -152,7 +156,7 @@ def test_operation_retry_and_restore_reconciliation(engine):
             credential_ref=only_identity_ref(restored),
         )
         assert [(row.operation_id, row.state) for row in pending] == [
-            ("receipt-1", "pending"),
+            ("submission-1", "pending"),
             ("vote-1", "pending"),
             ("retry-1", "submitted"),
         ]
@@ -184,7 +188,7 @@ def test_operation_retry_and_restore_reconciliation(engine):
                 key_id="sha256:key-1",
                 credential_ref=only_identity_ref(restored),
             )
-        ] == ["receipt-1", "vote-1"]
+        ] == ["vote-1"]
         assert restored.query(CommunityOperationRow).count() == 3
 
 

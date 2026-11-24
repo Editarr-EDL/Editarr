@@ -29,6 +29,7 @@ from scanner.persistence.repository.review_community_repairs import (
     restore_community_review,
 )
 from tests.community_identity_support import only_identity_ref
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.test_community_verified_import import BOUNDS, local_target, verified_input
 from tests.test_community_verified_import import import_database as import_database
 
@@ -126,6 +127,7 @@ def restoration(import_database, tmp_path):
         yield db, review, attempt
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_redownload_restores_rows_and_rebinds_receipt_in_one_commit(restoration):
     db, before, attempt = restoration
     commits = []
@@ -157,6 +159,7 @@ def test_redownload_restores_rows_and_rebinds_receipt_in_one_commit(restoration)
 
 
 @pytest.mark.parametrize("failure", ["digest", "map", "partial_map"])
+@RETIRED_REVISION_PROTOCOL
 def test_unmatched_identity_or_finding_rolls_back_the_entire_import(restoration, failure):
     db, before, attempt = restoration
     record = db.get(ReviewScanRepairRow, attempt.record_id)
@@ -189,6 +192,7 @@ def test_unmatched_identity_or_finding_rolls_back_the_entire_import(restoration,
     assert db.query(CommunityOperationRow).one().scan_id is None
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_no_event_map_uses_exact_source_content_only(restoration):
     db, before, attempt = restoration
     record = db.get(ReviewScanRepairRow, attempt.record_id)
@@ -210,7 +214,7 @@ def test_no_event_map_uses_exact_source_content_only(restoration):
 @pytest.mark.parametrize(
     "failure",
     [
-        None,
+        pytest.param(None, marks=RETIRED_REVISION_PROTOCOL),
         "not_found",
         "revoked",
         "offline",

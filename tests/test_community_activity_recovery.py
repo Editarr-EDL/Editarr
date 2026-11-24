@@ -27,6 +27,7 @@ from scanner.security.community_download_receipts import (
 )
 from tests import test_community_activity_feedback as feedback_module
 from tests.multi_user_access_support import ADMIN, USER
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.scan_access_http import LIBRARY_A, LIBRARY_B
 from tests.test_community_activity_access import activities as activities
 from tests.test_community_activity_feedback import (
@@ -41,6 +42,8 @@ from tests.test_community_activity_feedback import (
 from tests.test_community_activity_http import community as community
 from tests.test_community_verified_import import BOUNDS, RECEIPT_VECTOR
 from tests.test_stream_fingerprints import generated_streams as generated_streams
+
+pytestmark = RETIRED_REVISION_PROTOCOL
 
 
 @pytest.mark.parametrize("caller", [USER, ADMIN])

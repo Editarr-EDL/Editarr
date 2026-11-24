@@ -12,7 +12,7 @@ from scanner.persistence.rows.db_archive import ArchivedSource
 from scanner.persistence.rows.db_catalog import MediaItemRow
 from scanner.persistence.rows.db_scans import ScanRow
 from tests import upgrade_matrix_support as state
-from tests.activity_migration_support import _clone
+from tests.activity_migration_support import _clone, _upgrade
 from tests.explicit_filter_modes_support import drop_0031_additions
 from tests.test_account_migration import _snapshot
 from tests.test_upgrade_matrix import SOURCES as MATRIX_SOURCES
@@ -128,7 +128,7 @@ def test_every_supported_revision_archives_other_files_and_keeps_every_row(tmp_p
 
     assert generation.is_dir()
     assert (
-        adoption._inspect_database(path) == adoption.HEAD_REVISION == "0036_sampled_media_identity"
+        adoption._inspect_database(path) == adoption.HEAD_REVISION == "0037_community_master_sets"
     )
     upgraded, _ = _snapshot(path)
     drop_0031_additions(upgraded, original)
@@ -238,7 +238,8 @@ def test_unsent_publications_end_cancelled_and_sent_ones_keep_polling(tmp_path):
         _clone_publication(database, "op-done", "scan", scan, scan, "acknowledged")
         live = "jellyfin-queued-scan"
         _clone_publication(database, "op-live", "scan", live, live, "pending")
-    adoption.upgrade_existing_database(path, path.parent)
+    # Stop at 0026: 0037 later retires every unfinished publication.
+    _upgrade(path, "0026_archive_manual_files")
     with sqlite3.connect(path) as database:
         assert database.execute(
             "SELECT operation.operation_id, operation.state, publication.cancel_requested "

@@ -10,6 +10,7 @@ import pytest
 from scanner.backup.archive import _sqlite_snapshot
 from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _upgrade
+from tests.community_master_migration_support import retire_publications
 from tests.explicit_filter_modes_support import drop_0031_additions
 from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
@@ -62,7 +63,7 @@ def test_previous_revision_upgrades_with_every_row_kept_and_an_empty_table(tmp_p
     generation = adoption.upgrade_existing_database(path, path.parent)
     assert generation.is_dir()
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
-    assert adoption.HEAD_REVISION == "0036_sampled_media_identity"
+    assert adoption.HEAD_REVISION == "0037_community_master_sets"
     upgraded, _ = _snapshot(path)
     drop_0031_additions(upgraded, original)
     assert upgraded.pop("account_dispositions") == []
@@ -70,7 +71,7 @@ def test_previous_revision_upgrades_with_every_row_kept_and_an_empty_table(tmp_p
     assert upgraded.pop("jellyfin_user_blocks") == []
     assert all(row[-1] is None for row in upgraded["media_item_exports"])
     upgraded["media_item_exports"] = [row[:-1] for row in upgraded["media_item_exports"]]
-    assert without_stable_media_identity(upgraded) == original
+    assert without_stable_media_identity(upgraded) == retire_publications(original, upgraded)
     assert adoption.upgrade_existing_database(path, path.parent) is None
 
 

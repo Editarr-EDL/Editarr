@@ -26,6 +26,7 @@ from tests.arr_archive_support import undo_archive_migration
 from tests.filter_policy_http_support import rule
 from tests.multi_user_access_support import USER
 from tests.owner_schema_support import (
+    undo_community_master_migration,
     undo_explicit_filter_modes_migration,
     undo_jellyfin_admission_migration,
     undo_jellyfin_owner_migration,
@@ -175,6 +176,7 @@ def test_legacy_nearest_import_cues_under_source_basis_binding(app, monkeypatch,
         ):
             db.connection().exec_driver_sql(f"ALTER TABLE media_item_exports DROP COLUMN {column}")
         db.connection().exec_driver_sql("PRAGMA foreign_keys = OFF")
+        undo_community_master_migration(db.connection())
         undo_stable_media_identity_migration(db.connection())
         undo_scan_read_indexes_migration(db.connection())
         undo_manual_filter_tracking_migration(db.connection())

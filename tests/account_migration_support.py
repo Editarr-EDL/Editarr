@@ -2,6 +2,12 @@
 
 import sqlite3
 
+from tests.community_master_migration_support import (
+    comparable,
+    legacy_rows,
+    retire_publications,
+)
+
 LEGACY_AUTH_TABLES = frozenset({"admin_users", "auth_sessions", "api_keys"})
 DROPPED_BY_ARCHIVE = {"arr_settings": frozenset({"api_key"})}
 """Columns revision 0025 removes; tests/test_arr_archive_migration.py checks the removal."""
@@ -18,15 +24,17 @@ def assert_preserved_after_account_migration(path, original, columns):
     """
     kept = {name: names for name, names in columns.items() if name not in LEGACY_AUTH_TABLES}
     with sqlite3.connect(path) as database:
+        selected, actual, expected = {}, {}, {}
         for name, names in kept.items():
             dropped = DROPPED_BY_ARCHIVE.get(name, frozenset())
             positions = [index for index, column in enumerate(names) if column not in dropped]
-            selected = ", ".join(f'"{names[index]}"' for index in positions)
-            expected = [tuple(row[index] for index in positions) for row in original[name]]
-            assert (
-                database.execute(f'SELECT {selected} FROM "{name}" ORDER BY rowid').fetchall()
-                == expected
-            ), name
+            selected[name] = [names[index] for index in positions]
+            rows = [tuple(row[index] for index in positions) for row in original[name]]
+            expected[name] = comparable(name, selected[name], rows)
+            actual[name] = legacy_rows(database, name, selected[name])
+        expected = retire_publications(expected, actual, selected)
+        for name in kept:
+            assert actual[name] == expected[name], name
         assert "admin_users" not in {
             row[0] for row in database.execute("SELECT name FROM sqlite_master")
         }

@@ -16,6 +16,7 @@ from scanner.persistence.repository import review_access
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import ADMIN, PEER_USER, USER
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.scan_access_http import LIBRARY_A, LIBRARY_B
 from tests.test_community_activity_access import activities as activities
 from tests.test_community_activity_feedback import (
@@ -29,6 +30,8 @@ from tests.test_community_activity_feedback import (
 )
 from tests.test_community_activity_http import community as community
 from tests.test_stream_fingerprints import generated_streams as generated_streams
+
+pytestmark = RETIRED_REVISION_PROTOCOL
 
 
 def test_feedback_uses_each_contributors_accessible_verified_copy(feedback, activities):

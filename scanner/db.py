@@ -54,6 +54,17 @@ from scanner.persistence.rows.db_community import (
     CommunityOperationRow,
     CommunityPublicationRow,
 )
+from scanner.persistence.rows.db_community_masters import (
+    CommunityMasterDismissalRow,
+    CommunityMasterFilterRow,
+    CommunityMasterLinkRow,
+    CommunityMasterPreferenceRow,
+    CommunityMasterSnapshotRow,
+    CommunityMasterUpdateRow,
+    CommunitySyncNotificationRow,
+    CommunitySyncStateRow,
+    RetiredCommunityOperationRow,
+)
 from scanner.persistence.rows.db_core import Base
 from scanner.persistence.rows.db_export_regenerations import ExportRegenerationRow
 from scanner.persistence.rows.db_media_identity import (

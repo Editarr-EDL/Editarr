@@ -14,9 +14,12 @@ from scanner.integrations.community.votes import VoteOutbox
 from scanner.persistence.repository.repository_community import set_connection
 from scanner.security.community_identity import save_identity_registration
 from tests.community_identity_support import client_home
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.test_community_downloads import response
 from tests.test_community_import_receipts import committed, outbox
 from tests.test_community_verified_import import import_database as import_database
+
+pytestmark = RETIRED_REVISION_PROTOCOL
 
 
 def sender(db, tmp_path, handle):

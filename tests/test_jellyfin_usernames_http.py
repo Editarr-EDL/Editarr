@@ -18,6 +18,7 @@ from tests.community_schema_fixture import SYNTHETIC_PASSWORD_HASH
 from tests.jellyfin_user_boundary import IDS
 from tests.multi_user_access_support import ORIGIN, OWNER, PEER_USER
 from tests.owner_schema_support import (
+    undo_community_master_migration,
     undo_explicit_filter_modes_migration,
     undo_manual_filter_tracking_migration,
     undo_remove_passwords_migration,
@@ -135,6 +136,7 @@ def test_a_name_a_password_account_held_before_0030_comes_with_the_next_sync(app
     assert _usernames(app)[casey] is None
     with app.accounts.engine.begin() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
+        undo_community_master_migration(connection)
         undo_stable_media_identity_migration(connection)
         undo_scan_read_indexes_migration(connection)
         undo_manual_filter_tracking_migration(connection)

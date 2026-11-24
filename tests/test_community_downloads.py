@@ -19,6 +19,7 @@ from scanner.integrations.community.transport import (
 )
 from scanner.security.community_identity import load_or_create_installation_identity
 from tests.community_identity_support import identity_home, only_identity_ref
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.test_community_verified_import import (
     BOUNDS,
     SERVICE,
@@ -200,6 +201,7 @@ def test_bounded_explicit_larger_response_keeps_enrollment_default_small(tmp_pat
         )
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_restore_reuses_original_import_association_and_operation(import_database, tmp_path):
     import sqlite3
 
@@ -244,6 +246,7 @@ def test_restore_reuses_original_import_association_and_operation(import_databas
         engine.dispose()
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_concurrent_retries_create_one_immutable_scan_and_receipt(import_database, tmp_path):
     from concurrent.futures import ThreadPoolExecutor
 

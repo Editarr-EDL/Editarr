@@ -27,6 +27,7 @@ from scanner.security.community_download_receipts import (
 from tests import test_community_activity_http as activity_http
 from tests.community_identity_users_support import SERVICE
 from tests.multi_user_access_support import ADMIN, PEER_USER, USER
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.scan_access_http import LIBRARY_A, LIBRARY_B
 from tests.test_community_activity_access import activities as activities
 from tests.test_community_activity_http import community as community
@@ -197,6 +198,7 @@ def import_for(app, service, homes, scan, user, kind="retimed"):
         return result.import_id, result.scan.id, value["revisionId"], contributor
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_two_contributors_share_evidence_not_receipts_or_votes(feedback):
     app, service, homes, scan, _review = feedback
     first = import_for(app, service, homes, scan, USER)
@@ -243,6 +245,7 @@ def test_two_contributors_share_evidence_not_receipts_or_votes(feedback):
         )
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_receipt_hidden_and_absent_ids_match_without_network_or_writes(feedback):
     app, service, homes, scan, _review = feedback
     imported, _shared_scan, _revision, _contributor = import_for(app, service, homes, scan, USER)
@@ -269,6 +272,7 @@ def test_receipt_hidden_and_absent_ids_match_without_network_or_writes(feedback)
 
 
 @pytest.mark.parametrize("caller", [ADMIN, USER])
+@RETIRED_REVISION_PROTOCOL
 def test_receipt_recovery_skips_out_of_scope_imports(feedback, activities, caller):
     app, service, homes, scan, _review = feedback
     hidden_scan, _ = activities.seed_scan(USER, "library-b", library=LIBRARY_B, status="complete")
@@ -295,6 +299,7 @@ def test_receipt_recovery_skips_out_of_scope_imports(feedback, activities, calle
     assert service.feedback == []
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_receipt_permission_revoked_after_key_read_holds_unsent_operation(feedback):
     app, service, homes, scan, _review = feedback
     imported, _shared_scan, _revision, _contributor = import_for(app, service, homes, scan, USER)
@@ -319,6 +324,7 @@ def test_receipt_permission_revoked_after_key_read_holds_unsent_operation(feedba
 
 
 @pytest.mark.parametrize("kind", ["receipt", "vote"])
+@RETIRED_REVISION_PROTOCOL
 def test_accepted_feedback_is_recorded_after_revocation(feedback, kind):
     app, service, homes, scan, _review = feedback
     imported, _shared_scan, revision, _contributor = import_for(app, service, homes, scan, USER)

@@ -194,10 +194,13 @@ Field rules:
   finding of the same category on this local version.
 - A row is `active` when **all** of these hold:
   - the alignment state isn't `required`;
-  - the state is `pending`, `verified`, or `adjusted`;
+  - the state is `pending`, `verified`, or `adjusted` (or
+    `low_confidence` when `showLowConfidence` is set);
   - **untouched rows only:** the row isn't Low Confidence, unless
     `showLowConfidence` is set, and its confidence is at least
     `confidenceThreshold`.
+- With `showLowConfidence` set, untouched `low_confidence` rows that meet the
+  threshold are active.
 - Touched rows ignore the threshold.
 - `active` is computed with the account's **saved** preferences. While the
   user changes the threshold or the Low Confidence toggle and the change
@@ -556,7 +559,7 @@ the upgrade.
 | `community_master_dismissals` | **link_id**, **filter_id**, values_digest, dismissed_at | — |
 | `community_master_preferences` | **owner_id**, confidence_threshold (0–1), show_low_confidence | — |
 | `community_sync_state` | **owner_id**, **service_url**, contributor_id, state, run_id, last_started_at, last_success_at, next_due_at, last_error_code | — |
-| `community_sync_notifications` | **id**, owner_id, link_id → links (CASCADE), kind, from_revision, to_revision, created_at, read_at | Unique on `(owner_id, link_id, to_revision)`. Index on `(owner_id, read_at)` |
+| `community_sync_notifications` | **id**, owner_id, link_id → links (CASCADE), kind, from_revision, to_revision, created_at, read_at | Unique on `(owner_id, link_id, kind, to_revision)`. Index on `(owner_id, read_at)` |
 
 `community_operations` is rebuilt with SQLite batch mode:
 

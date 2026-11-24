@@ -146,7 +146,7 @@ def test_migration_resources_work_from_an_isolated_wheel(tmp_path):
             "import sqlite3; "
             "assert sqlite3.connect('fresh.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0036_sampled_media_identity'",
+            "'0037_community_master_sets'",
         ],
         cwd=tmp_path,
         env=environment,
@@ -281,7 +281,7 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
             "import sqlite3; "
             "assert sqlite3.connect('data/scanner.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0036_sampled_media_identity'",
+            "'0037_community_master_sets'",
         ],
         cwd=tmp_path,
         env=environment,
@@ -307,6 +307,7 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
         "community_schema_support.py",
         "jellyfin_setup_fake.py",
         "jellyfin_user_boundary.py",
+        "retired_protocol_support.py",
         "test_community_verified_import.py",
     ):
         shutil.copyfile(root / "tests" / name, support / name)

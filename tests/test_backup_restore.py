@@ -12,6 +12,7 @@ import tarfile
 
 import pytest
 from pydantic import TypeAdapter
+from sqlalchemy import text
 
 from scanner.backup.age_transport import AgeUnavailable
 from scanner.backup.archive import BackupError, export_backup
@@ -99,14 +100,7 @@ def _fixture(tmp_path, *, encrypted=False):
             AudioTrackSelectionRow(file_path="/private/movie.mkv", selection_json=selected)
         )
         database.commit()
-        from scanner.persistence.repository.community_imports import import_verified_download
         from scanner.persistence.repository.repository_community import set_connection
-        from tests.test_community_verified_import import (
-            BOUNDS,
-            SERVICE,
-            local_target,
-            verified_input,
-        )
 
         set_connection(
             database,
@@ -116,20 +110,18 @@ def _fixture(tmp_path, *, encrypted=False):
             installation_id=source_identity.installation_id,
             key_id=source_identity.key_id,
         )
-        database.commit()
-        downloaded = verified_input()
-        target_import = local_target(downloaded, source)
-        from dataclasses import replace
-
-        target_import = replace(target_import, media_item_id="media-fixture")
-        import_verified_download(
-            database,
-            downloaded,
-            target_import,
-            bounds=BOUNDS,
-            confirm_uncertain=True,
-            credential_ref=only_identity_ref(database),
+        database.add(
+            ScanRow(
+                id="imported-fixture",
+                media_item_id="media-fixture",
+                scan_number=2,
+                source_path="/private/movie.mkv",
+                resolved_local_path="/private/movie.mkv",
+                origin="imported",
+            )
         )
+        database.commit()
+        _add_retired_revision_rows(database)
         database.add(
             CommunityOperationRow(
                 operation_id="pending-publication",
@@ -148,18 +140,17 @@ def _fixture(tmp_path, *, encrypted=False):
         )
         database.add(
             CommunityOperationRow(
-                operation_id="vote-backup-neutral",
+                operation_id="vote-backup-up",
                 service_url=SERVICE,
-                kind="vote",
+                kind="filter_vote",
                 state="submitted",
                 contributor_id="reader",
                 installation_id=source_identity.installation_id,
-                contribution_id="root-vote",
-                revision_id="revision-vote",
-                digest="b" * 64,
-                scan_id="audio-fixture",
-                vote="neutral",
-                receipt='{"version":1,"vote":"neutral"}',
+                community_version_id="v_backup",
+                filter_id="f_backup",
+                receipt_id="b" * 64,
+                vote="up",
+                receipt='{"version":1,"vote":"up","receiptId":"' + "b" * 64 + '"}',
                 updated_at="2026-10-04",
             )
         )
@@ -188,6 +179,46 @@ def _fixture(tmp_path, *, encrypted=False):
         source_db, source, archive, passphrase="test-only-password" if encrypted else None
     )
     return archive, source_identity, target
+
+
+SERVICE = "https://community.example"
+_RECEIPT = '{"receipt":1}'
+_RETIRED_BYTES = (b"\x1f\x8b retired artifact", b'{"manifest":1}', b"\x00signature")
+
+
+def _add_retired_revision_rows(database):
+    """Revision-protocol rows 0037 retired: an import, its target, and its receipt."""
+    database.execute(
+        text(
+            "INSERT INTO retired_community_imports (id, scan_id, service_url, contribution_id, "
+            "revision_id, digest, author_id, artifact_type, artifact_bytes, manifest_bytes, "
+            "signature_bytes, historical_key_json, provenance_json, event_ids_json, "
+            "receipt_json) VALUES ('retired-import', 'imported-fixture', :service, 'root', "
+            "'revision', 'sha256:1', 'author', 'filter-set', :artifact, :manifest, :signature, "
+            "'{}', '{}', '[]', :receipt)"
+        ),
+        dict(
+            zip(("artifact", "manifest", "signature"), _RETIRED_BYTES, strict=True),
+            service=SERVICE,
+            receipt=_RECEIPT,
+        ),
+    )
+    database.execute(
+        text(
+            "INSERT INTO retired_community_import_targets VALUES "
+            "('retired-import', 'media-fixture', '', '/private/movie.mkv', NULL, '{}', 0)"
+        )
+    )
+    database.execute(
+        text(
+            "INSERT INTO retired_community_operations (operation_id, service_url, kind, state, "
+            "receipt, scan_id, updated_at, retired_at, retired_reason) VALUES "
+            "('retired-receipt', :service, 'receipt', 'acknowledged', :receipt, "
+            "'imported-fixture', '2026-10-01', '2026-10-02', 'revision_protocol_removed')"
+        ),
+        {"service": SERVICE, "receipt": _RECEIPT},
+    )
+    database.commit()
 
 
 def _active_hashes(target):
@@ -221,7 +252,7 @@ def test_full_restore_stages_pending_operation_without_new_remote_ids(tmp_path):
             (
                 "retry-1",
                 "https://pending.example",
-                "receipt",
+                "submission",
                 "submitted",
                 "contributor-1",
                 source_identity.installation_id,
@@ -293,39 +324,34 @@ def test_preview_stages_all_work_without_leaking_secrets_or_touching_target(tmp_
             imported = database.execute(
                 "SELECT artifact_bytes, manifest_bytes, signature_bytes, historical_key_json, "
                 "provenance_json, event_ids_json, receipt_json "
-                "FROM community_imports"
+                "FROM retired_community_imports"
             ).fetchall()
             targets = database.execute(
                 "SELECT import_id, media_item_id, media_source_id, target_evidence_json "
-                "FROM community_import_targets"
+                "FROM retired_community_import_targets"
             ).fetchall()
             receipts = database.execute(
-                "SELECT operation_id, receipt, scan_id FROM community_operations "
-                "WHERE kind='receipt'"
+                "SELECT operation_id, receipt, scan_id, retired_reason "
+                "FROM retired_community_operations"
             ).fetchall()
             votes = database.execute(
-                "SELECT operation_id, state, revision_id, vote, receipt, contributor_id "
-                "FROM community_operations WHERE kind='vote'"
+                "SELECT operation_id, state, community_version_id, filter_id, vote, receipt_id, "
+                "contributor_id FROM community_operations WHERE kind='filter_vote'"
             ).fetchall()
-            assert votes == (
-                [
-                    (
-                        "vote-backup-neutral",
-                        "submitted",
-                        "revision-vote",
-                        "neutral",
-                        '{"version":1,"vote":"neutral"}',
-                        "reader",
-                    )
-                ]
-            )
-            from tests.test_community_verified_import import download_input
-
-            assert imported[0][:3] == download_input()[2]
+            assert votes == [
+                ("vote-backup-up", "submitted", "v_backup", "f_backup", "up", "b" * 64, "reader")
+            ]
+            assert imported[0][:3] == _RETIRED_BYTES
             assert all(imported[0][3:])
-            assert len(targets) == len(receipts) == 1
-            assert targets[0][1:3] == ("media-fixture", "")
-            assert receipts[0][1] == imported[0][-1]
+            assert targets == [("retired-import", "media-fixture", "", "{}")]
+            assert receipts == [
+                (
+                    "retired-receipt",
+                    imported[0][-1],
+                    "imported-fixture",
+                    "revision_protocol_removed",
+                )
+            ]
             publications = database.execute(
                 "SELECT p.operation_id, p.artifact_bytes, p.manifest_bytes, p.signature_bytes, "
                 "p.cancel_requested, p.error_code, o.state, o.revision_id "
@@ -456,7 +482,7 @@ def test_a_backup_below_schema_head_is_refused_without_changes(tmp_path, revisio
     assert refused.value.reason == "restore_backup_schema_unsupported"
     assert str(refused.value) == (
         f"This backup has database schema {revision or 'unversioned-v1'}. This Editarr "
-        "restores only backups made at schema 0036_sampled_media_identity."
+        "restores only backups made at schema 0037_community_master_sets."
     )
     assert legacy.read_bytes() == old_bytes
     assert _active_hashes(target) == before
