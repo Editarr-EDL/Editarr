@@ -79,14 +79,23 @@ def test_privileged_routes_require_session_even_with_local_bypass(context):
     assert local.json() == safe.json()
 
 
-@pytest.mark.parametrize("method,path", [("GET", ""), ("POST", ""), ("POST", "/retry")])
-def test_votes_require_admin_csrf_confirmation_and_no_store(context, method, path):
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("GET", "votes/revision-1"),
+        ("POST", "votes/revision-1"),
+        ("POST", "votes/revision-1/retry"),
+        ("POST", "import-receipts/recover"),
+        ("POST", "import-receipts/import-1/retry"),
+        ("POST", "lookup"),
+        ("POST", "downloads"),
+        ("POST", "downloads/status"),
+    ],
+)
+def test_retired_revision_routes_stay_protected_and_answer_gone(context, method, path):
     client, issued = context
-    target = "/editarr/api/community/votes/revision-1" + path
-    body = {"operation_id": "vote-one", "confirmed": True}
-    if not path:
-        body["vote"] = "neutral"
-    kwargs = {"json": body} if method == "POST" else {}
+    target = "/editarr/api/community/" + path
+    kwargs = {"json": {}} if method == "POST" else {}
     assert client.request(method, target, **kwargs).status_code == 401
     valid = headers(issued)
     if method == "POST":
@@ -95,47 +104,10 @@ def test_votes_require_admin_csrf_confirmation_and_no_store(context, method, pat
             client.request(method, target, headers=missing, **kwargs).json()["code"]
             == "csrf_failed"
         )
-        assert (
-            client.request(
-                method, target, headers=valid | {"Origin": "https://attacker.test"}, **kwargs
-            ).status_code
-            == 403
-        )
-        assert (
-            client.post(target, headers=valid, json=body | {"confirmed": False}).json()["code"]
-            == "confirmation_required"
-        )
     result = client.request(method, target, headers=valid, **kwargs)
-    assert result.json()["code"] == "not_configured"
+    assert result.status_code == 410
+    assert result.json() == {"error": "protocol_retired"}
     assert result.headers["cache-control"] == "no-store"
-
-
-@pytest.mark.parametrize("path", ["recover", "import-1/retry"])
-def test_receipt_recovery_and_retry_require_real_admin_and_csrf(context, path):
-    client, issued = context
-    target = "/editarr/api/community/import-receipts/" + path
-    assert client.post(target, json={"confirmed": True}).status_code == 401
-    valid = headers(issued)
-    missing = {name: value for name, value in valid.items() if name != "X-CSRF-Token"}
-    assert (
-        client.post(target, headers=missing, json={"confirmed": True}).json()["code"]
-        == "csrf_failed"
-    )
-    assert (
-        client.post(
-            target, headers=valid | {"Origin": "https://attacker.test"}, json={"confirmed": True}
-        ).status_code
-        == 403
-    )
-    if path.endswith("retry"):
-        assert (
-            client.post(target, headers=valid, json={"confirmed": False}).json()["code"]
-            == "confirmation_required"
-        )
-    assert (
-        client.post(target, headers=valid, json={"confirmed": True}).json()["code"]
-        == "not_configured"
-    )
 
 
 def test_start_and_confirmation_require_csrf_and_explicit_approval(context, monkeypatch):
@@ -277,7 +249,13 @@ def test_sharing_preview_routes_require_admin_and_csrf(context, method, path):
     client, issued = context
     target = "/editarr/api/community/sharing" + path
     body = (
-        {"json": {"name": "Public", "identity_confirmed": True}}
+        {
+            "json": {
+                "name": "Public",
+                "identity_confirmed": True,
+                "version_choice": {"choice": "alias", "alias_id": "theatrical"},
+            }
+        }
         if path.endswith("preview")
         else ({"json": {"confirmed": True}} if method == "POST" else {})
     )

@@ -28,7 +28,7 @@ def test_reconnected_publication_resumes_despite_historical_connection_error(
                 identity_connection(db, homes[USER].credential_ref, SERVICE).contributor_id = None
                 db.commit()
 
-        service.on_check = disconnect
+        disconnect()
         raced = app.send(
             "POST", f"/api/community/publications/{operation_id}/retry", USER, {"confirmed": True}
         )
@@ -40,7 +40,6 @@ def test_reconnected_publication_resumes_despite_historical_connection_error(
                 db, homes[USER].credential_ref, SERVICE
             ).contributor_id = contributor_id
             db.commit()
-        service.on_check = None
     else:
         with app.accounts.factory() as db:
             db.get(CommunityPublicationRow, operation_id).error_code = "not_connected"

@@ -4,26 +4,26 @@ Connection, enrollment, profile, and key routes live in `community_identity_api`
 The routes here act through the caller's identity; MU-29 scopes them by actor.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
 from scanner.db import get_db
 from scanner.integrations.community.activity_access import CHECK, RETRACT, RETRY
 from scanner.integrations.community.publications import PublicationOutbox
-from scanner.integrations.community.receipts import ReceiptOutbox
 from scanner.integrations.community.transport import CommunityFailure
 from scanner.security.access.grants import PrincipalAccess
 from scanner.security.access.request_access import request_access
 from scanner.security.private_identity_files import IdentityUnavailable
 from scanner.settings.config import settings
 
-from .community_activity_access import publication_client, receipt_client
+from .community_activity_access import publication_client
 from .community_downloads_api import router as downloads_router
 from .community_identity_api import RotationConfirmation
 from .community_identity_api import router as identity_router
 from .community_identity_api import users_router as identity_users_router
 from .community_lookup_api import router as lookup_router
+from .community_retired import protocol_retired
 from .community_sharing_api import router as sharing_router
 from .community_votes_api import router as votes_router
 
@@ -111,27 +111,13 @@ async def publication_cancel(
 
 
 @router.post("/import-receipts/recover")
-async def recover_receipts(
-    db: Session = Depends(get_db),
-    access: PrincipalAccess = Depends(request_access),
-    user_id: int | None = Query(default=None, gt=0),
-):
-    return await _result(
-        lambda: {"importIds": ReceiptOutbox(receipt_client(db, access, user_id)).recover()}
-    )
+async def recover_receipts(_access: PrincipalAccess = Depends(request_access)):
+    return protocol_retired()
 
 
 @router.post("/import-receipts/{import_id}/retry")
-async def retry_receipt(
-    import_id: str,
-    body: RotationConfirmation,
-    db: Session = Depends(get_db),
-    access: PrincipalAccess = Depends(request_access),
-    user_id: int | None = Query(default=None, gt=0),
-):
-    if not body.confirmed:
-        return JSONResponse({"code": "confirmation_required", "retryable": False}, status_code=409)
-    return await _result(lambda: ReceiptOutbox(receipt_client(db, access, user_id)).run(import_id))
+async def retry_receipt(import_id: str, _access: PrincipalAccess = Depends(request_access)):
+    return protocol_retired()
 
 
 connection_router = router

@@ -108,58 +108,14 @@ def test_non_review_router_paths_also_refuse_repair(app, flagged, kind):
     assert response.json()["detail"]["code"] == "review_needs_repair"
 
 
-@pytest.mark.parametrize("denied", [C.REVIEWS_SAVE_OWN, C.COMMUNITY_DOWNLOAD])
-def test_community_repair_requires_both_permissions(app, flagged, denied):
-    app.accounts.set_override(USER, C.COMMUNITY_DOWNLOAD, OverrideEffect.ALLOW)
-    app.accounts.set_override(USER, denied, OverrideEffect.DENY)
+def test_community_repair_is_retired_with_the_revision_protocol(app, flagged):
     response = app.send(
         "POST", f"/api/reviews/{flagged.id}/repair/community", app.accounts.unsafe_cookie(USER)
     )
-    assert response.status_code == 403, response.text
-
-
-@pytest.mark.parametrize(
-    "reason,transient",
-    [
-        ("downloads_not_configured", True),
-        ("not_connected", True),
-        ("artifact_unavailable", False),
-        ("incompatible_artifact", False),
-        ("invalid_channels", False),
-    ],
-)
-def test_community_failure_envelope_and_persistence(app, flagged, monkeypatch, reason, transient):
-    from scanner.http import community_downloads_api
-    from scanner.integrations.community.transport import CommunityFailure
-
-    app.accounts.set_override(USER, C.COMMUNITY_DOWNLOAD, OverrideEffect.ALLOW)
+    assert response.status_code == 410, response.text
+    assert response.json() == {"error": "protocol_retired"}
     with app.accounts.factory() as db:
-        record = db.query(ReviewScanRepairRow).filter_by(review_id=flagged.id).one()
-        record.community_json = json.dumps(
-            {
-                "service_url": "https://community.example",
-                "contribution_id": "original",
-                "revision_id": "revision",
-                "digest": "a" * 64,
-            }
-        )
-        db.commit()
-
-    def unavailable(*_args):
-        raise CommunityFailure(reason)
-
-    monkeypatch.setattr(community_downloads_api, "download_service", unavailable)
-    response = app.send(
-        "POST", f"/api/reviews/{flagged.id}/repair/community", app.accounts.unsafe_cookie(USER)
-    )
-    assert response.status_code == 409, response.text
-    detail = response.json()["detail"]
-    assert detail["code"] == "community_scan_unavailable"
-    assert detail["reason"] == reason and detail["transient"] == transient
-    assert detail["repair"]["community"]["available"] == transient
-    with app.accounts.factory() as db:
-        record = db.query(ReviewScanRepairRow).filter_by(review_id=flagged.id).one()
-        assert record.community_unavailable_reason == (None if transient else reason)
+        assert db.query(ReviewScanRepairRow).filter_by(review_id=flagged.id).count() == 1
 
 
 def test_delete_flagged_review_cascades_repair_records(app, flagged):
@@ -169,13 +125,3 @@ def test_delete_flagged_review_cascades_repair_records(app, flagged):
     assert response.status_code == 204, response.text
     with app.accounts.factory() as db:
         assert db.query(ReviewScanRepairRow).filter_by(review_id=flagged.id).count() == 0
-
-
-def test_community_confirmation_rejects_truthy_non_boolean_input(app, flagged):
-    response = app.send(
-        "POST",
-        f"/api/reviews/{flagged.id}/repair/community",
-        app.accounts.unsafe_cookie(USER),
-        {"confirmed": "true"},
-    )
-    assert response.status_code == 422, response.text

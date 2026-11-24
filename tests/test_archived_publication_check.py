@@ -1,9 +1,10 @@
 # ruff: noqa: F811
-"""A publication of archived work that reached the server can still learn its outcome.
+"""A sent publication of archived work keeps its state and is never resent.
 
-0025 and 0026 leave such a publication `submitted` with a cancel request. Only an
-archive viewer who may also check that contributor's publications may check it,
-through the contributor who sent it, and nobody may resend or change it.
+0025 and 0026 leave such a publication `submitted` with a cancel request. The
+submission protocol has no remote status read, so a check is local. Only an archive
+viewer who may also check that contributor's publications may check it, and nobody
+may resend or change it.
 """
 
 import pytest
@@ -18,21 +19,8 @@ from tests.test_stream_fingerprints import generated_streams as generated_stream
 
 
 def _archive_sent(app, service, operation_id, source):
+    """Mark the job sent but cancelled, then archive its review's media item."""
     with app.accounts.factory() as db:
-        operation = db.get(CommunityOperationRow, operation_id)
-        service.publications[operation_id] = {
-            "version": 1,
-            "state": "completed",
-            "publicationState": "published",
-            "result": {
-                "version": 1,
-                "operationId": operation_id,
-                "contributionId": operation.contribution_id,
-                "revisionId": operation.revision_id,
-                "committedAt": 1700000030,
-                "artifactDigest": operation.digest,
-            },
-        }
         db.execute(
             text("UPDATE community_operations SET state = 'submitted' WHERE operation_id = :id"),
             {"id": operation_id},
@@ -65,10 +53,10 @@ def test_an_archive_viewer_learns_a_sent_archived_publication_was_published(comm
     assert app.send("GET", path, ADMIN).json()["state"] == "cancel_pending"
     checked = app.send("POST", f"{path}/check", ADMIN)
     assert checked.status_code == 200, checked.text
-    assert checked.json()["state"] == "published"
+    assert checked.json()["state"] == "cancel_pending"
     assert service.posts == []
     with app.accounts.factory() as db:
-        assert db.get(CommunityOperationRow, operation_id).state == "acknowledged"
+        assert db.get(CommunityOperationRow, operation_id).state == "submitted"
 
 
 @SOURCES
@@ -110,13 +98,12 @@ def test_checking_another_users_archived_publication_needs_check_other(
     checked = app.send("POST", f"{path}/check", ADMIN)
     with app.accounts.factory() as db:
         state = db.get(CommunityOperationRow, operation_id).state
+    assert state == "submitted"
     if denied is None:
         assert checked.status_code == 200, checked.text
-        assert state == "acknowledged"
     else:
         assert checked.status_code == 404, checked.text
         assert app.send("GET", path, ADMIN).status_code == 404
-        assert state == "submitted"
     assert service.posts == []
 
 
@@ -136,10 +123,9 @@ def test_an_archive_viewer_checks_their_own_archived_publication_with_check_own(
     checked = app.send("POST", f"/api/community/publications/{operation_id}/check", ADMIN)
     with app.accounts.factory() as db:
         state = db.get(CommunityOperationRow, operation_id).state
+    assert state == "submitted"
     if denied == C.COMMUNITY_PUBLICATIONS_CHECK_OTHER:
         assert checked.status_code == 200, checked.text
-        assert state == "acknowledged"
     else:
         assert checked.status_code == 403, checked.text
         assert checked.json()["code"] == "capability_denied"
-        assert state == "submitted"

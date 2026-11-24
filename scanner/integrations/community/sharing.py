@@ -1,4 +1,8 @@
-"""Session-bound exact public previews with explicit, independently approved donation."""
+"""Session-bound exact submission previews with explicit, independently approved sharing.
+
+A preview projects the source and its master link into `community-artifact-3`
+(local API §7); approval queues a `submission` operation for the exact bytes.
+"""
 
 import hashlib
 import json
@@ -7,23 +11,29 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from pydantic import TypeAdapter
 
 from scanner.db import (
+    CommunityIdentityRow,
     CommunityOperationRow,
     CommunityPublicationRow,
 )
 from scanner.formats.community.codec import ArtifactError, ResourceBounds
+from scanner.modeling.community_normalization import SEEDED_ALIASES, Alias
+from scanner.modeling.community_work_identity import WorkIdentityRequired, work_identity
 from scanner.modeling.media_identity import MediaIdentity
+from scanner.persistence.repository.community_master_links import live_link
+from scanner.persistence.repository.media_identity_store import (
+    review_version_id,
+    scan_version_id,
+)
 
 from .client import CommunityClient
-from .donation_projection import DonationOptions
 from .donation_sources import SourceRef
-from .donations import PreparedDonation, prepare_donation
 from .publications import PublicationOutbox
 from .sharing_context import TERMS_TEXT, TERMS_VERSION, SharingSource
+from .submissions import PreparedSubmission, SubmissionRequest, prepare_submission
 from .transport import CommunityFailure
 
 
@@ -32,9 +42,8 @@ class PreviewRecord:
     owner: str
     scope: str
     expires_at: float
-    prepared: PreparedDonation
+    prepared: PreparedSubmission
     operation_id: str
-    contribution_id: str
 
 
 class PreviewStore:
@@ -161,6 +170,33 @@ class SharingService:
             "jobs": [self.outbox.status(identifier) for identifier in jobs],
         }
 
+    def _account(self) -> int:
+        row = self.db.get(CommunityIdentityRow, self.client.home.credential_ref)
+        self.db.rollback()
+        if row is None or row.user_id is None:
+            raise CommunityFailure("not_connected")
+        return row.user_id
+
+    def default_link(self, source: SourceRef, owner_id: int) -> str | None:
+        """The account's live link for the source's local version, if any."""
+        find = review_version_id if source.kind == "review" else scan_version_id
+        version_id = find(self.db, source.identifier)
+        link = (
+            live_link(self.db, owner_id, version_id, self.client.transport.endpoint.url)
+            if version_id
+            else None
+        )
+        self.db.rollback()
+        return link.id if link is not None else None
+
+    @staticmethod
+    def _title(data: dict) -> tuple[str, int | None]:
+        documents = [item for item in data["documents"] if item.get("title")]
+        title = data["media"][0]["name"] if data["media"] else None
+        title = title or (documents[0]["title"] if documents else None) or ""
+        years = [item["year"] for item in data["documents"] if item.get("year")]
+        return title, years[0] if years else None
+
     def prepare(
         self,
         source: SourceRef,
@@ -169,35 +205,47 @@ class SharingService:
         name: str,
         media: MediaIdentity,
         audio_source_scan_id: str | None = None,
+        version_choice: dict | None = None,
+        link_id: str | None = None,
+        aliases: tuple[Alias, ...] = SEEDED_ALIASES,
     ) -> dict:
-        """Freeze private evidence, returning only its exact allowlisted public preview."""
+        """Freeze private evidence, returning only its exact public preview and estimates.
+
+        `version_choice` is required (`version_choice_required`); `link_id` defaults to
+        the account's link for the source's local version. Media without a TMDB or TVDB
+        identity is `work_identity_required`. `name` is kept for the sharing dialog and
+        is not part of the submission.
+        """
         self._authorize(source)
+        if version_choice is None:
+            raise CommunityFailure("version_choice_required")
         identity = self._identity()
+        owner_id = self._account()
         captured = self._capture(source)
         self._source_terms(captured)
-        data = captured.data()
-        duration = (
-            data["synchronization"][0]["end_seconds"]
-            if data["synchronization"]
-            else data["root"].get("duration_seconds")
-        )
-        if duration is None or duration <= 0:
-            raise CommunityFailure("source_duration_unknown")
+        title, year = self._title(captured.data())
         try:
-            prepared = prepare_donation(
+            work = work_identity(media, title=title, year=year)
+        except WorkIdentityRequired as error:
+            raise CommunityFailure("work_identity_required") from error
+        submission_id = "sub_" + uuid.uuid4().hex
+        request = SubmissionRequest(
+            submission_id=submission_id,
+            contributor_id=identity.contributor_id,
+            key_id=identity.key_id,
+            created_at=int(time.time()),
+            work=work,
+            version_choice=version_choice,
+            owner_id=owner_id,
+            link_id=link_id if link_id is not None else self.default_link(source, owner_id),
+            audio_source_scan_id=audio_source_scan_id,
+            aliases=aliases,
+        )
+        try:
+            prepared = prepare_submission(
                 self.db.get_bind(),
                 source,
-                DonationOptions(
-                    submission_id=str(uuid.uuid4()),
-                    name=name,
-                    contributor_id=identity.contributor_id,
-                    key_id=identity.key_id,
-                    created_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    media=media,
-                    duration_seconds=duration,
-                    sharing_terms=TERMS_VERSION,
-                    audio_source_scan_id=audio_source_scan_id,
-                ),
+                request,
                 bounds=self.bounds,
                 source_limit=self.source_limit,
             )
@@ -208,15 +256,16 @@ class SharingService:
             self.scope,
             self.store.clock() + 900,
             prepared,
-            "publish-" + str(uuid.uuid4()),
-            "contribution-" + str(uuid.uuid4()),
+            "submit-" + submission_id,
         )
         preview_id = self.store.put(record)
         return {
+            "version": 1,
             "previewId": preview_id,
             "expiresAt": int(record.expires_at),
-            "preview": json.loads(prepared.preview_bytes),
             "terms": {"version": TERMS_VERSION, "text": TERMS_TEXT},
+            "preview": json.loads(prepared.preview_bytes),
+            **prepared.summary(),
         }
 
     def confirmed_media(self, source: SourceRef) -> MediaIdentity:
@@ -250,7 +299,6 @@ class SharingService:
                 consent_token=record.prepared.consent_token,
                 consent_version=TERMS_VERSION,
                 operation_id=record.operation_id,
-                contribution_id=record.contribution_id,
                 record_consent=True,
             )
         except ArtifactError as error:

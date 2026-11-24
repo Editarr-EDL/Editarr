@@ -96,10 +96,9 @@ def connect(tmp_path, service: FakeService, *, owner: int = OWNER):
     db = factory()
     home = IdentityHome(tmp_path, ensure_identity_ref(db, owner))
     identity = load_or_create_installation_identity(home)
-    service.on(
-        "POST",
-        "/v1/enrollments/complete",
-        lambda _request: {
+
+    def profile(_request):
+        return {
             "contributorId": CONTRIBUTOR,
             "shortId": CONTRIBUTOR[:8],
             "installationId": identity.installation_id,
@@ -110,8 +109,10 @@ def connect(tmp_path, service: FakeService, *, owner: int = OWNER):
             "policyVersion": "test-v1",
             "protocolVersion": 1,
             "allowedOperations": ["identity:read"],
-        },
-    )
+        }
+
+    service.on("POST", "/v1/enrollments/complete", profile)
+    service.on("GET", "/v1/identity", profile)
     transport = CommunityTransport(
         ServiceEndpoint(SERVICE, SERVICE.removeprefix("https://")),
         adapter=httpx.MockTransport(service),

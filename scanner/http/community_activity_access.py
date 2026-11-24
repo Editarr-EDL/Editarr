@@ -76,7 +76,7 @@ def publication_client(db, access, operation_id, action):
     if (
         operation is None
         or payload is None
-        or operation.kind != "publish"
+        or operation.kind not in ("submission", "publish")
         or operation.owner_id is None
     ):
         raise not_found()
