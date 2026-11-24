@@ -8,8 +8,13 @@ records one notification per link.
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import timedelta
 
-from scanner.persistence.repository.community_master_links import mark_link_state, utcnow
+from scanner.persistence.repository.community_master_links import (
+    mark_link_state,
+    require_link,
+    utcnow,
+)
 from scanner.persistence.repository.community_master_sync import (
     SyncStatus,
     begin_sync,
@@ -91,6 +96,7 @@ class MasterSync:
             skipped = await self._run(run_id)
         except CommunityFailure as error:
             code = error.code
+            wait = error.details.get("retryAfter")
             self._write(
                 lambda: finish_sync(
                     self.db,
@@ -98,6 +104,7 @@ class MasterSync:
                     self.service_url,
                     run_id,
                     error_code=code,
+                    retry_after=timedelta(seconds=wait) if wait else None,
                     now=self.clock(),
                 )
             )
@@ -122,6 +129,7 @@ class MasterSync:
     async def _run(self, run_id: str) -> list[str]:
         links = links_to_sync(self.db, self.owner_id, self.service_url)
         by_version: dict[str, list[tuple[str, int]]] = defaultdict(list)
+        unavailable = {link.id for link in links if link.link_state == "unavailable"}
         for link in links:
             by_version[link.community_version_id].append((link.id, link.latest_revision))
         self.db.rollback()
@@ -132,16 +140,35 @@ class MasterSync:
         skipped: list[str] = []
         for start in range(0, len(items), SYNC_BATCH):
             response = await self.service.sync_revisions(run_id, items[start : start + SYNC_BATCH])
+            listed = set()
             for change in response.changed:
+                listed.add(change.version_id)
                 for link_id, revision in by_version[change.version_id]:
                     if change.status == "changed":
                         if change.revision > revision and not await self._changed(
                             link_id, change.version_id, revision
                         ):
                             skipped.append(link_id)
+                        elif link_id in unavailable:
+                            self._restore(link_id)
                     else:
                         self._gone(link_id, change.status, change.merged_into, revision)
+            # An omitted version is served and unchanged, so an unavailable link is back.
+            for version, _revision in items[start : start + SYNC_BATCH]:
+                if version not in listed:
+                    for link_id, _known in by_version[version]:
+                        if link_id in unavailable:
+                            self._restore(link_id)
         return skipped
+
+    def _restore(self, link_id: str) -> None:
+        """Follow a version again once it is served; a merged link stays merged."""
+
+        def restore():
+            if require_link(self.db, self.owner_id, link_id).link_state == "unavailable":
+                mark_link_state(self.db, self.owner_id, link_id, "active", now=self.clock())
+
+        self._write(restore)
 
     async def _changed(self, link_id: str, version_id: str, revision: int) -> bool:
         """Download and store the newer snapshot for review; False when it was skipped."""

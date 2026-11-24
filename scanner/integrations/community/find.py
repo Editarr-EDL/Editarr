@@ -44,6 +44,11 @@ def alignment_required(tier: str | None) -> bool:
     return tier not in FILE_TIERS
 
 
+def key_type(key: MatchKey) -> str:
+    """The `/v1/match` key type name of a key."""
+    return "title_year" if isinstance(key, TitleYearKey) else key.type
+
+
 def _key_json(key: MatchKey) -> dict:
     if isinstance(key, HashKey):
         return {"type": key.type, "value": key.value, "sizeBytes": key.size_bytes}

@@ -30,6 +30,7 @@ from scanner.http import (
 )
 from scanner.integrations.community.sharing import previews
 from scanner.integrations.community.transport import CommunityTransport, ServiceEndpoint
+from scanner.modeling.community_normalization import SEEDED_ALIASES
 from scanner.persistence.repository.repository_community import identity_connection
 from scanner.security.access.capability_ids import Capability as C
 from tests.community_identity_users_support import AUDIENCE, SERVICE, MockService
@@ -41,6 +42,10 @@ from tests.test_stream_fingerprints import generated_streams as generated_stream
 from tests.users_api_http_support import UsersApp
 
 BOUNDS = ResourceBounds(65536, 524288, 100, 4096, 24)
+ALIASES = [
+    {"aliasId": alias.alias_id, "label": alias.label, "spellings": list(alias.spellings)}
+    for alias in SEEDED_ALIASES
+]
 
 
 class ActivityService(MockService):
@@ -52,6 +57,9 @@ class ActivityService(MockService):
         self.submissions = {}
 
     async def __call__(self, request):
+        if request.url.path == "/v1/aliases":
+            self._signer(request)
+            return httpx.Response(200, json={"version": 1, "aliases": ALIASES})
         if request.url.path == "/v1/submissions":
             installation = self._signer(request)
             contributor = self.contributors[installation]

@@ -36,7 +36,6 @@ class LinkedFilter:
     subcategory: str
     severity: str
     action: str
-    locally_verified: bool
 
 
 @dataclass(frozen=True)

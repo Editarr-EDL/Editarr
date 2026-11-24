@@ -5,13 +5,21 @@ defined details, malformed responses are `invalid_response`, and failed master
 verification is `snapshot_invalid`. Network failures never become empty results.
 """
 
+import asyncio
 import json
 import re
 import secrets
+import threading
+import time
 
 from pydantic import ValidationError
 
-from scanner.modeling.community_normalization import Alias, AliasListError, parse_alias_list
+from scanner.modeling.community_normalization import (
+    SEEDED_ALIASES,
+    Alias,
+    AliasListError,
+    parse_alias_list,
+)
 from scanner.security.community_download_receipts import (
     ReceiptError,
     ReceiptKey,
@@ -42,7 +50,10 @@ MASTER_RESPONSE_BYTES = 2_800_000
 SUBMISSION_RESPONSE_BYTES = 16_384
 VOTES_RESPONSE_BYTES = 400_000
 SYNC_BATCH = 500
+ALIAS_TTL_SECONDS = 3600
 _TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+_aliases: dict[str, tuple[float, tuple[Alias, ...]]] = {}
+_aliases_lock = threading.Lock()
 _OPERATION = re.compile(r"[A-Za-z0-9._~-]{1,128}")
 
 
@@ -125,6 +136,34 @@ class MasterService:
             return parse_alias_list(value)
         except AliasListError as error:
             raise CommunityFailure("invalid_response") from error
+
+    async def cached_aliases(self, *, clock=time.monotonic) -> tuple[Alias, ...]:
+        """The approved aliases, refreshed at most hourly per service.
+
+        When the service cannot be reached, the last list is reused, and before any
+        list was fetched the seeded aliases (§3.4) stand in.
+        """
+        with _aliases_lock:
+            cached = _aliases.get(self.service_url)
+        if cached is not None and clock() - cached[0] < ALIAS_TTL_SECONDS:
+            return cached[1]
+        try:
+            aliases = await self.aliases()
+        except CommunityFailure:
+            return cached[1] if cached is not None else SEEDED_ALIASES
+        with _aliases_lock:
+            _aliases[self.service_url] = (clock(), aliases)
+        return aliases
+
+    def approved_aliases(self) -> tuple[Alias, ...]:
+        """`cached_aliases` for synchronous callers outside an event loop."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.cached_aliases())
+        with _aliases_lock:
+            cached = _aliases.get(self.service_url)
+        return cached[1] if cached is not None else SEEDED_ALIASES
 
     async def receipt_keys(self) -> tuple[ReceiptKey, ...]:
         """Fetch and pin the service's receipt-key history before verifying a master."""

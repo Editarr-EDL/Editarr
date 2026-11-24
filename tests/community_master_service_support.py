@@ -233,3 +233,48 @@ def master_route(service: FakeService, version_id: str, responses: dict[int | No
         return responses[int(known) if known else None]
 
     service.on("GET", f"/v1/versions/{version_id}/master", handle)
+
+
+def found_download(masters, version_id, *, tier="2", local=None, replace=False):
+    """Remember a Find result for `version_id` at `tier`, then download it as a route would."""
+    import asyncio
+
+    from scanner.integrations.community.find import FoundVersion
+    from scanner.integrations.community.master_service_models import MatchResult
+    from tests.community_master_support import VERSION_ID
+
+    percent = {"1": 100, "2": 80, "3": 65, "4": 30, "5": 15}[tier]
+    result = MatchResult.model_validate(
+        {
+            "versionId": version_id,
+            "status": "confirmed",
+            "aliasId": "theatrical",
+            "label": "Theatrical",
+            "labelText": None,
+            "work": {
+                "workId": "w_77",
+                "kind": "movie",
+                "tmdb": "603",
+                "tvdb": None,
+                "season": None,
+                "episode": None,
+                "lastEpisode": None,
+                "title": "The Matrix",
+                "year": 1999,
+            },
+            "tier": tier,
+            "matchPercent": percent,
+            "matchedKeys": ["md5_quick"] if tier in "123" else ["tmdb"],
+            "runtimeAgreement": "not_applicable" if tier in "123" else "same_cut",
+            "runtimeMs": 8160500,
+            "trust": 0.41,
+            "revision": 1,
+            "filterCount": 1,
+            "contributorCount": 1,
+        },
+        strict=True,
+    )
+    key = masters.remember(local or VERSION_ID, "guard", (FoundVersion(result),))
+    return asyncio.run(
+        masters.download(find_key=key, community_version_id=version_id, replace=replace)
+    )

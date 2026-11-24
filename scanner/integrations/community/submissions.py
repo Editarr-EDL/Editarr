@@ -12,22 +12,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from scanner.db import CommunityMasterFilterRow, ScanRow
+from scanner.db import ScanRow
 from scanner.formats.community.artifact_v3 import (
     ArtifactV3Error,
     build_manifest_v3,
     encode_artifact_v3,
 )
 from scanner.formats.community.codec import ArtifactError, ResourceBounds
-from scanner.modeling.community_filter_proposals import Estimates, LinkedFilter
+from scanner.modeling.community_filter_proposals import Estimates
 from scanner.modeling.community_normalization import SEEDED_ALIASES, Alias
 from scanner.modeling.community_work_identity import WorkIdentity
-from scanner.persistence.repository.community_master_filters import effective_values
-from scanner.persistence.repository.community_master_links import alignment_of, get_link
 from scanner.pipeline.audio_tracks import _file_state
 from scanner.security.community_artifact_signatures import SignedArtifact
 from scanner.security.community_artifact_v3_signatures import sign_artifact_v3
@@ -35,7 +32,8 @@ from scanner.security.community_artifact_v3_signatures import sign_artifact_v3
 from .donation_sources import CapturedSource, SourceRef, canonical, capture_source
 from .match_key_capture import capture_file_keys
 from .stream_fingerprints import StreamUnsupported, analyzed_audio_source
-from .submission_projection import LinkProjection, SubmissionOptions, project_submission
+from .submission_links import link_guard, link_projection
+from .submission_projection import SubmissionOptions, project_submission
 from .transport import CommunityFailure
 
 
@@ -50,6 +48,7 @@ class SubmissionRequest:
     work: WorkIdentity
     version_choice: dict
     owner_id: int
+    service_url: str
     link_id: str | None = None
     audio_source_scan_id: str | None = None
     aliases: tuple[Alias, ...] = SEEDED_ALIASES
@@ -118,47 +117,6 @@ def version_choice(choice: object, aliases: tuple[Alias, ...]) -> tuple[dict, di
             {"choice": "other", "text": text, "label": "Other"},
         )
     raise CommunityFailure("version_choice_required")
-
-
-def link_projection(db: Session, owner_id: int, link_id: str | None) -> LinkProjection | None:
-    """The account's link rows on the local timeline; a link still awaiting alignment
-    has no local timeline yet and is not projected."""
-    if link_id is None:
-        return None
-    link = get_link(db, owner_id, link_id)
-    if link is None or link.link_state == "replaced":
-        raise CommunityFailure("link_unavailable")
-    if link.alignment_state == "required":
-        return None
-    alignment = alignment_of(link)
-    rows = db.scalars(
-        select(CommunityMasterFilterRow)
-        .where(CommunityMasterFilterRow.link_id == link.id, CommunityMasterFilterRow.present)
-        .order_by(CommunityMasterFilterRow.filter_id)
-    )
-    filters = []
-    for row in rows:
-        values = effective_values(row, alignment)
-        filters.append(
-            LinkedFilter(
-                row.filter_id,
-                row.category,
-                row.state,
-                values["startMs"],
-                values["endMs"],
-                values["subcategory"],
-                values["severity"],
-                values["action"],
-                bool(row.locally_verified),
-            )
-        )
-    return LinkProjection(
-        link.community_version_id, link.latest_revision, alignment, tuple(filters)
-    )
-
-
-def _link_guard(link: LinkProjection | None) -> str:
-    return hashlib.sha256(canonical(repr(link))).hexdigest()
 
 
 def _consent(artifact: bytes, manifest: bytes, preview: bytes, guard: str) -> str:
@@ -241,7 +199,7 @@ def prepare_submission(
     captured = capture_source(bind, source, bounds=bounds, source_limit=source_limit)
     data = captured.data()
     with Session(bind) as db:
-        link = link_projection(db, request.owner_id, request.link_id)
+        link = link_projection(db, request, source)
     warnings: list[str] = [] if link or request.link_id is None else ["link_alignment_required"]
     states: dict[str, tuple] = {}
     keys = _media_keys(
@@ -277,7 +235,7 @@ def prepare_submission(
             "warnings": warnings,
         }
     )
-    guard = _link_guard(link)
+    guard = link_guard(link)
     return PreparedSubmission(
         source=captured,
         request=request,
@@ -320,8 +278,8 @@ def approve_submission(
     if current.guard != prepared.source.guard:
         raise ArtifactError("Source changed after preview; prepare a new preview")
     with Session(bind) as db:
-        link = link_projection(db, prepared.request.owner_id, prepared.request.link_id)
-    if _link_guard(link) != prepared.link_guard:
+        link = link_projection(db, prepared.request, prepared.source.reference)
+    if link_guard(link) != prepared.link_guard:
         raise ArtifactError("Master set changed after preview; prepare a new preview")
     for path, state in prepared.file_states:
         try:

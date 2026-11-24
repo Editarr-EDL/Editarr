@@ -326,8 +326,10 @@ def donate(author, *, lose_response=False):
 def find_and_download(application):
     """Find the shared version by its file keys and apply its master set directly."""
     find_filters(application)
-    found = application.master("find")
-    assert "error" not in found, found
+    outcome = application.master("find_download")
+    assert "error" not in outcome, outcome
+    found, link = outcome["found"], outcome["link"]
+    assert found["findKey"] and found["error"] is None, found
     assert {"sha256_sampled", "md5_quick"} <= set(found["keysUsed"]), found
     (result,) = found["results"]
     assert (result["tier"], result["matchPercent"], result["alignmentRequired"]) == (
@@ -335,14 +337,6 @@ def find_and_download(application):
         80,
         False,
     ), result
-    link = application.master(
-        "download",
-        local_version_id=found["localVersionId"],
-        version_id=result["communityVersionId"],
-        tier=result["tier"],
-        match_percent=result["matchPercent"],
-    )
-    assert "error" not in link, link
     assert (link["tier"], link["alignmentState"], link["linkState"]) == (
         "2",
         "not_required",

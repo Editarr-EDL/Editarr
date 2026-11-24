@@ -72,7 +72,6 @@ def row(filter_id, start, end, state="pending", category="violence", **values):
         defaults["subcategory"],
         defaults["severity"],
         defaults["action"],
-        False,
     )
 
 
@@ -152,25 +151,47 @@ def test_cues_support_proposed_filters_and_decisions_become_disputes_and_adjustm
     encode_artifact_v3(projection.artifact)
 
 
+def _stage(stage, status="complete", **settings):
+    return {
+        "stage": stage,
+        "status": status,
+        "effective_settings_json": json.dumps(settings),
+        "intervals_json": json.dumps([{"start_seconds": 0.0, "end_seconds": 3600.0}]),
+    }
+
+
+def _coverage(*stages):
+    data = scan_data(finding(10.0, 12.0), stages=stages)
+    projection = project_submission(data, "scan", options(), None)
+    return {item.category: item.intervals for item in projection.artifact.coverage}, projection
+
+
 def test_without_a_link_every_cue_is_new_and_coverage_comes_from_completed_stages():
-    stages = [
-        {
-            "stage": "audio_scan",
-            "status": "complete",
-            "intervals_json": json.dumps([{"start_seconds": 0.0, "end_seconds": 3600.0}]),
-        },
-        {"stage": "visual", "status": "partial", "intervals_json": None},
-    ]
-    projection = project_submission(
-        scan_data(finding(10.0, 12.0), stages=stages), "scan", options(), None
+    coverage, projection = _coverage(
+        _stage("audio_scan", audio_filter="better_profanity"),
+        _stage("visual", status="partial", video_model="nudenet"),
     )
-    artifact = projection.artifact
-    assert artifact.alignment_hint is None
-    assert [entry.proposed_filter_id for entry in artifact.entries] == [None]
-    assert [item.model_dump(by_alias=True) for item in artifact.coverage] == [
-        {"category": "language", "intervals": [{"startMs": 0, "endMs": 3_600_000}]}
-    ]
+    assert projection.artifact.alignment_hint is None
+    assert [entry.proposed_filter_id for entry in projection.artifact.entries] == [None]
+    assert list(coverage) == ["language"]
+    assert coverage["language"][0].model_dump(by_alias=True) == {"startMs": 0, "endMs": 3_600_000}
     assert projection.estimates.new_filters == 1
+
+
+@pytest.mark.parametrize(
+    ("model", "categories"),
+    [
+        ("nudenet", ["nudity"]),
+        ("siglip2_moderation_violence", ["violence"]),
+        ("shieldstral", ["nudity", "sex", "violence"]),
+        ("qwen3-vl-8b", []),
+        (None, []),
+    ],
+)
+def test_visual_coverage_claims_only_what_the_recorded_model_detects(model, categories):
+    settings = {} if model is None else {"video_model": model}
+    coverage, _projection = _coverage(_stage("visual", **settings))
+    assert sorted(coverage) == categories
 
 
 def test_reviews_mark_manual_cues_and_downloaded_cues_need_local_verification():

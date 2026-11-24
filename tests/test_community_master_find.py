@@ -162,3 +162,54 @@ def test_work_identity_for_movies_episodes_and_missing_ids():
     series_only = MediaIdentity("episode", (), (), (EpisodeNumber("aired", 1, 2),))
     with pytest.raises(WorkIdentityRequired):
         work_identity(series_only, title="Pilot", year=None)
+
+
+def test_find_keys_bind_downloads_to_the_stored_match(tmp_path):
+    from pathlib import Path
+
+    from scanner.integrations.community.find_store import FindStore
+    from scanner.integrations.community.find_targets import CapturedFind
+    from scanner.integrations.community.masters import MasterSets
+    from tests.community_master_service_support import master_response, master_route
+    from tests.community_master_support import MEMBER, OWNER, VERSION_ID
+
+    class Clock:
+        now = 0.0
+
+        def __call__(self):
+            return self.now
+
+    clock = Clock()
+    store = FindStore(clock=clock)
+    service = FakeService()
+    _factory, client = connect(tmp_path, service)
+    service.on("POST", "/v1/match", lambda _r: {"version": 1, "results": [MATCH]})
+    master_route(service, "v_12ab", {None: master_response("v_12ab", 1)})
+    masters = MasterSets(client, OWNER, store=store)
+    captured = CapturedFind(Path("/m.mkv"), (), keys(MD5), None, "generation-1", ())
+    found = asyncio.run(masters.find(captured, VERSION_ID))
+    assert found["keysUsed"] == ["md5_quick", "tmdb", "title_year"]
+    assert found["results"][0]["linkedLinkId"] is None
+
+    def download(key, version="v_12ab", **options):
+        return asyncio.run(masters.download(find_key=key, community_version_id=version, **options))
+
+    for key, version, options, code in (
+        ("unknown", "v_12ab", {}, "find_expired"),
+        (found["findKey"], "v_other", {}, "find_expired"),
+        (found["findKey"], "v_12ab", {"guard": "generation-2"}, "target_changed"),
+    ):
+        with pytest.raises(CommunityFailure, match=code):
+            download(key, version, **options)
+    with pytest.raises(CommunityFailure, match="find_expired"):
+        asyncio.run(
+            MasterSets(client, MEMBER, store=store).download(
+                find_key=found["findKey"], community_version_id="v_12ab"
+            )
+        )
+    link = download(found["findKey"], guard="generation-1")
+    assert (link.tier, link.match_percent, link.alignment_state) == ("2", 80, "not_required")
+    clock.now += 1801
+    with pytest.raises(CommunityFailure, match="find_expired"):
+        download(found["findKey"])
+    client.db.close()

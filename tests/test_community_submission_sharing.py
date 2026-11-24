@@ -11,14 +11,16 @@ import pytest
 
 from scanner.db import (
     ArchivedSource,
+    CommunityMasterLinkRow,
     CommunityOperationRow,
     CommunityPublicationRow,
     MediaItemRow,
+    MediaVersionRow,
     ScanFindingRow,
     ScanRow,
 )
 from scanner.formats.community.codec import ArtifactError, ResourceBounds
-from scanner.integrations.community import submissions
+from scanner.integrations.community import master_service, submissions
 from scanner.integrations.community.donation_sources import SourceRef, capture_source
 from scanner.integrations.community.masters import MasterSets
 from scanner.integrations.community.sharing import PreviewStore, SharingService
@@ -32,11 +34,12 @@ from tests.community_master_service_support import (
     FakeService,
     connect,
     error,
+    found_download,
     master_response,
     master_route,
     served_filter,
 )
-from tests.community_master_support import OWNER, SERVICE, VERSION_ID
+from tests.community_master_support import OWNER, SERVICE
 
 BOUNDS = ResourceBounds(65536, 524288, 100, 4096, 24)
 MOVIE = MediaIdentity("movie", (ProviderIdentifier("tmdb", "movie", "603", "user_confirmed"),))
@@ -74,6 +77,20 @@ def accept_submission(request):
             "aliasSuggestion": None,
         },
     }
+
+
+ALIASES = [
+    {"aliasId": "theatrical", "label": "Theatrical", "spellings": ["", "theatrical"]},
+    {"aliasId": "directors_cut", "label": "Director's Cut", "spellings": ["directors cut"]},
+    {"aliasId": "extended", "label": "Extended Edition", "spellings": ["extended"]},
+    {"aliasId": "imax", "label": "IMAX", "spellings": ["imax"]},
+    {"aliasId": "unrated", "label": "Unrated", "spellings": ["unrated"]},
+]
+
+
+@pytest.fixture(autouse=True)
+def _fresh_alias_cache(monkeypatch):
+    monkeypatch.setattr(master_service, "_aliases", {})
 
 
 @pytest.fixture
@@ -159,7 +176,7 @@ def test_preview_is_local_and_reports_estimates_without_enabling_sharing(sharing
     }
     assert preview["versionChoice"]["label"] == "Theatrical" and preview["entryCount"] == 2
     assert "PRIVATE FULL TRANSCRIPT" not in json.dumps(preview)
-    assert fake.requests == []
+    assert {request.url.path for request in fake.requests} <= {"/v1/aliases"}
     assert service.db.query(CommunityOperationRow).count() == 0
     assert (
         identity_connection(service.db, service.client.home.credential_ref, SERVICE).sharing_enabled
@@ -181,11 +198,7 @@ def test_preview_projects_against_the_accounts_linked_master_set(sharing):
             )
         },
     )
-    link = asyncio.run(
-        MasterSets(service.client, OWNER).download(
-            media_version_id=VERSION_ID, community_version_id="v_1", tier="2"
-        )
-    )
+    link = found_download(MasterSets(service.client, OWNER), "v_1")
     with factory() as db:
         set_filter_decision(db, OWNER, link.id, "f_no", "reject")
         db.commit()
@@ -203,6 +216,61 @@ def test_preview_projects_against_the_accounts_linked_master_set(sharing):
         db.commit()
     with pytest.raises(CommunityFailure, match="preview_stale"):
         approve(service, preview)
+
+
+def test_alias_choices_follow_the_services_approved_list(sharing):
+    fake, _factory, service = sharing
+    with pytest.raises(CommunityFailure, match="unknown_alias"):
+        prepare(service, version_choice={"choice": "alias", "alias_id": "imax"})
+    fake.on("GET", "/v1/aliases", lambda _r: {"version": 1, "aliases": ALIASES})
+    master_service._aliases.clear()
+    preview = prepare(service, version_choice={"choice": "alias", "alias_id": "imax"})
+    assert preview["versionChoice"] == {"choice": "alias", "aliasId": "imax", "label": "IMAX"}
+    fake.on("GET", "/v1/aliases", lambda _r: error(503, "service_unavailable"))
+    assert prepare(service, version_choice={"choice": "alias", "alias_id": "imax"})
+    assert len(fake.sent("GET", "/v1/aliases")) == 2
+
+
+def test_a_link_must_follow_the_sources_version_and_service(sharing):
+    fake, factory, service = sharing
+    master_route(fake, "v_1", {None: master_response("v_1", 1, served_filter("f_hit"))})
+    link = found_download(MasterSets(service.client, OWNER), "v_1")
+    with factory() as db:
+        db.add(MediaVersionRow(id="mv_other", title_id="title"))
+        db.commit()
+    other = found_download(MasterSets(service.client, OWNER), "v_1", local="mv_other")
+    with pytest.raises(CommunityFailure, match="link_unavailable"):
+        prepare(service, link_id=other.id)
+    with factory() as db:
+        db.get(CommunityMasterLinkRow, link.id).service_url = "https://other.example"
+        db.commit()
+    with pytest.raises(CommunityFailure, match="link_unavailable"):
+        prepare(service, link_id=link.id)
+
+
+def test_the_shared_title_and_year_come_from_jellyfin_like_find(sharing, monkeypatch):
+    from scanner.integrations.community import find_targets
+
+    _fake, _factory, service = sharing
+    monkeypatch.setattr(find_targets, "get_jellyfin_credentials", lambda _db: ("s" * 32, "key"))
+
+    class Jellyfin:
+        def __init__(self, *_credentials):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def item(self, item_id):
+            assert item_id == "j" * 32
+            return type("Item", (), {"name": "The Matrix", "year": 1999})()
+
+    monkeypatch.setattr(find_targets, "JellyfinClient", Jellyfin)
+    work = prepare(service)["preview"]["artifact"]["work"]
+    assert (work["title"], work["year"]) == ("The Matrix", 1999)
 
 
 def test_version_choice_and_work_identity_are_required(sharing):
@@ -279,7 +347,8 @@ def test_changed_source_invalidates_the_preview_before_any_network(sharing):
         db.commit()
     with pytest.raises(CommunityFailure, match="preview_stale"):
         approve(service, preview)
-    assert fake.requests == [] and service.db.query(CommunityOperationRow).count() == 0
+    assert not fake.sent("POST", "/v1/submissions")
+    assert service.db.query(CommunityOperationRow).count() == 0
 
 
 def test_preview_store_expiry_scope_and_discard(sharing):

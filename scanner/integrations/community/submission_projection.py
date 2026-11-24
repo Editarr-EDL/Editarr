@@ -7,7 +7,7 @@
 | `rejected` master row | `dispute` |
 | `verified`/`adjusted` row no cue proposes | `support` with the effective values |
 | Untouched master row | not shared |
-| Completed scan stages | `coverage` |
+| Completed scan stages | `coverage`, for the categories their model detects |
 
 All times are milliseconds on the local file timeline.
 """
@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from scanner.formats.community.artifact_v3_models import ArtifactV3
+from scanner.modeling.community_coverage import stage_categories
 from scanner.modeling.community_filter_proposals import (
     Cue,
     Estimates,
@@ -34,9 +35,6 @@ from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
 
 MAX_ENTRIES = 2000
 MAX_INTERVALS = 512
-# Categories a completed generated stage examined across its recorded intervals. Kept
-# deliberately narrow: coverage creates implicit negatives on other contributors' filters.
-STAGE_COVERAGE = {"audio_scan": ("language",), "visual": ("nudity", "sex", "violence")}
 _ORIGINS = {"generated": "model", "manual": "manual", "imported": "downloaded"}
 
 
@@ -160,13 +158,14 @@ def _coverage(data: dict, kind: str, duration_ms: int) -> list[dict]:
         return []
     spans = defaultdict(list)
     for stage in data["stages"]:
-        if stage["status"] != "complete" or stage["stage"] not in STAGE_COVERAGE:
+        categories = stage_categories(stage["stage"], stage.get("effective_settings_json"))
+        if stage["status"] != "complete" or not categories:
             continue
         for interval in _intervals(stage.get("intervals_json")):
             start = _ms(interval["start_seconds"], duration_ms)
             end = _ms(interval["end_seconds"], duration_ms)
             if start < end:
-                for category in STAGE_COVERAGE[stage["stage"]]:
+                for category in categories:
                     spans[category].append((start, end))
     coverage = []
     for category in sorted(spans):

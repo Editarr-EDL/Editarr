@@ -20,19 +20,18 @@ from scanner.db import (
     CommunityPublicationRow,
 )
 from scanner.formats.community.codec import ArtifactError, ResourceBounds
-from scanner.modeling.community_normalization import SEEDED_ALIASES, Alias
+from scanner.modeling.community_normalization import Alias
 from scanner.modeling.community_work_identity import WorkIdentityRequired, work_identity
 from scanner.modeling.media_identity import MediaIdentity
 from scanner.persistence.repository.community_master_links import live_link
-from scanner.persistence.repository.media_identity_store import (
-    review_version_id,
-    scan_version_id,
-)
 
 from .client import CommunityClient
 from .donation_sources import SourceRef
+from .find_targets import item_title
+from .master_service import MasterService
 from .publications import PublicationOutbox
 from .sharing_context import TERMS_TEXT, TERMS_VERSION, SharingSource
+from .submission_links import source_version_id
 from .submissions import PreparedSubmission, SubmissionRequest, prepare_submission
 from .transport import CommunityFailure
 
@@ -179,8 +178,7 @@ class SharingService:
 
     def default_link(self, source: SourceRef, owner_id: int) -> str | None:
         """The account's live link for the source's local version, if any."""
-        find = review_version_id if source.kind == "review" else scan_version_id
-        version_id = find(self.db, source.identifier)
+        version_id = source_version_id(self.db, source)
         link = (
             live_link(self.db, owner_id, version_id, self.client.transport.endpoint.url)
             if version_id
@@ -189,10 +187,15 @@ class SharingService:
         self.db.rollback()
         return link.id if link is not None else None
 
-    @staticmethod
-    def _title(data: dict) -> tuple[str, int | None]:
+    def _title(self, data: dict) -> tuple[str, int | None]:
+        """The work title and year: Jellyfin's, as Find uses, else stored metadata."""
+        media = data["media"][0] if data["media"] else None
+        found = item_title(self.db, media["server_id"], media["jellyfin_id"]) if media else None
+        self.db.rollback()
+        if found is not None:
+            return found
         documents = [item for item in data["documents"] if item.get("title")]
-        title = data["media"][0]["name"] if data["media"] else None
+        title = media["name"] if media else None
         title = title or (documents[0]["title"] if documents else None) or ""
         years = [item["year"] for item in data["documents"] if item.get("year")]
         return title, years[0] if years else None
@@ -207,20 +210,24 @@ class SharingService:
         audio_source_scan_id: str | None = None,
         version_choice: dict | None = None,
         link_id: str | None = None,
-        aliases: tuple[Alias, ...] = SEEDED_ALIASES,
+        aliases: tuple[Alias, ...] | None = None,
     ) -> dict:
         """Freeze private evidence, returning only its exact public preview and estimates.
 
         `version_choice` is required (`version_choice_required`); `link_id` defaults to
         the account's link for the source's local version. Media without a TMDB or TVDB
         identity is `work_identity_required`. `name` is kept for the sharing dialog and
-        is not part of the submission.
+        is not part of the submission. `aliases` defaults to the service's approved list
+        (cached, with the seeded aliases as fallback).
         """
         self._authorize(source)
         if version_choice is None:
             raise CommunityFailure("version_choice_required")
         identity = self._identity()
         owner_id = self._account()
+        if aliases is None:
+            aliases = MasterService(self.client).approved_aliases()
+            self.db.rollback()
         captured = self._capture(source)
         self._source_terms(captured)
         title, year = self._title(captured.data())
@@ -237,6 +244,7 @@ class SharingService:
             work=work,
             version_choice=version_choice,
             owner_id=owner_id,
+            service_url=self.client.transport.endpoint.url,
             link_id=link_id if link_id is not None else self.default_link(source, owner_id),
             audio_source_scan_id=audio_source_scan_id,
             aliases=aliases,

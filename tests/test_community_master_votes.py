@@ -23,11 +23,12 @@ from tests.community_master_service_support import (
     FakeService,
     connect,
     error,
+    found_download,
     master_response,
     master_route,
     served_filter,
 )
-from tests.community_master_support import OWNER, SERVICE, VERSION_ID
+from tests.community_master_support import OWNER, SERVICE
 
 ARTIFACT = json.loads((FIXTURES / "artifact-v3.json").read_text())["artifact"]
 
@@ -45,11 +46,7 @@ def voting(tmp_path):
             )
         },
     )
-    link = asyncio.run(
-        MasterSets(client, OWNER).download(
-            media_version_id=VERSION_ID, community_version_id="v_1", tier="2"
-        )
-    )
+    link = found_download(MasterSets(client, OWNER), "v_1")
 
     def accept(request):
         body = json.loads(request.content)
@@ -77,7 +74,9 @@ def vote(feedback, link_id, filter_id="f_1", choice="up", operation="vote-1"):
 
 def test_vote_sends_the_snapshot_receipt_and_records_my_vote(voting):
     service, factory, feedback, link_id = voting
-    assert vote(feedback, link_id)["result"]["vote"] == "up"
+    first = vote(feedback, link_id)
+    assert first["result"]["vote"] == "up" and first["result"]["revision"] == 3
+    assert asyncio.run(feedback.send_vote(link_id, "f_1", "vote-1")) == first
     (sent,) = service.sent("POST", "/v1/filters/f_1/votes")
     with factory() as db:
         operation = db.get(CommunityOperationRow, "vote-1")

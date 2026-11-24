@@ -24,7 +24,9 @@ from scanner.persistence.repository.community_master_updates import (
 from scanner.persistence.write_lock import write_lock
 from scanner.security.community_master_snapshots import MasterUnchanged, VerifiedMaster
 
-from .find import alignment_required
+from .find import alignment_required, find_versions, key_type, query_keys
+from .find_store import FindStore, FoundMatch, finds
+from .find_targets import CapturedFind
 from .master_service import MasterService, require_token
 from .transport import CommunityFailure
 
@@ -65,8 +67,9 @@ def link_version(
 class MasterSets:
     """Master-set download and update checks for one account's identity."""
 
-    def __init__(self, client, owner_id: int):
+    def __init__(self, client, owner_id: int, *, store: FindStore = finds):
         self.client = client
+        self.store = store
         self.db = client.db
         self.owner_id = owner_id
         self.service = MasterService(client)
@@ -90,23 +93,68 @@ class MasterSets:
             )
             self.db.commit()
 
+    async def find(
+        self,
+        captured: CapturedFind,
+        local_version_id: str,
+        *,
+        label: dict | None = None,
+        limit: int = 20,
+    ) -> dict:
+        """Find versions for a captured target and remember them under a `findKey`.
+
+        Returns the local API Find response (§2).
+        """
+        found = await find_versions(self.service, captured.keys, label=label, limit=limit)
+        key = self.remember(local_version_id, captured.guard, found)
+        return {
+            "version": 1,
+            "findKey": key,
+            "localVersionId": local_version_id,
+            "keysUsed": [key_type(key) for key in query_keys(captured.keys)],
+            "results": [
+                item.as_json(self.linked_link_id(local_version_id, item.result.version_id))
+                for item in found
+            ],
+            "error": None,
+        }
+
+    def remember(self, local_version_id: str, guard: str, found) -> str:
+        """Store Find results for this account; see `find_store`."""
+        return self.store.put(
+            owner_id=self.owner_id,
+            service_url=self.service.service_url,
+            local_version_id=local_version_id,
+            guard=guard,
+            matches={
+                item.result.version_id: FoundMatch(item.result.tier, item.result.match_percent)
+                for item in found
+            },
+        )
+
     async def download(
         self,
         *,
-        media_version_id: str,
+        find_key: str,
         community_version_id: str,
-        tier: str | None,
-        match_percent: int | None = None,
         replace: bool = False,
+        guard: str | None = None,
     ) -> CommunityMasterLinkRow:
-        """Fetch, verify and apply a version's master set to a local version.
+        """Fetch, verify and apply a found version's master set to the Find's local version.
 
-        Tiers 1–3 apply at once; other tiers create rows that stay inactive until the
-        user approves an alignment. Another version already linked to the local version
-        needs `replace=True` (`replace_required`). A merged version raises
-        `version_merged` with `details["mergedInto"]`.
+        The tier and Match % come from the stored Find (`find_expired`, `target_changed`
+        when `guard` names another file generation). Tiers 1–3 apply at once; other
+        tiers stay inactive until the user approves an alignment. Another version
+        already linked to the local version needs `replace=True` (`replace_required`).
+        A merged version raises `version_merged` with `details["mergedInto"]`.
         """
         require_token(community_version_id, "invalid_master_request")
+        record = self.store.get(
+            find_key, owner_id=self.owner_id, service_url=self.service.service_url, guard=guard
+        )
+        match = record.matches.get(community_version_id)
+        if match is None:
+            raise CommunityFailure("find_expired")
         self._clean()
         master = await self.service.master(community_version_id)
         if not isinstance(master, VerifiedMaster):
@@ -118,12 +166,14 @@ class MasterSets:
                 link = apply_master(
                     self.db,
                     owner_id=self.owner_id,
-                    media_version_id=media_version_id,
+                    media_version_id=record.local_version_id,
                     service_url=self.service.service_url,
                     contributor_id=identity.contributor_id,
-                    version=link_version(master.snapshot, tier=tier, match_percent=match_percent),
+                    version=link_version(
+                        master.snapshot, tier=match.tier, match_percent=match.match_percent
+                    ),
                     snapshot=verified_snapshot(master),
-                    alignment_required=alignment_required(tier),
+                    alignment_required=alignment_required(match.tier),
                     replace=replace,
                 )
                 self.db.commit()

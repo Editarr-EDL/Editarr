@@ -132,6 +132,25 @@ def resolve_find_target(db: Session, target: FindTarget, *, authorize=None) -> R
     return ResolvedTarget(path, media, item.name, item.year, item.duration_seconds)
 
 
+def item_title(db: Session, server_id: str, item_id: str) -> tuple[str, int | None] | None:
+    """The Jellyfin title and year Find uses for an item, for sharing the same work.
+
+    None when Jellyfin is not configured or the item belongs to another server; a
+    provider failure is `target_unavailable` and an absent item `invalid_target`.
+    """
+    credentials = get_jellyfin_credentials(db)
+    if not credentials or credentials[0] != server_id:
+        return None
+    try:
+        with JellyfinClient(*credentials) as client:
+            item = client.item(item_id)
+    except JellyfinNotFound as error:
+        raise MissingTarget() from error
+    except JellyfinError as error:
+        raise CommunityFailure("target_unavailable", retryable=True) from error
+    return item.name, item.year
+
+
 def _runtime_ms(path: Path, fallback: float | None, should_cancel, warnings: list[str]):
     try:
         seconds = probe_video_duration(path, should_cancel)

@@ -15,6 +15,7 @@ from tests.community_master_service_support import (
     FakeService,
     connect,
     error,
+    found_download,
     master_response,
     master_route,
     served_filter,
@@ -42,9 +43,7 @@ def linked(tmp_path):
     links = {}
     for version, local in (("v_1", VERSION_ID), ("v_2", "mv_2"), ("v_3", "mv_3")):
         master_route(service, version, {None: master_response(version, 1, served_filter("f_a"))})
-        links[version] = asyncio.run(
-            masters.download(media_version_id=local, community_version_id=version, tier="1")
-        ).id
+        links[version] = found_download(masters, version, tier="1", local=local).id
     master_route(
         service,
         "v_1",
@@ -105,18 +104,52 @@ def test_sync_runs_once_per_day_and_records_each_notification_kind(linked):
     )
     assert asyncio.run(sync.run()).ran is True
     (later,) = service.sent("POST", "/v1/sync/revisions")[1:]
-    assert json.loads(later.content)["items"] == [{"versionId": "v_1", "revision": 2}]
+    assert json.loads(later.content)["items"] == [
+        {"versionId": "v_1", "revision": 2},
+        {"versionId": "v_3", "revision": 1},
+    ]
 
 
-def test_a_rate_limited_run_fails_and_stays_due(linked):
-    service, _factory, sync, _clock, _links = linked
+def test_a_rate_limited_run_waits_for_retry_after(linked):
+    service, _factory, sync, clock, _links = linked
     service.on(
         "POST", "/v1/sync/revisions", lambda _r: error(429, "sync_rate_limited", retry_after=600)
     )
     with pytest.raises(CommunityFailure, match="sync_rate_limited"):
         asyncio.run(sync.run())
     status = sync.status()
-    assert (status.state, status.last_error, status.due) == ("failed", "sync_rate_limited", True)
+    assert (status.state, status.last_error, status.due) == ("failed", "sync_rate_limited", False)
+    assert asyncio.run(sync.run()).ran is False
+    clock.now += timedelta(seconds=601)
+    assert sync.status().due is True
+
+
+def test_a_failure_without_retry_after_backs_off_an_hour(linked):
+    service, _factory, sync, clock, _links = linked
+    service.on("POST", "/v1/sync/revisions", lambda _r: error(400, "invalid_sync"))
+    with pytest.raises(CommunityFailure, match="invalid_sync"):
+        asyncio.run(sync.run())
+    clock.now += timedelta(minutes=59)
+    assert sync.status().due is False
+    clock.now += timedelta(minutes=2)
+    assert sync.status().due is True
+
+
+def test_unavailable_links_are_checked_and_restored(linked):
+    service, factory, sync, clock, links = linked
+    assert asyncio.run(sync.run()).ran
+    clock.now += timedelta(hours=25)
+    service.on(
+        "POST",
+        "/v1/sync/revisions",
+        lambda _r: {"version": 1, "changed": [], "nextRunAllowedAt": 1},
+    )
+    assert asyncio.run(sync.run()).ran
+    (sent,) = service.sent("POST", "/v1/sync/revisions")[1:]
+    assert {item["versionId"] for item in json.loads(sent.content)["items"]} == {"v_1", "v_3"}
+    with factory() as db:
+        assert db.get(CommunityMasterLinkRow, links["v_3"]).link_state == "active"
+        assert db.get(CommunityMasterLinkRow, links["v_2"]).link_state == "merged"
 
 
 def test_a_version_merged_during_download_is_marked_merged(linked):

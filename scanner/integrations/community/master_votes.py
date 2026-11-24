@@ -44,6 +44,20 @@ def snapshot_filter_ids(snapshot_bytes: bytes) -> set[str]:
     }
 
 
+def _hosted_result(operation) -> dict | None:
+    """Rebuild an acknowledged vote's hosted result from its stored intent and revision."""
+    if operation.state != "acknowledged" or not (operation.revision_id or "").isdigit():
+        return None
+    return {
+        "version": 1,
+        "operationId": operation.operation_id,
+        "filterId": operation.filter_id,
+        "versionId": operation.community_version_id,
+        "vote": operation.vote,
+        "revision": int(operation.revision_id),
+    }
+
+
 class MasterFeedback:
     """Votes and reports for one account's identity."""
 
@@ -168,9 +182,10 @@ class MasterFeedback:
         if link.community_version_id != operation.community_version_id:
             raise CommunityFailure("vote_intent_unavailable")
         body, vote, state = operation.receipt.encode(), operation.vote, operation.state
+        stored = _hosted_result(operation)
         self.db.rollback()
         if state == "acknowledged":
-            return {"version": 1, "state": "completed", "result": json.loads(body)}
+            return {"version": 1, "state": "completed", "result": stored}
         self._set_state(operation_id, "submitted")
         try:
             result = await self.service.vote(filter_id, body, operation_id)
@@ -181,7 +196,11 @@ class MasterFeedback:
         if result.vote != vote:
             raise CommunityFailure("invalid_response")
         with write_lock(self.db):
-            set_operation_state(self.db, operation_id=operation_id, state="acknowledged")
+            acknowledged = set_operation_state(
+                self.db, operation_id=operation_id, state="acknowledged"
+            )
+            # The hosted result is the intent plus the revision it produced.
+            acknowledged.revision_id = str(result.revision)
             set_filter_vote(self.db, self.owner_id, link_id, filter_id, vote)
             self.db.commit()
         return {

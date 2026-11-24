@@ -24,11 +24,12 @@ from tests.community_master_service_support import (
     FakeService,
     connect,
     error,
+    found_download,
     master_response,
     master_route,
     served_filter,
 )
-from tests.community_master_support import OWNER, VERSION_ID
+from tests.community_master_support import OWNER
 
 OVERLAPS_FINDING = served_filter("f_hit", 100_000, 101_000)
 ELSEWHERE = served_filter("f_far", 500_000, 501_000)
@@ -43,15 +44,7 @@ def setup(tmp_path):
 
 
 def download(masters, tier="2", replace=False, version="v_1"):
-    return asyncio.run(
-        masters.download(
-            media_version_id=VERSION_ID,
-            community_version_id=version,
-            tier=tier,
-            match_percent=80,
-            replace=replace,
-        )
-    )
+    return found_download(masters, version, tier=tier, replace=replace)
 
 
 def rows(factory, link_id):

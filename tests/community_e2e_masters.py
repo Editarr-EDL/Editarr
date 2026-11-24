@@ -18,9 +18,7 @@ from sqlalchemy import select
 from scanner.db import CommunityMasterFilterRow, MediaItemRow, UserRow, get_session_factory
 from scanner.integrations.community import find_targets
 from scanner.integrations.community.client import CommunityClient
-from scanner.integrations.community.find import find_versions
 from scanner.integrations.community.find_targets import FindTarget, capture_find_keys
-from scanner.integrations.community.master_service import MasterService
 from scanner.integrations.community.master_sync import MasterSync
 from scanner.integrations.community.master_votes import MasterFeedback
 from scanner.integrations.community.masters import MasterSets
@@ -84,24 +82,19 @@ def _view(db, owner, link_id) -> dict:
 async def _act(db, action: dict):
     client, owner = _client(db)
     kind = action["action"]
-    if kind == "find":
-        captured = capture_find_keys(db, TARGET)
-        found = await find_versions(MasterService(client), captured.keys)
-        return {
-            "localVersionId": _local_version(db, captured),
-            "keysUsed": [key.type for key in captured.keys.file_keys],
-            "results": [item.as_json() for item in found],
-        }
     masters = MasterSets(client, owner)
-    if kind == "download":
+    if kind in ("find", "find_download"):
+        # Find keys live in the application process, so a download follows in this one.
+        captured = capture_find_keys(db, TARGET)
+        found = await masters.find(captured, _local_version(db, captured))
+        if kind == "find" or not found["results"]:
+            return found
         link = await masters.download(
-            media_version_id=action["local_version_id"],
-            community_version_id=action["version_id"],
-            tier=action["tier"],
-            match_percent=action.get("match_percent"),
-            replace=action.get("replace", False),
+            find_key=found["findKey"],
+            community_version_id=found["results"][0]["communityVersionId"],
+            guard=captured.guard,
         )
-        return _view(db, owner, link.id)
+        return {"found": found, "link": _view(db, owner, link.id)}
     if kind == "view":
         return _view(db, owner, action["link_id"])
     if kind == "check":
