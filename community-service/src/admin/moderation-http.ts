@@ -3,6 +3,9 @@ import type { Env } from '../config';
 import { BodyLimitError, readBoundedBytes } from '../http/bounded-body';
 import { inspectModeration, moderate, ModerationError, resourceId } from './moderation';
 import { operatorReadAdmission, operatorFailure as failure } from './admission';
+import { ConfigurationError, masterPolicy } from '../config';
+import { CatalogModerationError, isCatalogCommand, moderateCatalog } from '../versions/moderation';
+import { inspectCatalogResource, listAliasSuggestions, listVersions } from '../versions/admin-reads';
 export { moderationLimits } from './admission';
 
 export async function operatorModeration(request: Request, env: Env, subject: string, now: number): Promise<Response> {
@@ -16,8 +19,15 @@ export async function operatorModeration(request: Request, env: Env, subject: st
       else if (url.search || request.headers.get('content-type') !== 'application/json') output = failure(400, 'invalid_moderation');
       else {
         const body = await readBoundedBytes(request, requestBytes);
-        output = Response.json(await moderate(db, subject, JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)), now));
+        const input: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
+        output = Response.json(isCatalogCommand(input)
+          ? await moderateCatalog(db, subject, input, now, { policy: masterPolicy(env) })
+          : await moderate(db, subject, input, now));
       }
+    } else if (path === '/admin/v1/versions' || path === '/admin/v1/alias-suggestions') {
+      if (request.method !== 'GET') output = failure(405, 'method_not_allowed');
+      else output = Response.json(path === '/admin/v1/versions'
+        ? await listVersions(db, url.searchParams) : await listAliasSuggestions(db, url.searchParams));
     } else if (path === '/admin/v1/reports') {
       if (request.method !== 'GET') output = failure(405, 'method_not_allowed');
       else {
@@ -32,15 +42,20 @@ export async function operatorModeration(request: Request, env: Env, subject: st
           nextCursor: rows.results.length > 20 ? rows.results[19].reportId : null });
       }
     } else {
-      const match = path.match(/^\/admin\/v1\/moderation\/(revision|contributor|vote|report)\/([A-Za-z0-9_.-]{1,128})(?:\/([A-Za-z0-9_.-]{1,128}))?$/);
+      const match = path.match(/^\/admin\/v1\/moderation\/(revision|contributor|vote|report|version|alias_suggestion)\/([A-Za-z0-9_.-]{1,128})(?:\/([A-Za-z0-9_.-]{1,128}))?$/);
       if (!match) output = failure(404, 'not_found');
       else if (request.method !== 'GET') output = failure(405, 'method_not_allowed');
       else if (url.search) output = failure(400, 'invalid_moderation');
+      else if (match[1] === 'version' || match[1] === 'alias_suggestion') output = match[3] ? failure(404, 'not_found')
+        : Response.json(await inspectCatalogResource(db, match[1], match[2]));
       else output = Response.json(await inspectModeration(db, match[1], match[2], match[3]));
     }
   } catch (error) {
-    if (error instanceof BodyLimitError) output = failure(413, 'body_too_large');
+    if (error instanceof ConfigurationError) output = failure(503, 'moderation_not_configured');
+    else if (error instanceof BodyLimitError) output = failure(413, 'body_too_large');
     else if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof TypeError || String(error).includes('invalid_moderation')) output = failure(400, 'invalid_moderation');
+    else if (error instanceof CatalogModerationError) output = failure(error.code === 'resource_not_found' ? 404 :
+      error.code === 'moderation_ineligible' ? 403 : error.code === 'invalid_moderation' ? 400 : 409, error.code);
     else if (error instanceof ModerationError) output = failure(error.code === 'resource_not_found' ? 404 : error.code === 'moderation_ineligible' ? 403 : 409, error.code);
     else if (String(error).includes('operator_rate_limited')) output = failure(429, 'operator_rate_limited');
     else if (String(error).includes('download_query_limit')) output = failure(413, 'moderation_query_limit');

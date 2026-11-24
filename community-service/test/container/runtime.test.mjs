@@ -45,7 +45,7 @@ test('native image safely initializes, survives hard restart and verifies an off
     assert.equal(plan.policy.version, 'community-retain-first-1');
     assert.equal(plan.policy.durableRecords, 'indefinite');
     assert.equal(plan.mode, 'read_only');
-    assert.equal(plan.schemaVersion, 17);
+    assert.equal(plan.schemaVersion, 18);
     assert.equal(plan.payloadBytesReclaimed, 0);
     assert.equal(plan.categories.length, 8);
     assert.equal(plan.categories.find(category => category.category === 'requestNonces').eligible, 1);
@@ -83,7 +83,7 @@ test('native image safely initializes, survives hard restart and verifies an off
       const restored = new DatabaseSync('/backups/verified.sqlite', { readOnly: true });
       assert.deepEqual(restored.prepare('SELECT public_key FROM installation_keys').get().public_key, new Uint8Array([0,255,1,128]));
       assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM request_nonces WHERE nonce = 'expired-preview'").get().count, 1);
-      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 17);
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 18);
       restored.close(); console.log('snapshot_verified');`);
     assert.equal(result, 'snapshot_verified');
     const inspection = JSON.parse(docker('image', 'inspect', image))[0];
@@ -177,7 +177,7 @@ test('real Compose isolates mounts and preserves populated data across image rep
       import assert from 'node:assert/strict'; import { DatabaseSync } from 'node:sqlite';
       for (const path of ['/data/community.sqlite', '/backups/before-replacement.sqlite']) {
         const database = new DatabaseSync(path, { readOnly: true });
-        assert.equal(database.prepare('PRAGMA user_version').get().user_version, 17);
+        assert.equal(database.prepare('PRAGMA user_version').get().user_version, 18);
         const key = database.prepare('SELECT * FROM installation_keys WHERE key_id = ?').get('key');
         assert.equal(key.state, 'revoked'); assert.equal(key.retired_at, 2);
         assert.deepEqual(key.public_key, new Uint8Array([0,255,1,128]));
@@ -229,7 +229,7 @@ test('packaged migrations require verified snapshots and preserve failed upgrade
         assert.deepEqual(key.public_key, new Uint8Array([0,255,1,128]));
         database.close();
       }
-      for (let version = 1; version < 17; version++) {
+      for (let version = 1; version < 18; version++) {
         mkdirSync('/data/v' + version);
         const path = '/data/v' + version + '/community.sqlite', snapshot = '/backups/v' + version + '.sqlite';
         seed(path, version);
@@ -237,7 +237,7 @@ test('packaged migrations require verified snapshots and preserve failed upgrade
         await assert.rejects(upgradeDatabase(path, path), /EEXIST/);
         verify(path, version);
         await upgradeDatabase(path, snapshot);
-        verify(path, 17); verify(snapshot, version);
+        verify(path, 18); verify(snapshot, version);
         assert.equal(statSync(snapshot).mode & 0o777, 0o600);
       }
       mkdirSync('/data/failed');
@@ -245,7 +245,7 @@ test('packaged migrations require verified snapshots and preserve failed upgrade
       await assert.rejects(upgradeDatabase('/data/failed/community.sqlite', '/backups/failed.sqlite'));
       verify('/data/failed/community.sqlite', 7, 2); verify('/backups/failed.sqlite', 7, 2);
       const unknown = new DatabaseSync('/data/unknown.sqlite');
-      unknown.exec("PRAGMA user_version = 17; CREATE TABLE unknown (evidence BLOB); INSERT INTO unknown VALUES (X'00FF')"); unknown.close();
+      unknown.exec("PRAGMA user_version = 18; CREATE TABLE unknown (evidence BLOB); INSERT INTO unknown VALUES (X'00FF')"); unknown.close();
       assert.throws(() => openDatabase('/data/unknown.sqlite'), /unknown_database_schema/);
       console.log('supported_upgrades_and_rollback_verified');`), 'supported_upgrades_and_rollback_verified');
     for (const path of ['/data/failed/community.sqlite', '/data/unknown.sqlite']) {

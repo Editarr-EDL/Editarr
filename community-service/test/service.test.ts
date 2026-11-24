@@ -23,7 +23,7 @@ describe('local Node service scaffold', () => {
 
   it('denies production admission without policy and credentials', async () => {
     expect(missingConfig({ APP_ENV: 'production', CATALOG_DB: env.CATALOG_DB })).toEqual([
-      'POLICY_VERSION', 'PUBLIC_ORIGIN', 'DISCORD_CLIENT_ID',
+      'POLICY_VERSION', 'PUBLIC_ORIGIN', 'MASTER_POLICY', 'DISCORD_CLIENT_ID',
       'DISCORD_CLIENT_SECRET', 'DISCORD_GUILD_ID', 'ACCESS_AUDIENCE',
       'ACCESS_ISSUER', 'OPERATOR_ORIGIN', 'OPERATOR_SUBJECTS', 'OPERATOR_ASSETS',
     ]);

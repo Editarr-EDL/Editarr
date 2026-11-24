@@ -12,6 +12,7 @@ import { signingKey, signedPost, signedRead } from '../helpers/key-lifecycle.ts'
 import { signedEnrollment } from '../helpers/enrollment-signatures.ts';
 import { confirmationHash } from '../../src/identity/confirmation.ts';
 import { limits } from '../helpers/publication.ts';
+import { DEFAULT_MASTER_POLICY } from '../../src/filters/policy.ts';
 
 export const origin = 'https://community.example';
 export const timestamp = () => Math.floor(Date.now() / 1000);
@@ -57,6 +58,7 @@ export async function journey(database, run, runtime = {}) {
     VOTE_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
     REPORT_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
     MODERATION_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
+    MASTER_POLICY: JSON.stringify(DEFAULT_MASTER_POLICY),
     DOWNLOAD_RECEIPT_PRIVATE_KEY: Buffer.from(await crypto.subtle.exportKey('pkcs8', signer.privateKey)).toString('base64'),
     DOWNLOAD_RECEIPT_KEYS: JSON.stringify([{ keyId: signer.keyId, publicKey: Buffer.from(signer.publicKey).toString('base64'), status: 'active' }]), TRUSTED_ACTOR_KEY: tunnelActor};
   let server;

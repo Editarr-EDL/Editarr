@@ -13,6 +13,7 @@ import { pruneRecoveryAuthorizations } from './identity/recovery';
 import { contributorPublication } from './http/publication';
 import { publicationLimits } from './contributions/publication-input';
 import { contributorCatalog } from './http/catalog';
+import { contributorVersionCatalog } from './http/match';
 import { searchLimits } from './catalog/search-input';
 import { contributorDownload } from './http/download';
 import { downloadLimits } from './contributions/download';
@@ -108,6 +109,16 @@ export default {
         if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
         return contributorCatalog(request, db, new URL(env.PUBLIC_ORIGIN!).host,
           Math.floor(Date.now() / 1000), createBotMembership({ ...env, CATALOG_DB: db }), limits, env.POLICY_VERSION!, env.CATALOG_DB);
+      });
+    }
+    if (url.pathname === '/v1/match' || url.pathname === '/v1/aliases') {
+      if (!env.CATALOG_DB || !env.PUBLIC_ORIGIN || !env.POLICY_VERSION || url.origin !== env.PUBLIC_ORIGIN)
+        return jsonResponse(503, 'service_unavailable');
+      return admittedDiscordWork(request, env, async (db, admit) => {
+        const allowed = await admit(request);
+        if (!db || allowed !== 'allowed') return jsonResponse(503, 'service_unavailable');
+        return contributorVersionCatalog(request, db, new URL(env.PUBLIC_ORIGIN!).host,
+          Math.floor(Date.now() / 1000), createBotMembership({ ...env, CATALOG_DB: db }));
       });
     }
     if (url.pathname === '/v1/contributions' || url.pathname.startsWith('/v1/publication-operations/')) {

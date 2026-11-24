@@ -15,7 +15,7 @@ test('initialization is explicit, refuses overwrite and holds a single-writer lo
     assert.throws(() => initializeDatabase(path), /EEXIST/);
     const { database, version } = openDatabase(path);
     try {
-      assert.equal(version, 17);
+      assert.equal(version, 18);
       const other = new DatabaseSync(path);
       try { assert.throws(() => other.exec('BEGIN IMMEDIATE'), /locked/); }
       finally { other.close(); }
@@ -32,7 +32,7 @@ test('read-only inspection refuses mutations and leaves database bytes unchanged
     const before = readFileSync(path);
     const { database, version } = openDatabase(path, undefined, false, { readOnly: true });
     try {
-      assert.equal(version, 17);
+      assert.equal(version, 18);
       assert.equal(database.connection.prepare('SELECT COUNT(*) AS count FROM operations').get().count, 0);
       assert.throws(() => database.connection.exec('CREATE TABLE forbidden (value TEXT)'), /readonly/);
       assert.equal(database.connection.prepare('SELECT total_changes() AS count').get().count, 0);
@@ -56,7 +56,7 @@ test('read-only inspection refuses mutations and leaves database bytes unchanged
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-for (let version = 1; version < 17; version++) {
+for (let version = 1; version < 18; version++) {
   test(`upgrades version ${version} with a verified backup and preserved identity BLOBs`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'community-upgrade-'));
     const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
@@ -79,6 +79,7 @@ for (let version = 1; version < 17; version++) {
       try {
         assert.deepEqual(database.connection.prepare('SELECT public_key FROM installation_keys').get().public_key, new Uint8Array([0, 255, 1, 128]));
         assert.equal(database.connection.prepare('SELECT display_name FROM contributors').get().display_name, 'One Two Three');
+        assert.equal(database.connection.prepare("SELECT count(*) AS count FROM alias_spellings WHERE source = 'seed'").get().count, 19);
       } finally { database.close(); }
       const restored = new DatabaseSync(snapshot, { readOnly: true });
       try { assert.equal(restored.prepare('PRAGMA user_version').get().user_version, version); }
