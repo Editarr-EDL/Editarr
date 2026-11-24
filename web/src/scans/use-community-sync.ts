@@ -1,30 +1,44 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchCommunitySync, markSyncNotificationsRead, runCommunitySync } from "../api/api-community-updates";
 import type { SyncStatus } from "../api/api-community-master-types";
+import { notifyCommunityMastersChanged } from "./community-master-events";
+import { masterErrorText } from "./community-master-format";
 
-const RUNNING_POLL_MS = 15_000;
+export const RUNNING_POLL_MS = 15_000;
 
 /**
  * Request the daily community sync once when the app loads. The server decides whether a run is due
- * (at most once per 24 hours) and otherwise just returns the status; while a run is in progress the
- * status is re-read until it settles. Failures leave the status empty and are retried on next load.
+ * (at most once per 24 hours) and otherwise just returns the status. While a run is in progress the
+ * status is re-read; a failed re-read is surfaced as `error` and retried. When a run finishes (or one ran during
+ * the request) open item pages are told to refresh their update banners.
  */
 export function useCommunitySync(enabled: boolean) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!enabled) { setStatus(null); return; }
+    if (!enabled) { setStatus(null); setError(null); return; }
     const controller = new AbortController();
-    let timer: number | undefined;
-    const follow = (value: SyncStatus) => {
-      if (controller.signal.aborted) return;
-      setStatus(value);
-      if (value.state === "running") timer = window.setTimeout(() => {
-        fetchCommunitySync(controller.signal).then(follow).catch(() => {});
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      timer = setTimeout(() => {
+        fetchCommunitySync(controller.signal).then((next) => follow(next, true)).catch((reason) => {
+          if (controller.signal.aborted) return;
+          setError(masterErrorText(reason));
+          poll();
+        });
       }, RUNNING_POLL_MS);
     };
-    runCommunitySync(controller.signal).then(follow).catch(() => {});
-    return () => { controller.abort(); window.clearTimeout(timer); };
+    const follow = (value: SyncStatus, wasRunning: boolean) => {
+      if (controller.signal.aborted) return;
+      setStatus(value);
+      setError(null);
+      if (value.state === "running") poll();
+      else if (wasRunning || value.ran) notifyCommunityMastersChanged();
+    };
+    // A failed initial request stays quiet (for example when the service isn't configured); it is retried on next load.
+    runCommunitySync(controller.signal).then((value) => follow(value, false)).catch(() => {});
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [enabled]);
 
   const markRead = useCallback(async (ids: string[] | "all") => {
@@ -37,5 +51,5 @@ export function useCommunitySync(enabled: boolean) {
     await markSyncNotificationsRead(ids).catch(() => {});
   }, []);
 
-  return { status, markRead };
+  return { status, error, markRead };
 }

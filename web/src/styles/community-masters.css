@@ -91,3 +91,9 @@
   .master-preferences { align-items: stretch; flex-direction: column; }
   .master-update-actions > button, .master-version-card > button { min-height: 44px; }
 }
+
+.master-field-changes { width: auto; border-collapse: collapse; font-size: 12px; }
+.master-field-changes th, .master-field-changes td { padding: 2px 10px 2px 0; text-align: left; font-variant-numeric: tabular-nums; }
+.master-field-changes thead th { color: #a4adbb; font-weight: 600; }
+.master-field-changes tbody th { color: #c8d2e2; font-weight: 600; }
+.master-confidence-cell { display: inline-flex; align-items: center; gap: 4px; }

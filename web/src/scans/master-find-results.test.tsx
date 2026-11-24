@@ -25,10 +25,16 @@ it("shows version cards and confirms before replacing the linked version", async
   const changed = vi.fn();
   window.addEventListener("editarr:community-masters-changed", changed);
   render(<MasterFindResults target={target} />);
-  await screen.findByRole("combobox", { name: "Your version" });
+  expect(screen.queryByRole("combobox")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Find community versions" }));
   expect(await screen.findByText("30% match")).toBeInTheDocument();
   expect(findCommunityVersions).toHaveBeenCalledWith(target, { alias_id: "theatrical" }, false);
+  const version = await screen.findByRole("combobox", { name: "Your version" });
+  fireEvent.change(version, { target: { value: "__other__" } });
+  expect(screen.getByText("Without a version name, this searches as Theatrical.")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Version name (optional)"), { target: { value: "IMAX" } });
+  expect(screen.queryByText(/searches as Theatrical/)).toBeNull();
+  fireEvent.change(version, { target: { value: "theatrical" } });
   expect(screen.getByText("In use for this file")).toBeInTheDocument();
   expect(screen.getByText("1 filter · 1 contributor")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Unconfirmed" })).toBeInTheDocument();

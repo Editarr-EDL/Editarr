@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { AudioTrackSelection } from "../api/api-audio-tracks";
-import { fetchDraftFilterPreview } from "../api/api-reviews";
 import type { Scan, ScanQueueItem } from "../api/api-scan-types";
 import {
   approveScanReuse, previewScanReuse,
@@ -11,10 +10,11 @@ import { scanLabel } from "../shared/display";
 import { openScanQueue } from "../shared/scan-events";
 import { ModalDialog } from "../ui/ModalDialog";
 import { VerificationQueue } from "./scan-verification-queue";
-import { VerificationCueReview, type CueClip } from "./scan-verification-review";
+import { VerificationCueReview } from "./scan-verification-review";
 import { emptyAnchor, VerificationTiming } from "./scan-verification-timing";
 import { useAudioTracks } from "./use-audio-tracks";
 import { useVerificationTranscript } from "./use-verification-transcript";
+import { useFilterClip } from "./use-filter-clip";
 
 const steps = [
   { id: "align", label: "Align timing" }, { id: "review", label: "Check cues" }, { id: "approve", label: "Approve" },
@@ -55,11 +55,10 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
   const [anchors, setAnchors] = useState([emptyAnchor(), emptyAnchor()]);
   const [preview, setPreview] = useState<{ request: VerificationRequest; result: VerificationPreview } | null>(null);
   const [viewedVideo, setViewedVideo] = useState<number[]>([]);
-  const [activity, setActivity] = useState<"preview" | "verify" | "clip" | "approve" | null>(null);
-  const busy = activity !== null;
+  const [activity, setActivity] = useState<"preview" | "verify" | "approve" | null>(null);
+  const clips = useFilterClip<VerificationCue["source_finding_id"]>(target);
+  const busy = activity !== null || clips.loading !== null;
   const [error, setError] = useState<string | null>(null);
-  const [clip, setClip] = useState<CueClip | null>(null);
-  const clipUrl = useRef<string | null>(null);
   const pendingRead = useRef<AbortController | null>(null);
   const dismissed = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -68,10 +67,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
   const queueId = useId();
   const queueButton = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => () => {
-    pendingRead.current?.abort();
-    if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
-  }, []);
+  useEffect(() => () => pendingRead.current?.abort(), []);
   useEffect(() => {
     if (lastStep.current === step) return;
     lastStep.current = step;
@@ -82,9 +78,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
     setError(null);
     setPreview(null);
     setViewedVideo([]);
-    if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
-    clipUrl.current = null;
-    setClip(null);
+    clips.reset();
   }
 
   async function prepare() {
@@ -125,26 +119,14 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
   async function play(cue: VerificationCue) {
     if (cue.target_start === null || busy) return;
     const audioOnly = cue.channel === "audio";
-    const controller = new AbortController();
-    pendingRead.current = controller;
-    setActivity("clip");
     setError(null);
-    try {
-      const blob = await fetchDraftFilterPreview(target, {
-        start_seconds: cue.target_start, end_seconds: cue.target_end,
-        target_generation: preview?.result.target_generation ?? undefined,
-        audio_track_index: cue.channel !== "video" ? preview?.request.audio_track_index : undefined,
-        source: audioOnly ? "audio" : "visual",
-        edit_action: audioOnly ? "mute" : "skip",
-      }, controller.signal);
-      if (controller.signal.aborted) return;
-      const url = URL.createObjectURL(blob);
-      if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
-      clipUrl.current = url;
-      setClip({ source: cue.source_finding_id, url, kind: audioOnly ? "audio" : "video" });
-    } catch (reason) {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Unable to preview the cue.");
-    } finally { if (!controller.signal.aborted) setActivity(null); }
+    await clips.play(cue.source_finding_id, {
+      start_seconds: cue.target_start, end_seconds: cue.target_end,
+      target_generation: preview?.result.target_generation ?? undefined,
+      audio_track_index: cue.channel !== "video" ? preview?.request.audio_track_index : undefined,
+      source: audioOnly ? "audio" : "visual",
+      edit_action: audioOnly ? "mute" : "skip",
+    });
   }
 
   const mapped = preview?.result.cues.filter((cue) => cue.target_start !== null).length ?? 0;
@@ -218,7 +200,7 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
         onAnchors={(updated) => { setAnchors(updated); resetPreview(); }}
         onTrack={(selection) => { resetPreview(); tracks.onChange(selection); }} />}
       {step === "review" && preview && <VerificationCueReview preview={preview.result} method={preview.request.method}
-        busy={busy} mapped={mapped} videoToCheck={videoToCheck} clip={clip} viewedVideo={viewedVideo}
+        busy={busy} mapped={mapped} videoToCheck={videoToCheck} clip={clips.clip} viewedVideo={viewedVideo}
         onManual={switchToManual} onPlay={(cue) => void play(cue)}
         onViewed={(id) => setViewedVideo((viewed) => viewed.includes(id) ? viewed : [...viewed, id])} />}
       {step === "approve" && <section className="verification-approval" aria-label="Approve">
@@ -227,11 +209,11 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
           {pending > 0 && ` ${pending} ${pending === 1 ? "cue stays" : "cues stay"} pending.`}</p>
         <p className="muted-copy">Editarr checks the target file before saving. For large files, it reads sampled blocks. Follow the check in Queue.</p>
       </section>}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {activity && <p className="form-status" role="status">{approving
+      {(error || clips.error) && <p className="form-error" role="alert">{error ?? clips.error}</p>}
+      {(activity || clips.loading !== null) && <p className="form-status" role="status">{approving
         ? "Checking the target file’s fingerprint before saving…"
         : activity === "verify" ? "Checking the file before reusing the saved transcript…"
-          : activity === "clip" ? "Loading the cue preview…" : "Calculating proposed cue times…"}</p>}
+          : clips.loading !== null ? "Loading the cue preview…" : "Calculating proposed cue times…"}</p>}
     </div>
     <footer className="verification-footer">
       <div className="verification-footer-back">

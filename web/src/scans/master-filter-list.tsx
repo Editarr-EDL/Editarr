@@ -31,9 +31,10 @@ export function MasterPreferenceControls({ preferences, disabled, onChange }: {
 /**
  * Master set filter rows filtered by the user's preferences. Touched rows always show. Each row has
  * its confidence, contributor count (never names), the Locally verified icon, votes and local decisions.
+ * `serverActive` uses the server's `active` flag; otherwise activity is recomputed for unsaved preferences.
  */
-export function MasterFilterList({ view, preferences, canVote, canDecide, onFilter }: {
-  view: MasterView; preferences: MasterPreferences; canVote: boolean; canDecide: boolean;
+export function MasterFilterList({ view, preferences, serverActive = false, canVote, canDecide, onFilter }: {
+  view: MasterView; preferences: MasterPreferences; serverActive?: boolean; canVote: boolean; canDecide: boolean;
   onFilter: (filter: MasterFilter) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -62,18 +63,21 @@ export function MasterFilterList({ view, preferences, canVote, canDecide, onFilt
           <th scope="col">Contributors</th><th scope="col">Status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
         <tbody>{visible.map((filter) => {
           const name = `${filterName({ category: filter.category, subcategory: filter.effective.subcategory })} at ${formatRange(filter.effective)}`;
-          const active = filterActive(filter, preferences, alignmentRequired);
+          const active = serverActive ? filter.active : filterActive(filter, preferences, alignmentRequired);
           return <tr key={filter.filterId} className={active ? undefined : "master-row-inactive"}>
             <td className="master-time">{formatRange(filter.effective)}</td>
             <th scope="row">{filterName({ category: filter.category, subcategory: filter.effective.subcategory })}
               <small className="muted-copy">{[filter.effective.severity, filter.effective.action].filter(Boolean).join(" · ")}</small></th>
             <td><ConfidenceBadge confidence={filter.master.confidence} low={filter.master.lowConfidence} /></td>
-            <td aria-label={`${filter.master.contributorCount} contributors`}>{filter.master.contributorCount}</td>
+            <td>{filter.master.contributorCount}</td>
             <td><span className="master-status">{stateLabels[filter.state]}{filter.locallyVerified && <LocallyVerifiedIcon />}
               {!active && <small className="muted-copy">Not applied</small>}</span></td>
             <td><div className="community-row-actions">
               {canVote && <MasterVoteButtons linkId={link.linkId} filterId={filter.filterId} name={name} myVote={filter.myVote}
-                onVoted={(myVote) => onFilter({ ...filter, myVote, touched: filter.touched || myVote !== null })} />}
+                onVoted={(myVote) => {
+                  const next = { ...filter, myVote, touched: filter.touched || myVote !== null };
+                  onFilter({ ...next, active: filterActive(next, preferences, alignmentRequired) });
+                }} />}
               {canDecide && filter.state !== "verified" && filter.state !== "rejected" && <button type="button"
                 className="btn-secondary compact-button" disabled={busy !== null} aria-label={`Confirm ${name}`}
                 onClick={() => void decide(filter, "verify")}>Confirm</button>}

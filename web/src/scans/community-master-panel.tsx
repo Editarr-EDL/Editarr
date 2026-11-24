@@ -3,14 +3,8 @@ import { listCommunityMasters } from "../api/api-community-masters";
 import type { MasterLinkSummary, MasterTarget } from "../api/api-community-master-types";
 import { useCan } from "../auth/auth-gate";
 import { masterErrorText } from "./community-master-format";
+import { COMMUNITY_MASTERS_CHANGED_EVENT } from "./community-master-events";
 import { MasterLinkCard } from "./master-link-card";
-
-export const COMMUNITY_MASTERS_CHANGED_EVENT = "editarr:community-masters-changed";
-
-/** Tell item pages that this account's master links changed (for example after applying a version). */
-export function notifyCommunityMastersChanged() {
-  window.dispatchEvent(new Event(COMMUNITY_MASTERS_CHANGED_EVENT));
-}
 
 /**
  * Item page section for the current account's community master sets on one local version. Renders

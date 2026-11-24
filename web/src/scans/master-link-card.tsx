@@ -1,12 +1,14 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { checkMasterUpdates } from "../api/api-community-updates";
 import type { MasterLinkSummary, MasterTarget } from "../api/api-community-master-types";
 import { useCan } from "../auth/auth-gate";
 import { MatchPercent, UnconfirmedLabel } from "./community-master-badges";
 import { bannerText, masterErrorText, updateTotal } from "./community-master-format";
+import { COMMUNITY_MASTERS_CHANGED_EVENT } from "./community-master-events";
 import { MasterAlignment, type AlignableFilter } from "./master-alignment";
 import { MasterFilterList, MasterPreferenceControls } from "./master-filter-list";
 import { MasterUpdateReview } from "./master-update-review";
+import { useMasterPreferences } from "./master-preferences-store";
 import { useMasterView } from "./use-master-view";
 
 /**
@@ -21,10 +23,17 @@ export function MasterLinkCard({ summary, target, onChanged }: {
   const mayDownload = useCan("community.download");
   const mayVote = useCan("community.feedback.submit");
   const master = useMasterView(summary.linkId);
+  const preferences = useMasterPreferences();
   const [expanded, setExpanded] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const { reload } = master;
+  useEffect(() => {
+    const refresh = () => void reload();
+    window.addEventListener(COMMUNITY_MASTERS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(COMMUNITY_MASTERS_CHANGED_EVENT, refresh);
+  }, [reload]);
   const link = master.view?.link ?? summary;
   const pending = link.pendingUpdate;
   const alignable: AlignableFilter[] = (master.view?.filters ?? []).map((filter) => ({
@@ -36,8 +45,10 @@ export function MasterLinkCard({ summary, target, onChanged }: {
     setChecking(true); setCheckMessage(null);
     try {
       const result = await checkMasterUpdates(link.linkId);
-      setCheckMessage(result.changed ? null : "These community filters are up to date.");
-      if (result.changed) await master.reload();
+      const outstanding = updateTotal(result.pendingUpdate) > 0;
+      setCheckMessage(result.changed ? null : outstanding
+        ? "No newer filters. You still have updates to review." : "These community filters are up to date.");
+      if (result.changed || outstanding) await master.reload();
     } catch (reason) { setCheckMessage(masterErrorText(reason)); }
     finally { setChecking(false); }
   };
@@ -70,11 +81,11 @@ export function MasterLinkCard({ summary, target, onChanged }: {
     {mayDownload && link.alignmentState === "required" && master.view && <MasterAlignment linkId={link.linkId} target={target}
       filters={alignable} forRevision={link.appliedRevision} prefill={link.alignment} onApproved={settled} />}
     <div id={listId} hidden={!expanded}>
-      {expanded && master.view && master.preferences && <>
-        <MasterPreferenceControls preferences={master.preferences} onChange={master.changePreferences} />
-        {master.saveError && <p className="form-error" role="alert">{master.saveError}</p>}
-        <MasterFilterList view={master.view} preferences={master.preferences} canVote={mayVote} canDecide={mayDownload}
-          onFilter={master.replaceFilter} />
+      {expanded && master.view && preferences.displayed && <>
+        <MasterPreferenceControls preferences={preferences.displayed} onChange={preferences.change} />
+        {preferences.error && <p className="form-error" role="alert">{preferences.error}</p>}
+        <MasterFilterList view={master.view} preferences={preferences.displayed} serverActive={preferences.synced}
+          canVote={mayVote} canDecide={mayDownload} onFilter={master.replaceFilter} />
       </>}
       {expanded && !master.view && !master.error && <p role="status">Loading community filters…</p>}
     </div>

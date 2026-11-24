@@ -16,8 +16,9 @@ export class MasterApiError extends CommunityApiError {
 }
 
 /**
- * Call a local `/api/community/*` route and return its versioned JSON body. Transport failures become
- * a retryable `network_unavailable` error so they never read as an empty result; aborts propagate.
+ * Call a local `/api/community/*` route and return its versioned JSON body, or undefined for 204 No
+ * Content. Transport failures become a retryable `network_unavailable` error so they never read as
+ * an empty result; aborts propagate.
  */
 export async function communityJson<Result>(path: string, init: RequestInit = {}): Promise<Result> {
   let response: Response;
@@ -27,6 +28,7 @@ export async function communityJson<Result>(path: string, init: RequestInit = {}
     if (reason instanceof Error && reason.name === "AbortError") throw reason;
     throw new MasterApiError("network_unavailable", true, 0);
   }
+  if (response.ok && (response.status === 204 || response.headers.get("Content-Length") === "0")) return undefined as Result;
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new MasterApiError(typeof body?.code === "string" ? body.code : "remote_error", body?.retryable === true,
@@ -69,7 +71,7 @@ export const previewMasterAlignment = (linkId: string, request: AlignmentPreview
   communityJson<AlignmentPreview>(`${link(linkId)}/alignment/preview`, { ...postJson(request), signal });
 
 export const approveMasterAlignment = (linkId: string, token: string, forRevision: number, signal?: AbortSignal) =>
-  communityJson<Record<string, unknown>>(`${link(linkId)}/alignment/approve`,
+  communityJson<{ version: 1; link: MasterLink }>(`${link(linkId)}/alignment/approve`,
     { ...postJson({ token, for_revision: forRevision, confirmed: true }), signal });
 
 export const decideMasterFilter = (linkId: string, filterId: string, decision: FilterDecision, signal?: AbortSignal) =>

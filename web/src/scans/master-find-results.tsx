@@ -4,7 +4,7 @@ import type { FindLabel, FindResponse, FindResult, MasterTarget } from "../api/a
 import { useCan } from "../auth/auth-gate";
 import { MatchPercent, UnconfirmedLabel } from "./community-master-badges";
 import { masterErrorText, OTHER, type PickerValue } from "./community-master-format";
-import { notifyCommunityMastersChanged } from "./community-master-panel";
+import { notifyCommunityMastersChanged } from "./community-master-events";
 import { VersionPicker } from "./version-picker";
 
 function findLabel({ selection, otherText }: PickerValue): FindLabel {
@@ -34,7 +34,8 @@ function VersionCard({ result, busy, canApply, onApply }: {
 }
 
 /**
- * Find community master sets for a local version and show them as version cards. Applying a different
+ * Find community master sets for a local version and show them as version cards. The first search
+ * uses Theatrical; the version picker then appears to search another version. Applying a different
  * version while another is linked asks for confirmation and then replaces the link.
  */
 export function MasterFindResults({ target }: { target: MasterTarget }) {
@@ -77,7 +78,8 @@ export function MasterFindResults({ target }: { target: MasterTarget }) {
         <button type="button" className="btn-secondary" disabled={busy} onClick={() => void find(response !== null)}>
           {busy ? "Finding…" : response ? "Refresh community versions" : "Find community versions"}</button>
       </div></header>
-    <VersionPicker value={label} onChange={setLabel} disabled={busy} label="Your version" />
+    {response && <VersionPicker value={label} onChange={setLabel} disabled={busy} label="Your version" />}
+    {response && label.selection === OTHER && !label.otherText.trim() && <p className="muted-copy">Without a version name, this searches as Theatrical.</p>}
     {message && <p role={message.error ? "alert" : "status"} className={message.error ? "form-error" : "form-status"}>{message.text}</p>}
     {response?.error && <p role="alert" className="form-error">{masterErrorText(response.error)}</p>}
     {replacing && <div className="community-notice" role="group" aria-label="Replace community filters">

@@ -54,3 +54,9 @@ it("keeps error codes, vote reasons and merged targets, and never turns failures
   await expect(listCommunityMasters("abc", null)).rejects.toMatchObject({ code: "network_unavailable", retryable: true });
   await expect(listCommunityMasters("abc", null)).rejects.toMatchObject({ code: "invalid_response" });
 });
+
+it("accepts 204 No Content from the routes that return no body", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+  await expect(markSyncNotificationsRead("all")).resolves.toBeUndefined();
+  await expect(decideMasterUpdate("l1", 13, [{ rowId: "r1", decision: "accept" }])).resolves.toBeUndefined();
+});

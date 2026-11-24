@@ -2,6 +2,7 @@ import { Fragment, useId, useMemo, useState } from "react";
 import type { SharingFinding, SharingPreview } from "../api/api-community-sharing";
 import { CommunityIcon } from "./community-icon";
 import { categoryLabel } from "./community-result-state";
+import { estimateText } from "./community-master-format";
 
 type Counts = { total: number; scanned: number | null; added: number | null; edited: number | null };
 type Subcategory = { name: string; counts: Counts };
@@ -98,6 +99,12 @@ export function SharingPreviewDetails({ value }: { value: SharingPreview }) {
   const hasUnknownCounts = countKeys.some((key) => totals[key] === null);
   return <section className="sharing-preview" aria-label="Filter summary">
     <h3>Filter summary</h3>
+    {value.estimates && <div className="sharing-master-estimates">
+      {value.work && <p className="sharing-name">{value.work.title}{value.work.year ? ` (${value.work.year})` : ""}
+        {value.versionChoice && ` · ${value.versionChoice.label}`}</p>}
+      <p role="status"><strong>{estimateText({ estimates: value.estimates })}</strong></p>
+      <p className="muted-copy">Counts are estimates. The community service makes the final match.</p>
+    </div>}
     <dl className="sharing-totals">{countKeys.map((key) => <div key={key}>
       <dt>{labels[key]}</dt><dd><Count value={totals[key]} /></dd>
     </div>)}</dl>

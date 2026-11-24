@@ -4,7 +4,7 @@ import type { MasterLink, MasterTarget, MasterUpdate, UpdateDecision, UpdateGrou
 import { acceptAllRows, masterErrorText, updateGroups } from "./community-master-format";
 import { MasterAlignment, type AlignableFilter } from "./master-alignment";
 import { MasterUpdateRow } from "./master-update-row";
-import { FilterClipPlayer, useFilterClip } from "./use-filter-clip";
+import { FilterClipPlayer, rangePreview, useFilterClip } from "./use-filter-clip";
 
 export const remainingRows = (update: MasterUpdate) => updateGroups.reduce((total, { id }) => total + update.groups[id].length, 0);
 
@@ -76,7 +76,7 @@ export function MasterUpdateReview({ link, target, filters, onClose, onSettled }
         {touched > 0 && <p className="muted-copy">Accept all skips {touched === 1 ? "the filter" : `the ${touched} filters`} you edited. Decide {touched === 1 ? "it" : "them"} one at a time.</p>}
         <ul className="master-update-rows">{rows.map((row) => <MasterUpdateRow key={row.rowId} row={row} group={id} busy={busy}
           clipLoading={clips.loading === row.rowId} onDecide={(decision) => decide(row.rowId, decision)}
-          onPlay={(range) => void clips.play(row.rowId, range)} />)}</ul>
+          onPlay={(range) => void clips.play(row.rowId, rangePreview(range))} />)}</ul>
       </section>;
     })}
     <FilterClipPlayer clip={clips.clip} error={clips.error} />

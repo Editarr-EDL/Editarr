@@ -5,7 +5,7 @@ import type { SettingsSection } from "./settings/settings-sections";
 export type Route =
   | { kind: "settings"; section: SettingsSection; deleteAccountId?: number; filterTab?: FilterTab; eventId?: string; openBackups?: boolean }
   | { kind: "title"; titleId: string; versionId?: string; itemId?: string }
-  | { kind: "library"; libraryId: string; itemId?: string; seriesId?: string; seasonId?: string };
+  | { kind: "library"; libraryId: string; itemId?: string; seriesId?: string; seasonId?: string; sourceId?: string };
 
 export const AUDIT_SETTINGS_ROUTE = "settings/audit";
 export const BACKUP_SETTINGS_ROUTE = "settings/general/backups";
@@ -48,7 +48,10 @@ export function parseRoute(hash = window.location.hash): Route {
     const [, rawLibraryId, section, rawId, childSection, rawChildId, itemSection, rawItemId] = path.split("/");
     if (rawLibraryId) {
       const libraryId = decodeURIComponent(rawLibraryId);
-      if (section === "item" && rawId) return { kind: "library", libraryId, itemId: decodeURIComponent(rawId) };
+      if (section === "item" && rawId) return {
+        kind: "library", libraryId, itemId: decodeURIComponent(rawId),
+        ...(childSection === "source" && rawChildId ? { sourceId: decodeURIComponent(rawChildId) } : {}),
+      };
       if (section === "series" && rawId) return {
         kind: "library",
         libraryId,
@@ -77,4 +80,10 @@ export function editarrItemRoute(titleId: string, versionId?: string, itemId?: s
   if (versionId) return `${base}/version/${encodeURIComponent(versionId)}`;
   if (itemId) return `${base}/item/${encodeURIComponent(itemId)}`;
   return base;
+}
+
+/** Route to a library item, optionally opening one of its media sources (versions). */
+export function libraryItemRoute(libraryId: string, itemId: string, sourceId?: string | null) {
+  const base = `library/${encodeURIComponent(libraryId)}/item/${encodeURIComponent(itemId)}`;
+  return sourceId ? `${base}/source/${encodeURIComponent(sourceId)}` : base;
 }

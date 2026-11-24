@@ -8,22 +8,24 @@ import { installProductionApi, json, mediaItem } from "./app-test-fixtures";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
 
-const notification = { notificationId: "n1", linkId: "link-1", itemId: "movie-1", mediaSourceId: null, title: "The Matrix",
+const notification = { notificationId: "n1", linkId: "link-1", libraryId: "movies", itemId: "movie-1", mediaSourceId: "source-1", title: "The Matrix",
   kind: "changed", fromRevision: 12, toRevision: 13, createdAt: 1795553648, read: false };
 const syncStatus = { version: 1, ran: true, state: "idle", lastRunAt: 1795553648, nextDueAt: 1795640048, lastError: null,
   unreadCount: 1, notifications: [notification] };
 
-it("requests the daily sync on load and links updated items to their item pages", async () => {
+it("requests the daily sync on load and links updated items to the notified version", async () => {
   const baseApi = installProductionApi();
   const calls: { path: string; method: string; body: unknown }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), "http://editarr.test");
-    if (url.pathname.startsWith("/api/community/sync") || url.pathname.startsWith("/api/editarr-items/legacy")) {
+    if (url.pathname.startsWith("/api/community/sync")) {
       calls.push({ path: url.pathname + url.search, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
     }
     if (url.pathname === "/api/community/sync/run") return json(syncStatus);
-    if (url.pathname === "/api/community/sync/notifications/read") return json({ version: 1 });
-    if (url.pathname === "/api/editarr-items/legacy/movie-1") return json({ title_id: "title-1", selected_version_id: "ver-1" });
+    if (url.pathname === "/api/community/sync/notifications/read") return new Response(null, { status: 204 });
+    if (url.pathname === "/api/editarr-items/legacy/movie-1") return json({ title_id: "title-1", name: "The Matrix",
+      active_item: null, active_items: [], versions: [], selected_version_id: "other-version", choose_version: true,
+      current_versions: [{ item_id: "movie-1", media_source_id: "source-1", version_id: "ver-1" }] });
     return baseApi(input, init);
   }));
   render(<AuthenticationGate><App /></AuthenticationGate>);
@@ -31,9 +33,11 @@ it("requests the daily sync on load and links updated items to their item pages"
   expect(within(entry).getByLabelText("1 unread")).toBeInTheDocument();
   expect(calls.filter((call) => call.path === "/api/community/sync/run")).toEqual([{ path: "/api/community/sync/run", method: "POST", body: {} }]);
   fireEvent.click(entry);
-  fireEvent.click(screen.getByRole("button", { name: /The Matrix/ }));
+  const link = screen.getByRole("link", { name: /The Matrix/ });
+  expect(link).toHaveAttribute("href", "#/library/movies/item/movie-1/source/source-1");
+  fireEvent.click(link);
+  // The item page resolves the notified media source to its exact Editarr version.
   await waitFor(() => expect(window.location.hash).toBe("#title/title-1/version/ver-1"));
-  expect(calls).toContainEqual({ path: "/api/editarr-items/legacy/movie-1?library_id=movies", method: "GET", body: null });
   expect(calls).toContainEqual({ path: "/api/community/sync/notifications/read", method: "POST", body: { notification_ids: ["n1"] } });
 });
 

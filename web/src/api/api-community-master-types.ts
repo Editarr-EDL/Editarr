@@ -69,7 +69,7 @@ export type ReportRequest = { target: { type: "filter" | "version"; id: string }
 
 export type SyncNotification = {
   notificationId: string; linkId: string; itemId: string; mediaSourceId: string | null; title: string;
-  kind: "changed" | "merged" | "unavailable"; fromRevision: number | null; toRevision: number | null;
+  libraryId: string; kind: "changed" | "merged" | "unavailable"; fromRevision: number | null; toRevision: number | null;
   createdAt: number; read: boolean;
 };
 export type SyncStatus = {
@@ -91,14 +91,10 @@ export type MasterUpdate = {
 };
 
 export type VersionChoice = { choice: "alias"; alias_id: string } | { choice: "other"; text: string | null };
-export type MasterSharingDraft = {
-  identity_confirmed: true; media: null; audio_source_scan_id: string | null;
-  link_id: string | null; version_choice: VersionChoice;
-};
-export type MasterSharingPreview = {
-  version: 1; previewId: string; expiresAt: number;
+/** Master-set fields that the community-artifact-3 sharing preview adds to the manual sharing preview. */
+export type MasterSharingSummary = {
   estimates: { approximate: boolean; newFilters: number; confirmations: number; adjustments: number; disputes: number };
   versionChoice: { choice: "alias"; aliasId: string; label: string } | { choice: "other"; text: string | null; label: string };
   work: { kind: string; tmdb: string | null; tvdb: string | null; title: string; year: number | null };
-  entryCount: number; warnings: string[];
+  entryCount: number;
 };

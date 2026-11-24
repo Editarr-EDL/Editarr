@@ -20,10 +20,15 @@ export function MatchPercent({ value }: { value: number }) {
   return <span className={`master-badge master-match${value >= 65 ? " master-match-strong" : ""}`}>{value}% match</span>;
 }
 
-/** Confidence badge; Low Confidence rows are labelled explicitly rather than by color alone. */
+export const LOW_CONFIDENCE_TOOLTIP = "More people disputed, voted down or didn't find this filter than confirmed or voted it up. "
+  + "Low Confidence filters stay hidden unless you show them.";
+
+/** Confidence badge; Low Confidence rows are labelled explicitly and explained in a tooltip. */
 export function ConfidenceBadge({ confidence, low }: { confidence: number; low: boolean }) {
-  return <span className={`master-badge master-confidence${low ? " master-low-confidence" : ""}`}
-    title={low ? "More negatives than support" : undefined}>
-    {low ? `Low Confidence · ${percent(confidence)}` : `${percent(confidence)} confidence`}
+  return <span className="master-confidence-cell">
+    <span className={`master-badge master-confidence${low ? " master-low-confidence" : ""}`}>
+      {low ? `Low Confidence · ${percent(confidence)}` : `${percent(confidence)} confidence`}
+    </span>
+    {low && <InfoButton label="About Low Confidence">{LOW_CONFIDENCE_TOOLTIP}</InfoButton>}
   </span>;
 }

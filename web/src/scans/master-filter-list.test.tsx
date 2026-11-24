@@ -43,10 +43,26 @@ it("filters by the confidence threshold and keeps Low Confidence hidden until to
   expect(screen.getByRole("button", { name: "Locally verified" })).toBeInTheDocument();
 });
 
-it("shows contributor counts without names", () => {
-  render(<Harness filters={[masterFilter()]} />);
-  expect(screen.getByRole("columnheader", { name: "Contributors" })).toBeInTheDocument();
-  expect(screen.getByLabelText("4 contributors")).toHaveTextContent("4");
+it("shows contributor counts without names and explains Low Confidence in a tooltip", () => {
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(20, 20, 120, 24));
+  render(<Harness filters={[masterFilter({ lowConfidence: true, touched: true, state: "verified" })]} />);
+  const header = screen.getByRole("columnheader", { name: "Contributors" });
+  const column = Array.from(header.parentElement!.children).indexOf(header);
+  expect(screen.getAllByRole("row")[1].children[column]).toHaveTextContent(/^4$/);
+  const about = screen.getByRole("button", { name: "About Low Confidence" });
+  fireEvent.focus(about);
+  expect(screen.getByRole("tooltip")).toHaveTextContent("More people disputed, voted down or didn't find this filter");
+  vi.restoreAllMocks();
+});
+
+it("uses the server's active flag when preferences are saved and recomputes it for unsaved ones", () => {
+  const view = masterView([masterFilter({ active: false, confidence: 0.6 })]);
+  const preferences = { confidenceThreshold: 0, showLowConfidence: false };
+  const { rerender } = render(<MasterFilterList view={view} preferences={preferences} serverActive canVote={false} canDecide={false} onFilter={vi.fn()} />);
+  expect(screen.getByText("Not applied")).toBeInTheDocument();
+  rerender(<MasterFilterList view={view} preferences={preferences} canVote={false} canDecide={false} onFilter={vi.fn()} />);
+  expect(screen.queryByText("Not applied")).toBeNull();
 });
 
 it("votes, clears the vote on a second press and retries a retryable failure with the same operation", async () => {

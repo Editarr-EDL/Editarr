@@ -11,7 +11,10 @@ export function useVersionAliases() {
   useEffect(() => {
     const controller = new AbortController();
     setError(false);
-    fetchVersionAliases(controller.signal).then((value) => setChoices(value.choices))
+    fetchVersionAliases(controller.signal).then((value) => {
+      if (!Array.isArray(value?.choices)) throw new Error("invalid_response");
+      setChoices(value.choices);
+    })
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
   }, [attempt]);

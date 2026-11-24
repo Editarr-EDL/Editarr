@@ -18,6 +18,9 @@ These follow the existing `/api/community/*` routes:
 - **Field names:** request bodies are strict snake_case, and extra fields
   return a 422 validation list. Responses are camelCase and carry
   `"version": 1`.
+- **Empty responses:** `POST /api/community/sync/notifications/read` and
+  `POST /api/community/masters/{link_id}/update/decisions` return
+  `204 No Content`. Every other successful route returns a JSON body.
 - **Errors:**
 
   | Status | Body | Meaning |
@@ -196,6 +199,11 @@ Field rules:
     `showLowConfidence` is set, and its confidence is at least
     `confidenceThreshold`.
 - Touched rows ignore the threshold.
+- `active` is computed with the account's **saved** preferences. While the
+  user changes the threshold or the Low Confidence toggle and the change
+  hasn't been saved yet, the client recomputes `active` with the same rules
+  for display. Once the displayed preferences equal the saved ones, the client
+  uses the server's `active` flag.
 - Rows with `present: false` are only included when the user kept them
   (§5).
 
@@ -230,9 +238,10 @@ Request: `{ "token": "…", "for_revision": 13, "confirmed": true }`.
 - Approval stores the transform on the link and sets
   `alignmentState: "approved"`.
 - For the first import, it activates the rows.
-- For an update (§6), it enables **Accept** for that revision's rows.
+- For an update (§9), it enables **Accept** for that revision's rows.
 - If the preview no longer matches, the route returns
   `409 alignment_preview_changed`.
+- The response is `{ "version": 1, "link": <MasterLink> }`.
 
 ## 5. Local filter decisions
 
@@ -263,6 +272,8 @@ Request:
 ```
 
 - `confidence_threshold` ranges from 0 to 1.
+- The response is the saved preferences object
+  (`{ "version": 1, "confidenceThreshold": …, "showLowConfidence": … }`).
 - These preferences belong to the account. `GET` returns the same object.
 - The defaults are `0.0` and `false`.
 
@@ -310,22 +321,27 @@ This proxies `POST /v1/reports`.
 ## 7. Sharing
 
 Sharing reuses the
-[manual sharing](api-contract.md#manual-sharing) preview, approval and
-publication job routes. Under this contract, the preview builds a
-`community-artifact-3` submission.
+[manual sharing](api-contract.md#manual-sharing) dialog and its preview,
+consent, discard, approval and publication job routes. Under this contract,
+the preview builds a `community-artifact-3` submission. There is one Share
+action; master-set sharing isn't a separate flow.
 
 ### `POST /api/community/sharing/sources/{kind}/{source_id}/preview`
 
 Request:
 
 ```json
-{ "identity_confirmed": true, "media": null, "audio_source_scan_id": null,
+{ "name": "…", "identity_confirmed": true, "media": null, "audio_source_scan_id": null,
   "link_id": "…"|null,
   "version_choice": { "choice": "alias", "alias_id": "theatrical" } | { "choice": "other", "text": "IMAX"|null } }
 ```
 
-- `version_choice` is required. Choosing `other` reveals the optional text
-  field in the UI.
+- The request is the existing manual-sharing draft (`name`,
+  `identity_confirmed`, `media`, `audio_source_scan_id`) plus `link_id` and
+  `version_choice`.
+- `version_choice` is required. The UI lists the aliases from
+  `GET /api/community/aliases` (Theatrical first) and Other, which reveals
+  an optional text field. No preview is requested until a version is chosen.
 - `link_id` selects the master set to project against. It defaults to the
   account's link for the source's local version.
 - The work needs a TMDB or TVDB ID, plus season and episode for TV.
@@ -343,8 +359,13 @@ The projection builds the entries as follows:
 
 The response:
 
+The response keeps the manual-sharing preview fields used for consent and
+review (`previewId`, `expiresAt`, `terms` and `preview`), and adds the
+master-set summary:
+
 ```json
 { "version": 1, "previewId": "…", "expiresAt": 1795554548,
+  "terms": { "version": "…", "text": "…" }, "preview": { … },
   "estimates": { "approximate": true, "newFilters": 4, "confirmations": 27, "adjustments": 3, "disputes": 1 },
   "versionChoice": { "choice": "alias", "aliasId": "theatrical", "label": "Theatrical" },
   "work": { "kind": "movie", "tmdb": "603", "tvdb": null, "title": "The Matrix", "year": 1999 },
@@ -358,8 +379,10 @@ The response:
 
 ### `POST /api/community/sharing/previews/{preview_id}/approve`
 
-The request is unchanged: `{confirmed: true}`. Approval queues an outbox
-operation of kind `submission`. The existing publication routes report its
+The request is unchanged: `{confirmed: true}`, and it accepts the displayed
+terms as before. Unused previews are still discarded with
+`DELETE /api/community/sharing/previews/{preview_id}`. Approval queues an
+outbox operation of kind `submission`. The existing publication routes report its
 status, and `result` is the hosted `POST /v1/submissions` result.
 
 ## 8. Daily sync and notifications
@@ -385,18 +408,23 @@ marked `merged` (with `mergedInto`) or `unavailable`.
 ```json
 { "version": 1, "ran": false, "state": "idle"|"running"|"failed", "lastRunAt": 1795553648,
   "nextDueAt": 1795640048, "lastError": null, "unreadCount": 2,
-  "notifications": [ { "notificationId": "…", "linkId": "…", "itemId": "abc", "mediaSourceId": null,
+  "notifications": [ { "notificationId": "…", "linkId": "…", "libraryId": "movies", "itemId": "abc", "mediaSourceId": null,
     "title": "The Matrix", "kind": "changed"|"merged"|"unavailable", "fromRevision": 12, "toRevision": 13,
     "createdAt": 1795553648, "read": false } ] }
 ```
 
 - At most 100 notifications are returned, newest first.
-- Each notification links to its item page.
+- Each notification carries the Jellyfin `libraryId`, `itemId` and
+  `mediaSourceId` of the notified local version, so the web app links
+  directly to that version's item page
+  (`#/library/{libraryId}/item/{itemId}/source/{mediaSourceId}`).
+- While `state` is `running`, the web app re-reads `GET /api/community/sync`
+  until it settles, then refreshes open item pages.
 
 ### `POST /api/community/sync/notifications/read`
 
 Request: `{ "notification_ids": ["…"] }`, with at most 100 IDs, or
-`{"all": true}`.
+`{"all": true}`. The response is `204 No Content`.
 
 ### `POST /api/community/masters/{link_id}/check`
 
@@ -483,6 +511,7 @@ Request:
 - A decision outside the row's `allowed` list returns
   `409 decision_not_allowed`.
 - A stale `to_revision` returns `409 update_changed`.
+- The response is `204 No Content`; the client re-reads the update.
 
 ### `POST /api/community/masters/{link_id}/update/accept-all`
 

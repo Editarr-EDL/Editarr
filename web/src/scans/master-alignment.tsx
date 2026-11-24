@@ -4,7 +4,7 @@ import type { Alignment, AlignmentPreview, AlignmentPreviewRequest, MasterTarget
 import { AudioTrackField } from "./audio-track-field";
 import { filterName, formatMs, formatRange, masterErrorText } from "./community-master-format";
 import { useAudioTracks } from "./use-audio-tracks";
-import { FilterClipPlayer, useFilterClip } from "./use-filter-clip";
+import { FilterClipPlayer, rangePreview, useFilterClip } from "./use-filter-clip";
 
 export type AlignableFilter = { filterId: string; category: string; subcategory: string | null; startMs: number; endMs: number; action: string };
 type Anchor = { filterId: string; seconds: string };
@@ -98,7 +98,7 @@ export function MasterAlignment({ linkId, target, filters, forRevision, prefill,
             return <tr key={row.filterId}><td>{filter ? filterName(filter) : row.filterId}</td><td>{formatRange(range)}</td>
               <td><button type="button" className="btn-secondary compact-button" disabled={clips.loading !== null}
                 aria-label={`Play clip at ${formatMs(row.alignedStartMs)}`}
-                onClick={() => void clips.play(row.filterId, { ...range, action: filter?.action ?? "skip" })}>
+                onClick={() => void clips.play(row.filterId, rangePreview({ ...range, action: filter?.action ?? "skip" }))}>
                 {clips.loading === row.filterId ? "Loading…" : "▶ Play"}</button></td></tr>;
           })}</tbody></table>
       </div>

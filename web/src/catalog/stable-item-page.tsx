@@ -82,7 +82,8 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
   const requestedVersion = route.kind === "title" ? route.versionId : undefined;
   const titleId = route.kind === "title" ? route.titleId : null;
   const itemId = route.itemId || (route.kind === "library" ? route.seriesId : undefined);
-  const routeKey = JSON.stringify([titleId, itemId, legacyLibrary, requestedVersion]);
+  const sourceId = route.kind === "library" ? route.sourceId : undefined;
+  const routeKey = JSON.stringify([titleId, itemId, legacyLibrary, requestedVersion, sourceId]);
   const [state, setState] = useState<{
     routeKey: string; identity?: EditarrItem; exactVersion?: ExplicitVersion | null; failed?: boolean;
   }>();
@@ -104,13 +105,16 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
       if (library) writeUserValue(`library-last-route.${library}`, editarrItemRoute(
         result.title_id, requestedVersion || result.selected_version_id || undefined,
       ));
-      if (!titleId && !result.choose_version) {
+      // A library route naming a media source (from a notification) opens that exact version.
+      const sourceVersion = sourceId ? result.current_versions?.find((version) =>
+        version.item_id === itemId && version.media_source_id === sourceId)?.version_id : undefined;
+      if (!titleId && (sourceVersion || !result.choose_version)) {
         const liveItem = result.active_items.length > 1 ? result.active_item?.id : undefined;
-        onReplace(editarrItemRoute(result.title_id, result.selected_version_id || undefined, liveItem));
+        onReplace(editarrItemRoute(result.title_id, sourceVersion || result.selected_version_id || undefined, liveItem));
       }
     }).catch(() => { if (active) setState({ routeKey, failed: true }); });
     return () => { active = false; };
-  }, [titleId, itemId, legacyLibrary, requestedVersion, routeKey, onReplace]);
+  }, [titleId, itemId, legacyLibrary, requestedVersion, sourceId, routeKey, onReplace]);
 
   if (failed && route.kind === "library" && itemId) {
     const library = libraries.find((entry) => entry.id === legacyLibrary);

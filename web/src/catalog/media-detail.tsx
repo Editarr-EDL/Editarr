@@ -1,21 +1,7 @@
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { fetchCapabilities, primaryImageUrl } from "../api/api-service";
 import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  fetchCapabilities,
-  primaryImageUrl,
-} from "../api/api-service";
-import {
-  deleteScan,
-  enqueueScan,
-  fetchAssociatedScans,
-  fetchScanHistory,
-  fetchScanQueue,
-  requiresAudioTrackRefresh,
+  deleteScan, enqueueScan, fetchAssociatedScans, fetchScanHistory, fetchScanQueue, requiresAudioTrackRefresh,
 } from "../api/api-scans";
 import { deleteExport, startCreditsDetection } from "../api/api-reviews";
 import type { ScanCapabilities } from "../api/api-system-types";
@@ -24,58 +10,28 @@ import { PreviousVersionScans } from "../scans/previous-version-scans";
 import { ScanVerificationDialog } from "../scans/scan-verification";
 import type { JellyfinMediaItem } from "../api/api-media-types";
 import type { ExportFormat, ExportStatus } from "../api/api-mcf-types";
-import type {
-  ScanOptions,
-  Scan,
-} from "../api/api-scan-types";
+import type { ScanOptions, Scan } from "../api/api-scan-types";
 import type { SavedReview } from "../api/api-review-types";
-import {
-  validateDisplayName,
-} from "../shared/name-validation";
-import {
-  usePageTitle,
-} from "../shared/display";
-import {
-  ScanCapabilityDisclosure,
-} from "../scans/scan-capability-disclosure";
+import { validateDisplayName } from "../shared/name-validation";
+import { usePageTitle } from "../shared/display";
+import { ScanCapabilityDisclosure } from "../scans/scan-capability-disclosure";
 import { AudioLanguageHelp, QwenModelField } from "../scans/qwen-model-field";
 import { ModelOptions, resolveModelChoice } from "../scans/model-options";
 import { AudioTrackField } from "../scans/audio-track-field";
 import { useAudioTracks } from "../scans/use-audio-tracks";
 import { useVerificationAudioScan } from "../scans/use-verification-audio-scan";
 import { IDLE_SCAN_POLL_MS, scanPollDelay, useScanPolling } from "../scans/use-scan-polling";
-import { useFindFilters } from "../scans/use-find-filters";
-import { FindFiltersDialog } from "../scans/find-filters-dialog";
 import { MediaWorkflowHeader } from "./media-workflow-header";
-import {
-  navigate,
-} from "../routes";
-import {
-  ScanSelectionList,
-  ScanDeleteDialog,
-} from "../scans/scan-components";
-import {
-  SavedReviewPanel,
-} from "../review/review-workspace";
-import {
-  ManageExportsDialog,
-} from "../review/review-controls";
-import {
-  importStatusMessage,
-} from "../review/review-types";
-import {
-  legacyExports,
-  normalizedExportStatus,
-  withoutLegacyExport,
-} from "../review/export-status";
-import {
-  applicationUrl,
-} from "../shared/runtime-urls";
-import type { LookupInput } from "../api/api-community-lookup";
-import { useCommunityDownloads } from "../scans/use-community-downloads";
+import { navigate } from "../routes";
+import { ScanSelectionList, ScanDeleteDialog } from "../scans/scan-components";
+import { SavedReviewPanel } from "../review/review-workspace";
+import { ManageExportsDialog } from "../review/review-controls";
+import { importStatusMessage } from "../review/review-types";
+import { legacyExports, normalizedExportStatus, withoutLegacyExport } from "../review/export-status";
+import { applicationUrl } from "../shared/runtime-urls";
 import { communityReviewScans } from "../review/community-review-scans";
 import { useCan } from "../auth/auth-gate";
-import { CommunityMasterPanel } from "../scans/community-master-panel";
+import { useMediaFilterFinding } from "./use-media-filter-finding";
 
 export type Breadcrumb = { label: string; route?: string };
 
@@ -100,7 +56,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const mayViewOwnJobs = useCan("scan_jobs.view.own");
   const mayViewOtherJobs = useCan("scan_jobs.view.other");
   const mayReadHistory = mayReadFindings || mayViewOwnJobs || mayViewOtherJobs;
-  const maySearchCommunity = useCan("community.search");
   const imageTag = typeof item.image_tags.Primary === "string" ? item.image_tags.Primary : undefined;
   const imageUrl = item.image_url ? applicationUrl(item.image_url) : (imageTag ? primaryImageUrl(item.id, imageTag) : null);
   const [showNewScan, setShowNewScan] = useState(false);
@@ -148,7 +103,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const [showManageExports, setShowManageExports] = useState(false);
   const [fallbackExportStatus, setFallbackExportStatus] = useState<ExportStatus>(() => normalizedExportStatus(item));
   const [message, setMessage] = useState<string | null>(null);
-  const [findFiltersActive, setFindFiltersActive] = useState(false);
   const mayReadLinkedScans = mayReadFindings && !!stableIdentity;
   const scanContext = JSON.stringify([item.id, selectedReviewMediaSourceId]);
   const currentScanContext = useRef(scanContext);
@@ -161,13 +115,11 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const [scanToDelete, setScanToDelete] = useState<Scan | null>(null);
   const [deletingScan, setDeletingScan] = useState(false);
   const newScanTriggerRef = useRef<HTMLButtonElement>(null);
-  const findFiltersTriggerRef = useRef<HTMLButtonElement>(null);
   const scanPopoverRef = useRef<HTMLElement>(null);
   const wasNewScanOpen = useRef(false);
   const selectedReviewVersion = versions.find(
     (version) => version.id === selectedReviewMediaSourceId,
   );
-  const lookupTracks = useAudioTracks({ item_id: item.id, media_source_id: selectedReviewMediaSourceId }, findFiltersActive);
   const activeExportStatus = selectedReviewVersion?.exports || fallbackExportStatus;
   const updateActiveExportStatus = useCallback((status: ExportStatus) => {
     if (selectedReviewMediaSourceId) {
@@ -207,15 +159,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       return IDLE_SCAN_POLL_MS;
     }
   }, [item.id, item.library_id, mayReadHistory, mayReadLinkedScans, mayViewOwnJobs, mayViewOtherJobs, scanContext, selectedReviewMediaSourceId]);
-  const communityInput: LookupInput | null = maySearchCommunity && findFiltersActive ? {
-      target: { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId },
-      audio_selection: lookupTracks.ready ? lookupTracks.selection : null,
-    } : null;
-  const downloads = useCommunityDownloads(communityInput, () => void loadScans(), stableIdentity ? (scan) => {
-    filters.close();
-    setFindFiltersActive(false);
-    openVerification(scan);
-  } : undefined);
+  const filters = useMediaFilterFinding({ item, sourceId: selectedReviewMediaSourceId, version: selectedReviewVersion,
+    verifyImports: !!stableIdentity, loadScans, onMessage: setMessage, onVerify: openVerification });
   const [identified, setIdentified] = useState<{ source: string; id: string } | null>(null);
   const currentVersion = identified?.source === scanContext ? identified.id
     : stableIdentity?.current_versions?.find((version) => version.item_id === item.id
@@ -244,27 +189,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const pendingImports = versionScans.filter(isPending);
   const readyScans = versionScans.filter((scan) => !isPending(scan) && !previousIds.has(scan.id));
   const reviewScans = communityReviewScans(readyScans, { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId });
-  const filters = useFindFilters({
-    communityInput,
-    target: {
-      source: "jellyfin",
-      item_id: item.id,
-      media_source_id: selectedReviewMediaSourceId,
-      library_id: item.library_id,
-      item_name: item.name,
-      item_type: item.item_type,
-      duration_seconds: selectedReviewMediaSourceId
-        ? selectedReviewVersion?.duration_seconds || item.duration_seconds
-        : item.duration_seconds,
-      scene_name: selectedReviewVersion?.scene_name || null,
-      release_group: selectedReviewVersion?.release_group || null,
-      media_format: selectedReviewVersion?.media_format || item.media_format,
-      media_provider_id: item.media_provider_id,
-    },
-    onMessage: setMessage,
-    requireVerification: !!stableIdentity,
-    onAssociated: async () => { setFindFiltersActive(false); await loadScans(); },
-  });
   useScanPolling(loadScans, loadScans);
   useEffect(() => {
     if (!mayScan || !showNewScan) return;
@@ -407,12 +331,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       onSourceChange={selectReviewVersion} onManageLegacyExports={mayDeleteLegacy && Object.values(legacyExports(activeExportStatus)).some((status) => status.present)
         ? () => setShowManageExports(true) : undefined} />
     {message && <p className="form-status" role="status">{message}</p>}
-    <CommunityMasterPanel target={{ source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId }} />
-    {filters.open && <FindFiltersDialog candidates={filters.candidates} results={filters.results} selectedIds={filters.selectedIds} associating={filters.associating} onSelect={filters.select} onAssociate={() => void filters.associate()} onClose={() => { filters.close(); setFindFiltersActive(false); }} returnFocusRef={findFiltersTriggerRef}
-      masterTarget={maySearchCommunity ? { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId } : undefined}
-      community={{ lookup: filters.community, downloads, tracks: { inventory: lookupTracks.inventory, selection: lookupTracks.selection,
-        loading: lookupTracks.loading, error: lookupTracks.error, disabled: filters.associating,
-        onChange: lookupTracks.onChange, onRetry: lookupTracks.onRetry } }} />}
+    {filters.masterPanel}
+    {filters.dialog}
     <SavedReviewPanel item={item} seasonNumber={seasonNumber} mediaSourceId={selectedReviewMediaSourceId} stableVersionId={currentVersion} scans={reviewScans}
       importedReview={importedReview} exportStatus={activeExportStatus} onExportStatusChange={updateActiveExportStatus}
       onDirtyChange={handleReviewDirtyChange} onSaved={() => void loadScans()}
@@ -425,9 +345,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       guided={{
         scanStart: mayScan && <button type="button" className="btn-primary" ref={newScanTriggerRef}
           onClick={() => openNewScan()}>New Scan</button>,
-        findFilters: mayReadFindings && <button type="button" className="btn-secondary" ref={findFiltersTriggerRef}
-          onClick={() => { setFindFiltersActive(true); void filters.find(false); }}
-          disabled={filters.finding}>{filters.finding ? "Finding Filters…" : "Find Filters"}</button>,
+        findFilters: filters.button,
         scanHistory: <>
           {scansError
           ? <div className="load-error" role="alert"><span>{scansError}</span>

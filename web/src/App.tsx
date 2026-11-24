@@ -159,7 +159,7 @@ function App() {
   return <div className="editarr-shell">
     <AppSidebar principal={principal} route={route} libraries={libraries} settings={settings}
       error={navigationError} onRetry={() => void refreshNavigation()} onNavigate={guardedNavigate}
-      notifications={<CommunityUpdatesEntry sync={communitySync} libraries={libraries} onNavigate={guardedNavigate} />} />
+      notifications={<CommunityUpdatesEntry sync={communitySync} onNavigate={guardedNavigate} />} />
     <main className="app-main">
       {!allowed && <EmptyPage title="Page unavailable" body="Your account cannot open this page. Choose another page from the navigation." />}
       {allowed && <>

@@ -12,7 +12,8 @@ import { SharingPreviewDetails } from "./sharing-preview";
 import { sharingAccessLost, sharingErrorCode, useSharingSummary } from "./use-sharing-summary";
 import { useCan, useOptionalAuthenticationGate, usePrincipal } from "../auth/auth-gate";
 import { useCommunityLifetime } from "../settings/community/community-access";
-import { MasterShareAction } from "./master-share-dialog";
+import { versionChoice, type PickerValue } from "./community-master-format";
+import { VersionPicker } from "./version-picker";
 import "../styles/community-sharing.css";
 
 const messages: Record<string, string> = {
@@ -73,6 +74,7 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
   const [useSaved, setUseSaved] = useState(true);
   const [editing, setEditing] = useState(false);
   const [audioSource, setAudioSource] = useState("");
+  const [version, setVersion] = useState<PickerValue>({ selection: "", otherText: "" });
   const [job, setJob] = useState<PublicationJob | null>(null);
   const [busy, setBusy] = useState(true);
   const [activity, setActivity] = useState("Checking community access...");
@@ -143,21 +145,23 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
   const savedMedia = context?.mediaIdentity && !context.mediaIdentity.input_requirement ? context.mediaIdentity : null;
   const usingSaved = !!savedMedia && useSaved;
   const chosenAudio = context?.audioSources.find((item) => item.scanId === audioSource);
+  const choice = useMemo(() => versionChoice(version), [version]);
   const draft = useMemo<SharingDraft | null>(() => {
-    if (!context?.accessVerified || !mayPublish || job || !name.trim() ||
+    if (!context?.accessVerified || !mayPublish || job || !name.trim() || !choice ||
       (!usingSaved && !reference.trim()) || (context.audioSources.length > 0 && !chosenAudio)) return null;
     const airedEpisode = !usingSaved && entity === "episode" && (season !== "" || episode !== "");
     if (airedEpisode && ![season, episode].every((number) => /^[0-9]+$/.test(number) && Number.isSafeInteger(Number(number)))) return null;
     return {
       // This normalizes a candidate association for a private summary. Share approves the displayed artifact.
       name: name.trim(), identity_confirmed: true, audio_source_scan_id: chosenAudio?.scanId ?? null,
+      link_id: null, version_choice: choice,
       media: usingSaved ? null : {
         provider, entity_type: entity, reference: reference.trim(),
         ...(series.trim() ? { series_reference: series.trim() } : {}),
         ...(airedEpisode ? { episode_numbers: [{ scheme: "aired", season: Number(season), number: Number(episode) }] } : {}),
       },
     };
-  }, [context, mayPublish, job, name, usingSaved, reference, chosenAudio, entity, season, episode, provider, series]);
+  }, [context, mayPublish, job, name, choice, usingSaved, reference, chosenAudio, entity, season, episode, provider, series]);
   const { preview, error: summaryError, loading: loadingSummary, retry: retrySummary } =
     useSharingSummary(source, draft, accessLost, clearPrivate);
   const error = errorCode || summaryError || context?.accessError;
@@ -229,6 +233,7 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
           <label className="field"><span>Aired episode</span><input type="number" min={0} value={episode} disabled={busy} onChange={(event) => setEpisode(event.target.value)} /></label>
         </>}
       </div>}
+      <VersionPicker value={version} onChange={setVersion} disabled={busy} required label="Which version is this?" />
       {context.audioSources.length > 1 && <label className="field"><span>Contribution audio source</span>
         <select value={audioSource} disabled={busy} onChange={(event) => setAudioSource(event.target.value)}>
           <option value="">Choose one analyzed source</option>{context.audioSources.map((item) => <option key={item.scanId} value={item.scanId}>{item.track ? audioTrackLabel(item.track) : "Unknown analyzed track / Review required"}</option>)}
@@ -277,6 +282,5 @@ export function ShareAction({ source, name, disabled = false }: { source: Sharin
   if (!(source.kind === "scan" ? publishScan : publishOwn || publishOther) && !checkOwn && !checkOther) return null;
   return <><button type="button" ref={trigger} className="btn-secondary compact-button" disabled={disabled}
     aria-label={`Share ${name}`} onClick={() => setOpen(true)}>Share</button>
-    <MasterShareAction source={source} name={name} disabled={disabled} />
     {open && <SharingDialog key={source.kind + ":" + source.id} source={source} initialName={name} returnFocusRef={trigger} onClose={() => setOpen(false)} />}</>;
 }

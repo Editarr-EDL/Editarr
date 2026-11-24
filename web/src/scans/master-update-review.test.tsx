@@ -44,7 +44,7 @@ it("groups rows, marks edited rows and accepts all without the edited ones", asy
 it("sends single decisions and reports when everything is reviewed", async () => {
   vi.mocked(fetchMasterUpdate).mockResolvedValueOnce(masterUpdate({ new: [updateRow("n1", { oldMaster: null })] }))
     .mockResolvedValueOnce(masterUpdate({}));
-  vi.mocked(decideMasterUpdate).mockResolvedValue({});
+  vi.mocked(decideMasterUpdate).mockResolvedValue(undefined);
   const settled = vi.fn();
   renderReview(settled);
   fireEvent.click(await screen.findByRole("button", { name: /^Dismiss/ }));
@@ -59,7 +59,7 @@ it("requires alignment for fuzzy updates before Accept is enabled", async () => 
     .mockResolvedValueOnce(masterUpdate({ changed: [updateRow("c1", { canAccept: true })] }, { alignmentRequired: true, alignmentApproved: true }));
   vi.mocked(previewMasterAlignment).mockResolvedValue({ version: 1, token: "tok", alignment: { offsetMs: 1300, scale: 1, anchors: 0 },
     rows: [{ filterId: "c1", alignedStartMs: 601_300, alignedEndMs: 606_300, clipToken: "clip" }] });
-  vi.mocked(approveMasterAlignment).mockResolvedValue({});
+  vi.mocked(approveMasterAlignment).mockResolvedValue({ version: 1, link: masterLink({ alignmentState: "approved" }) });
   renderReview();
   const accept = await screen.findByRole("button", { name: /^Accept violence/i });
   expect(accept).toBeDisabled();
@@ -73,4 +73,43 @@ it("requires alignment for fuzzy updates before Accept is enabled", async () => 
   await waitFor(() => expect(approveMasterAlignment).toHaveBeenCalledWith("link-1", "tok", 13));
   await waitFor(() => expect(screen.getByRole("button", { name: /^Accept violence/i })).toBeEnabled());
   expect(screen.queryByRole("button", { name: "Approve alignment" })).toBeNull();
+});
+
+it("shows old → new values for every changed field and mine for edited rows", async () => {
+  const oldMaster = { startMs: 600_000, endMs: 605_000, subcategory: "punching", severity: "medium", action: "skip", confidence: 0.4, lowConfidence: false };
+  const newMaster = { ...oldMaster, startMs: 601_000, subcategory: "kicking", severity: "high", action: "mute", confidence: 0.2, lowConfidence: true };
+  vi.mocked(fetchMasterUpdate).mockResolvedValue(masterUpdate({ changed: [
+    updateRow("c1", { oldMaster: oldMaster as never, newMaster: newMaster as never,
+      changedFields: ["startMs", "subcategory", "severity", "action", "confidence", "lowConfidence"] }),
+    updateRow("c2", { touched: true, oldMaster: oldMaster as never, newMaster: newMaster as never, changedFields: ["severity"],
+      mine: { startMs: 600_000, endMs: 605_000, subcategory: "punching", severity: "low", action: "skip" } }),
+  ] }));
+  renderReview();
+  const tables = await screen.findAllByRole("table", { name: "Changed fields" });
+  const rows = (table: HTMLElement) => within(table).getAllByRole("row").map((row) =>
+    Array.from(row.children).map((cell) => cell.textContent));
+  expect(rows(tables[0])).toEqual([
+    ["Field", "Old", "changes to", "New"],
+    ["Start", "10:00.000", "→", "10:01.000"], ["Subcategory", "Punching", "→", "Kicking"],
+    ["Severity", "Medium", "→", "High"], ["Action", "Skip", "→", "Mute"],
+    ["Confidence", "40%", "→", "20%"], ["Low Confidence", "Normal", "→", "Low Confidence"],
+  ]);
+  expect(rows(tables[1])).toEqual([["Field", "Mine", "Old", "changes to", "New"], ["Severity", "Low", "Medium", "→", "High"]]);
+});
+
+it("sends anchor alignment previews and approves for the update's revision", async () => {
+  vi.mocked(fetchMasterUpdate).mockResolvedValue(masterUpdate({ changed: [updateRow("c1", { canAccept: false })] },
+    { alignmentRequired: true, alignmentApproved: false }));
+  vi.mocked(previewMasterAlignment).mockResolvedValue({ version: 1, token: "anchor-token", alignment: { offsetMs: 1500, scale: 1.0001, anchors: 1 },
+    rows: [{ filterId: "c1", alignedStartMs: 601_500, alignedEndMs: 606_500, clipToken: "clip" }] });
+  vi.mocked(approveMasterAlignment).mockResolvedValue({ version: 1, link: masterLink({ alignmentState: "approved" }) });
+  renderReview();
+  fireEvent.click(await screen.findByRole("radio", { name: /Match filters to times/ }));
+  fireEvent.change(screen.getByLabelText("Starts on your file at (seconds)"), { target: { value: "601.5" } });
+  fireEvent.click(screen.getByRole("button", { name: "Preview alignment" }));
+  expect(await screen.findByText(/drift ×1\.00010/)).toBeInTheDocument();
+  expect(previewMasterAlignment).toHaveBeenCalledWith("link-1",
+    { anchors: [{ filter_id: "c1", local_start_ms: 601_500 }], offset_ms: null, audio_track_index: null });
+  fireEvent.click(screen.getByRole("button", { name: "Approve alignment" }));
+  await waitFor(() => expect(approveMasterAlignment).toHaveBeenCalledWith("link-1", "anchor-token", 13));
 });

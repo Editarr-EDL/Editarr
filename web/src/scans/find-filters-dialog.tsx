@@ -66,7 +66,7 @@ export function FindFiltersDialog({
         {associating ? "Associating…" : "Associate Selected"}
       </button>
     </div>
-    {community && <CommunityFilterResults {...community} />}
     {masterTarget && <MasterFindResults target={masterTarget} />}
+    {community && <CommunityFilterResults {...community} />}
   </ModalDialog>;
 }

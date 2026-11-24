@@ -1,4 +1,5 @@
 import type { VerificationCue, VerificationPreview, VerificationRequest } from "../api/api-stable-media";
+import type { FilterClip } from "./use-filter-clip";
 
 function timestamp(seconds: number | null) {
   if (seconds === null) return "Pending";
@@ -9,7 +10,7 @@ function timestamp(seconds: number | null) {
   return hours > 0 ? `${hours}:${clock}` : clock;
 }
 
-export type CueClip = { source: VerificationCue["source_finding_id"]; url: string; kind: "audio" | "video" };
+export type CueClip = FilterClip<VerificationCue["source_finding_id"]>;
 
 export function VerificationCueReview({ preview, method, busy, mapped, videoToCheck, clip, viewedVideo,
   onManual, onPlay, onViewed }: {
@@ -61,7 +62,7 @@ export function VerificationCueReview({ preview, method, busy, mapped, videoToCh
     </>}
     {clip?.kind === "audio" && <audio controls tabIndex={0} preload="metadata" aria-label="Target cue preview" src={clip.url} />}
     {clip?.kind === "video" && <video controls tabIndex={0} preload="metadata" aria-label="Target cue preview" src={clip.url}
-      onPlaying={() => onViewed(clip.source)} />}
+      onPlaying={() => onViewed(clip.key)} />}
     {videoToCheck > 0 && <p className="verification-callout">{videoToCheck === 1
       ? "Play the target clip for the remaining video cue before approving."
       : `Play the target clips for the ${videoToCheck} remaining video cues before approving.`}</p>}
