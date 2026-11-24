@@ -3,6 +3,17 @@ import { expect, test } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi, mockReview } from "./app-fixtures";
 import { pendingPublication, sharingContextFixture, sharingPreviewFixture } from "../src/scans/sharing-test-fixtures";
 import type { PublicationJob } from "../src/api/api-sharing";
+import type { Locator, Page } from "@playwright/test";
+
+/** Serve master-set routes the page uses on load; registered after the community catch-all so they take priority. */
+async function mockAliases(page: Page) {
+  await page.route("**/api/community/aliases", (route) => json(route, { version: 1, choices: [
+    { kind: "alias", aliasId: "theatrical", label: "Theatrical" }, { kind: "other", label: "Other" }] }));
+  await page.route("**/api/community/sync/run", (route) => json(route, { version: 1, ran: false, state: "idle", lastRunAt: null,
+    nextDueAt: null, lastError: null, unreadCount: 0, notifications: [] }));
+  await page.route("**/api/community/masters?*", (route) => json(route, { version: 1, links: [] }));
+}
+const chooseVersion = (dialog: Locator) => dialog.getByLabel("Which version is this?").selectOption("theatrical");
 
 const completedScan = {
   id: "scan-previous", scan_id: 7, media_item_id: "media-1", library_id: "movies", jellyfin_item_id: "movie-1",
@@ -46,11 +57,13 @@ for (const width of [320, 1440]) {
       if (request.method() === "DELETE") return json(route, { discarded: true });
       return json(route, { ...sharingContextFixture(), jobs: job ? [job] : [] });
     });
+    await mockAliases(page);
     await page.goto("/#/library/movies/item/movie-1");
     await chooseWorkflowStep(page, "Scans");
     const share = page.getByRole("button", { name: /^Share Audio test scan/ });
     await share.click();
     const dialog = page.getByRole("dialog", { name: "Share scan" });
+    await chooseVersion(dialog);
     const summary = dialog.getByRole("region", { name: "Filter summary" });
     await expect(summary).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Generate preview" })).toHaveCount(0);
@@ -68,6 +81,7 @@ for (const width of [320, 1440]) {
     await expect(share).toBeFocused();
     expect(approvalCalls).toBe(0);
     await share.click();
+    await chooseVersion(dialog);
     await dialog.getByRole("button", { name: "Share contribution" }).click();
     await expect(dialog.getByRole("alert")).toContainText("The source changed");
     await expect(summary).toBeVisible();
@@ -117,6 +131,7 @@ for (const width of [320, 1440]) {
     page.on("request", (request) => {
       if (request.method() === "PUT" || request.url().includes("/approve") || request.url().includes("/publications/")) writes.push(request.url());
     });
+    await mockAliases(page);
     await page.goto("/#/library/movies/item/movie-1");
     await page.getByRole("button", { name: "Open review Mixed community review" }).click();
     await chooseWorkflowStep(page, "Publish");
@@ -124,6 +139,7 @@ for (const width of [320, 1440]) {
     if (await community.count()) await community.click();
     await page.getByRole("button", { name: "Share Mixed community review" }).click();
     const dialog = page.getByRole("dialog", { name: "Share review" });
+    await chooseVersion(dialog);
     await expect(dialog.getByRole("button", { name: "Share contribution" })).toBeDisabled();
     await dialog.getByLabel("Contribution audio source").selectOption("scan-a");
     await expect(dialog.getByRole("list", { name: "Excluded filters" })).toContainText("Audio from another track excluded from 1 filter");
@@ -162,10 +178,12 @@ for (const width of [320, 1440]) {
       }
       return json(route, { ...sharingContextFixture("manual"), mediaIdentity: null, audioSources: [{ scanId: "scan-previous", track: null }] });
     });
+    await mockAliases(page);
     await page.goto("/#/library/movies/item/movie-1");
     await chooseWorkflowStep(page, "Scans");
     await page.getByRole("button", { name: /^Share Manual evidence/ }).click();
     const dialog = page.getByRole("dialog", { name: "Share scan" });
+    await chooseVersion(dialog);
     await dialog.getByLabel("TMDB/TVDB ID or URL").fill("https://www.imdb.com/title/tt123");
     await expect(dialog.getByRole("alert")).toContainText("supported TMDB/TVDB");
     await expect(dialog.getByRole("button", { name: "Share contribution" })).toBeDisabled();

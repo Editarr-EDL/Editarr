@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as api from "../api/api-community-sharing";
 import { CommunityApiError } from "../api/api-community";
+import { fetchVersionAliases } from "../api/api-community-masters";
 import { ShareAction } from "./sharing-dialog";
 import { pendingPublication, sharingContextFixture, sharingPreviewFixture } from "./sharing-test-fixtures";
 
@@ -12,11 +13,16 @@ vi.mock("../auth/auth-gate", async (original) => ({
   usePrincipal: () => ({ userId: 1, role: "admin", capabilities: access.grants }),
   useOptionalAuthenticationGate: () => ({ isAuthenticationCurrent: () => access.current, refreshAuthenticationStatus: access.refresh }),
 }));
+vi.mock("../api/api-community-masters", async (original) => ({
+  ...await original<typeof import("../api/api-community-masters")>(), fetchVersionAliases: vi.fn() }));
 vi.mock("../api/api-community-sharing", async (original) => ({ ...await original<typeof api>(),
   fetchSharingContext: vi.fn(), prepareSharingPreview: vi.fn(), approveSharingPreview: vi.fn(),
   discardSharingPreview: vi.fn(), retryPublication: vi.fn(), checkPublication: vi.fn(), cancelPublication: vi.fn(),
 }));
 beforeEach(() => {
+  vi.mocked(fetchVersionAliases).mockResolvedValue({ version: 1, choices: [
+    { kind: "alias", aliasId: "theatrical", label: "Theatrical" }, { kind: "alias", aliasId: "extended", label: "Extended Edition" },
+    { kind: "other", label: "Other" }] });
   access.grants = new Set(["community.publish.other_review", "community.publications.retry.own"]);
   access.current = true;
   vi.mocked(api.fetchSharingContext).mockResolvedValue({ ...sharingContextFixture(), sourceOwnerId: 2 });
@@ -26,10 +32,14 @@ beforeEach(() => {
   vi.mocked(api.retryPublication).mockResolvedValue({ ...pendingPublication, state: "paused" });
 });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
+async function chooseVersion(value = "theatrical") {
+  fireEvent.change(await screen.findByRole("combobox", { name: "Which version is this?" }), { target: { value } });
+}
 async function open() {
   const rendered = render(<ShareAction source={{ kind: "review", id: "other-review" }} name="Shared source" />);
   fireEvent.click(screen.getByRole("button", { name: "Share Shared source" }));
   await waitFor(() => expect(api.fetchSharingContext).toHaveBeenCalledOnce());
+  if (access.grants.has("community.publish.other_review")) await chooseVersion();
   return rendered;
 }
 async function prepare() {

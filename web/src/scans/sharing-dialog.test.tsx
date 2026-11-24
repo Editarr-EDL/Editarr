@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as api from "../api/api-community-sharing";
 import { CommunityApiError } from "../api/api-community";
+import { fetchVersionAliases } from "../api/api-community-masters";
 import { ShareAction } from "./sharing-dialog";
 import { pendingPublication, sharingContextFixture, sharingPreviewFixture } from "./sharing-test-fixtures";
 
@@ -9,11 +10,16 @@ vi.mock("../auth/auth-gate", async (original) => {
   const { ownerPrincipal } = await import("../settings/users/users.test-support");
   return { ...await original<typeof import("../auth/auth-gate")>(), useCan: () => true, usePrincipal: () => ownerPrincipal };
 });
+vi.mock("../api/api-community-masters", async (original) => ({
+  ...await original<typeof import("../api/api-community-masters")>(), fetchVersionAliases: vi.fn() }));
 vi.mock("../api/api-community-sharing", async (original) => ({ ...await original<typeof api>(),
   fetchSharingContext: vi.fn(), prepareSharingPreview: vi.fn(), approveSharingPreview: vi.fn(),
   discardSharingPreview: vi.fn(), retryPublication: vi.fn(), checkPublication: vi.fn(), cancelPublication: vi.fn(),
 }));
 beforeEach(() => {
+  vi.mocked(fetchVersionAliases).mockResolvedValue({ version: 1, choices: [
+    { kind: "alias", aliasId: "theatrical", label: "Theatrical" }, { kind: "alias", aliasId: "extended", label: "Extended Edition" },
+    { kind: "other", label: "Other" }] });
   vi.mocked(api.fetchSharingContext).mockResolvedValue(sharingContextFixture());
   vi.mocked(api.prepareSharingPreview).mockResolvedValue(sharingPreviewFixture());
   vi.mocked(api.discardSharingPreview).mockResolvedValue({ discarded: true });
@@ -21,10 +27,14 @@ beforeEach(() => {
   vi.mocked(api.retryPublication).mockResolvedValue({ ...pendingPublication, state: "paused", errorCode: "network_unavailable" });
 });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
+async function chooseVersion(value = "theatrical") {
+  fireEvent.change(await screen.findByRole("combobox", { name: "Which version is this?" }), { target: { value } });
+}
 async function open(kind: "scan" | "review" = "scan") {
   render(<ShareAction source={{ kind, id: "source-local" }} name="Public source" />);
   fireEvent.click(screen.getByRole("button", { name: "Share Public source" }));
   await screen.findByRole("button", { name: "Share contribution" });
+  await chooseVersion();
 }
 async function prepare() {
   return screen.findByRole("region", { name: "Filter summary" });
@@ -207,4 +217,26 @@ it.each([false, true])("allows in-flight cancellation without overriding a commi
     await waitFor(() => expect(screen.queryByText("Requesting local cancellation...")).not.toBeInTheDocument());
   }
   expect(screen.getByRole("button", { name: "Cancel publication" })).toBeDisabled();
+});
+it("requires a version before previewing and shows master-set estimates in the summary", async () => {
+  vi.mocked(api.prepareSharingPreview).mockResolvedValue({ ...sharingPreviewFixture(),
+    estimates: { approximate: true, newFilters: 4, confirmations: 27, adjustments: 3, disputes: 1 },
+    versionChoice: { choice: "other", text: "IMAX", label: "IMAX" },
+    work: { kind: "movie", tmdb: "603", tvdb: null, title: "The Matrix", year: 1999 }, entryCount: 35 });
+  render(<ShareAction source={{ kind: "scan", id: "source-local" }} name="Public source" />);
+  fireEvent.click(screen.getByRole("button", { name: "Share Public source" }));
+  const picker = await screen.findByRole("combobox", { name: "Which version is this?" });
+  expect(Array.from((picker as HTMLSelectElement).options).map((option) => option.text))
+    .toEqual(["Choose a version", "Theatrical", "Extended Edition", "Other"]);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(api.prepareSharingPreview).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Share contribution" })).toBeDisabled();
+  fireEvent.change(picker, { target: { value: "__other__" } });
+  fireEvent.change(screen.getByLabelText("Version name (optional)"), { target: { value: "IMAX" } });
+  const summary = within(await prepare());
+  expect(summary.getByText("≈4 new, ≈27 confirmations, 3 adjustments, 1 dispute")).toBeVisible();
+  expect(summary.getByText(/The Matrix \(1999\)/)).toHaveTextContent("The Matrix (1999) · IMAX");
+  expect(vi.mocked(api.prepareSharingPreview).mock.calls.at(-1)?.[1]).toMatchObject({
+    link_id: null, version_choice: { choice: "other", text: "IMAX" } });
+  expect(screen.getAllByRole("button", { name: /^Share/ }).filter((button) => button.textContent === "Share")).toHaveLength(1);
 });

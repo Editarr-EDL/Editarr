@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mayOpen } from "./auth/route-access";
 import type { Capability } from "./auth/capabilities";
 import type { Principal } from "./auth/session";
-import { parseRoute } from "./routes";
+import { libraryItemRoute, parseRoute } from "./routes";
 
 describe("parseRoute", () => {
   it("reads the account deletion deep link and nothing looser", () => {
@@ -11,6 +11,12 @@ describe("parseRoute", () => {
     expect(parseRoute("#/settings/users/abc/delete")).toEqual({ kind: "settings", section: "connections" });
     expect(parseRoute("#/settings/users/42")).toEqual({ kind: "settings", section: "connections" });
   });
+});
+
+it("opens a library item on a specific media source", () => {
+  expect(parseRoute(`#${libraryItemRoute("movies", "movie 1", "source/2")}`))
+    .toEqual({ kind: "library", libraryId: "movies", itemId: "movie 1", sourceId: "source/2" });
+  expect(parseRoute(`#${libraryItemRoute("movies", "movie-1")}`)).toEqual({ kind: "library", libraryId: "movies", itemId: "movie-1" });
 });
 
 describe("Filters tabs", () => {
