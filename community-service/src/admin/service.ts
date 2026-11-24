@@ -27,7 +27,8 @@ export async function operatorService(request: Request, env: Env,
       if (request.method !== 'GET') return json(405, 'method_not_allowed');
       return Response.json({ version: 1, subject: principal.subject }, { headers: securityHeaders });
     }
-    if (path === '/admin/v1/moderation' || path.startsWith('/admin/v1/moderation/') || path === '/admin/v1/reports') {
+    if (path === '/admin/v1/moderation' || path.startsWith('/admin/v1/moderation/') ||
+        ['/admin/v1/reports', '/admin/v1/versions', '/admin/v1/alias-suggestions'].includes(path)) {
       const response = await operatorModeration(request, env, principal.subject, Math.floor((now?.getTime() ?? Date.now()) / 1000));
       for (const [name, value] of Object.entries(securityHeaders)) response.headers.set(name, value);
       return response;

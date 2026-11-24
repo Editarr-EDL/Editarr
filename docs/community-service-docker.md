@@ -165,9 +165,9 @@ cutover. Preserve the original volume, configuration and receipt key history.
 Restoring stale snapshots can roll back revocations, moderation, replay and
 operation state: recovery must account for that before access is enabled.
 
-Current schema is **17**. Migrations 0015/0016 preserve all prior rows while
+Current schema is **18**. Migrations 0015/0016 preserve all prior rows while
 retiring usage admission and moving historical report allowance values out of
-active reports. Starting schemas 1–16 are supported. Existing configuration must
+active reports. Starting schemas 1–17 are supported. Existing configuration must
 use report/operator JSON with only `requestBytes` and `maxQueries`; remove retired
 allowance fields before activating. Legacy archive validation is separate from
 the current snapshot/upgrade workflow.
@@ -185,6 +185,11 @@ and file-only media, but their requests about Radarr- or Sonarr-sourced items ar
 refused. To move a schema 16 store, stop the service and run the upgrade below
 with the new image. It writes and verifies the pre-upgrade backup at `--destination`
 itself, so no separate backup step is needed.
+
+Migration 0018 is additive. It creates the work-version catalog tables for
+community master filter sets and seeds the four approved aliases. It changes no
+existing row, so upgrade a schema 17 store with the same verified-backup-first
+procedure.
 
 To upgrade to the current schema, build the reviewed image, stop the
 service, and run `docker compose -f community-service/compose.yaml run --rm --no-deps

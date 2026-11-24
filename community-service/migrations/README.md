@@ -2,7 +2,7 @@
 
 ## Current Schema
 
-The current Docker schema is **17**. Supported starting versions **1 through 16**
+The current Docker schema is **18**. Supported starting versions **1 through 17**
 upgrade through the offline runtime runner with an independently verified,
 recoverable pre-upgrade snapshot. Startup never upgrades or initializes a store.
 The October 7 local-service decision retires all user usage admission. Historical
@@ -32,7 +32,16 @@ row IDs, sequences and every other row stay unchanged. It drops and recreates
 artifact BLOBs are never rewritten; readers of those stored bytes apply the same
 mapping. New requests that carry either Arr value fail ordinary validation.
 
-No existing database was changed. To adopt schema 17, explicitly stop the service
+`0018_master_catalog.sql` is additive and changes no existing row. It creates the
+work-version catalog of community master filter sets: `master_works` and
+`master_work_identifiers` (named apart from the legacy `works` tables), `work_titles`,
+`work_identifier_conflicts`, `aliases`, `alias_spellings` seeded with the four
+approved aliases, `alias_suggestions`, `versions`, `version_match_keys`,
+`version_acceptances` with the `version_counted_acceptances` view for latest-per-contributor
+promotion and runtime bookkeeping, and the `catalog_moderation_actions` audit for
+version and alias commands.
+
+No existing database was changed. To adopt schema 18, explicitly stop the service
 and use the [verified-backup-first upgrade procedure](../../docs/community-service-docker.md#persistence-and-recovery).
 Never reset a store, overwrite a backup or stamp an unknown schema. Current
 snapshots contain all tables, including historical data; legacy encrypted archive

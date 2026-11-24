@@ -37,7 +37,7 @@ for (const name of ['identity', 'sharing', 'operator', 'cleanup', ...(process.en
             try {
               for (const name of readdirSync('/app/migrations').filter(name => name.endsWith('.sql')).sort())
                 database.connection.exec(readFileSync('/app/migrations/' + name, 'utf8'));
-              database.connection.exec('PRAGMA user_version = 17');
+              database.connection.exec('PRAGMA user_version = 18');
               database.lockWriter();
               await exercise(database, { service, validateEnvironment, createHttpServer, readConfiguration, startMaintenance, serverPath: '/app/dist/runtime/server.mjs', assets: operatorAssets(new URL('file:///app/dist/runtime/assets/')) });
             } finally { database.close(); }`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 });
