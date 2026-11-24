@@ -22,6 +22,7 @@ from scanner.persistence.repository.repository_review_core import _scan_is_avail
 from scanner.pipeline.audio_tracks import _file_state
 from scanner.security.private_identity_files import IdentityHome
 from tests.community_identity_support import only_identity_ref
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.test_community_api import context as context
 from tests.test_community_api import headers
 from tests.test_community_verified_import import BOUNDS, SERVICE, local_target, verified_input
@@ -115,6 +116,7 @@ def status(scenario, choices=None):
     )
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_catalog_bound_import_reuses_and_reconciles_original_receipt(scenario):
     first = asyncio.run(scenario.service.run(scenario.body))
     assert first["status"] == "imported" and first["receiptState"] == "pending"

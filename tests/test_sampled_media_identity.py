@@ -128,7 +128,7 @@ def test_upgrade_from_stable_ids_keeps_original_versions_and_recoverable_backup(
     validate_safety_snapshot(backup)
     restored = adoption.export_upgrade_recovery(path, tmp_path, tmp_path / "recovered.db")
     assert adoption._inspect_database(restored) == adoption.STABLE_MEDIA_IDENTITY_REVISION
-    assert adoption._inspect_database(path) == adoption.SAMPLED_MEDIA_IDENTITY_REVISION
+    assert adoption._inspect_database(path) == adoption.HEAD_REVISION
     with sqlite3.connect(restored) as db:
         assert _rows(db, columns) == original
     with sqlite3.connect(path) as db:

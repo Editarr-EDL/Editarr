@@ -10,6 +10,7 @@ import pytest
 from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _upgrade, link_owner
 from tests.community_identity_migration_support import no_network as no_network
+from tests.community_master_migration_support import retire_publications
 from tests.explicit_filter_modes_support import drop_0031_additions
 from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
@@ -51,7 +52,7 @@ def test_every_supported_revision_retains_rows_and_verified_recovery(tmp_path, r
             row[-5:] == (None, None, None, 0, None) for row in upgraded["media_item_exports"]
         )
         upgraded["media_item_exports"] = [row[:-5] for row in upgraded["media_item_exports"]]
-        assert without_stable_media_identity(upgraded) == original
+        assert without_stable_media_identity(upgraded) == retire_publications(original, upgraded)
     assert adoption.upgrade_existing_database(path, path.parent) is None
     recovered = adoption.export_upgrade_recovery(path, path.parent, tmp_path / "recovered.db")
     assert generation.is_dir()

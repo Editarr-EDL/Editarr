@@ -235,7 +235,10 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
     ("GET /api/editarr-items/legacy/{item_id}", _BROWSE),
     ("POST /api/editarr-items/{title_id}/versions", _BROWSE),
     ("GET /api/media-fingerprints/queue", _gated(C.REVIEWS_IMPORT_UPLOAD)),
-    ("POST /api/media-versions/{version_id}/reuse/transcript-status", _gated(C.REVIEWS_IMPORT_UPLOAD)),
+    (
+        "POST /api/media-versions/{version_id}/reuse/transcript-status",
+        _gated(C.REVIEWS_IMPORT_UPLOAD),
+    ),
     ("POST /api/media-versions/{version_id}/reuse/preview", _gated(C.REVIEWS_IMPORT_UPLOAD)),
     ("POST /api/media-versions/{version_id}/reuse/approve", _gated(C.REVIEWS_IMPORT_UPLOAD)),
     ("GET /api/library-items/{item_id}", _BROWSE),

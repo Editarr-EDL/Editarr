@@ -27,7 +27,7 @@ def test_harness_engine_enforces_fks(app):
         assert database.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
 
 
-@pytest.mark.parametrize("kind", ["publish", "receipt", "vote"])
+@pytest.mark.parametrize("kind", ["publish", "submission", "filter_vote"])
 def test_references_precheck_says_deletable_but_delete_refuses(app, kind):
     scan_id, _ = app.seed_scan(OWNER, "retained", status="complete")
     with app.accounts.factory() as database:
@@ -49,7 +49,7 @@ def test_references_precheck_says_deletable_but_delete_refuses(app, kind):
         assert private not in response.text
 
 
-@pytest.mark.parametrize("kind", ["publish", "receipt", "vote", "review"])
+@pytest.mark.parametrize("kind", ["publish", "submission", "filter_vote", "review"])
 @pytest.mark.parametrize("boundary", ["first_read", "delete_children"])
 def test_evidence_committed_between_check_and_delete(app, kind, boundary):
     """A second writer cannot commit evidence while deletion checks its references."""

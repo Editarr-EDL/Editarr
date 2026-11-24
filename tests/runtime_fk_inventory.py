@@ -17,13 +17,20 @@ audit_events|target_user_id|users|id|NO ACTION
 auth_sessions|user_id|users|id|CASCADE
 community_connections|credential_ref|community_identities|credential_ref|NO ACTION
 community_identities|user_id|users|id|NO ACTION
-community_import_targets|import_id|community_imports|id|CASCADE
-community_import_targets|media_item_id|media_items|id|CASCADE
-community_imports|scan_id|scans|id|CASCADE
 community_operations|actor_id|users|id|NO ACTION
 community_operations|owner_id|users|id|NO ACTION
 community_operations|scan_id|scans|id|RESTRICT
+community_master_dismissals|link_id|community_master_links|id|CASCADE
+community_master_filters|link_id|community_master_links|id|CASCADE
+community_master_links|media_version_id|media_versions|id|NO ACTION
+community_master_links|owner_id|users|id|NO ACTION
+community_master_preferences|owner_id|users|id|NO ACTION
+community_master_snapshots|link_id|community_master_links|id|CASCADE
+community_master_updates|link_id|community_master_links|id|CASCADE
 community_publications|operation_id|community_operations|operation_id|RESTRICT
+community_sync_notifications|link_id|community_master_links|id|CASCADE
+community_sync_notifications|owner_id|users|id|NO ACTION
+community_sync_state|owner_id|users|id|NO ACTION
 credits_detection_runs|scan_id|scans|id|CASCADE
 filter_selection_rules|settings_id|filter_settings|id|CASCADE
 jellyfin_account_sync|user_id|users|id|CASCADE
@@ -46,6 +53,11 @@ media_title_sources|title_id|media_titles|id|NO ACTION
 media_version_locators|media_item_id|media_items|id|CASCADE
 media_version_locators|version_id|media_versions|id|NO ACTION
 media_versions|title_id|media_titles|id|NO ACTION
+retired_community_import_targets|import_id|retired_community_imports|id|CASCADE
+retired_community_import_targets|media_item_id|media_items|id|CASCADE
+retired_community_imports|scan_id|scans|id|CASCADE
+retired_community_operations|actor_id|users|id|NO ACTION
+retired_community_operations|owner_id|users|id|NO ACTION
 review_accepted_credits|review_id|saved_reviews|id|CASCADE
 review_accepted_credits|source_finding_id,scan_id|scan_findings|id,scan_id|NO ACTION
 review_filters|review_id|saved_reviews|id|CASCADE

@@ -77,13 +77,14 @@ def test_durable_activity_records_the_contributor_owner_and_actual_actor(account
         intent = dict(
             credential_ref=home.credential_ref,
             service_url=SERVICE,
-            kind="vote",
+            kind="filter_vote",
             contributor_id=connection.contributor_id,
             installation_id=connection.installation_id,
-            contribution_id="synthetic-contribution",
-            revision_id="synthetic-revision",
-            digest="a" * 64,
-            vote="like",
+            community_version_id="v_synthetic",
+            filter_id="f_synthetic",
+            receipt_id="a" * 64,
+            receipt='{"version":1,"vote":"up"}',
+            vote="up",
         )
         own = enqueue_operation(db, operation_id="own-vote", **intent)
         assert (own.owner_id, own.actor_id) == (USER, USER)

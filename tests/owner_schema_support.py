@@ -9,6 +9,13 @@ from alembic.operations import Operations
 from tests.community_schema_fixture import SYNTHETIC_PASSWORD_HASH
 
 
+def undo_community_master_migration(connection) -> None:
+    """Reverse 0037 on a fixture without master-set data or retired publications."""
+    migration = import_module("scanner.persistence.migrations.versions.0037_community_master_sets")
+    with Operations.context(MigrationContext.configure(connection)):
+        migration.downgrade()
+
+
 def undo_stable_media_identity_migration(connection) -> None:
     """Remove stable identity tables from a fixture representing an older database."""
     migration = import_module(

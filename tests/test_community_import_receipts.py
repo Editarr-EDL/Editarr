@@ -30,6 +30,7 @@ from scanner.security.community_download_receipts import (
 )
 from scanner.security.private_identity_files import IdentityHome
 from tests.community_identity_support import only_identity_ref
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.test_community_downloads import identity, response
 from tests.test_community_verified_import import (
     BOUNDS,
@@ -112,6 +113,7 @@ def test_recovery_ignores_another_contributors_receipt(import_database, tmp_path
         assert db.query(CommunityOperationRow).count() == 0
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_shared_import_retains_each_contributors_exact_receipt(import_database, tmp_path):
     value, keys, _ = download_input()
     fields = value["receipt"]["receipt"]
@@ -181,6 +183,7 @@ def test_shared_import_retains_each_contributors_exact_receipt(import_database, 
     assert calls == ["second-reader"]
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_retry_sends_original_saved_receipt_and_recovers_missing_intent(import_database, tmp_path):
     _, keys, _ = download_input()
     calls = []
@@ -268,6 +271,7 @@ def test_absent_or_corrupt_evidence_and_invalid_response_cannot_acknowledge(
             assert "/v1/import-receipts" not in calls
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_receipt_failure_preserves_successful_import_and_returns_durable_state(
     import_database, tmp_path
 ):
@@ -285,6 +289,7 @@ def test_receipt_failure_preserves_successful_import_and_returns_durable_state(
         assert db.query(CommunityOperationRow).one().state == "pending"
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_restored_pending_queue_reuses_original_operation_and_receipt(import_database, tmp_path):
     import sqlite3
 

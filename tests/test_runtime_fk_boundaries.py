@@ -53,7 +53,7 @@ def test_existing_orphans_are_refused_without_automatic_repair(monkeypatch, tmp_
         database.execute(
             "INSERT INTO community_operations "
             "(operation_id, service_url, kind, state, scan_id, updated_at) "
-            "VALUES ('orphan', 'https://community.example', 'receipt', 'pending', "
+            "VALUES ('orphan', 'https://community.example', 'submission', 'pending', "
             "'missing-scan', '2026-10-24T00:00:00Z')"
         )
     before = hashlib.sha256(path.read_bytes()).digest()

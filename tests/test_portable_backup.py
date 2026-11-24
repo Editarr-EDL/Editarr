@@ -64,7 +64,7 @@ def test_export_keeps_credentials_and_identity_but_not_runtime_artifacts(tmp_pat
         connection.execute(
             "INSERT INTO community_operations (operation_id, service_url, kind, state, "
             "contributor_id, installation_id, updated_at) "
-            "VALUES ('retry-1', 'https://community.example', 'vote', 'pending', "
+            "VALUES ('retry-1', 'https://community.example', 'filter_vote', 'pending', "
             "'contributor-1', ?, '2026-09-27')",
             (identity.installation_id,),
         )

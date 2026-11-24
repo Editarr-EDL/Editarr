@@ -36,6 +36,7 @@ from scanner.security.community_download_receipts import (
 )
 from tests.community_identity_support import only_identity_ref
 from tests.community_schema_fixture import create_unversioned_fixture
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 
 BOUNDS = ResourceBounds(65536, 131072, 100, 2048, 30)
 VECTORS = json.loads(
@@ -177,6 +178,7 @@ def local_target(downloaded, tmp_path):
 
 
 @pytest.mark.parametrize("name", list(VECTORS["cases"]))
+@RETIRED_REVISION_PROTOCOL
 def test_atomic_import_preserves_bytes_source_timeline_attribution_and_reuses(
     import_database, tmp_path, name
 ):
@@ -228,6 +230,7 @@ def test_atomic_import_preserves_bytes_source_timeline_attribution_and_reuses(
         assert db.query(CommunityOperationRow).one().receipt == original_receipt
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_lost_response_after_import_commit_reuses_committed_scan_and_original_receipt(
     import_database, tmp_path, monkeypatch
 ):
@@ -476,6 +479,7 @@ def test_before_commit_crash_rolls_back_all_evidence(import_database, tmp_path):
         assert db.query(CommunityOperationRow).count() == 0
 
 
+@RETIRED_REVISION_PROTOCOL
 def test_post_commit_receipt_failure_keeps_import_and_retry_recovers_original_intent(
     import_database, tmp_path, monkeypatch
 ):

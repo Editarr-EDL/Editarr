@@ -103,10 +103,13 @@ def _seed_members(path, revision):
 
 
 def _references(path):
-    """Each user-keyed column's per-account row counts, for every table that holds one."""
+    """Each user-keyed column's per-account row counts, for every table that holds one.
+
+    Operations 0037 retired count with the operations they came from.
+    """
     with sqlite3.connect(path) as database:
         tables = {name for (name,) in database.execute("SELECT name FROM sqlite_master")}
-        return {
+        counts = {
             (table, column): database.execute(
                 f'SELECT "{column}", count(*) FROM "{table}" WHERE "{column}" IS NOT NULL '
                 f'GROUP BY "{column}" ORDER BY "{column}"'
@@ -114,6 +117,14 @@ def _references(path):
             for table, column in USER_REFERENCES
             if table in tables and column in _columns(database, table)
         }
+    for column in ("owner_id", "actor_id"):
+        retired = dict(counts.pop(("retired_community_operations", column), []))
+        if retired:
+            merged = dict(counts[("community_operations", column)])
+            for user_id, count in retired.items():
+                merged[user_id] = merged.get(user_id, 0) + count
+            counts[("community_operations", column)] = sorted(merged.items())
+    return counts
 
 
 def _accounts(path):

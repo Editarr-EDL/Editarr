@@ -34,7 +34,7 @@ def test_export_snapshot_upgrade_preserves_0020_rows_and_recoverable_backup(tmp_
     restored = adoption.export_upgrade_recovery(path, path.parent, tmp_path / "restored.db")
     assert _snapshot(restored)[0] == original
     assert adoption._inspect_database(restored) == "0020_review_scan_repairs"
-    assert adoption._inspect_database(path) == "0036_sampled_media_identity"
+    assert adoption._inspect_database(path) == "0037_community_master_sets"
 
 
 def orphan_database(tmp_path, revision=PREVIOUS):
@@ -169,7 +169,9 @@ def test_exact_removed_rows_and_blobs_are_preserved_per_review(tmp_path):
         )
         assert preserved["community_import_targets"][0]["import_id"] == "community-import"
         assert preserved["community_operations"][0]["operation_id"] == "old-receipt"
-        assert database.execute("SELECT scan_id FROM community_operations").fetchone()[0] is None
+        assert database.execute(
+            "SELECT scan_id FROM retired_community_operations WHERE operation_id = 'old-receipt'"
+        ).fetchone()[0] is None
         assert database.execute("PRAGMA foreign_key_check").fetchall() == []
         database.execute("PRAGMA foreign_keys=ON")
         database.execute("DELETE FROM media_item_exports WHERE id=2")

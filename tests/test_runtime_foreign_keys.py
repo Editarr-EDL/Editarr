@@ -23,6 +23,7 @@ from scanner.settings.config import Settings
 from tests import test_community_verified_import as community_fixtures
 from tests.community_identity_support import identity_home, only_identity_ref
 from tests.multi_user_access_support import OWNER
+from tests.retired_protocol_support import RETIRED_REVISION_PROTOCOL
 from tests.runtime_fk_inventory import EXPECTED_FOREIGN_KEYS
 from tests.test_community_verified_import import (
     BOUNDS,
@@ -43,7 +44,14 @@ def import_database(community_import_database):
 
 
 @pytest.mark.parametrize(
-    "operation_state", [None, "pending", "submitted", "acknowledged", "failed"]
+    "operation_state",
+    [
+        None,
+        *(
+            pytest.param(state, marks=RETIRED_REVISION_PROTOCOL)
+            for state in ("pending", "submitted", "acknowledged", "failed")
+        ),
+    ],
 )
 def test_imported_scan_deletion_waits_only_for_active_operations(
     import_database, tmp_path, operation_state
@@ -90,6 +98,7 @@ def test_imported_scan_deletion_waits_only_for_active_operations(
 
 
 @pytest.mark.parametrize("state", ["pending", "submitted", "acknowledged", "failed"])
+@RETIRED_REVISION_PROTOCOL
 def test_imported_scan_http_deletion_matches_precheck(app, tmp_path, monkeypatch, state):
     original_id, _ = app.seed_scan(OWNER, "import-target", status="complete")
     downloaded = verified_input()
@@ -164,7 +173,7 @@ def test_imported_scan_http_deletion_matches_precheck(app, tmp_path, monkeypatch
     assert destination.stat().st_size > 0
 
 
-@pytest.mark.parametrize("kind", ["publish", "receipt", "vote"])
+@pytest.mark.parametrize("kind", ["publish", "submission", "filter_vote"])
 @pytest.mark.parametrize("state", ["pending", "submitted", "acknowledged", "failed"])
 def test_only_in_progress_operations_block_scan_deletion(app, kind, state):
     scan_id, _ = app.seed_scan(OWNER, "operation-target", status="complete")
