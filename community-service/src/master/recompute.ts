@@ -92,13 +92,19 @@ export async function recomputeStatements(db: SqlDatabase, state: VersionState, 
   return { result, revision: result.revision.revision, changed: result.revision.changed, statements };
 }
 
+/** A change committed with a recompute: `change` applies it to the loaded state, `extra` writes it. */
+export interface PendingChange {
+  change?: (state: VersionState) => void;
+  extra?: (plan: RecomputePlan) => SqlStatement[];
+}
+
 /**
  * Recompute one stored version in its own guarded batch, planning again after a concurrent
- * catalog write. `extra` statements (for example a vote or moderation change) join the batch
- * before the recompute statements, and `change` applies the same change to the loaded state.
+ * catalog write. A pending change (for example a vote) is applied to the loaded inputs and its
+ * statements join the same batch.
  */
 export async function recomputeVersion(db: SqlDatabase, versionId: string, options: RecomputeOptions,
-  pending: { extra?: SqlStatement[]; change?: (state: VersionState) => void } = {}, attempts = 5) {
+  pending: PendingChange = {}, attempts = 5) {
   for (let attempt = 1; ; attempt++) {
     const row = await db.prepare('SELECT work_id FROM versions WHERE version_id = ?').bind(versionId).first<{ work_id: string }>();
     if (!row) throw new Error('version_not_found');
@@ -108,7 +114,7 @@ export async function recomputeVersion(db: SqlDatabase, versionId: string, optio
     pending.change?.(state);
     const plan = await recomputeStatements(db, state, options);
     try {
-      await db.batch([guard, ...(pending.extra ?? []), ...plan.statements]);
+      await db.batch([guard, ...(pending.extra?.(plan) ?? []), ...plan.statements]);
       return plan;
     } catch (error) {
       if (attempt >= attempts || !isCatalogWriteConflict(error)) throw error;

@@ -1081,6 +1081,13 @@ Errors:
 
 It returns at most 4,000 votes.
 
+**Clarifications.** A vote may name a retired filter ID listed in the receipt
+snapshot's `mergedIds`; the self-vote check uses the filter it resolves to. Changing
+or removing a vote keeps a moderator's `exclude_vote`. The vote list returns
+`404 version_not_found`, `409 version_merged` and `410 version_unavailable` like
+§7.3. An `Idempotency-Key` of the form `vote-<client id>` is recommended, not
+required.
+
 ### 7.5 `POST /v1/sync/revisions` (read)
 
 ```json
@@ -1110,6 +1117,13 @@ It returns at most 4,000 votes.
 - `unavailable` covers quarantined and unknown versions.
 - Sync issues no receipts.
 
+**Clarifications.** Runs are scoped to the signing key's installation. A request
+that would exceed the run's batches or window, or start a run past the daily limit,
+returns `429 sync_rate_limited` with `Retry-After` until `nextRunAllowedAt`.
+`nextRunAllowedAt` is the request time when another run may start now, otherwise
+the time the oldest counted run leaves the rolling 24 hours. A malformed request
+is `400 invalid_sync`. Items keep request order.
+
 ### 7.6 `POST /v1/reports`
 
 ```json
@@ -1130,6 +1144,11 @@ Result:
 ```json
 {"version":1,"operationId":"…","reportId":"…","state":"open"}
 ```
+
+**Clarifications.** `note` is optional. A report on an unknown target is
+`403 report_ineligible`, so the route reveals nothing about targets the caller has
+no receipt for. A version report also accepts a receipt for a version merged into
+the target. A malformed request is `400 invalid_report`.
 
 ### 7.7 `GET /v1/aliases` and `GET /v1/receipt-keys`
 

@@ -11,6 +11,7 @@ import { readWorkRows, withPendingWork } from '../versions/work-summary';
 import { recomputeStatements } from '../master/recompute';
 import { loadVersionState, type VersionState } from '../master/state';
 import { RouteError } from '../http/contributor-route';
+import { completedOperation, completionStatements } from '../operations/completed';
 import { artifactBounds, type SubmissionLimits, type SubmissionRequest } from './input';
 import { submissionInput, submissionStatements, type StoredSubmission } from './store';
 
@@ -23,11 +24,7 @@ export interface SubmissionResult {
 }
 export interface SubmissionOptions { service: string; policy: MasterPolicy; limits: SubmissionLimits; now: number }
 
-async function completed(db: SqlDatabase, identity: AuthenticatedContributor) {
-  return db.prepare(`SELECT request_digest, result FROM operations WHERE contributor_id = ? AND kind = 'submission'
-    AND operation_id = ? AND state = 'completed'`).bind(identity.contributorId, identity.operationId)
-    .first<{ request_digest: string; result: string }>();
-}
+const completed = (db: SqlDatabase, identity: AuthenticatedContributor) => completedOperation(db, identity, 'submission');
 
 /** Replay a stored result for the same operation and bytes, or refuse a different upload of the same `submissionId`. */
 async function replay(db: SqlDatabase, identity: AuthenticatedContributor, request: SubmissionRequest): Promise<SubmissionResult | null> {
@@ -132,11 +129,7 @@ export async function acceptSubmission(db: SqlDatabase, identity: AuthenticatedC
       outcome: outcome(recompute.result, stored.submissionId, registry), aliasSuggestion: plan.result.aliasSuggestion };
     try {
       await db.batch([
-        db.prepare('INSERT INTO request_nonces (key_id, nonce, expires_at, contributor_id) VALUES (?, ?, ?, ?)')
-          .bind(identity.keyId, identity.nonce, identity.expiresAt, identity.contributorId),
-        db.prepare(`INSERT INTO operations (contributor_id, kind, operation_id, request_digest, state, result, created_at, updated_at)
-          VALUES (?, 'submission', ?, ?, 'completed', ?, ?, ?)`).bind(identity.contributorId, identity.operationId,
-          identity.contentDigest, JSON.stringify(result), options.now * 1000, options.now * 1000),
+        ...completionStatements(db, identity, 'submission', identity.contentDigest, result, options.now),
         ...plan.statements, ...submissionStatements(db, stored, options.now), ...recompute.statements,
       ]);
       return result;

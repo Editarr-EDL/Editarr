@@ -9,7 +9,7 @@ import { SqliteDatabase } from '../../src/runtime/sqlite.mjs';
 import { operatorAssets } from '../../src/runtime/http.mjs';
 import { migrationsDirectory } from '../../src/runtime/schema.mjs';
 
-for (const name of ['identity', 'operator', 'cleanup', ...(process.env.COMMUNITY_RUNTIME_IMAGE ? ['restart'] : ['multi-instance'])]) {
+for (const name of ['identity', 'sharing', 'operator', 'cleanup', ...(process.env.COMMUNITY_RUNTIME_IMAGE ? ['restart'] : ['multi-instance'])]) {
   test(`Node HTTP/SQLite ${name} journey with mocked external providers`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'community-journey-'));
     const output = join(directory, 'fixture.mjs');
@@ -48,15 +48,7 @@ for (const name of ['identity', 'operator', 'cleanup', ...(process.env.COMMUNITY
             database.connection.exec(readFileSync(new URL(name, migrationsDirectory), 'utf8'));
           database.lockWriter();
           await (await import(pathToFileURL(output).href)).exercise(database, { assets: operatorAssets(new URL('../../../web/dist-operator/', import.meta.url)),
-            applicationRoot: fileURLToPath(new URL('../../../', import.meta.url)),
-            importDownload: async input => {
-              const root = fileURLToPath(new URL('../../../', import.meta.url));
-              const output = execFileSync(join(root, '.venv/bin/python'), ['-m', 'tests.community_node_import'], {
-                cwd: root, input: JSON.stringify(input), encoding: 'utf8', timeout: 30000,
-                env: { ...process.env, EDITARR_DATA_DIR: join(directory, 'local-app') },
-              });
-              if (!JSON.parse(output).committed) throw new Error('local_import_not_committed');
-            } });
+            applicationRoot: fileURLToPath(new URL('../../../', import.meta.url)) });
         } finally { database.close(); }
       }
     } finally { rmSync(directory, { recursive: true, force: true }); }

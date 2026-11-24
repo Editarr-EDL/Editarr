@@ -1,4 +1,4 @@
-import { masterPolicy, missingConfig, type Env } from './config';
+import { masterPolicy, missingConfig, routeLimits, type Env } from './config';
 import { contributorIdentity } from './http/identity';
 import { contributorEnrollment } from './http/enrollment';
 import { admittedDiscordWork, discordService } from './integrations/discord/service';
@@ -19,6 +19,9 @@ import { contributorMasterRead } from './http/master';
 import { contributorSubmission } from './http/submissions';
 import { submissionLimitsSchema } from './submissions/input';
 import { servedFilterCounts } from './master/reads';
+import { contributorVotes } from './http/votes';
+import { contributorSync } from './http/sync';
+import { contributorReport } from './http/reports';
 import type { SqlDatabase } from './runtime/contracts';
 import type { MembershipCheck } from './security/contributor-auth';
 
@@ -73,6 +76,26 @@ export default {
     if (url.pathname === '/v1/match' || url.pathname === '/v1/aliases') {
       return contributorWork(request, env, (db, authority, now, membership) =>
         contributorVersionCatalog(request, db, authority, now, membership, { filterCounts: servedFilterCounts }));
+    }
+    if (/^\/v1\/filters\/[^/]+\/votes$/.test(url.pathname) || /^\/v1\/versions\/[^/]+\/votes$/.test(url.pathname)) {
+      let policy, limits;
+      try { policy = masterPolicy(env); limits = routeLimits.parse(JSON.parse(env.VOTE_LIMITS ?? '')); }
+      catch { return jsonResponse(503, 'service_unavailable'); }
+      return contributorWork(request, env, (db, authority, now, membership) =>
+        contributorVotes(request, db, authority, now, membership, { policy, limits }));
+    }
+    if (url.pathname === '/v1/sync/revisions') {
+      let policy;
+      try { policy = masterPolicy(env); } catch { return jsonResponse(503, 'service_unavailable'); }
+      return contributorWork(request, env, (db, authority, now, membership) =>
+        contributorSync(request, db, authority, now, membership, { policy }));
+    }
+    if (url.pathname === '/v1/reports') {
+      let limits;
+      try { limits = routeLimits.parse(JSON.parse(env.REPORT_LIMITS ?? '')); }
+      catch { return jsonResponse(503, 'service_unavailable'); }
+      return contributorWork(request, env, (db, authority, now, membership) =>
+        contributorReport(request, db, authority, now, membership, limits));
     }
     if (url.pathname === '/v1/submissions') {
       let policy, limits;

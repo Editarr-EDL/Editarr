@@ -12,6 +12,7 @@ import { signingKey, signedPost, signedRead } from '../helpers/key-lifecycle.ts'
 import { signedEnrollment } from '../helpers/enrollment-signatures.ts';
 import { confirmationHash } from '../../src/identity/confirmation.ts';
 import { DEFAULT_MASTER_POLICY } from '../../src/filters/policy.ts';
+import { DEFAULT_SUBMISSION_LIMITS } from '../../src/submissions/input.ts';
 
 export const origin = 'https://community.example';
 export const timestamp = () => Math.floor(Date.now() / 1000);
@@ -47,6 +48,7 @@ export async function journey(database, run, runtime = {}) {
     DISCORD_CLIENT_SECRET: 'synthetic-secret', DISCORD_BOT_TOKEN: 'synthetic-bot',
     OPERATOR_ORIGIN: 'https://operator.example.test', ACCESS_ISSUER: 'https://journey.cloudflareaccess.com',
     ACCESS_AUDIENCE: 'journey', OPERATOR_SUBJECTS: '["operator"]',
+    SUBMISSION_LIMITS: JSON.stringify(DEFAULT_SUBMISSION_LIMITS),
     VOTE_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
     REPORT_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),
     MODERATION_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }),

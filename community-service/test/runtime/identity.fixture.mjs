@@ -4,9 +4,11 @@ import { preparedRotation, signingKey, signedPost, signedRead } from '../helpers
 
 async function protectedRequests(key, time = timestamp()) {
   const revision = '10000000-0000-4000-8000-000000000001';
-  const reads = ['/v1/identity', '/v1/receipt-keys', '/v1/aliases',
+  const reads = ['/v1/identity', '/v1/receipt-keys', '/v1/aliases', '/v1/versions/v_journey/master?knownRevision=1',
+    '/v1/versions/v_journey/votes',
     ...['key_rotation', 'key_revocation', 'key_recovery'].map(kind => `/v1/key-operations/${kind}/${revision}`)];
-  const writes = ['/v1/match', '/v1/keys/rotate', '/v1/keys/revoke'];
+  const writes = ['/v1/match', '/v1/submissions', '/v1/filters/f_journey/votes', '/v1/sync/revisions', '/v1/reports',
+    '/v1/keys/rotate', '/v1/keys/revoke'];
   return [...await Promise.all(reads.map(path => signedRead(key, path, time))),
     ...await Promise.all(writes.map(path => signedPost(key, path, '{}', crypto.randomUUID(), time))),
     await patch(key, { displayName: 'Auth Matrix Name' }, undefined, undefined, time)];
