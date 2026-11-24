@@ -1194,7 +1194,6 @@ The read routes are:
 - `GET /admin/v1/alias-suggestions?state=pending&after=`
 - `GET /admin/v1/moderation/{resource}/{id}`
 - `GET /admin/v1/reports?after=`
-
 - `GET /admin/v1/dashboard/versions/{versionId}/filters?after=` (registry state,
   quarantine and master filter values with count-only `attestations`, votes,
   disputes and `served`)
@@ -1293,10 +1292,10 @@ The service migrations are **rebased** to a new baseline,
 | `alias_suggestions` | **suggestion_id**, normalized, text, submission_id, state (`pending`\|`approved`\|`rejected`), alias_id, created_at | Index on `(state, suggestion_id)` |
 | `versions` | **version_id**, work_id, alias_id, label_text, status, merged_into, runtime_ms, trust, revision, reference_submission_id, quarantined, created_seq, created_at | Index on `(work_id, status)` and `(work_id, alias_id, label_text)` |
 | `version_match_keys` | **version_id**, **type**, **algorithm**, **value**, **size_bytes**, is_reference, observations | Index on `(type, algorithm, value, size_bytes)` |
-| `submissions` | **submission_id**, digest (unique), contributor_id, installation_id, key_id, version_id, accepted_seq (unique, monotonic), tier, artifact_bytes, manifest_bytes, envelope_bytes, alignment_hint_json, fit_json, state (`counted`\|`superseded`\|`quarantined`), created_at | Index on `(version_id, contributor_id, accepted_seq)` |
+| `submissions` | **submission_id**, digest (unique), contributor_id, installation_id, key_id, version_id, accepted_seq (unique, monotonic), tier, artifact_bytes, manifest_bytes, envelope_bytes, alignment_hint_json, fit_json, state (`counted`\|`superseded`\|`quarantined`), created_at | Index on `(version_id, contributor_id, accepted_seq)` and `(version_id, submission_id)` |
 | `submission_entries` | **submission_id**, **entry_id**, kind, proposed_filter_id, start_ms, end_ms, category, subcategory, severity, action, origin, manual_review, locally_verified, model_version, aligned_start_ms, aligned_end_ms, weight, ignored_reason, quarantined | — |
 | `submission_coverage` | **submission_id**, **category**, **ordinal**, start_ms, end_ms | — |
-| `filter_registry` | **filter_id**, version_id, created_seq, incumbent_subcategory, incumbent_action, state, merged_into, quarantined | Index on `version_id` |
+| `filter_registry` | **filter_id**, version_id, created_seq, incumbent_subcategory, incumbent_action, state, merged_into, quarantined | Index on `version_id` and `(version_id, filter_id)` |
 | `master_filters` | **filter_id**, version_id, category, subcategory, severity, action, start_ms, end_ms, spread_start_ms, spread_end_ms, confidence, contributor_count, attestations, upvotes, downvotes, disputes, coverage_negatives, low_confidence, served, subcategory_tally_json, severity_tally_json, action_tally_json | Index on `(version_id, served)` |
 | `filter_attestations` | **submission_id**, **entry_id**, filter_id, contributor_id, kind (`support`\|`dispute`\|`coverage_negative`), implicit (0/1), counted (0/1), prior_filter_id | Index on `(filter_id, contributor_id)`. Implicit rows have `entry_id = "cov:" + filterId` |
 | `filter_votes` | **filter_id**, **contributor_id**, vote (`up`\|`down`), receipt_id, excluded, updated_at | Index on `contributor_id` |
