@@ -8,6 +8,7 @@ import { CatalogModerationError, moderateCatalog } from '../src/versions/moderat
 import { db, keys, newId, now, policy, setupVersionCatalog, submission } from './helpers/versions';
 
 const env = { APP_ENV: 'local', TRUSTED_ACTOR_KEY: tunnelActor, CATALOG_DB: db, OPERATOR_ORIGIN: 'https://operator.example.test',
+  PUBLIC_ORIGIN: 'https://community.example',
   ACCESS_ISSUER: 'https://test.cloudflareaccess.com', ACCESS_AUDIENCE: 'operator-app', OPERATOR_SUBJECTS: '["operator-subject"]',
   MODERATION_LIMITS: JSON.stringify({ requestBytes: 8192, maxQueries: 64 }), MASTER_POLICY: JSON.stringify(policy) };
 let jwt: string, resolver: JWTVerifyGetKey, signer: CryptoKey;

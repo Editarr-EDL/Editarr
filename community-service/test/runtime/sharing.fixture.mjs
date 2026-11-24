@@ -5,7 +5,7 @@ import { receiptSigningBytes, snapshotSigningBytes, verifyServiceSignature } fro
 
 // Master-set sharing over the real HTTP server: submit, download, vote, report and sync.
 export async function exercise(database, runtime) {
-  await journey(database, async ({ enroll, post, read, env }) => {
+  await journey(database, async ({ enroll, post, read, admin, env }) => {
     const author = await enroll('1554889314549243999'), reader = await enroll('1554889314549243988');
     const value = artifact(author, { entries: [support('e1', 600_000, 605_000), support('e2', 1_200_000, 1_203_000)] });
     const encoded = await encode(value, author);
@@ -43,5 +43,13 @@ export async function exercise(database, runtime) {
     assert.deepEqual(changed.changed, [{ versionId: submitted.versionId, status: 'changed', revision: 2 }]);
     assert.equal(expectStatus(await post(reader, '/v1/sync/revisions', { version: 1, runId: 'another-run',
       items: [{ versionId: submitted.versionId, revision: 2 }] }), 429).error.code, 'sync_rate_limited');
+    for (const command of ['quarantine', 'restore']) {
+      const inspected = expectStatus(await admin(`/admin/v1/moderation/version/${submitted.versionId}`));
+      expectStatus(await admin('/admin/v1/moderation', { version: 1, actionId: crypto.randomUUID(), command, resource: 'version',
+        targetId: submitted.versionId, expectedRevision: inspected.revision, reason: 'Synthetic master moderation' }));
+      if (command === 'quarantine') assert.equal(expectStatus(await read(reader, `/v1/versions/${submitted.versionId}/master`), 410)
+        .error.code, 'version_unavailable');
+    }
+    assert.equal(expectStatus(await read(reader, `/v1/versions/${submitted.versionId}/master?knownRevision=2`)).changed, false);
   }, runtime);
 }

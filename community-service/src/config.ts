@@ -38,7 +38,7 @@ export function missingConfig(env: Env): string[] {
 
 /** A missing or invalid required configuration value; routes answer 503. */
 export class ConfigurationError extends Error {
-  constructor(public code: 'master_policy_missing' | 'master_policy_invalid') { super(code); }
+  constructor(public code: 'master_policy_missing' | 'master_policy_invalid' | 'public_origin_missing') { super(code); }
 }
 
 let parsedPolicy: { source: string; policy: MasterPolicy } | undefined;

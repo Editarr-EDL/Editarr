@@ -1195,6 +1195,38 @@ Each returns 20 items per page with `nextCursor`.
 - `all` runs in bounded batches and returns `{"version":1,"jobId":"…"}`.
 - The operator uses it after config changes.
 
+**Clarifications.** The service resolves these admin details as follows:
+
+- The envelope always carries `resource`. A vote action uses `resource: "vote"`,
+  `targetId` = filter ID and `contributorId`; its moderation resource is
+  `vote:<filterId>:<contributorId>`. Other resources are `<resource>:<targetId>`.
+  `GET /admin/v1/moderation/{resource}/{id}` reads `filter`, `attestation`
+  (URL-encoded `submissionId:entryId`), `submission`, `contributor`, `version`,
+  `alias_suggestion`, `report` and `vote/{filterId}/{contributorId}`.
+- Quarantining something already quarantined, or restoring something that is not,
+  is `403 moderation_ineligible`, as are suspend, unsuspend, vote and report actions
+  that do not change state. Each refusal is audited.
+- Contributor quarantine (`contributors.quarantined`) is separate from suspension.
+  It excludes the contributor's submissions and votes from every version they
+  touched, and their uploads return `403 upload_suspended`; their requests still
+  authenticate.
+- Every quarantine, restore and vote action recomputes each affected version in the
+  action's batch. A version restore advances the revision only if the served
+  content then differs (§6.11).
+- `merge_version` recomputes the target with the source's submissions, registry
+  and votes. Filter IDs, and therefore votes and the eligibility of receipts for
+  source snapshots, follow the filters into the target.
+- An approved alias relabel advances `versions.revision` once and stores the
+  relabeled snapshot at that revision; the recompute does not advance it again.
+- A `versionIds` list holds 1–100 unique non-merged versions, otherwise
+  `404 resource_not_found`. It returns
+  `{"version":1,"actionId":"…","versions":[{"versionId","revision","changed"}]}`.
+  `all` pages through every non-merged version, 20 per batch, before it answers, and
+  `jobId` is the `actionId`. Reusing an `actionId` with a different body is
+  `409 action_conflict`. A retry recomputes again, which changes nothing when no
+  input changed. Recompute audit rows use `command: "recompute"` and need no
+  `expectedRevision`.
+
 Admin errors:
 
 | Status | Code |
