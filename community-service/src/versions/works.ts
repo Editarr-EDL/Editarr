@@ -7,7 +7,11 @@ export interface SubmissionWork {
   kind: 'movie' | 'episode'; tmdb: string | null; tvdb: string | null;
   season: number | null; episode: number | null; lastEpisode: number | null; title: string; year: number | null;
 }
-export interface WorkPlan { workId: string; created: boolean; conflicts: number; statements: SqlStatement[] }
+export interface WorkPlan {
+  workId: string; created: boolean; conflicts: number; statements: SqlStatement[];
+  /** Identifiers this plan attaches and its title observation, for summaries computed before commit. */
+  attached: IdentifierRow[]; title: { normalized: string; year: number; title: string };
+}
 
 export class VersionAcceptanceError extends Error {
   constructor(public code: 'work_identity_required' | 'unknown_alias' | 'invalid_submission') { super(code); }
@@ -59,6 +63,7 @@ export async function planWork(db: SqlDatabase, work: SubmissionWork, submission
   const statements: SqlStatement[] = [existing ? await workWriteGuard(db, workId)
     : db.prepare('INSERT INTO works (work_id, kind, catalog_seq, created_at) VALUES (?, ?, 0, ?)').bind(workId, work.kind, now)];
   let conflicts = 0;
+  const attached: IdentifierRow[] = [];
   rows.forEach((row, index) => {
     if (found[index] === workId) return;
     if (found[index] !== null) {
@@ -68,6 +73,7 @@ export async function planWork(db: SqlDatabase, work: SubmissionWork, submission
         .bind(newId('wc'), submissionId, row.provider, row.value, found[index], now));
       return;
     }
+    attached.push(row);
     statements.push(db.prepare(`INSERT INTO work_identifiers
       (provider, kind, value, season, episode, last_episode, work_id) VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .bind(row.provider, row.kind, row.value, row.season, row.episode, row.lastEpisode, workId));
@@ -75,5 +81,6 @@ export async function planWork(db: SqlDatabase, work: SubmissionWork, submission
   statements.push(db.prepare(`INSERT INTO work_titles (work_id, normalized, year, title, observations) VALUES (?, ?, ?, ?, 1)
     ON CONFLICT(work_id, normalized, year) DO UPDATE SET observations = observations + 1`)
     .bind(workId, title, work.year ?? -1, work.title));
-  return { workId, created: !existing, conflicts, statements };
+  return { workId, created: !existing, conflicts, statements, attached,
+    title: { normalized: title, year: work.year ?? -1, title: work.title } };
 }

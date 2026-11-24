@@ -1,4 +1,4 @@
-import { missingConfig, type Env } from './config';
+import { masterPolicy, missingConfig, type Env } from './config';
 import { contributorIdentity } from './http/identity';
 import { contributorEnrollment } from './http/enrollment';
 import { admittedDiscordWork, discordService } from './integrations/discord/service';
@@ -16,6 +16,9 @@ import { RETENTION_BATCH_SIZE } from './retention/transient';
 import { pruneRateWindows } from './retention/windows';
 import { receiptKeysSchema } from './security/service-signer';
 import { contributorMasterRead } from './http/master';
+import { contributorSubmission } from './http/submissions';
+import { submissionLimitsSchema } from './submissions/input';
+import { servedFilterCounts } from './master/reads';
 import type { SqlDatabase } from './runtime/contracts';
 import type { MembershipCheck } from './security/contributor-auth';
 
@@ -57,7 +60,14 @@ export default {
     }
     if (url.pathname === '/v1/match' || url.pathname === '/v1/aliases') {
       return contributorWork(request, env, (db, authority, now, membership) =>
-        contributorVersionCatalog(request, db, authority, now, membership));
+        contributorVersionCatalog(request, db, authority, now, membership, { filterCounts: servedFilterCounts }));
+    }
+    if (url.pathname === '/v1/submissions') {
+      let policy, limits;
+      try { policy = masterPolicy(env); limits = submissionLimitsSchema.parse(JSON.parse(env.SUBMISSION_LIMITS ?? '')); }
+      catch { return jsonResponse(503, 'service_unavailable'); }
+      return contributorWork(request, env, (db, authority, now, membership) =>
+        contributorSubmission(request, db, authority, now, membership, { policy, limits }));
     }
     if (url.pathname.startsWith('/v1/discord/')) {
       return discordService(request, env);

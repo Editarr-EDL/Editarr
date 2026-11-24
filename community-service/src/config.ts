@@ -8,6 +8,7 @@ export interface Env {
   TRUSTED_ACTOR_KEY?: (request: Request) => string | null;
   PUBLIC_ORIGIN?: string;
   POLICY_VERSION?: string;
+  SUBMISSION_LIMITS?: string;
   VOTE_LIMITS?: string;
   REPORT_LIMITS?: string;
   MODERATION_LIMITS?: string;

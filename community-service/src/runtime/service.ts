@@ -3,6 +3,7 @@ import { masterPolicy, routeLimits, type Env } from '../config';
 import { operatorConfig } from '../admin/auth/access';
 import { moderationLimits } from '../admin/admission';
 import { loadReceiptSigner, receiptKeysSchema } from '../security/service-signer';
+import { submissionLimitsSchema } from '../submissions/input';
 
 export { previewRetention } from '../retention/policy';
 
@@ -12,6 +13,7 @@ export async function validateEnvironment(env: Env) {
       !/^\d{17,20}$/.test(env.DISCORD_CLIENT_ID ?? '') || !/^\d{17,20}$/.test(env.DISCORD_GUILD_ID ?? '') ||
       !env.DISCORD_CLIENT_SECRET || !env.DISCORD_BOT_TOKEN || !env.POLICY_VERSION) throw new Error('invalid_service_configuration');
   operatorConfig(env);
+  submissionLimitsSchema.parse(JSON.parse(env.SUBMISSION_LIMITS ?? ''));
   routeLimits.parse(JSON.parse(env.VOTE_LIMITS ?? ''));
   routeLimits.parse(JSON.parse(env.REPORT_LIMITS ?? ''));
   moderationLimits.parse(JSON.parse(env.MODERATION_LIMITS ?? ''));

@@ -920,6 +920,28 @@ Errors:
 
 Each contributor may accept `submissionsPerDay` submissions (default 50).
 
+**Clarifications.** The service resolves these details as follows:
+
+- The `Idempotency-Key` must be exactly `submit-<submissionId>`; any other key is
+  `400 invalid_submission`. A retry with the same operation and bytes returns the
+  stored result. A different upload that reuses a stored `submissionId`, from any
+  contributor, is `409 submission_conflict`.
+- `tier` is the attach tier, and is null when the submission created the version.
+- `supersedes` is the contributor's previous counted submission for the version, or
+  null.
+- `outcome` counts this submission's rows after the recompute: `newFilters` are
+  registry IDs created by it that are now active; `supports` are weight-1 support
+  members; `disputes` and `coverageNegatives` are assigned disputes and explicit plus
+  implicit coverage negatives; `ignored` are weight-0 support entries
+  (`unverified_reshare` or `duplicate`); and `unassigned` are disputes and explicit
+  coverage negatives that no filter took.
+- `403 upload_suspended` refuses a contributor under moderator quarantine (§7.8).
+  A suspended contributor already fails request authentication.
+- Past the daily limit the service returns `429 rate_limited` with `Retry-After`. The
+  limit counts accepted submissions in the rolling 24 hours before the request.
+- A submission that would exceed the stored-byte caps (§8) is refused with
+  `503 service_unavailable`, and nothing is stored.
+
 ### 7.3 `GET /v1/versions/{versionId}/master[?knownRevision=N]`
 
 This route has no body. It returns `200` in one of two forms:

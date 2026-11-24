@@ -4,7 +4,7 @@ import { decideVersion, type AcceptanceRow, type Disposition } from './acceptanc
 import { KEY_TIER, storedKey, type EvidenceKey, type EvidenceTier } from './keys';
 import { aliasExists, resolveText, spellingLookup, type Label } from './labels';
 import { acceptanceRows, derivedStatements, serviceId, workVersions } from './repository';
-import { isCatalogWriteConflict, planWork, VersionAcceptanceError, type SubmissionWork } from './works';
+import { isCatalogWriteConflict, planWork, VersionAcceptanceError, type SubmissionWork, type WorkPlan } from './works';
 
 export { isCatalogWriteConflict, VersionAcceptanceError, type SubmissionWork } from './works';
 
@@ -36,7 +36,11 @@ export interface AcceptanceOptions {
   now: number;
   newId?: (prefix: string) => string;
 }
-export interface AcceptancePlan { result: VersionAcceptance; statements: SqlStatement[] }
+export interface AcceptancePlan {
+  result: VersionAcceptance; statements: SqlStatement[];
+  /** The work writes of this plan, so a master snapshot can be summarized before the batch commits. */
+  work: Pick<WorkPlan, 'created' | 'attached' | 'title'> & { kind: SubmissionWork['kind'] };
+}
 
 /**
  * Run D13 version acceptance (§3.5) and return the result with the write statements. The
@@ -100,7 +104,8 @@ export async function planVersionAcceptance(db: SqlDatabase, input: VersionAccep
       VALUES (?, ?, ?, ?, 'pending', NULL, ?)`)
       .bind(aliasSuggestion.suggestionId, label.labelText, suggestionText, input.submissionId, now));
   }
-  return { statements, result: { workId: work.workId, versionId, versionStatus: derived.promoted ? 'confirmed' : status,
+  return { statements, work: { created: work.created, attached: work.attached, title: work.title, kind: input.work.kind },
+    result: { workId: work.workId, versionId, versionStatus: derived.promoted ? 'confirmed' : status,
     disposition: decision.disposition, tier: decision.disposition === 'attached' ? String(tier) as '1' | '2' | '3' : null,
     promoted: derived.promoted, identifierConflicts: work.conflicts, label, aliasSuggestion } };
 }
