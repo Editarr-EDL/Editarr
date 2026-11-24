@@ -18,7 +18,7 @@ async function setup(context) {
       ...args, '--origin', 'https://operator.example.test'], { encoding: 'utf8',
       env: { ...process.env, PATH: `${fixtures}:${process.env.PATH}`, CSS59_CALLS: calls, ...extra } }) };
 }
-const action = ['moderate', 'quarantine', 'revision-1', '--expected-revision', '2', '--reason', 'Reviewed evidence'];
+const action = ['moderate', 'quarantine', 'filter', 'filter-1', '--expected-revision', '2', '--reason', 'Reviewed evidence'];
 
 test('executable handles help, denies unsupported commands and redacts successful output', async context => {
   const fixture = await setup(context);

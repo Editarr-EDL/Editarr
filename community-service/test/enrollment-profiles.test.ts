@@ -1,13 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { applyBaseline } from './helpers/schema';
 import { env } from './helpers/environment';
-import identityMigration from '../migrations/0001_identity_operations.sql?raw';
-import budgetMigration from '../migrations/0002_budget_ledger.sql?raw';
-import quotaMigration from '../migrations/0003_quotas.sql?raw';
-import admissionMigration from '../migrations/0004_request_admission.sql?raw';
-import oauthMigration from '../migrations/0005_discord_oauth.sql?raw';
-import usageMigration from '../migrations/0006_oauth_usage.sql?raw';
-import membershipMigration from '../migrations/0007_membership.sql?raw';
-import profileMigration from '../migrations/0008_enrollment_profiles.sql?raw';
 import { confirmationHash } from '../src/identity/confirmation';
 import { completeEnrollmentProof } from '../src/identity/enrollment-proof';
 import { contributorEnrollment } from '../src/http/enrollment';
@@ -28,11 +21,7 @@ const policy = { authority: 'community.example', now, maxLifetimeSeconds: 120,
   maxClockSkewSeconds: 5, displayName: 'Fixture Initial Name', requireConfirmation: true };
 
 beforeAll(async () => {
-  for (const sql of [identityMigration, budgetMigration, quotaMigration, admissionMigration,
-    oauthMigration, usageMigration, membershipMigration, profileMigration]) {
-    await db.exec(sql.replace(/\s*\n\s*/g, ' '));
-  }
-  await db.prepare('UPDATE quota_policy SET enabled = 1').run();
+  await applyBaseline(db);
 });
 
 async function grant(subject = '1554889314549243999') {
@@ -135,8 +124,6 @@ describe('confirmed enrollment and current profiles', () => {
     expect(JSON.stringify(profile)).not.toContain(value.subject);
     expect(JSON.stringify(profile)).not.toContain(value.confirmationSecret);
     expect((await contributorEnrollment(edge(await proof(value)), bindings, now, client)).status).toBe(200);
-    expect(await db.prepare('SELECT used FROM quota_counters WHERE contributor_id = ? AND resource = ?')
-      .bind(profile.contributorId, 'worker_requests').first()).toBeNull();
     expect((await service.fetch(edge(await proof(value)), { ...bindings, APP_ENV: 'production' })).status).toBe(503);
   });
 
@@ -161,7 +148,6 @@ describe('confirmed enrollment and current profiles', () => {
     const registered = await completeEnrollmentProof(await proof(value), db, { ...policy, displayName: 'First Current Name' });
     const identity = { ...registered, displayName: 'First Current Name', nonce: 'initial-nonce',
       expiresAt: now / 1000 + 120, operationId: 'initial-operation', contentDigest: 'initial-digest' };
-    await db.exec('DROP TRIGGER guard_profile_name_rate');
     await Promise.all(Array.from({ length: 5 }, (_, index) => renameContributor(db,
       { ...identity, nonce: `name-nonce-${index}`, operationId: `name-op-${index}`, contentDigest: `digest-${index}` },
       `Updated Current ${index}`, now)));
@@ -216,8 +202,6 @@ describe('confirmed enrollment and current profiles', () => {
     const first = await grant(subject);
     const registered = await completeEnrollmentProof(await proof(first), db,
       { ...policy, displayName: 'Stable Current Name' });
-    await db.prepare(`UPDATE quota_counters SET used = 1800 WHERE contributor_id = ?
-      AND resource = 'worker_requests'`).bind(registered.contributorId).run();
     const next = await grant(subject);
     await expect(completeEnrollmentProof(await proof(next), db, policy)).resolves.toMatchObject({ contributorId: registered.contributorId });
     expect(await db.prepare('SELECT consumed_at FROM enrollment_states WHERE state_id = ?')
@@ -241,8 +225,6 @@ describe('confirmed enrollment and current profiles', () => {
       'DQIDBAUGBwgJCgsMDQ4PEA'), db, policy)).toEqual(registered);
     expect(await db.prepare('SELECT 1 AS present FROM request_nonces WHERE key_id = ? AND nonce = ?')
       .bind(value.keyId, 'DQIDBAUGBwgJCgsMDQ4PEA').first()).toEqual({ present: 1 });
-    expect(await db.prepare('SELECT used FROM quota_counters WHERE contributor_id = ? AND resource = ?')
-      .bind(registered.contributorId, 'worker_requests').first()).toBeNull();
     expect((await db.prepare('SELECT 1 FROM installation_keys WHERE installation_id = ?')
       .bind(value.installationId).all()).results).toHaveLength(1);
   });

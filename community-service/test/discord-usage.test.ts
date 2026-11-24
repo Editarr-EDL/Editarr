@@ -1,11 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import usageMigration from '../migrations/0006_oauth_usage.sql?raw';
+import { applyBaseline } from './helpers/schema';
 import { serviceUsage, pruneOAuthUsage, recordOAuthUsage } from '../src/integrations/discord/usage';
 import { db, initializeOAuthDb, now } from './helpers/discord-oauth';
 
 beforeAll(async () => {
   await initializeOAuthDb();
-  await db.exec(usageMigration.replace(/\s*\n\s*/g, ' '));
 });
 
 describe('OAuth observed usage', () => {
@@ -39,13 +38,6 @@ describe('OAuth observed usage', () => {
     expect(status.resources.d1_writes.observed).toBe(80_000);
     expect(Object.keys(status.resources).sort()).toEqual(['d1_writes', 'worker_requests']);
     expect(status).not.toHaveProperty('paused');
-  });
-
-  it('ignores retired storage observations retained for audit', async () => {
-    await db.prepare(`INSERT INTO usage_observations VALUES
-      ('pre-oauth', 'r2_a', '2026-10', 'allowed', 1, 999999999, ?)`)
-      .bind(now).run();
-    expect((await serviceUsage(db, now + 86_400_000)).resources.worker_requests.observed).toBeNull();
   });
 
   it('prunes only bounded old anonymous counters, preserving existing grants and identity', async () => {

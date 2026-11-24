@@ -60,7 +60,7 @@ it('previews only bounded counts without executing mutations or exposing private
     { category: 'recoveryAuthorizations', eligible: 1, moreEligible: false },
     { category: 'requestNonces', eligible: 1, moreEligible: false },
   ]);
-  expect(prepare).toHaveBeenCalledTimes(8);
+  expect(prepare).toHaveBeenCalledTimes(10);
   expect(batch).not.toHaveBeenCalled();
   expect(JSON.stringify(plan)).not.toMatch(/private-|retention-person|retention-key|used-authority|retained-digest/);
   expect((await db.prepare('SELECT * FROM operations ORDER BY operation_id').all()).results).toEqual(before);

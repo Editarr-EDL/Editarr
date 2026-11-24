@@ -8,10 +8,16 @@ const id = z.string().regex(/^[A-Za-z0-9_.-]{1,128}$/);
 const revision = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER - 1);
 const cursor = z.string().min(1).max(1024).nullable();
 const commands = ['quarantine', 'restore', 'suspend', 'unsuspend', 'exclude_vote', 'restore_vote', 'resolve_report'];
+const resources = ['filter', 'attestation', 'submission', 'contributor', 'version', 'vote', 'report'];
+const allowed = { quarantine: ['filter', 'attestation', 'submission', 'contributor', 'version'],
+  restore: ['filter', 'attestation', 'submission', 'contributor', 'version'], suspend: ['contributor'],
+  unsuspend: ['contributor'], exclude_vote: ['vote'], restore_vote: ['vote'], resolve_report: ['report'] };
+const attestation = z.string().regex(/^[A-Za-z0-9_.-]{1,128}:[A-Za-z0-9_.-]{1,32}$/);
 const action = z.strictObject({ version: z.literal(1), actionId: z.string().uuid(), command: z.enum(commands),
-  targetId: id, revisionId: id.optional(), expectedRevision: revision,
+  resource: z.enum(resources), targetId: z.string().max(161), contributorId: id.optional(), expectedRevision: revision,
   reason: z.string().max(1000).refine(value => value.trim().length > 0 && !/[\x00-\x1f\x7f]/.test(value)),
-}).refine(value => value.command.endsWith('_vote') === (value.revisionId !== undefined));
+}).refine(value => allowed[value.command].includes(value.resource) && (value.resource === 'vote') === (value.contributorId !== undefined) &&
+  (value.resource === 'attestation' ? attestation : id).safeParse(value.targetId).success);
 const inspection = z.strictObject({ version: z.literal(1), resource: z.string().max(400), revision,
   state: z.record(z.string(), z.unknown()), audit: z.array(z.record(z.string(), z.unknown())).max(20) });
 const session = z.strictObject({ version: z.literal(1), subject: z.string().min(1).max(256) });
@@ -26,23 +32,20 @@ function parse(schema, value) {
   return result.data;
 }
 function resource(body) {
-  if (body.command.endsWith('_vote')) return `vote:${body.targetId}:${body.revisionId}`;
-  if (['suspend', 'unsuspend'].includes(body.command)) return `contributor:${body.targetId}`;
-  return `${body.command === 'resolve_report' ? 'report' : 'revision'}:${body.targetId}`;
+  return body.resource === 'vote' ? `vote:${body.targetId}:${body.contributorId}` : `${body.resource}:${body.targetId}`;
 }
-function inspectPath(kind, target, selectedRevision) {
-  if (!['revision', 'contributor', 'vote', 'report'].includes(kind) ||
-      (kind === 'vote') !== (selectedRevision !== undefined)) throw new CliError('invalid_resource');
-  parse(id, target);
-  if (selectedRevision !== undefined) parse(id, selectedRevision);
-  return `/admin/v1/moderation/${kind}/${target}${selectedRevision ? `/${selectedRevision}` : ''}`;
+function inspectPath(kind, target, contributor) {
+  if (!resources.includes(kind) || (kind === 'vote') !== (contributor !== undefined)) throw new CliError('invalid_resource');
+  parse(kind === 'attestation' ? attestation : id, target);
+  if (contributor !== undefined) parse(id, contributor);
+  return `/admin/v1/moderation/${kind}/${encodeURIComponent(target)}${contributor ? `/${contributor}` : ''}`;
 }
 function listPath(collection, target) {
   if (collection === 'reports' && target === undefined) return '/admin/v1/reports';
   if (['keys', 'usage'].includes(collection)) {
     return `/admin/v1/dashboard/contributors/${parse(id, target)}/${collection}`;
   }
-  if (!['contributions', 'contributors', 'operations', 'audit'].includes(collection) || target !== undefined)
+  if (!['contributors', 'operations', 'audit'].includes(collection) || target !== undefined)
     throw new CliError('invalid_collection');
   return `/admin/v1/dashboard/${collection}`;
 }
@@ -57,9 +60,9 @@ function boundJournal(value, origin, subject) {
   if (value.origin !== origin || value.subject !== subject) throw new CliError('checkpoint_identity_mismatch');
   return value;
 }
-export async function inspect(request, kind, target, selectedRevision) {
-  const value = parse(inspection, await request(inspectPath(kind, target, selectedRevision)));
-  if (value.resource !== `${kind}:${target}${selectedRevision ? `:${selectedRevision}` : ''}`)
+export async function inspect(request, kind, target, contributor) {
+  const value = parse(inspection, await request(inspectPath(kind, target, contributor)));
+  if (value.resource !== `${kind}:${target}${contributor ? `:${contributor}` : ''}`)
     throw new CliError('invalid_operator_data');
   return value;
 }
@@ -96,17 +99,16 @@ async function submit(request, store, saved) {
     revision: saved.body.expectedRevision + 1, outcome: 'applied' }, current: await currentState(request, saved.body) };
 }
 async function currentState(request, body) {
-  const kind = resource(body).split(':')[0];
-  try { return await inspect(request, kind, body.targetId, body.revisionId); }
+  try { return await inspect(request, body.resource, body.targetId, body.contributorId); }
   catch { return { available: false }; }
 }
 
 export async function moderate(request, origin, options) {
-  const body = parse(action, { version: 1, actionId: randomUUID(), command: options.command,
+  const body = parse(action, { version: 1, actionId: randomUUID(), command: options.command, resource: options.resource,
     targetId: options.target, expectedRevision: options.expectedRevision, reason: options.reason,
-    ...(options.revisionId === undefined ? {} : { revisionId: options.revisionId }) });
-  const kind = resource(body).split(':')[0];
-  const fresh = await inspect(request, kind, body.targetId, body.revisionId);
+    ...(options.contributorId === undefined ? {} : { contributorId: options.contributorId }) });
+  const kind = body.resource;
+  const fresh = await inspect(request, kind, body.targetId, body.contributorId);
   if (fresh.revision !== body.expectedRevision) throw new CliError('moderation_conflict', 409);
   const preview = { dryRun: !options.confirm, action: body, current: fresh,
     ...(kind === 'contributor' ? { credentials: await list(request, 'keys', body.targetId),

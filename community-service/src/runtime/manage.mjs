@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { initializeDatabase, openDatabase, upgradeDatabase, verifiedBackup } from './schema.mjs';
+import { initializeDatabase, openDatabase, REPORTED_REFUSALS, upgradeDatabase, verifiedBackup } from './schema.mjs';
 
 async function main() {
   process.umask(0o077);
@@ -36,6 +36,7 @@ async function main() {
 
 main().catch(error => {
   const code = error.message;
-  console.error(code.startsWith('usage:') ? code : 'community_management_refused');
+  console.error(code.startsWith('usage:') ? code
+    : `community_management_refused${REPORTED_REFUSALS.has(code) ? ` reason=${code}` : ''}`);
   process.exitCode = 1;
 });

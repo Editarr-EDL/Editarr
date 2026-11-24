@@ -1,7 +1,7 @@
 import type { SqlDatabase } from '../runtime/contracts';
 import { z } from 'zod';
 import type { Env } from '../config';
-import { observeDownloadDatabase } from '../budgets/download-usage';
+import { observeQueries } from '../budgets/query-observer';
 import { recordOAuthUsage } from '../integrations/discord/usage';
 
 export const moderationLimits = z.strictObject({ requestBytes: z.number().int().min(1).max(8192),
@@ -14,13 +14,13 @@ export async function operatorReadAdmission(env: Env, now: number,
   let limits;
   try { limits = moderationLimits.parse(JSON.parse(env.MODERATION_LIMITS)); }
   catch { return operatorFailure(503, 'moderation_not_configured'); }
-  const observer = observeDownloadDatabase(env.CATALOG_DB, limits.maxQueries), db = observer.db;
+  const observer = observeQueries(env.CATALOG_DB, limits.maxQueries), db = observer.db;
   let output: Response;
   try {
     output = await handler(db, limits.requestBytes);
   } catch (error) {
-    output = operatorFailure(String(error).includes('download_query_limit') ? 413 : 503,
-      String(error).includes('download_query_limit') ? 'moderation_query_limit' : 'service_unavailable');
+    output = operatorFailure(String(error).includes('query_limit') ? 413 : 503,
+      String(error).includes('query_limit') ? 'moderation_query_limit' : 'service_unavailable');
   }
   try {
     const usage = observer.snapshot();

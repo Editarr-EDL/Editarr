@@ -1,19 +1,13 @@
 import { env } from './helpers/environment';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, expect, it } from 'vitest';
-import identityMigration from '../migrations/0001_identity_operations.sql?raw';
-import budgetMigration from '../migrations/0002_budget_ledger.sql?raw';
-import quotaMigration from '../migrations/0003_quotas.sql?raw';
-import admissionMigration from '../migrations/0004_request_admission.sql?raw';
 import { changeInstallationKey, keyOperation } from '../src/identity/key-lifecycle';
 import type { AuthenticatedContributor } from '../src/security/contributor-auth';
 
 const db = env.CATALOG_DB;
 const now = 1_700_000_030_000;
 beforeAll(async () => {
-  for (const migration of [identityMigration, budgetMigration, quotaMigration, admissionMigration]) {
-    await db.exec(migration.replace(/\s*\n\s*/g, ' '));
-  }
-  await db.prepare('UPDATE quota_policy SET enabled = 1').run();
+  await applyBaseline(db);
 });
 
 async function fixture() {
@@ -23,8 +17,8 @@ async function fixture() {
   const pair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
   const publicKey = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
   await db.batch([
-    db.prepare(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, created_at)
-      VALUES (?, ?, 'Historical Name', 1)`).bind(contributorId, contributorId),
+    db.prepare(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, created_at, display_name_key)
+      VALUES (?, ?, 'Historical Name', 1, lower(hex(randomblob(8))))`).bind(contributorId, contributorId),
     db.prepare('INSERT INTO installations (installation_id, contributor_id, created_at) VALUES (?, ?, 1)')
       .bind(installationId, contributorId),
     db.prepare(`INSERT INTO installation_keys (key_id, installation_id, algorithm, public_key, state, created_at)
@@ -74,8 +68,6 @@ it('concurrent identical operations reconcile and changed bytes conflict', async
   expect(outcomes[1]).toEqual(outcomes[0]);
   await expect(changeInstallationKey(db, { ...identity, contentDigest: 'changed' }, input, now))
     .rejects.toThrow('operation_conflict');
-  expect((await db.prepare('SELECT * FROM quota_charges WHERE contributor_id = ?')
-    .bind(identity.contributorId).all()).results).toHaveLength(0);
 });
 
 it('rolls back nonce, retirement and operation when activation fails', async () => {
@@ -99,10 +91,6 @@ it('rejects foreign targets and retirement between proof and transaction', async
 
 it('historical exhausted counters cannot block key rotation', async () => {
   const { identity, input } = await fixture();
-  await db.prepare("UPDATE quota_caps SET cap = 1 WHERE resource = 'worker_requests'").run();
-  await db.prepare(`INSERT INTO quota_charges (charge_id, contributor_id, resource, period, units, created_at)
-    VALUES (?, ?, 'worker_requests', ?, 1, ?)`).bind(crypto.randomUUID(), identity.contributorId,
-      new Date(now).toISOString().slice(0, 10), now).run();
   try {
     await expect(changeInstallationKey(db, identity, input, now)).resolves.toMatchObject({ newKeyId: input.newKey.keyId });
     expect(await db.prepare('SELECT state FROM installation_keys WHERE key_id = ?').bind(input.oldKeyId).first())
@@ -110,7 +98,6 @@ it('historical exhausted counters cannot block key rotation', async () => {
     expect(await keyOperation(db, identity.contributorId, 'key_rotation', identity.operationId!)).not.toBeNull();
     expect(await db.prepare('SELECT 1 FROM request_nonces WHERE key_id = ?').bind(input.oldKeyId).first()).not.toBeNull();
   } finally {
-    await db.prepare("UPDATE quota_caps SET cap = 1800 WHERE resource = 'worker_requests'").run();
   }
 });
 

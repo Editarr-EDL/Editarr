@@ -1,8 +1,6 @@
 import type { SqlDatabase, SqlStatement } from '../src/runtime/contracts';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import migration from '../migrations/0006_oauth_usage.sql?raw';
-import membershipMigration from '../migrations/0007_membership.sql?raw';
-import profileMigration from '../migrations/0008_enrollment_profiles.sql?raw';
 import service from '../src/index';
 import { discordService } from '../src/integrations/discord/service';
 import { observeOAuthDatabase, serviceUsage } from '../src/integrations/discord/usage';
@@ -10,10 +8,6 @@ import { config, confirm, db, initializeOAuthDb, now, origin, provider, start } 
 
 beforeAll(async () => {
   await initializeOAuthDb();
-  await db.exec(migration.replace(/\s*\n\s*/g, ' '));
-  await db.exec(membershipMigration.replace(/\s*\n\s*/g, ' '));
-  await db.exec(profileMigration.replace(/\s*\n\s*/g, ' '));
-  await db.prepare('UPDATE quota_policy SET enabled = 1 WHERE policy_id = 1').run();
 });
 
 function bindings(database: SqlDatabase = db) {

@@ -9,8 +9,8 @@ import { transferPage } from '../../scripts/operator/transfer.mjs';
 import { withCheckpoint } from '../../scripts/operator/state.mjs';
 
 const origin = 'https://operator.example.test';
-const options = { command: 'quarantine', target: 'revision-1', expectedRevision: 2, reason: 'Reviewed evidence' };
-const snapshot = { version: 1, resource: 'revision:revision-1', revision: 2, state: { state: 'published' }, audit: [] };
+const options = { command: 'quarantine', resource: 'filter', target: 'filter-1', expectedRevision: 2, reason: 'Reviewed evidence' };
+const snapshot = { version: 1, resource: 'filter:filter-1', revision: 2, state: { state: 'active' }, audit: [] };
 const identity = { version: 1, subject: 'operator-subject' };
 async function temporary(context) {
   const directory = await mkdtemp(join(tmpdir(), 'css59-'));
@@ -65,7 +65,7 @@ test('conflicts stop retry and wrong human or origin cannot use a journal', asyn
 
 test('invalid success remains pending, preserving exact ID', async context => {
   const checkpoint = await temporary(context);
-  await assert.rejects(moderate(fixture(body => ({ version: 1, actionId: body.actionId, resource: 'revision:other',
+  await assert.rejects(moderate(fixture(body => ({ version: 1, actionId: body.actionId, resource: 'filter:other',
     revision: 3, outcome: 'applied' })), origin, { ...options, confirm: true, checkpoint }), /invalid_operator_data/);
   assert.equal(JSON.parse(await readFile(join(checkpoint, 'state.json'), 'utf8')).state, 'pending');
 });
@@ -104,21 +104,25 @@ test('transfer adapters retain exact BLOB bytes and advance only after destinati
   await assert.rejects(transferPage('next', read, async () => assert.fail('must not commit')), /invalid_transfer_page/);
 });
 
-test('all approved commands bind the same resource/token/reason and reject extra vote identity', async () => {
-  for (const command of ['quarantine', 'restore', 'suspend', 'unsuspend', 'exclude_vote', 'restore_vote', 'resolve_report']) {
-    const kind = command.endsWith('_vote') ? 'vote' : ['suspend', 'unsuspend'].includes(command) ? 'contributor'
-      : command === 'resolve_report' ? 'report' : 'revision';
-    const revisionId = kind === 'vote' ? 'revision-2' : undefined;
+test('all approved commands bind the same resource/token/reason and reject mismatched vote identity', async () => {
+  const cases = [['quarantine', 'filter'], ['restore', 'version'], ['quarantine', 'attestation'], ['restore', 'submission'],
+    ['quarantine', 'contributor'], ['suspend', 'contributor'], ['unsuspend', 'contributor'], ['exclude_vote', 'vote'],
+    ['restore_vote', 'vote'], ['resolve_report', 'report']];
+  for (const [command, kind] of cases) {
+    const target = kind === 'attestation' ? 'submission-1:entry-1' : 'target-1';
+    const contributorId = kind === 'vote' ? 'contributor-2' : undefined;
     const request = async path => {
       if (path.includes('/dashboard/')) return { version: 1, observedAt: 1, source: 'service_database', items: [], nextCursor: 'next' };
-      return { ...snapshot, resource: `${kind}:revision-1${revisionId ? `:${revisionId}` : ''}` };
+      return { ...snapshot, resource: `${kind}:${target}${contributorId ? `:${contributorId}` : ''}` };
     };
-    const preview = await moderate(request, origin, { ...options, command, revisionId });
+    const preview = await moderate(request, origin, { ...options, command, resource: kind, target, contributorId });
     assert.equal(preview.action.command, command);
+    assert.equal(preview.action.resource, kind);
     assert.equal(preview.action.expectedRevision, 2);
     if (kind === 'contributor') assert.match(preview.scope, /all_installations/);
   }
-  await assert.rejects(moderate(fixture(() => assert.fail()), origin, { ...options, revisionId: 'extra' }), /invalid_operator_data/);
+  for (const invalid of [{ contributorId: 'extra' }, { command: 'suspend' }, { resource: 'vote' }, { resource: 'attestation' }])
+    await assert.rejects(moderate(fixture(() => assert.fail()), origin, { ...options, ...invalid }), /invalid_operator_data/);
 });
 
 test('auth loss, pressure and post-commit budget failures preserve pending exact intent', async context => {
