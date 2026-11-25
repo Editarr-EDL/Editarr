@@ -151,11 +151,12 @@ def master_response(
     *filters: dict,
     contributor: str = CONTRIBUTOR,
     status: str = "confirmed",
+    service: str = SERVICE,
 ) -> dict:
     """A signed `changed: true` master response for the given served filters."""
     snapshot = {
         "schemaVersion": "community-master-snapshot-1",
-        "service": SERVICE,
+        "service": service,
         "versionId": version_id,
         "revision": revision,
         "generatedAt": ISSUED_AT,
@@ -184,7 +185,7 @@ def master_response(
     digest = hashlib.sha256(raw).hexdigest()
     signature = {
         "schemaVersion": "community-master-signature-1",
-        "service": SERVICE,
+        "service": service,
         "serviceKeyId": SERVICE_KEY_ID,
         "versionId": version_id,
         "revision": revision,
@@ -194,13 +195,13 @@ def master_response(
     signed = sign_snapshot(signature)
     receipt = {
         "schemaVersion": "community-master-receipt-1",
-        "service": SERVICE,
+        "service": service,
         "serviceKeyId": SERVICE_KEY_ID,
         "contributorId": contributor,
         "versionId": version_id,
         "revision": revision,
         "snapshotDigest": digest,
-        "receiptId": master_receipt_identity(SERVICE, contributor, version_id, revision, digest),
+        "receiptId": master_receipt_identity(service, contributor, version_id, revision, digest),
         "issuedAt": ISSUED_AT,
     }
     return {

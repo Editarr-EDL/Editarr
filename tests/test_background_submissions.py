@@ -38,15 +38,10 @@ PRIMITIVES = frozenset(
 SITES: dict[tuple[str, str, str], tuple[int, str]] = {
     ("scanner/http/background.py", "start_thread", "Thread"): (1, HELPER),
     ("scanner/http/background.py", "submit", "submit"): (1, HELPER),
-    ("scanner/http/community_downloads_api.py", "download", "create_task"): (2, REQUEST_SCOPED),
-    ("scanner/http/community_lookup_api.py", "lookup", "create_task"): (2, REQUEST_SCOPED),
-    ("scanner/integrations/community/local_downloads.py", "drained_thread", "create_task"): (
+    ("scanner/http/drained_threads.py", "drained_thread", "create_task"): (1, REQUEST_SCOPED),
+    ("scanner/integrations/community/publications.py", "PublicationOutbox.run", "submit"): (
         1,
-        REQUEST_SCOPED,
-    ),
-    ("scanner/integrations/community/lookup.py", "CommunityLookup.run", "create_task"): (
-        1,
-        REQUEST_SCOPED,
+        "service call: MasterService.submit awaits the signed upload inside the request",
     ),
     ("scanner/backup/schedule_runner.py", "BackupScheduler.__init__", "Thread"): (1, SYSTEM),
     ("scanner/runtime/export_regeneration.py", "ExportRegenerationScheduler.__init__", "Thread"): (

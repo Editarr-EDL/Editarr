@@ -100,13 +100,16 @@ class MasterSets:
         *,
         label: dict | None = None,
         limit: int = 20,
+        guard: str | None = None,
     ) -> dict:
         """Find versions for a captured target and remember them under a `findKey`.
 
-        Returns the local API Find response (§2).
+        `guard` replaces the captured key guard, so a download can revalidate the target
+        file generation without measuring the keys again. Returns the local API Find
+        response (§2).
         """
         found = await find_versions(self.service, captured.keys, label=label, limit=limit)
-        key = self.remember(local_version_id, captured.guard, found)
+        key = self.remember(local_version_id, guard or captured.guard, found)
         return {
             "version": 1,
             "findKey": key,

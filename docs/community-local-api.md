@@ -29,9 +29,14 @@ These follow the existing `/api/community/*` routes:
   | 503 | `{code, retryable}` | Retryable failure, or the community service isn't configured |
   | 403 | `capability_denied` | Missing capability |
   | 404 | — | Unknown links, or links owned by another account, so existence isn't revealed |
-  | 422 | Existing validation list | Invalid request |
+  | 422 | Existing validation list | Invalid request, including a `link_id` or `filter_id` path segment that isn't 1–128 of `A–Z a–z 0–9 _ . -` |
+  | 429 | `{code: "rate_limited", retryable: true, retryAfter}` and `Retry-After` | A repeated manual Find or update check inside its cooldown (§2, §8) |
 
-  A network or membership failure never becomes an empty result.
+  A network or membership failure never becomes an empty result. A 409 or
+  503 body may add the contract details `reason` (for `vote_ineligible`) and
+  `mergedInto` (for `version_merged`) next to `code` and `retryable`.
+  Requests without `confirmed: true` where one is required return
+  `409 confirmation_required`.
 - **Ownership:** master links, local filter state, votes, preferences and
   sync notifications all belong to the **current account** (`owner_id`).
   They are signed with that account's contributor identity. Media access
@@ -40,10 +45,15 @@ These follow the existing `/api/community/*` routes:
 
   | Capability | Routes |
   | --- | --- |
-  | `community.search` | find, aliases, master view and lists |
-  | `community.download` | download and apply, alignment, filter decisions, check, update review, sync |
+  | `community.search` | find, aliases, master view and lists, active filters, `GET` preferences |
+  | `community.download` | download and apply, alignment, filter decisions, `PATCH` preferences, check, update review, sync and notifications |
   | `community.feedback.submit` | votes, reports |
   | `community.publish.own_review`, `community.publish.scan_evidence`, `community.publish.other_review` | share |
+
+  A missing capability is `403 capability_denied` before any link is looked
+  up or any confirmation is checked. Each link route also needs media access,
+  with the route's capability, to one catalog location of the link's local
+  version; otherwise it is `404`.
 
 - **Targets:** a target is the existing
   `{ "source": "jellyfin", "item_id": "…", "media_source_id": "…"|null }`. The
@@ -63,8 +73,13 @@ Request:
 ```
 
 - `label` is optional. It is `{alias_id}`, `{text}`, or null (Theatrical).
+- `refresh` is accepted for compatibility. Find never reuses an earlier
+  result: every call measures the keys and queries the service again.
 - The backend computes the available keys using the existing fingerprint
   budgets, then calls `POST /v1/match`.
+- The target needs media access with `community.search`; a hidden or unknown
+  item is `404`. Find records the target's local version
+  (`localVersionId`) from its sampled fingerprint.
 
 Response:
 
@@ -84,8 +99,14 @@ Response:
 - `alignmentRequired` is true when `tier` isn't `1`–`3`.
 - `linkedLinkId` is the current account's existing link for this local
   version and community version, if one exists.
-- `findKey` binds the result to the target, file generation and match
-  response. It expires after 30 minutes.
+- **Cooldown:** an account may Find the same target with the same `label` at
+  most once per 10 seconds. A repeat inside the window returns `429
+  rate_limited` with `retryAfter` (whole seconds) and never reaches the
+  service, even when the earlier call failed. Another label or target isn't
+  limited.
+- `findKey` binds the result to the account, target, file generation and match
+  response. It expires after 30 minutes. Another account's key is
+  `find_expired`.
 
 ### `GET /api/community/aliases`
 
@@ -136,20 +157,29 @@ Errors:
 
 | Status | Code |
 | --- | --- |
-| 409 | `find_expired`, `target_changed`, `version_merged` (also returns `mergedInto`), `snapshot_invalid` |
-| 503 | `service_unavailable` |
+| 409 | `find_expired`, `target_changed`, `version_merged` (also returns `mergedInto`), `snapshot_invalid`, `replace_required`, `confirmation_required` |
+| 503 | `service_unavailable` (or another retryable transport code) |
 
-Replacing a link's community version keeps the old rows as `removed`
-history until the user confirms the switch. To confirm, send
-`confirmed: true` with `replace: true`.
+The account has one unreplaced link per local version and service.
+Downloading another community version for a linked local version without
+`replace: true` returns `409 {"code":"replace_required","retryable":false}`
+and changes nothing. To confirm the switch, send `confirmed: true` with
+`replace: true`: the old link becomes `linkState: "replaced"` and keeps its
+rows as history. Downloading the version already linked stores a newer
+revision for update review instead.
 
 ### `GET /api/community/masters?item_id=…&media_source_id=…`
 
-Lists the current account's links for the item:
+Lists the current account's unreplaced links for the item version
+(`media_source_id` omitted means the item's default version):
 
 ```json
 { "version": 1, "links": [<MasterLinkSummary>] }
 ```
+
+An item the account can't reach is `404`; an item with no local version yet
+returns `links: []`. `MasterLinkSummary` and `MasterLink` are the same `link`
+object shown below.
 
 ### `GET /api/community/masters/{link_id}`
 
@@ -159,8 +189,10 @@ Returns the master view:
 { "version": 1, "link": {
     "linkId": "…", "localVersionId": "mv_…", "communityVersionId": "v_12ab", "label": "Theatrical",
     "status": "confirmed", "unconfirmed": false, "tier": "2", "matchPercent": 80,
-    "appliedRevision": 12, "latestRevision": 13, "alignmentState": "not_required",
-    "alignment": null, "pendingUpdate": { "new": 3, "changed": 2, "removed": 1, "nowLowConfidence": 0 } },
+    "aliasId": "theatrical", "appliedRevision": 12, "latestRevision": 13, "alignmentState": "not_required",
+    "alignment": null, "alignmentRevision": null,
+    "pendingUpdate": { "new": 3, "changed": 2, "removed": 1, "nowLowConfidence": 0 },
+    "linkState": "active", "mergedInto": null },
   "preferences": { "confidenceThreshold": 0.0, "showLowConfidence": false },
   "filters": [ {
     "filterId": "f_9c1d…", "category": "violence",
@@ -175,6 +207,15 @@ Returns the master view:
 
 Field rules:
 
+- `link.label` is the version's label, or `"Other"` for an unlabeled
+  candidate. `link.alignment` is the approved `{offsetMs, scale, anchors}`
+  transform or null, and `alignmentRevision` the revision it was approved for.
+- `link.linkState` is `active`, `merged` (with `mergedInto`, the surviving
+  community version), `unavailable` (the service no longer serves the
+  version), or `replaced` (history after a confirmed replace). A merged or
+  unavailable link keeps its local rows and decisions; the web app shows the
+  state and offers Find again. `pendingUpdate` is always present, with zero
+  counts when nothing is pending.
 - `master` holds the row's baseline master values, mapped to the local
   timeline through `alignment` when one is present.
 - `local` holds the user's overrides, or null.
@@ -210,6 +251,23 @@ Field rules:
 - Rows with `present: false` are only included when the user kept them
   (§5).
 
+### `GET /api/community/masters/{link_id}/active-filters`
+
+The read path that saved reviews and EDL export use for a master set as a
+filter source next to scans (no imported scan is generated). It returns the
+link's `active` rows with their `effective` values on the local timeline, and
+the same filters merged by the existing Simple EDL range merging. Bounds are
+clipped to `[0, duration]` (the duration comes from a completed scan of the
+local version, when one exists), and a filter wholly outside the file is left
+out, so no range is empty or negative:
+
+```json
+{ "version": 1, "linkId": "…", "localVersionId": "mv_…",
+  "filters": [ { "linkId": "…", "filterId": "f_9c1d…", "category": "violence", "startMs": 600100,
+                 "endMs": 605050, "subcategory": "punching", "severity": "medium", "action": "skip" } ],
+  "edl": "## Editarr Simple EDL\n## punching: Community filter\n600.100 605.050 3" }
+```
+
 ## 4. Alignment for fuzzy tiers
 
 These routes reuse the version-reuse verification UI and its clip preview.
@@ -223,16 +281,38 @@ Request:
 { "anchors": [ { "filter_id": "f_…", "local_start_ms": 601300 } ], "offset_ms": null, "audio_track_index": 1 }
 ```
 
-- Send either `anchors` (1–50) or `offset_ms`.
+- Send exactly one of `anchors` (1–50) or `offset_ms`; the other is null
+  or omitted. Both, neither, an empty list, more than 50 anchors or an
+  unknown `filter_id` is a 422 validation list.
+- An anchor places a filter's master start (`startMs` of the row's baseline,
+  or of a new filter in a pending update) at `local_start_ms`.
 - With at least 3 anchors spanning 300 s or more, the preview fits an
-  offset and drift. Otherwise it fits only an offset.
+  offset and drift (the median of pairwise slopes, then the median offset).
+  Otherwise it fits only the median offset. A drift beyond ±10% returns
+  `409 alignment_out_of_range`.
+- The transform must keep every row on the local file: a row that would end at
+  or before 0, or (when a completed scan of the local version records its
+  duration) start at or after the file's end, returns
+  `409 alignment_out_of_range`. Rows that only partly leave the file are kept
+  and clipped where they are used. Approval checks this again.
+- The transform maps master to local time:
+  `local = master × scale + offsetMs`.
+- `audio_track_index` is validated but not used by the backend; the client
+  uses it for its clip previews.
+- A link that needs no alignment (tiers 1–3) returns
+  `409 alignment_not_required`. Nothing is stored by a preview.
 
 Response:
 
 ```json
 { "version": 1, "token": "…", "alignment": { "offsetMs": 1300, "scale": 1.0, "anchors": 3 },
-  "rows": [ { "filterId": "…", "alignedStartMs": …, "alignedEndMs": …, "clipToken": "…" } ] }
+  "rows": [ { "filterId": "…", "alignedStartMs": …, "alignedEndMs": … } ] }
 ```
+
+`rows` lists every row in the local set, and new filters of a pending update,
+in aligned start order. There is no clip token: clips play through the existing
+review draft-filter preview of the target file at `alignedStartMs` to
+`alignedEndMs`.
 
 ### `POST /api/community/masters/{link_id}/alignment/approve`
 
@@ -242,8 +322,11 @@ Request: `{ "token": "…", "for_revision": 13, "confirmed": true }`.
   `alignmentState: "approved"`.
 - For the first import, it activates the rows.
 - For an update (§9), it enables **Accept** for that revision's rows.
-- If the preview no longer matches, the route returns
-  `409 alignment_preview_changed`.
+- The token is single-use and expires after 30 minutes. Each account keeps
+  at most 32 live previews; a newer preview evicts that account's oldest. An unknown, used,
+  expired or another account's token, a `for_revision` other than the
+  previewed revision, or rows or revision that changed since the preview,
+  returns `409 alignment_preview_changed`.
 - The response is `{ "version": 1, "link": <MasterLink> }`.
 
 ## 5. Local filter decisions
@@ -258,13 +341,18 @@ Request:
   "expected_state": "pending" }
 ```
 
-- `adjust` requires at least one value field. Values are validated against
-  the taxonomy and must satisfy `0 ≤ start_ms < end_ms`.
+- `adjust` requires at least one value field; other decisions take none.
+  Values are validated against the taxonomy: `subcategory` must belong to the
+  row's top-level `category`, `severity` is `low`, `medium` or `high`, and
+  `action` is `skip` or `mute`. The resulting effective bounds must satisfy
+  `0 ≤ start_ms < end_ms`. Violations are a 422 validation list.
+- `expected_state` is optional.
 - `verify`, `reject` and `adjust` set `touched = true`.
 - `reset` clears the local values, sets `state` back to
   `pending`/`low_confidence`, and clears `touched` unless the user has voted.
 - A stale `expected_state` returns `409 filter_state_changed`.
-- The response is the updated filter object.
+- The response is the updated filter object with `"version": 1`. An unknown
+  filter is `404`.
 
 ### `PATCH /api/community/preferences`
 
@@ -305,8 +393,12 @@ Response:
 
 | Error | Meaning |
 | --- | --- |
-| `409 vote_ineligible` | The `reason` is `self_vote` or `receipt_required` |
+| `409 vote_ineligible` | The body's `reason` is `self_vote` or `receipt_required` (the filter isn't in the link's latest receipt) |
+| `409 vote_pending`, `operation_conflict`, `receipt_owner_mismatch` | Another open vote on the filter, a reused `operation_id` with another vote, or a link received through account transfer |
+| `404` | Unknown link, filter or vote intent |
 | `503` | Retryable. The pending intent is kept |
+
+`operation_id` matches `vote-[A-Za-z0-9._~-]{1,123}`.
 
 `POST …/vote/retry` accepts `{operation_id, confirmed: true}` and resends
 the saved bytes only.
@@ -319,7 +411,14 @@ Request:
 { "target": { "type": "filter"|"version", "id": "…" }, "reason": "inaccurate", "note": "…", "confirmed": true }
 ```
 
-This proxies `POST /v1/reports`.
+This proxies `POST /v1/reports` and returns
+`{ "version": 1, "state": "completed", "result": {…hosted result…} }`.
+
+- `reason` is `spam`, `inaccurate`, `privacy`, `rights` or `other`. `note` is
+  optional, at most 1,000 characters, and a blank note is not sent.
+- A filter target must be in the link's latest receipt
+  (`409 vote_ineligible`); a version target must be the link's version
+  (`409 report_ineligible`).
 
 ## 7. Sharing
 
@@ -346,7 +445,9 @@ Request:
   `GET /api/community/aliases` (Theatrical first) and Other, which reveals
   an optional text field. No preview is requested until a version is chosen.
 - `link_id` selects the master set to project against. It defaults to the
-  account's link for the source's local version.
+  account's link for the source's local version. A link that isn't the
+  account's live link for that local version and service returns
+  `409 link_unavailable`, whether or not it exists.
 - The work needs a TMDB or TVDB ID, plus season and episode for TV.
   Otherwise the preview returns `409 work_identity_required`.
 
@@ -397,14 +498,20 @@ The web app calls this on page load. The request is `{}`.
 - **Not due:** if the account's last successful run was less than 24 hours
   ago, or a run is in progress, the route returns the status with
   `ran: false`.
-- **Due:** otherwise, the backend sends all of the account's links in
-  batches of 500 under one `runId`.
+- **Due:** otherwise, the backend sends the account's active and unavailable
+  links in batches of 500 under one `runId`. A link whose local version the
+  account can no longer reach (media access, §1) is skipped: it isn't sent to
+  the service and gets no notification.
   1. For each changed version, it downloads the new snapshot.
   2. It builds the update rows (§9).
   3. It records a notification.
 
 A merged or unavailable version also gets a notification. Its link is
 marked `merged` (with `mergedInto`) or `unavailable`.
+
+The route needs an enrolled identity (`409 not_connected` otherwise). A
+failed run returns its error and is due again after the service's
+`Retry-After`, or one hour.
 
 ### `GET /api/community/sync`
 
@@ -416,7 +523,12 @@ marked `merged` (with `mergedInto`) or `unavailable`.
     "createdAt": 1795553648, "read": false } ] }
 ```
 
-- At most 100 notifications are returned, newest first.
+- At most 100 notifications are returned, newest first. `GET` works before
+  enrollment once the service is configured.
+- Times are Unix seconds. `fromRevision` and `toRevision` are null when not
+  applicable (`toRevision` for `merged` and `unavailable`).
+- A notification whose local version the account can no longer reach is
+  left out and not counted in `unreadCount`.
 - Each notification carries the Jellyfin `libraryId`, `itemId` and
   `mediaSourceId` of the notified local version, so the web app links
   directly to that version's item page
@@ -427,7 +539,8 @@ marked `merged` (with `mergedInto`) or `unavailable`.
 ### `POST /api/community/sync/notifications/read`
 
 Request: `{ "notification_ids": ["…"] }`, with at most 100 IDs, or
-`{"all": true}`. The response is `204 No Content`.
+`{"all": true}`; sending both or neither is a 422. Only the account's own
+notifications change. The response is `204 No Content`.
 
 ### `POST /api/community/masters/{link_id}/check`
 
@@ -445,7 +558,12 @@ Response:
   "pendingUpdate": { "new": 3, "changed": 2, "removed": 1, "nowLowConfidence": 0 } }
 ```
 
-This check doesn't use the daily sync allowance.
+This check doesn't use the daily sync allowance. An account may check the
+same link at most once per 10 seconds; a repeat returns `429 rate_limited`
+with `retryAfter` and doesn't reach the service. A merged or unavailable
+version marks the link and returns `409 version_merged` (with `mergedInto`)
+or `409 version_unavailable` (`version_not_found` when the service no longer
+knows it).
 
 ## 9. Update review (D20)
 
@@ -500,6 +618,19 @@ A `<Row>` looks like this:
 
 - `canAccept` is false for every row with bounds while the link is fuzzy
   (tier 4 and below) until alignment is approved for `toRevision` (§4).
+  `removed` rows can always be accepted.
+- `mine`, `oldMaster` and `newMaster` are on the **local timeline**: the
+  master values are mapped through the link's stored alignment, the same
+  transform the master view uses. Until alignment is approved for
+  `toRevision`, that is the previously approved transform.
+  - `mine` is the row's current effective values (`startMs`, `endMs`,
+    `subcategory`, `severity`, `action`) for a touched row, or null.
+  - `oldMaster` is the baseline master values (those fields plus
+    `lowConfidence` and `present`), or null for a new filter.
+  - `newMaster` adds the informational fields (`confidence`,
+    `contributorCount`, `support`, `negative`, `spread`), and is null for a
+    removed filter.
+- `rowId` is the filter ID.
 - The client prefills the alignment step from the stored transform.
 
 ### `POST /api/community/masters/{link_id}/update/decisions`
@@ -511,8 +642,9 @@ Request:
 ```
 
 - At most 500 decisions per request. The request is atomic.
-- A decision outside the row's `allowed` list returns
-  `409 decision_not_allowed`.
+- A decision outside the row's `allowed` list, Accept while `canAccept` is
+  false, or two decisions for one row return `409 decision_not_allowed`.
+- A row that was already decided returns `409 update_changed`.
 - A stale `to_revision` returns `409 update_changed`.
 - The response is `204 No Content`; the client re-reads the update.
 
@@ -581,11 +713,17 @@ Portable backups include all the new and retired tables.
 
 ## Open questions
 
-1. **How reviews and EDL exports consume master sets.** The suggested
-   default is that a saved review can include a link's active effective
-   filters as a source next to scans, using the existing filter linking and
-   EDL range merging. The alternative is to materialize them as a derived
-   imported scan.
+1. **How reviews and EDL exports consume master sets.** The default is
+   implemented as a read path: master sets stay a filter source next to scans,
+   and no derived imported scan is generated.
+   `community_master_sources.active_master_filters` returns an account's
+   active effective filters for a local version (after local decisions, the
+   saved threshold and Low Confidence preference, and alignment), and
+   `as_findings` feeds them to the existing EDL range merging, which
+   `GET /api/community/masters/{link_id}/active-filters` exposes. **Still
+   open:** adding a link as a member of a saved review, so the review's
+   filter linking, export revision, policy freshness and published sidecars
+   include it.
 2. **Per-account versus shared master links.** The suggested default is
    per-account, matching personal reviews and per-contributor receipts.
    Several accounts on one install then each download their own copy.
