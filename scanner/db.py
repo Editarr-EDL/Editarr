@@ -91,6 +91,7 @@ from scanner.persistence.rows.db_policies import (
     UserFilterRuleOverrideRow,
     UserFilterSeverityOverrideRow,
 )
+from scanner.persistence.rows.db_review_community import ReviewCommunitySourceRow
 from scanner.persistence.rows.db_review_repairs import ReviewScanRepairRow
 from scanner.persistence.rows.db_reviews import (
     ReviewAcceptedCreditsRow,

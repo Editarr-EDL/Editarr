@@ -51,7 +51,8 @@ export type MasterFilter = {
   state: FilterState; touched: boolean; locallyVerified: boolean; myVote: MyVote; active: boolean;
 };
 export type MasterFilterResult = { version: 1 } & MasterFilter;
-export type MasterPreferences = { confidenceThreshold: number; showLowConfidence: boolean };
+/** `hideRejectedDownvoted` only hides rows from the master list; it never changes `active`. */
+export type MasterPreferences = { confidenceThreshold: number; showLowConfidence: boolean; hideRejectedDownvoted?: boolean };
 export type MasterPreferencesResult = { version: 1 } & MasterPreferences;
 export type MasterView = { version: 1; link: MasterLink; preferences: MasterPreferences; filters: MasterFilter[] };
 
@@ -76,7 +77,7 @@ export type ReportRequest = { target: { type: "filter" | "version"; id: string }
 export type FeedbackResult = { version: 1; state: "completed"; result: unknown };
 
 /** One in-effect filter of a link on the local timeline (`GET …/active-filters`). */
-export type ActiveMasterFilter = { linkId: string; filterId: string; category: string } & FilterValues;
+export type ActiveMasterFilter = { linkId: string; filterId: string; category: string; confidence?: number | null } & FilterValues;
 export type ActiveMasterFilters = { version: 1; linkId: string; localVersionId: string; filters: ActiveMasterFilter[]; edl: string };
 
 export type SyncNotification = {

@@ -6,6 +6,7 @@ import type {
   ReviewMcfDocument,
   McfMetadataSeedRequest,
   ReviewRetimeResult,
+  ReviewCommunityMembership,
   ReviewScanMembership,
   ReviewSynchronization,
   SavedReview,
@@ -22,6 +23,7 @@ interface ReviewContent {
   acceptedCredits: AcceptedCreditsReference | AcceptedCreditsProvenance | null;
   mcfMetadataSeed: McfMetadataSeedRequest | null;
   newManualFilters: NewManualReviewFilter[];
+  communityMemberships: ReviewCommunityMembership[];
 }
 
 export interface ReviewDraft extends ReviewContent {
@@ -60,6 +62,7 @@ function contentState(draft: ReviewContent): string {
     acceptedCredits: draft.acceptedCredits,
     mcfMetadataSeed: draft.mcfMetadataSeed,
     newManualFilters: draft.newManualFilters,
+    communityMemberships: draft.communityMemberships,
   });
 }
 
@@ -145,6 +148,7 @@ export function createReviewDraft(
     acceptedCredits: review?.accepted_credits ?? null,
     mcfMetadataSeed: null,
     newManualFilters: [],
+    communityMemberships: (review?.community_sources ?? []).map((source) => ({ source_id: source.source_id })),
   };
   return {
     ...clone(content),

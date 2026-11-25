@@ -1,6 +1,6 @@
 import { fireEvent, screen } from "@testing-library/react";
 
-type WorkflowLabel = "Scans" | "Review" | "Subtitles" | "Publish";
+type WorkflowLabel = "Community" | "Scans" | "Review" | "Subtitles" | "Publish";
 
 export async function openWorkflowStep(name: WorkflowLabel) {
   fireEvent.click(await screen.findByRole("tab", { name: new RegExp(`^${name}$`) }));

@@ -3,6 +3,7 @@ import { saveMasterPreferences } from "../api/api-community-masters";
 import type { MasterPreferences } from "../api/api-community-master-types";
 import { usePrincipal } from "../auth/auth-gate";
 import { masterErrorText } from "./community-master-format";
+import { notifyCommunityFiltersChanged } from "./community-master-events";
 
 export const PREFERENCE_SAVE_DELAY_MS = 400;
 
@@ -17,7 +18,8 @@ export type PreferenceSnapshot = {
 };
 const empty: PreferenceSnapshot = { saved: null, displayed: null, pending: false, error: null };
 export const samePreferences = (a: MasterPreferences | null, b: MasterPreferences | null) =>
-  !!a && !!b && a.confidenceThreshold === b.confidenceThreshold && a.showLowConfidence === b.showLowConfidence;
+  !!a && !!b && a.confidenceThreshold === b.confidenceThreshold && a.showLowConfidence === b.showLowConfidence
+  && !!a.hideRejectedDownvoted === !!b.hideRejectedDownvoted;
 
 /**
  * Account preference store shared by every master link card. Changes show at once, save after a
@@ -41,8 +43,10 @@ export function createPreferenceStore(
     void save(value).then((response) => {
       if (request !== sequence) return;
       const saved = response && typeof response.confidenceThreshold === "number"
-        ? { confidenceThreshold: response.confidenceThreshold, showLowConfidence: response.showLowConfidence } : value;
+        ? { confidenceThreshold: response.confidenceThreshold, showLowConfidence: response.showLowConfidence,
+          hideRejectedDownvoted: !!response.hideRejectedDownvoted } : value;
       set({ saved, pending: queued !== null, error: null });
+      notifyCommunityFiltersChanged();
     }).catch((reason) => {
       if (request === sequence) set({ pending: queued !== null, error: masterErrorText(reason) });
     });

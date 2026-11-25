@@ -93,7 +93,8 @@ def save_preferences(
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
 ):
-    """Save either preference; they decide which untouched rows are active."""
+    """Save any preference. The threshold and Low Confidence toggle decide which untouched
+    rows are active; hiding rejected and downvoted rows affects only the list."""
     require_capability(access, C.COMMUNITY_DOWNLOAD)
     db.rollback()
     with write_lock(db):
@@ -102,6 +103,7 @@ def save_preferences(
             access.principal.user_id,
             confidence_threshold=body.confidence_threshold,
             show_low_confidence=body.show_low_confidence,
+            hide_rejected_downvoted=body.hide_rejected_downvoted,
         )
         db.commit()
     return respond(lambda: {"version": 1, **preferences_json(saved)})

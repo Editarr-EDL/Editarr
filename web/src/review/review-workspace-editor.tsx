@@ -10,6 +10,9 @@ import { scanLabel } from "../shared/display";
 import { ReviewScanInfo, reviewScanName } from "./review-scan-source";
 import { ShareAction } from "../scans/sharing-dialog";
 import { useReviewAccountLabel } from "./review-access";
+import { ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
+import { exportedCommunityFilters, hasExportEvidence } from "./review-community";
+import { useReviewCommunity } from "./use-review-community";
 import {
   isReviewDraftDirty, isReviewDraftContentDirty, updateReviewFilter,
   deleteReviewFilter, discardReviewDraft, stageManualReviewFilter,
@@ -24,6 +27,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
   const accountLabel = useReviewAccountLabel(workspace.selected);
   const me = usePrincipal()?.userId ?? null;
   const [dialog, setDialog] = useState<"export" | "delete" | null>(null);
+  const community = useReviewCommunity(workspace);
   const {
     scans, selected, draft, busy, preview, editingReviewName, reviewNameBeforeEdit,
     showManualFilter, preflightFocusFilterId, draftNameValidation,
@@ -47,6 +51,12 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       || draftNameValidation.normalized === selected.name
     ));
   const combinedScans = availableScans.filter((scan) => scan.scan_audio && scan.scan_video);
+  // The runtime exports clip community filters to: the shortest included scan, else the version's.
+  const scanRuntimes = availableScans.filter((scan) => draft.memberships.some((value) => value.scan_id === scan.id))
+    .flatMap((scan) => scan.duration_seconds ? [scan.duration_seconds] : []);
+  const version = workspace.item.versions?.find((value) => value.id === workspace.mediaSourceId);
+  const runtime = scanRuntimes.length ? Math.min(...scanRuntimes) : version?.duration_seconds || workspace.item.duration_seconds || null;
+  const enforced: Partial<Record<string, string>> = selected?.policy_locked_severities ?? {};
   const hasCombinedMembership = combinedScans.some((scan) => draft.memberships.some((membership) => membership.scan_id === scan.id));
 
   const overview = <SavedReviewOverview
@@ -71,7 +81,11 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       previewDisabled={!access.preview}
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
+      communityFilters={exportedCommunityFilters(community.entries, runtime, enforced)}
     />;
+  const results = <div className="review-results-with-community">{overview}
+    <ReviewCommunityResults entries={community.entries} durationSeconds={runtime} enforced={enforced}
+      subtitles={selected?.community_subtitles} /></div>;
   const memberships = <div className="saved-review-memberships">
         <strong>Included scans</strong>
         {availableScans.map((scan) => {
@@ -86,6 +100,8 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
             <ReviewScanInfo scans={[scan]} />
           </span>;
         })}
+        <ReviewCommunityEntries entries={community.entries} draft={draft} maySearch={community.maySearch}
+          disabled={busy || !access.field("evidence")} onChange={setDraft} />
       </div>;
   const roles = hasCombinedMembership && <div className="saved-review-membership-roles">
       <strong>Combined scan roles</strong>
@@ -186,7 +202,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       {guided && saveControls}
     </div>
     {selected && <p className="muted-copy">Current owner: {accountLabel(selected.owner_id)}. Historical author: {accountLabel(selected.original_author_id)}. Policy source: {selected.policy_owner_id === selected.owner_id ? "current review owner" : accountLabel(selected.policy_owner_id)}, revision {selected.policy_revision}.</p>}
-    {guided ? <div className="guided-review-editor">{evidence}{overview}</div> : overview}
+    {guided ? <div className="guided-review-editor">{evidence}{results}</div> : results}
     <div className="saved-review-editor">
       {editingReviewName && draft.name && draftNameValidation?.error && <span className="form-error" role="alert">
         {draftNameValidation.error}
@@ -208,7 +224,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       </span>}
     </div>
     {selected && dialog === "export" && <ExportDialog review={selected} reviews={reviews} exports={exports} allowed={access.allowed}
-      edlAvailable={draft.memberships.length > 0} onMcfIssues={workspace.setMcfPreflightIssues}
+      exportAvailable={hasExportEvidence(selected)} onMcfIssues={workspace.setMcfPreflightIssues}
       onConflict={workspace.refreshAfterConflict} onPublished={() => void workspace.afterPublish()} onClose={() => setDialog(null)} />}
     {selected && dialog === "delete" && <ReviewDeletionDialog review={selected} onClose={() => setDialog(null)}
       onDeleted={(result) => { setDialog(null); workspace.forgetDeletedReview(result.review_id, result.retained.length, result.removed.length); }} />}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SavedReviewSummary } from "../api/api-review-types";
 import type { SavedReviewPanelProps } from "./review-workspace-state";
 import { useSavedReviewWorkspace } from "./review-workspace-state";
@@ -14,15 +14,17 @@ import { PublishedSubtitleFiles, ReviewReleaseProvider, ReviewReleaseStep } from
 import { ReviewWorkflowNavigation, SavedReviewPicker } from "./review-workflow-navigation";
 import type { GuidedWorkflowProps, WorkflowStep } from "./review-workflow-types";
 
-type VersionWorkspaceProps = SavedReviewPanelProps & { guided?: GuidedWorkflowProps };
+type VersionWorkspaceProps = SavedReviewPanelProps & { guided?: GuidedWorkflowProps; initialStep?: WorkflowStep };
 
 /** Render the saved review workspace for one media version. Each version
  * gets a fresh workspace, so reviews, published files, and late responses
  * from previously selected media never appear under another one.
- * @param props Media version, scans, and parent update callbacks.
+ * @param props Media version, scans, parent update callbacks, and the first workflow step to show.
  */
 export function SavedReviewPanel(props: VersionWorkspaceProps) {
-  const [step, setStep] = useState<WorkflowStep>("review");
+  const [step, setStep] = useState<WorkflowStep>(props.initialStep ?? "review");
+  // A later route naming a tab (a notification link to an open item) switches to it.
+  useEffect(() => { if (props.initialStep) setStep(props.initialStep); }, [props.initialStep]);
   return <VersionWorkspace key={JSON.stringify([props.item.id, props.mediaSourceId ?? ""])}
     {...props} step={step} onStepChange={setStep} />;
 }
@@ -105,6 +107,9 @@ function VersionWorkspace(props: VersionWorkspaceProps & {
       {published}
       <ReviewWorkflowNavigation step={step} onStepChange={onStepChange} />
       {alerts}
+      <div id="workflow-community-panel" role="tabpanel" aria-labelledby="workflow-community-tab" hidden={step !== "community"}>
+        {step === "community" && guided.community}
+      </div>
       <div id="workflow-scans-panel" role="tabpanel" aria-labelledby="workflow-scans-tab" hidden={step !== "scans"}>
         {step === "scans" && <section className="settings-card">
           <div className="section-heading">
@@ -113,7 +118,7 @@ function VersionWorkspace(props: VersionWorkspaceProps & {
           </div>
           {guided.scanHistory}
           <div className="button-row workflow-scan-actions">
-            {guided.findFilters}
+            {guided.recoverScans}
             <ReviewImportAction workspace={workspace} stageForVerification={guided.stageImportsForVerification}
               onComplete={() => onStepChange("review")} />
           </div>

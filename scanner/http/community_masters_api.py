@@ -190,18 +190,20 @@ def view_master(
 @router.get("/masters/{link_id}/active-filters")
 def active_filters(
     link_id: LinkId,
+    clipped: bool = Query(default=True),
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
 ):
-    """The link's in-effect filters on the local timeline, and their merged Simple EDL.
+    """The link's in-effect filters on the local timeline now, and their merged Simple EDL.
 
-    This is the read path reviews and EDL export use for a master set as a filter
-    source next to scans.
+    Saved reviews store these values as a snapshot when they include or refresh the
+    link; `clipped=false` returns them unclipped, as the snapshot stores them, so the
+    web app can tell whether a stored snapshot changed.
     """
 
     def action():
         link = authorize_link(db, access, link_id, C.COMMUNITY_SEARCH)
-        filters = link_active_filters(db, access.principal.user_id, link)
+        filters = link_active_filters(db, access.principal.user_id, link, clip=clipped)
         result = {
             "version": 1,
             "linkId": link.id,

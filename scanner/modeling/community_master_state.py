@@ -26,10 +26,15 @@ LOCAL_COLUMNS = {
 
 @dataclass(frozen=True)
 class Preferences:
-    """An account's display preferences; the defaults are 0.0 and False."""
+    """An account's display preferences; the defaults are 0.0, False and False.
+
+    `hide_rejected_downvoted` only hides rows from the master list; it never changes
+    which rows are active.
+    """
 
     confidence_threshold: float = 0.0
     show_low_confidence: bool = False
+    hide_rejected_downvoted: bool = False
 
 
 def untouched_state(values: MasterValues) -> str:

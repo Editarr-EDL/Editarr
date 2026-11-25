@@ -1,3 +1,4 @@
+import type { ItemRouteStep } from "../routes";
 import { readUserValue, writeUserValue } from "../shared/user-storage";
 import {
   useCallback,
@@ -237,6 +238,7 @@ export function MediaDetailPage({
   seasonId,
   onNavigate,
   onDirtyChange,
+  initialStep,
 }: {
   library: JellyfinLibrary;
   itemId: string;
@@ -244,6 +246,7 @@ export function MediaDetailPage({
   seasonId?: string;
   onNavigate: (route: string) => void;
   onDirtyChange: (dirty: boolean) => void;
+  initialStep?: ItemRouteStep;
 }) {
   const [item, setItem] = useState<JellyfinMediaItem | null>(null);
   const [series, setSeries] = useState<JellyfinMediaItem | null>(null);
@@ -276,7 +279,7 @@ export function MediaDetailPage({
     ...(season && seriesId && seasonId ? [{ label: season.name, route: `library/${encodeURIComponent(library.id)}/series/${encodeURIComponent(seriesId)}/season/${encodeURIComponent(seasonId)}` }] : []),
     { label: item.name },
   ];
-  return <MediaDetail key={item.id} item={item} breadcrumbs={breadcrumbs} onNavigate={onNavigate} seasonNumber={season?.index_number ?? item.season_number} onDirtyChange={onDirtyChange} />;
+  return <MediaDetail key={item.id} item={item} breadcrumbs={breadcrumbs} onNavigate={onNavigate} seasonNumber={season?.index_number ?? item.season_number} onDirtyChange={onDirtyChange} initialStep={initialStep} />;
 }
 
 export function SeriesSeasonsPage({ library, seriesId }: { library: JellyfinLibrary; seriesId: string }) {

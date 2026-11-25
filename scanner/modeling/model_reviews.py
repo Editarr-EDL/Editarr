@@ -24,6 +24,11 @@ from .model_core import (
     _validate_mcf_comment,
 )
 from .model_publications import ExportPublication
+from .model_review_community import (
+    CommunitySubtitleSummary,
+    ReviewCommunityMembership,
+    ReviewCommunitySource,
+)
 from .model_review_repairs import ReviewRepairSummary
 from .model_scans import (
     AcceptedCreditsProvenance,
@@ -105,6 +110,8 @@ class SavedReview(SavedReviewSummary):
     mcf_document: ReviewMcfDocument = Field(default_factory=ReviewMcfDocument)
     synchronization: ReviewSynchronization
     accepted_credits: AcceptedCreditsProvenance | None = None
+    community_sources: list[ReviewCommunitySource] = Field(default_factory=list)
+    community_subtitles: CommunitySubtitleSummary = Field(default_factory=CommunitySubtitleSummary)
 
 
 class ReviewFilterInput(ReviewFilter, ReviewWriteModel):
@@ -272,6 +279,9 @@ class ReviewCreate(ReviewWriteModel):
     filters: list[ReviewFilterInput] | None = None
     new_manual_filters: list[NewManualReviewFilter] = Field(default_factory=list)
     mcf_metadata_seed: McfMetadataSeedRequest | None = None
+    community_memberships: list[ReviewCommunityMembership] = Field(
+        default_factory=list, max_length=32
+    )
 
 
 class ReviewSave(ReviewPolicyToken):
@@ -284,6 +294,10 @@ class ReviewSave(ReviewPolicyToken):
     synchronization: ReviewSynchronization
     accepted_credits: AcceptedCreditsReference | None = None
     new_manual_filters: list[NewManualReviewFilter] = Field(default_factory=list)
+    # Omitted (null) keeps the saved community filter snapshots unchanged.
+    community_memberships: list[ReviewCommunityMembership] | None = Field(
+        default=None, max_length=32
+    )
 
 
 class ReviewRetimeRequest(ReviewPolicyToken):

@@ -9,7 +9,9 @@
 
 ## How to get to it (user POV)
 
-Community results are in Find Filters. Sharing is available on completed scans
+Community results are in the item page's Community tab (Find Filters); the
+Scans tab's Recover Scans finds local scans only. Review > Included scans can
+include community filter snapshots. Sharing is available on completed scans
 and saved reviews. My Profile contains the account's own community identity,
 independently of provider-settings permission. Connections retains its
 existing personal panel. Authorized administrators open Users, View, Community

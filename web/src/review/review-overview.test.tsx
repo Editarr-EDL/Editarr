@@ -231,3 +231,20 @@ it("sorts mixed review filters by time and restores the collapsible categories",
   expect(await within(list).findByRole("button", { name: /fight finding group/ })).toBeVisible();
   expect(within(list).queryByRole("region", { name: "Audio review filters" })).not.toBeInTheDocument();
 });
+
+it("counts included community filters in the timeline summary and skipped time", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const community = (id: string, start: number, edit_action: "skip" | "mute") => ({
+    filter_id: id, category: "violence", subcategory: "punching", severity: "high", edit_action,
+    start_seconds: start, end_seconds: start + 10, confidence: 0.5,
+  });
+  render(<SavedReviewOverview filters={[]} memberships={[]} scans={[]} busy={false}
+    communityFilters={[community("c1", 10, "skip"), community("c2", 15, "skip"), community("c3", 60, "mute")]}
+    onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+    onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
+  const summary = screen.getByRole("region", { name: "Timeline summary" });
+  expect(summary).toHaveTextContent("Combined results from 0 selected scans and 3 community filters.");
+  expect(summary).toHaveTextContent("3/3 results");
+  expect(summary).toHaveTextContent("Skipped Time 0:15");
+  expect(within(summary).getAllByRole("img", { name: /^selected (skip|mute) from/ })).toHaveLength(2);
+});

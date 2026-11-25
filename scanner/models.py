@@ -68,6 +68,12 @@ from scanner.modeling.model_core import (
     normalize_review_name,
     normalize_scan_name,
 )
+from scanner.modeling.model_review_community import (
+    CommunitySubtitleSummary,
+    ReviewCommunityFilter,
+    ReviewCommunityMembership,
+    ReviewCommunitySource,
+)
 from scanner.modeling.model_review_repairs import (
     ReviewRecoveryCounts,
     ReviewRepairSummary,
@@ -130,6 +136,7 @@ from scanner.modeling.model_scans import (
     ExportScanReference,
     ExportStatus,
     ExportSummary,
+    FilterCandidateAvailability,
     FilterCandidateSearchResult,
     McfMetadata,
     ReviewMcfDocument,

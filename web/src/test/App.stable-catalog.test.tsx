@@ -188,6 +188,7 @@ it("lists associated scans with their original source ID and keeps them pending 
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), "http://editarr.test");
     if (url.pathname === "/api/editarr-items/stable-chuck") return json(record);
+    if (url.pathname === "/api/filter-candidates/available") return json({ available: true });
     if (url.pathname === "/api/filter-candidates") {
       return json({ media_item_id: "resolved-media", matches: [{ scan, match_reason: "format", already_associated: false }] });
     }
@@ -208,7 +209,9 @@ it("lists associated scans with their original source ID and keeps them pending 
   window.location.hash = "#title/stable-chuck";
   render(<AuthenticationGate><App /></AuthenticationGate>);
   await openWorkflowStep("Scans");
-  fireEvent.click(screen.getByRole("button", { name: "Find Filters" }));
+  const recover = screen.getByRole("button", { name: "Recover Scans" });
+  await waitFor(() => expect(recover).toBeEnabled());
+  fireEvent.click(recover);
   fireEvent.click(await screen.findByRole("button", { name: "Associate Selected" }));
   const previous = await screen.findByRole("region", { name: "Previous version scans" });
   expect(within(previous).getByText(/^Linked earlier scan · Scan #7$/)).toBeVisible();

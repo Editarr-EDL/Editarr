@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from scanner import api as root
 from scanner.db import get_db
 from scanner.models import (
+    FilterCandidateAvailability,
     FilterCandidateSearchResult,
     ScanAssociationUpdate,
     ScanMatch,
@@ -17,6 +18,7 @@ from scanner.repository import (
     associate_scans_with_media_item,
     associated_scan_ids_for_media_item,
     find_filter_candidates,
+    possible_candidate_scans,
     resolve_local_path,
     upsert_media_item,
 )
@@ -89,6 +91,39 @@ def api_find_filter_candidates(
             for scan, reason in matches
         ],
     )
+
+
+@router.post("/api/filter-candidates/available", response_model=FilterCandidateAvailability)
+def api_filter_candidates_available(
+    search: ScanMatchSearch,
+    db: Session = Depends(get_db),
+    viewer: CatalogViewer = Depends(catalog_viewer(Capability.SCANS_FINDINGS_READ)),
+):
+    """Whether Recover Scans could find anything: a reachable completed scan of another
+    file of the same work. Reads no media and writes nothing."""
+    found = catalog_files.source_file(
+        db,
+        viewer,
+        search.item_id,
+        media_source_id=search.media_source_id,
+        path=search.source_path,
+    )
+    try:
+        resolution = resolve_local_path(db, found.path)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc) if viewer.sees_paths() else "Unsupported path") from exc
+    rows = possible_candidate_scans(
+        db,
+        resolved_local_path=str(Path(resolution.local_path).resolve()),
+        media_provider_id=found.media_provider_id,
+    )
+    if rows and not viewer.is_owner:
+        stored = catalog_files.stored_scans(db, [row.id for row in rows])
+        scan_ids = list(stored)
+        rebuilt = catalog_files.stored_targets(db, viewer, [stored[key] for key in scan_ids])
+        targets = dict(zip(scan_ids, rebuilt, strict=True))
+        rows = viewer.visible(rows, lambda row: targets.get(row.id))
+    return FilterCandidateAvailability(available=bool(rows))
 
 
 @router.post("/api/filter-candidates/associations", status_code=204)

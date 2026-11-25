@@ -212,7 +212,7 @@ def apply_master(
     Fuzzy links (`alignment_required`) keep every row inactive until alignment is
     approved. The same community version again only stores a newer revision for
     review. Another version needs `replace=True`; the old link is then `replaced`
-    and keeps its rows as history.
+    and keeps its rows as history, and reviews that included it include the new one.
     """
     from .community_master_filters import refresh_local_verification
     from .community_master_updates import store_latest_snapshot
@@ -255,6 +255,10 @@ def apply_master(
         add_filter_row(db, link.id, item, snapshot.revision, now)
     db.flush()
     refresh_local_verification(db, link)
+    if current is not None:
+        from .review_community_sources import move_link_sources
+
+        move_link_sources(db, current.id, link.id)
     return link
 
 

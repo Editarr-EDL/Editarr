@@ -1,3 +1,4 @@
+import { notifyCommunityFiltersChanged } from "./community-master-events";
 import { useCallback, useEffect, useId, useState } from "react";
 import { acceptAllMasterUpdate, decideMasterUpdate, fetchMasterUpdate } from "../api/api-community-updates";
 import type { MasterLink, MasterTarget, MasterUpdate, UpdateDecision, UpdateGroup } from "../api/api-community-master-types";
@@ -39,6 +40,7 @@ export function MasterUpdateReview({ link, target, filters, onClose, onSettled }
     setBusy(true); setError(null);
     try {
       const next = await action(update) ?? await fetchMasterUpdate(link.linkId);
+      notifyCommunityFiltersChanged();
       setUpdate(next);
       if (remainingRows(next) === 0) onSettled();
     } catch (reason) {

@@ -107,6 +107,12 @@ class SavedReviewRow(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    community_sources = relationship(
+        "ReviewCommunitySourceRow",
+        back_populates="review",
+        cascade="all, delete-orphan",
+        order_by="ReviewCommunitySourceRow.position",
+    )
 
     @validates("name")
     def validate_name(self, key, value):

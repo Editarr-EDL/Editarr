@@ -859,6 +859,16 @@ The transitional `manual` flag is derived from `origin == "manual"`; an AI scan 
 Files remains `generated`. Imported scans also expose their safe `import_source_name` and
 UTC `imported_at` and have no execution duration; import creation is a separate workflow.
 
+Recover Scans uses `POST /api/filter-candidates` (search and match, which may hash
+media) and `POST /api/filter-candidates/associations`. `POST
+/api/filter-candidates/available` takes the same search body and answers `{"available":
+bool}`: whether the caller can reach a completed scan of another file of the same work
+(TMDB/TVDB provider ID). It reads no media and writes nothing; it needs
+`scans.findings.read`, and the web app disables Recover Scans when it is false and the
+item has no other local versions, previous versions, pending imports or linked scans with
+scans. Because it doesn't hash, a search can still find nothing; the dialog then says
+"No recoverable scans matched this file."
+
 ## Primary flows
 
 - Settings: `GET`/`PUT /api/settings/jellyfin`, `POST /api/settings/jellyfin/test`.
@@ -909,6 +919,19 @@ UTC `imported_at` and have no execution duration; import creation is a separate 
   boundary. Mutations use the current
   review `revision`; content changes also advance `content_revision` and affected format
   revisions. Saves include the complete editable `mcf_document` and `synchronization`.
+- Community filter snapshots: `SavedReview.community_sources` lists the community
+  master-set snapshots a review includes; create and save requests take
+  `community_memberships` (omitted on save keeps them). Results and EDL/MCF exports
+  use only the stored snapshot filters. Exports need at least one scan or one
+  snapshot with filters; a community-only review exports beside the review target's
+  file. Snapshot filters are clipped to the runtime, take the owner's enforced
+  severities, and a misclassified one is left out of every format (and doesn't count
+  as export evidence). Community language mutes reach filtered subtitles only through
+  an aligned word-level finding of a local audio scan; `community_subtitles` reports
+  how many were applied, need an audio scan, or are unaligned. Including a link or refreshing a snapshot needs
+  `community.search` and evidence-edit permission, and only the review owner may take a
+  snapshot of their own link; see
+  [review membership](community-local-api.md#saved-review-community-filter-snapshots).
 - Manual filters: `new_manual_filters` in saved-review create/save requests stages
   human-authored audio mute and visual skip filters with required MCF classification. The successful transaction creates
   or reuses the target version's Manual evidence scan and returns assigned provenance;

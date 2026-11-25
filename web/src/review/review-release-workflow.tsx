@@ -1,3 +1,5 @@
+import { CommunitySubtitleNote } from "./review-community-sources";
+import { hasExportEvidence } from "./review-community";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ExportFormat } from "../api/api-mcf-types";
 import { usePrincipal } from "../auth/auth-gate";
@@ -106,7 +108,7 @@ function ReviewPublishPanel({ workspace, subtitles, onStepChange }: {
         </section>
       </div> : <p className="muted-copy">Publishing is unavailable for this review.</p>}
     {exportFormat && <ExportDialog review={selected} reviews={workspace.reviews} exports={workspace.exports} allowed={allowed}
-      formats={[exportFormat]} edlAvailable={selected.memberships.length > 0}
+      formats={[exportFormat]} exportAvailable={hasExportEvidence(selected)}
       onMcfIssues={(issues) => { workspace.setMcfPreflightIssues(issues); onStepChange("review"); }}
       onConflict={workspace.refreshAfterConflict} onPublished={() => void workspace.afterPublish()} onClose={() => setExportFormat(null)} />}
   </div>;
@@ -129,6 +131,6 @@ export function ReviewReleaseStep({ step, workspace, onStepChange, onStartAudioS
   if (!canExportSavedReview(selected.owner_id, me, workspace.access.allowed)) {
     return <p className="muted-copy">You do not have access to export this review.</p>;
   }
-  return <ReviewSubtitlePanel subtitles={subtitles} onStartAudioScan={workspace.access.allowed("scans.start") ? onStartAudioScan : undefined}
-    onContinue={() => { subtitles.prepare(); onStepChange("publish"); }} />;
+  return <><CommunitySubtitleNote summary={selected.community_subtitles} /><ReviewSubtitlePanel subtitles={subtitles} onStartAudioScan={workspace.access.allowed("scans.start") ? onStartAudioScan : undefined}
+    onContinue={() => { subtitles.prepare(); onStepChange("publish"); }} /></>;
 }

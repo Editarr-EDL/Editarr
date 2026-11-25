@@ -63,10 +63,16 @@ for (const width of [320, 1440]) {
     const community = await mockCommunityMasters(page);
     await page.goto("/#/library/movies/item/movie-1");
     await chooseWorkflowStep(page, "Scans");
-    await page.getByRole("button", { name: "Find Filters" }).click();
-    const dialog = page.getByRole("dialog", { name: "Found Filters" });
-    await dialog.getByRole("button", { name: "Find community versions" }).click();
+    await expect(page.getByRole("button", { name: "Find Filters" })).toHaveCount(0);
+    await chooseWorkflowStep(page, "Community");
+    const panel = page.getByRole("region", { name: "Community filters", exact: true });
+    await expect(panel.getByText(/No community filters for this version yet/)).toBeVisible();
+    await checkLayout(page, "community-tab-empty", width);
+    await panel.getByRole("button", { name: "Find Filters" }).click();
+    // Find Filters in the Community tab searches community versions at once, and nothing local.
+    const dialog = page.getByRole("dialog", { name: "Find Filters" });
     await expect(dialog.getByText("80% match")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Associate Selected" })).toHaveCount(0);
     await expect(dialog.getByText("30% match")).toBeVisible();
     await expect(dialog.getByRole("combobox", { name: "Your version" })).toHaveValue("theatrical");
     await expectTooltip(page, dialog.getByRole("button", { name: "Unconfirmed" }), /hasn't been verified yet/);
@@ -80,9 +86,8 @@ for (const width of [320, 1440]) {
     await expect(replace).toContainText("Replace Extended Edition with Theatrical?");
     await replace.getByRole("button", { name: "Cancel" }).click();
     await expect(replace).toHaveCount(0);
-    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
 
-    const panel = page.getByRole("region", { name: "Community filters", exact: true });
     await expect(panel.getByRole("heading", { name: "Extended Edition" })).toBeVisible();
     await expect(panel.getByRole("heading", { name: "Align before applying" })).toBeVisible();
     await expect(panel.getByRole("button", { name: "Approve alignment" })).toBeDisabled();
@@ -97,7 +102,7 @@ for (const width of [320, 1440]) {
       .toEqual({ token: "align-1", for_revision: 12, confirmed: true });
 
     await panel.getByRole("button", { name: "Show filters" }).click();
-    await expect(panel.getByText("2 filters shown · 1 hidden by your confidence settings")).toBeVisible();
+    await expect(panel.getByText("2 filters shown · 1 hidden by your filter settings")).toBeVisible();
     await expectTooltip(page, panel.getByRole("button", { name: "Locally verified" }), /Locally verified/);
     const thumbsUp = panel.getByRole("button", { name: /^Thumbs up for Violence · Punching/ });
     await expect(thumbsUp).toHaveAttribute("aria-pressed", "true");
@@ -110,9 +115,9 @@ for (const width of [320, 1440]) {
 
     const threshold = panel.getByRole("slider", { name: "Minimum confidence" });
     await threshold.fill("0.5");
-    await expect(panel.getByText("1 filter shown · 2 hidden by your confidence settings")).toBeVisible();
+    await expect(panel.getByText("1 filter shown · 2 hidden by your filter settings")).toBeVisible();
     await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
-      .toEqual({ confidence_threshold: 0.5, show_low_confidence: false });
+      .toEqual({ confidence_threshold: 0.5, show_low_confidence: false, hide_rejected_downvoted: false });
     await threshold.fill("0");
     const lowConfidence = panel.getByRole("checkbox", { name: "Show Low Confidence filters" });
     await expect(lowConfidence).not.toBeChecked();
@@ -120,9 +125,17 @@ for (const width of [320, 1440]) {
     await expect(panel.getByText("Low Confidence · 20%")).toBeVisible();
     await expect(panel.getByText("3 filters shown")).toBeVisible();
     await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
-      .toEqual({ confidence_threshold: 0, show_low_confidence: true });
+      .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_rejected_downvoted: false });
     await expect(panel.getByText("Not applied")).toHaveCount(0);
     await checkLayout(page, "master-view", width);
+    const hide = panel.getByRole("checkbox", { name: "Hide rejected and downvoted filters" });
+    await expect(hide).not.toBeChecked();
+    await hide.check();
+    await expect(panel.getByText("2 filters shown · 1 hidden by your filter settings")).toBeVisible();
+    await expect(thumbsDown).toHaveCount(0);
+    await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
+      .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_rejected_downvoted: true });
+    await checkLayout(page, "hide-toggle", width);
   });
 
   test(`${width}px update check and review decisions`, async ({ page }) => {
@@ -130,6 +143,7 @@ for (const width of [320, 1440]) {
     await mockItemPage(page);
     const community = await mockCommunityMasters(page, { linked: true });
     await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Community");
     const panel = page.getByRole("region", { name: "Community filters", exact: true });
     await panel.getByRole("button", { name: "Check for filter updates" }).click();
     const banner = panel.getByText("Community filters updated: 1 new, 2 changed, 1 removed.");
@@ -170,10 +184,12 @@ for (const width of [320, 1440]) {
     await expectKeyboardFocusVisible(page, entry);
     await entry.click();
     const notification = page.getByRole("link", { name: /Example Movie\s*filters updated/ });
-    await expect(notification).toHaveAttribute("href", "#/library/movies/item/movie-1/source/source-2");
+    await expect(notification).toHaveAttribute("href", "#/library/movies/item/movie-1/source/source-2/community");
     await checkLayout(page, "notifications", width);
     await notification.click();
-    await expect(page).toHaveURL(/#\/?library\/movies\/item\/movie-1\/source\/source-2$/);
+    await expect(page).toHaveURL(/#\/?library\/movies\/item\/movie-1\/source\/source-2\/community$/);
+    await expect(page.getByRole("tab", { name: "Community", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("region", { name: "Community filters", exact: true })).toBeVisible();
     await expect.poll(() => community.requests.find((request) => request.path === "sync/notifications/read")?.body)
       .toEqual({ notification_ids: ["n1"] });
   });

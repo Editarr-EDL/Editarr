@@ -45,7 +45,7 @@ These follow the existing `/api/community/*` routes:
 
   | Capability | Routes |
   | --- | --- |
-  | `community.search` | find, aliases, master view and lists, active filters, `GET` preferences |
+  | `community.search` | find, aliases, master view and lists, active filters, `GET` preferences, including or refreshing review snapshots (§3) |
   | `community.download` | download and apply, alignment, filter decisions, `PATCH` preferences, check, update review, sync and notifications |
   | `community.feedback.submit` | votes, reports |
   | `community.publish.own_review`, `community.publish.scan_evidence`, `community.publish.other_review` | share |
@@ -193,7 +193,7 @@ Returns the master view:
     "alignment": null, "alignmentRevision": null,
     "pendingUpdate": { "new": 3, "changed": 2, "removed": 1, "nowLowConfidence": 0 },
     "linkState": "active", "mergedInto": null },
-  "preferences": { "confidenceThreshold": 0.0, "showLowConfidence": false },
+  "preferences": { "confidenceThreshold": 0.0, "showLowConfidence": false, "hideRejectedDownvoted": false },
   "filters": [ {
     "filterId": "f_9c1d…", "category": "violence",
     "master": { "startMs": 600000, "endMs": 605050, "subcategory": "punching", "severity": "high", "action": "skip",
@@ -253,8 +253,10 @@ Field rules:
 
 ### `GET /api/community/masters/{link_id}/active-filters`
 
-The read path that saved reviews and EDL export use for a master set as a
-filter source next to scans (no imported scan is generated). It returns the
+The link's in-effect filters now: the values a saved review stores when it
+includes or refreshes the link (no imported scan is generated). `?clipped=false`
+returns them unclipped, exactly as a snapshot stores them, and the web app uses that
+to show whether a stored snapshot changed. By default it returns the
 link's `active` rows with their `effective` values on the local timeline, and
 the same filters merged by the existing Simple EDL range merging. Bounds are
 clipped to `[0, duration]` (the duration comes from a completed scan of the
@@ -264,9 +266,80 @@ out, so no range is empty or negative:
 ```json
 { "version": 1, "linkId": "…", "localVersionId": "mv_…",
   "filters": [ { "linkId": "…", "filterId": "f_9c1d…", "category": "violence", "startMs": 600100,
-                 "endMs": 605050, "subcategory": "punching", "severity": "medium", "action": "skip" } ],
+                 "endMs": 605050, "subcategory": "punching", "severity": "medium", "action": "skip",
+                 "confidence": 0.39 } ],
   "edl": "## Editarr Simple EDL\n## punching: Community filter\n600.100 605.050 3" }
 ```
+
+### Saved-review community filter snapshots
+
+A saved review uses a master set through a **snapshot** of the link's active
+filters, taken when the review includes or refreshes the link. Review results, EDL
+and MCF export, published sidecars and retained export snapshots read only the
+stored snapshot; later decisions, preferences, alignment or accepted updates never
+change a saved review.
+
+`GET /api/reviews/{review_id}` (and every response that returns a `SavedReview`)
+adds:
+
+```json
+"community_sources": [ {
+  "source_id": "…", "link_id": "…"|null, "community_version_id": "v_12ab", "label": "Theatrical",
+  "tier": "2", "match_percent": 80, "master_revision": 12, "alignment": null|{…},
+  "captured_at": "2026-11-24T21:00:00", "state": "current"|"changed"|"alignment_required"|"link_unavailable",
+  "link_state": "active"|"merged"|"unavailable"|"replaced"|null,
+  "filters": [ { "filter_id": "f_…", "category": "violence", "subcategory": "punching", "severity": "high",
+                 "edit_action": "skip", "start_seconds": 600.1, "end_seconds": 605.05, "confidence": 0.39 } ],
+  "unusable_filter_ids": [] } ]
+```
+
+- Snapshots store the link's filters **unclipped** on the local timeline. Exports clip
+  them to the runtime (the shortest completed scan of the review, or of its local
+  versions for a community-only review; retained publications keep the runtime they
+  used), apply the review owner's enforced severities, and leave out a filter whose
+  subcategory doesn't belong to its category in both EDL and MCF; such filters are
+  listed in `unusable_filter_ids`. A community-only review's runtime comes from the
+  shortest completed scan of its local versions, or else from probing its media file.
+- Community filters carry no words, so a snapshot `language` mute changes filtered
+  subtitles only through a word-level language finding of a completed local audio
+  scan of the review's version (a generated scan bound to one of the review's local
+  versions, or unbound and of the review's item and source, as export accepts them)
+  that it aligns with (same top-level category,
+  overlapping on the local timeline, as for "Locally verified"); that finding's words
+  are then redacted exactly like a scan mute. Other community mutes leave subtitles
+  untouched; a mute a scan mute already covers redacts once. Both the subtitle step and
+  the summary clip community filters to the same runtime exports use.
+  `SavedReview.community_subtitles` reports
+  `{ "applied": n, "needs_audio_scan": n, "unaligned": n }`.
+- `state` compares the snapshot with the link now: `changed` when the link's active
+  filters differ (confidence alone doesn't count), `alignment_required` when the
+  link awaits alignment, and `link_unavailable` when the link was deleted, is
+  `replaced` or belongs to another account than the review owner. The review keeps
+  using `filters` in every state.
+- `PUT /api/reviews/{review_id}` takes `community_memberships`: a list (at most 32)
+  of `{"source_id"}` to keep a snapshot, `{"source_id", "refresh": true}` to take a
+  new one from the same link, or `{"link_id"}` to include a link. Omitted or null
+  keeps the stored snapshots; snapshots left out are removed. Adding, refreshing or
+  removing one is a content change: it advances `revision`, `content_revision`,
+  `edl_content_revision` and `mcf_content_revision`, so published exports report
+  themselves outdated. `POST /api/library-items/{item_id}/reviews` accepts
+  `{"link_id"}` entries only.
+- A new or refreshed snapshot needs `community.search`, the review evidence-edit
+  permission, and the caller to be the review owner taking a snapshot of their own
+  unreplaced link to a local version of the review's target; a link awaiting
+  alignment is refused. These are `422 invalid_membership` errors (or
+  `403 capability_denied`).
+- A review needs at least one scan **or** one community snapshot with a usable
+  (correctly classified) filter to export. A community-only review (no scans) exports, downloads and publishes EDL and
+  MCF sidecars from its snapshots beside the review target's own file, which must
+  still match the review's bound Editarr version; its publications list no
+  `exported_scans`, and their retained export snapshot carries the community filters
+  for policy regeneration. A review with neither is refused with
+  `invalid_membership`.
+- Duplicating a review copies every snapshot; the link reference is kept only when
+  the duplicate's owner owns the link. Deleting an account's master state keeps
+  snapshots and clears their link; transferring it, or replacing a link with another
+  version, points snapshots at the destination's live link without changing them.
 
 ## 4. Alignment for fuzzy tiers
 
@@ -356,17 +429,21 @@ Request:
 
 ### `PATCH /api/community/preferences`
 
-Request:
+Request (every field optional):
 
 ```json
-{ "confidence_threshold": 0.0, "show_low_confidence": false }
+{ "confidence_threshold": 0.0, "show_low_confidence": false, "hide_rejected_downvoted": false }
 ```
 
 - `confidence_threshold` ranges from 0 to 1.
+- `hide_rejected_downvoted` hides rejected and downvoted rows from the web app's
+  master filter list only. It never changes `active`: rejected rows are already
+  inactive, and downvoted rows keep their state.
 - The response is the saved preferences object
-  (`{ "version": 1, "confidenceThreshold": …, "showLowConfidence": … }`).
+  (`{ "version": 1, "confidenceThreshold": …, "showLowConfidence": …, "hideRejectedDownvoted": … }`),
+  which the master view also returns as `preferences`.
 - These preferences belong to the account. `GET` returns the same object.
-- The defaults are `0.0` and `false`.
+- The defaults are `0.0`, `false` and `false`.
 
 ## 6. Votes and reports
 
@@ -541,8 +618,9 @@ failed run returns its error and is due again after the service's
   left out and not counted in `unreadCount`.
 - Each notification carries the Jellyfin `libraryId`, `itemId` and
   `mediaSourceId` of the notified local version, so the web app links
-  directly to that version's item page
-  (`#/library/{libraryId}/item/{itemId}/source/{mediaSourceId}`).
+  directly to that version's item page on its Community tab
+  (`#/library/{libraryId}/item/{itemId}/source/{mediaSourceId}/community`, without
+  `/source/…` for the default version).
 - While `state` is `running`, the web app re-reads `GET /api/community/sync`
   until it settles, then refreshes open item pages.
 
@@ -699,7 +777,7 @@ the upgrade.
 | `community_master_filters` | **link_id**, **filter_id**, category, baseline_json (master values at baseline), baseline_revision, info_json (confidence, counts, spread, as of the latest revision), local_start_ms, local_end_ms, local_subcategory, local_severity, local_action, state (`pending`\|`verified`\|`adjusted`\|`rejected`\|`low_confidence`), locally_verified, local_touched, my_vote (`up`\|`down`\|NULL), present (bool), updated_at | Checks: valid state, `local_start_ms < local_end_ms` |
 | `community_master_updates` | **link_id**, **filter_id**, to_revision, change (`new`\|`changed`\|`removed`\|`low_confidence`), changed_fields_json, new_master_json, merged_into, values_digest | Rebuilt for each newly stored latest snapshot. A row is deleted when it is decided |
 | `community_master_dismissals` | **link_id**, **filter_id**, values_digest, dismissed_at | — |
-| `community_master_preferences` | **owner_id**, confidence_threshold (0–1), show_low_confidence | — |
+| `community_master_preferences` | **owner_id**, confidence_threshold (0–1), show_low_confidence, hide_rejected_downvoted (0039) | — |
 | `community_sync_state` | **owner_id**, **service_url**, contributor_id, state, run_id, last_started_at, last_success_at, next_due_at, last_error_code, downloads_retry_at (pending downloads wait until then, §8) | — |
 | `community_sync_notifications` | **id**, owner_id, link_id → links (CASCADE), kind, from_revision, to_revision, created_at, read_at | Unique on `(owner_id, link_id, kind, to_revision)`. Index on `(owner_id, read_at)` |
 
@@ -730,19 +808,21 @@ The migration deletes their `role_capability_defaults` and
 so no access decision changes. The verified pre-upgrade backup keeps the removed
 rows, and the upgrade test recovers them from it.
 
+### 10.4 Review community snapshots (migration `0039_review_community_sources`)
+
+| Table | Columns (PK **bold**) | Keys and constraints |
+| --- | --- | --- |
+| `review_community_sources` | **review_id** → saved_reviews (CASCADE), **id**, link_id → community_master_links (nullable), position, community_version_id, label, tier, match_percent, master_revision, alignment_json, filters_json, filters_digest, captured_at | Index on `link_id`. Checks: `position >= 0`, `master_revision >= 1` |
+
+The migration also adds `community_master_preferences.hide_rejected_downvoted`
+(default false). It changes no existing row, runs only after the verified,
+recoverable backup, and its downgrade refuses while any snapshot or hide preference
+exists. The upgrade test starts from `0038_retire_receipt_capabilities` with stored
+preferences and recovers the pre-upgrade database from the backup; the upgrade
+matrix covers every earlier revision.
+
 ## Open questions
 
-1. **How reviews and EDL exports consume master sets.** The default is
-   implemented as a read path: master sets stay a filter source next to scans,
-   and no derived imported scan is generated.
-   `community_master_sources.active_master_filters` returns an account's
-   active effective filters for a local version (after local decisions, the
-   saved threshold and Low Confidence preference, and alignment), and
-   `as_findings` feeds them to the existing EDL range merging, which
-   `GET /api/community/masters/{link_id}/active-filters` exposes. **Still
-   open:** adding a link as a member of a saved review, so the review's
-   filter linking, export revision, policy freshness and published sidecars
-   include it.
-2. **Per-account versus shared master links.** The suggested default is
+1. **Per-account versus shared master links.** The suggested default is
    per-account, matching personal reviews and per-contributor receipts.
    Several accounts on one install then each download their own copy.

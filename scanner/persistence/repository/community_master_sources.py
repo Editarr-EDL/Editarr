@@ -34,6 +34,7 @@ class ActiveMasterFilter:
     subcategory: str
     severity: str
     action: str
+    confidence: float | None = None
 
     def as_json(self) -> dict:
         return {
@@ -45,6 +46,7 @@ class ActiveMasterFilter:
             "subcategory": self.subcategory,
             "severity": self.severity,
             "action": self.action,
+            "confidence": self.confidence,
         }
 
 
@@ -70,12 +72,16 @@ def clamp_range(start_ms: int, end_ms: int, duration_ms: int | None) -> tuple[in
 
 
 def link_active_filters(
-    db: Session, owner_id: int, link: CommunityMasterLinkRow
+    db: Session, owner_id: int, link: CommunityMasterLinkRow, *, clip: bool = True
 ) -> list[ActiveMasterFilter]:
-    """The link's active effective filters in master view order, clipped to the local
-    file; a filter wholly outside it is left out, so no EDL range is empty or negative."""
+    """The link's active effective filters in master view order.
+
+    By default they are clipped to the local file, and a filter wholly outside it is
+    left out, so no EDL range is empty or negative. `clip=False` returns the local
+    timeline values unchanged, as saved-review snapshots store them.
+    """
     view = master_view(db, owner_id, link.id)
-    duration = version_duration_ms(db, link.media_version_id)
+    duration = version_duration_ms(db, link.media_version_id) if clip else None
     found = []
     for row in view.filters:
         if not row.active:
@@ -93,6 +99,7 @@ def link_active_filters(
                 values["subcategory"],
                 values["severity"],
                 values["action"],
+                row.master.get("confidence"),
             )
         )
     return found

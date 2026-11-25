@@ -83,9 +83,10 @@ export function listCommunityMasters(itemId: string, mediaSourceId: string | nul
 export const fetchCommunityMaster = (linkId: string, signal?: AbortSignal) =>
   communityJson<MasterView>(link(linkId), { signal });
 
-/** The link's in-effect filters on the local timeline and their merged Simple EDL (reviews and export read path). */
-export const fetchMasterActiveFilters = (linkId: string, signal?: AbortSignal) =>
-  communityJson<ActiveMasterFilters>(`${link(linkId)}/active-filters`, { signal });
+/** The link's in-effect filters on the local timeline now and their merged Simple EDL. `clipped: false`
+ * returns them unclipped, as saved-review snapshots store them. */
+export const fetchMasterActiveFilters = (linkId: string, signal?: AbortSignal, { clipped = true } = {}) =>
+  communityJson<ActiveMasterFilters>(`${link(linkId)}/active-filters${clipped ? "" : "?clipped=false"}`, { signal });
 
 export const previewMasterAlignment = (linkId: string, request: AlignmentPreviewRequest, signal?: AbortSignal) =>
   communityJson<AlignmentPreview>(`${link(linkId)}/alignment/preview`, { ...postJson(request), signal });
@@ -102,6 +103,7 @@ export const fetchMasterPreferences = (signal?: AbortSignal) => communityJson<Ma
 export const saveMasterPreferences = (preferences: MasterPreferences, signal?: AbortSignal) =>
   communityJson<MasterPreferencesResult>("preferences", { ...postJson({
     confidence_threshold: preferences.confidenceThreshold, show_low_confidence: preferences.showLowConfidence,
+    hide_rejected_downvoted: !!preferences.hideRejectedDownvoted,
   }, "PATCH"), signal });
 
 /** Send a per-filter vote. Use `retry` with the same operation ID after a retryable failure. */

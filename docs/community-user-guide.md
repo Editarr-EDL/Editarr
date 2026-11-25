@@ -37,11 +37,20 @@ and contributor count. Attribution is a count only, without names.
 
 ## Find community filters
 
-Select the physical media version on the item page and open **Find Filters**.
-The dialog lists matching local scans first. Its **Community versions** section
-searches only when you choose **Find community versions**; local discovery stays
-available if the search fails. The first search uses Theatrical. Use the version
-picker to search a different version, or choose **Other** and an optional name.
+Community filters have their own **Community** tab on the item page, left of
+**Scans**. Select the physical media version and choose **Find Filters** in that
+tab. It searches the community service for versions of this file (the first
+search uses Theatrical); use the version picker to search a different version, or
+choose **Other** and an optional name. Accounts without community access see an
+explanation instead of the controls.
+
+Finding local scans is separate: the **Scans** tab's **Recover Scans** matches
+scans of this item's other versions and other local files and associates the ones
+you choose. It is enabled when this item's other versions, its previous versions,
+pending imports or linked scans have scans, or when another file of the same movie or
+episode has a scan you can see; otherwise it is disabled with an explanation.
+That check is quick and doesn't read your files, so a search can still come back
+with "No recoverable scans matched this file."
 
 Each result card shows the version name, a **Match %** and the filter and
 contributor counts. Match % reflects the strongest evidence that links your file
@@ -78,8 +87,9 @@ until alignment is approved.
 
 ## Review the community filters
 
-The item page's **Community filters** section lists the linked set's filters with
-their time, category, severity, action, confidence and contributor count.
+The **Community** tab lists each linked set's filters with their time, category,
+severity, action, confidence and contributor count. Notification links from
+**Filter updates** open this tab.
 
 - **Confirm** or **Reject** each filter. Your decisions are kept locally and are
   never overwritten by updates; **Reset** returns a filter to the master values.
@@ -95,10 +105,49 @@ their time, category, severity, action, confidence and contributor count.
   filters**. **Minimum confidence** hides other untouched filters below your
   threshold. Both preferences belong to your account; filters you touched ignore
   them.
+- **Hide rejected and downvoted filters** (off by default) removes filters you
+  rejected or voted down from the list. It only hides them: rejected filters are
+  already inactive, and downvoted filters you did not reject stay active. A filter
+  you reject or vote down while it is on stays listed until you change a list
+  setting or reopen the set. The setting belongs to your account.
 - Use **Thumbs up** or **Thumbs down** to vote on an individual filter. Votes
   require a current community connection and your downloaded copy of the set; you
   cannot vote on your own filters. A vote that could not be sent stays pending with
   **Retry vote**, which resends the same saved intent.
+
+## Use community filters in a saved review
+
+Linking a set never changes a saved review. In the **Review** tab, **Included
+scans** lists a **Community filters** entry for each set linked to this version.
+Check it and save the review to store a snapshot of the set's active filters at
+that moment: your decisions, minimum confidence, Low Confidence setting, approved
+alignment and accepted updates all apply. The review's results show these filters
+next to the scan filters, marked with their community source and confidence, and
+EDL and MCF exports and published sidecars use the stored snapshot.
+
+Later changes in the Community tab do not touch the review. When the set's active
+filters differ from the snapshot, the entry shows **Community filters changed since
+included** with **Refresh community filters**; refreshing and saving stores a new
+snapshot and a new review revision, so earlier exports show as out of date.
+Unchecking the entry and saving removes the snapshot. A set that still needs
+alignment can't be included or refreshed until you approve its alignment. If the
+set is later deleted or replaced, the review keeps its stored filters but can't
+refresh them. Duplicating a review copies its snapshots.
+
+A review can contain only community filters: with no scans included, it still
+exports and publishes EDL and MCF files beside the media file from its stored
+community filters. A review needs at least one scan or community filter to export.
+The timeline summary and the Community filters table show included community
+filters as exports render them: clipped to the file's runtime and with your
+instance's enforced severities (marked "enforced"). A filter whose classification is
+invalid, or that lies outside the file, is marked "not exported" and left out.
+
+Filtered subtitles need the words that were said, which community filters don't
+have. A community language mute changes subtitles only when the version has a
+completed local audio scan with a language finding that overlaps it; the scan's words
+are then removed exactly as for your own filters. Otherwise subtitles are left alone,
+and the Review and Subtitles steps say how many community mutes weren't applied and
+whether an audio scan is needed.
 
 ## Share your filters
 

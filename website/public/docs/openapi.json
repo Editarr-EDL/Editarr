@@ -5717,7 +5717,7 @@
           "community"
         ],
         "summary": "Active Filters",
-        "description": "The link's in-effect filters on the local timeline, and their merged Simple EDL.\n\nThis is the read path reviews and EDL export use for a master set as a filter\nsource next to scans.",
+        "description": "The link's in-effect filters on the local timeline now, and their merged Simple EDL.\n\nSaved reviews store these values as a snapshot when they include or refresh the\nlink; `clipped=false` returns them unclipped, as the snapshot stores them, so the\nweb app can tell whether a stored snapshot changed.",
         "operationId": "active_filters_api_community_masters__link_id__active_filters_get",
         "parameters": [
           {
@@ -5729,6 +5729,16 @@
               "maxLength": 128,
               "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
+            }
+          },
+          {
+            "name": "clipped",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Clipped"
             }
           }
         ],
@@ -5988,7 +5998,7 @@
           "community"
         ],
         "summary": "Save Preferences",
-        "description": "Save either preference; they decide which untouched rows are active.",
+        "description": "Save any preference. The threshold and Low Confidence toggle decide which untouched\nrows are active; hiding rejected and downvoted rows affects only the list.",
         "operationId": "save_preferences_api_community_preferences_patch",
         "requestBody": {
           "content": {
@@ -7517,6 +7527,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FilterCandidateSearchResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/filter-candidates/available": {
+      "post": {
+        "summary": "Api Filter Candidates Available",
+        "description": "Whether Recover Scans could find anything: a reachable completed scan of another\nfile of the same work. Reads no media and writes nothing.",
+        "operationId": "api_filter_candidates_available_api_filter_candidates_available_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanMatchSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterCandidateAvailability"
                 }
               }
             }
@@ -15208,6 +15265,28 @@
         ],
         "title": "CommunitySourceReference"
       },
+      "CommunitySubtitleSummary": {
+        "properties": {
+          "applied": {
+            "type": "integer",
+            "title": "Applied",
+            "default": 0
+          },
+          "needs_audio_scan": {
+            "type": "integer",
+            "title": "Needs Audio Scan",
+            "default": 0
+          },
+          "unaligned": {
+            "type": "integer",
+            "title": "Unaligned",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "CommunitySubtitleSummary",
+        "description": "How the review's community language mutes reach filtered subtitles.\n\n`applied` mutes align with a word-level language finding of a local audio scan and\nredact its words; `needs_audio_scan` mutes wait for a completed local audio scan of\nthe version; `unaligned` mutes overlap no local language finding. Only applied\nmutes change subtitles."
+      },
       "CommunityTargetApproval": {
         "properties": {
           "source": {
@@ -17054,6 +17133,20 @@
         ],
         "title": "ExportSummary"
       },
+      "FilterCandidateAvailability": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "FilterCandidateAvailability",
+        "description": "Whether a Recover Scans search could find a candidate for the item version."
+      },
       "FilterCandidateSearchResult": {
         "properties": {
           "media_item_id": {
@@ -18532,6 +18625,14 @@
               }
             ],
             "title": "Mcf Metadata Seed"
+          },
+          "community_memberships": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunityMembership"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Community Memberships"
           },
           "media_source_id": {
             "anyOf": [
@@ -20466,6 +20567,17 @@
               }
             ],
             "title": "Show Low Confidence"
+          },
+          "hide_rejected_downvoted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hide Rejected Downvoted"
           }
         },
         "additionalProperties": false,
@@ -21291,6 +21403,222 @@
           "label"
         ],
         "title": "ReviewAudioSource"
+      },
+      "ReviewCommunityFilter": {
+        "properties": {
+          "filter_id": {
+            "type": "string",
+            "title": "Filter Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "subcategory": {
+            "type": "string",
+            "title": "Subcategory"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "edit_action": {
+            "type": "string",
+            "enum": [
+              "mute",
+              "skip"
+            ],
+            "title": "Edit Action"
+          },
+          "start_seconds": {
+            "type": "number",
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "type": "number",
+            "title": "End Seconds"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filter_id",
+          "category",
+          "subcategory",
+          "severity",
+          "edit_action",
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "ReviewCommunityFilter",
+        "description": "One snapshot filter on the local timeline, in seconds."
+      },
+      "ReviewCommunityMembership": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "link_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "refresh": {
+            "type": "boolean",
+            "title": "Refresh",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReviewCommunityMembership",
+        "description": "One included community filter snapshot in a save request.\n\n`{source_id}` keeps a stored snapshot, `{source_id, refresh: true}` takes a new\nsnapshot from the same link, and `{link_id}` includes a link with a new snapshot.\nSaved snapshots that a request leaves out are removed."
+      },
+      "ReviewCommunitySource": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "link_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "community_version_id": {
+            "type": "string",
+            "title": "Community Version Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "match_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Percent"
+          },
+          "master_revision": {
+            "type": "integer",
+            "title": "Master Revision"
+          },
+          "alignment": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment"
+          },
+          "captured_at": {
+            "type": "string",
+            "title": "Captured At"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "current",
+              "changed",
+              "alignment_required",
+              "link_unavailable"
+            ],
+            "title": "State"
+          },
+          "link_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link State"
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunityFilter"
+            },
+            "type": "array",
+            "title": "Filters"
+          },
+          "unusable_filter_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unusable Filter Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "link_id",
+          "community_version_id",
+          "label",
+          "master_revision",
+          "captured_at",
+          "state"
+        ],
+        "title": "ReviewCommunitySource",
+        "description": "A stored community filter snapshot and how it compares with its link now.\n\n`state` is `current` (the link's active filters still equal the snapshot),\n`changed` (they differ; a refresh would update the snapshot), `alignment_required`\n(the link awaits alignment, so it can't be refreshed) or `link_unavailable` (the\nlink was deleted, replaced or belongs to another account). The review always uses\n`filters`, whatever the state."
       },
       "ReviewDeletionChoice": {
         "properties": {
@@ -22610,6 +22938,21 @@
             },
             "type": "array",
             "title": "New Manual Filters"
+          },
+          "community_memberships": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ReviewCommunityMembership"
+                },
+                "type": "array",
+                "maxItems": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Memberships"
           }
         },
         "additionalProperties": false,
@@ -23093,6 +23436,16 @@
                 "type": "null"
               }
             ]
+          },
+          "community_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunitySource"
+            },
+            "type": "array",
+            "title": "Community Sources"
+          },
+          "community_subtitles": {
+            "$ref": "#/components/schemas/CommunitySubtitleSummary"
           }
         },
         "type": "object",

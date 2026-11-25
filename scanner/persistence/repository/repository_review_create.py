@@ -74,6 +74,7 @@ from .repository_review_metadata import (
 from .repository_review_metadata import (
     _with_manual_membership as _with_manual_membership,
 )
+from .review_community_sources import prepare_sources
 from .review_policy import policy_write, prepare_review_policy
 from .review_policy_evidence import bind_review_evidence
 from .review_version_evidence import version_file_matches
@@ -190,6 +191,9 @@ def _create_saved_review(
     db.flush()
     if stable_version_id is not None:
         bind_review_version(db, row.id, stable_version_id)
+    if any(value.source_id for value in data.community_memberships):
+        raise ReviewMembershipError("A new review can only include community filters by link")
+    row.community_sources = prepare_sources(db, row, data.community_memberships) or []
     row.mcf_document = _review_mcf_document_row(row.id, review_document)
     row.synchronization = _review_synchronization_row(row.id, synchronization)
     if data.filters is None:

@@ -35,6 +35,29 @@ from .repository_rows import (
 from .scan_verification_coverage import verification_coverage_by_scan
 
 
+def possible_candidate_scans(
+    db: Session, *, resolved_local_path: str, media_provider_id: str | None
+) -> list[ScanRow]:
+    """Completed scans of other files of the same work (TMDB/TVDB provider ID), newest first.
+
+    These are every scan `find_filter_candidates` may match; reading them needs no hashing,
+    so Recover Scans uses them to tell whether anything could be recovered.
+    """
+    if not media_provider_id:
+        return []
+    return (
+        db.query(ScanRow)
+        .join(MediaItemRow)
+        .filter(
+            ScanRow.status == "complete",
+            ScanRow.resolved_local_path != resolved_local_path,
+            ScanRow.media_provider_id == media_provider_id,
+        )
+        .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
+        .all()
+    )
+
+
 def find_filter_candidates(
     db: Session,
     *,
@@ -47,18 +70,8 @@ def find_filter_candidates(
     source_path: str,
 ) -> list[tuple[Scan, str]]:
     """Find completed scans of likely matching, but not yet linked, media files."""
-    if not media_provider_id:
-        return []
-    rows = (
-        db.query(ScanRow)
-        .join(MediaItemRow)
-        .filter(
-            ScanRow.status == "complete",
-            ScanRow.resolved_local_path != resolved_local_path,
-            ScanRow.media_provider_id == media_provider_id,
-        )
-        .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
-        .all()
+    rows = possible_candidate_scans(
+        db, resolved_local_path=resolved_local_path, media_provider_id=media_provider_id
     )
     normalized_scene_name = _normalized_media_name(scene_name) if scene_name else None
     normalized_release_group = _normalized_media_name(release_group) if release_group else None

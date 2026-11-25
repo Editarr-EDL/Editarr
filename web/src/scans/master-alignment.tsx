@@ -1,3 +1,4 @@
+import { notifyCommunityFiltersChanged } from "./community-master-events";
 import { useId, useState } from "react";
 import { approveMasterAlignment, previewMasterAlignment } from "../api/api-community-masters";
 import type { Alignment, AlignmentPreview, AlignmentPreviewRequest, MasterTarget } from "../api/api-community-master-types";
@@ -55,6 +56,7 @@ export function MasterAlignment({ linkId, target, filters, forRevision, prefill,
   };
   const approve = () => preview && void run(async () => {
     await approveMasterAlignment(linkId, preview.token, forRevision);
+    notifyCommunityFiltersChanged();
     onApproved();
   });
 

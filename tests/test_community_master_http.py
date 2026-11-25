@@ -56,7 +56,11 @@ def test_find_download_list_and_view_for_a_file_tier(masters):
     listed = masters.ok("GET", f"/masters?item_id={masters.item_id}", USER)
     assert [item["linkId"] for item in listed["links"]] == [link["linkId"]]
     view = masters.ok("GET", f"/masters/{link['linkId']}", USER)
-    assert view["preferences"] == {"confidenceThreshold": 0.0, "showLowConfidence": False}
+    assert view["preferences"] == {
+        "confidenceThreshold": 0.0,
+        "showLowConfidence": False,
+        "hideRejectedDownvoted": False,
+    }
     (row,) = view["filters"]
     assert (row["state"], row["active"], row["touched"], row["local"]) == (
         "pending",
@@ -170,6 +174,7 @@ def test_preferences_are_per_account_and_decide_untouched_rows(masters):
         "version": 1,
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
+        "hideRejectedDownvoted": False,
     }
     saved = masters.ok("PATCH", "/preferences", USER, {"confidence_threshold": 0.3})
     assert saved["confidenceThreshold"] == 0.3
@@ -295,6 +300,12 @@ def test_active_filters_are_clipped_to_the_local_file(masters):
     ]
     lines = [line for line in active["edl"].splitlines() if not line.startswith("#")]
     assert lines == ["10.000 20.000 3", "95.000 100.000 3"]
+    unclipped = masters.ok("GET", f"/masters/{link['linkId']}/active-filters?clipped=false", USER)
+    assert [(item["filterId"], item["endMs"]) for item in unclipped["filters"]] == [
+        ("f_a", 20_000),
+        ("f_b", 105_000),
+        ("f_c", 130_000),
+    ]
 
 
 def test_repeated_find_and_check_wait_for_the_cooldown(masters, monkeypatch):
