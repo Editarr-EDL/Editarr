@@ -10,7 +10,6 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from scanner.formats.community.master_snapshot import MasterSnapshotError, parse_master_snapshot
 from scanner.formats.community.strict_json import canonical_json_bytes
-from scanner.security.community_download_receipts import ReceiptKey
 from scanner.security.community_master_snapshots import (
     MasterUnchanged,
     MasterVerificationError,
@@ -20,6 +19,7 @@ from scanner.security.community_master_snapshots import (
     snapshot_signing_bytes,
     verify_master_response,
 )
+from scanner.security.community_receipt_keys import ReceiptKey
 from scanner.testing.community_v3_vectors import master_response, vectors
 
 FIXTURES = Path(__file__).parents[1] / "community-service/test/fixtures/community-v3"

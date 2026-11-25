@@ -11,7 +11,8 @@ const repair: ReviewRepairSummary = {
 
 afterEach(() => vi.unstubAllGlobals());
 
-it.each(["review_needs_repair", "community_scan_unavailable"])("preserves the repair in a %s envelope", async (code) => {
+it("preserves the repair in a review_needs_repair envelope", async () => {
+  const code = "review_needs_repair";
   const error = await responseError(new Response(JSON.stringify({ detail: { code, message: "Repair needed", repair } }), { status: 409 }), "Fallback");
   expect(error).toMatchObject({ status: 409, code, message: "Repair needed", repair });
 });

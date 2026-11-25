@@ -62,7 +62,7 @@ def test_every_supported_revision_upgrades_with_every_row_kept(tmp_path, revisio
     generation = adoption.upgrade_existing_database(path, path.parent)
 
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
-    assert adoption.HEAD_REVISION == "0037_community_master_sets"
+    assert adoption.HEAD_REVISION == "0038_retire_receipt_capabilities"
     upgraded, _ = _snapshot(path)
     drop_0018_additions(upgraded)
     drop_0031_additions(upgraded, original)

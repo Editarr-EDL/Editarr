@@ -20,16 +20,16 @@ from scanner.modeling.community_normalization import (
     AliasListError,
     parse_alias_list,
 )
-from scanner.security.community_download_receipts import (
-    ReceiptError,
-    ReceiptKey,
-    parse_receipt_keys,
-)
 from scanner.security.community_master_snapshots import (
     MasterUnchanged,
     MasterVerificationError,
     VerifiedMaster,
     verify_master_response,
+)
+from scanner.security.community_receipt_keys import (
+    ReceiptError,
+    ReceiptKey,
+    parse_receipt_keys,
 )
 
 from .master_service_models import (

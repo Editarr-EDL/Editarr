@@ -704,12 +704,21 @@ the upgrade.
 
 | Existing data | Migration action |
 | --- | --- |
-| `community_imports`, `community_import_targets` | Renamed to `retired_community_imports` and `retired_community_import_targets`. All columns and BLOBs are unchanged, and the `scans` FK cascade is kept. No code reads them except backup, export and audit |
+| `community_imports`, `community_import_targets` | Renamed to `retired_community_imports` and `retired_community_import_targets`. All columns and BLOBs are unchanged, and the `scans` FK cascade is kept. Only backup, export, audit, scan provenance and the source terms and lineage of a shared imported scan read them |
 | `scans` and `scan_findings` for imported scans | Unchanged. They stay plain local imported scans, so reviews, exports and published files are unaffected |
 | `community_operations` rows of kind `receipt` or `vote` | Copied verbatim into `retired_community_operations` (same columns plus `retired_at` and `retired_reason = 'revision_protocol_removed'`), then deleted from `community_operations` |
 | `publish` operations | Rows in `pending` or `submitted` become `failed`, and their `community_publications.error_code` becomes `protocol_retired`. `acknowledged` rows are kept as history. All exact bytes are retained |
 
 Portable backups include all the new and retired tables.
+
+### 10.3 Retired capability grants (migration `0038_retire_receipt_capabilities`)
+
+The revision protocol's `community.receipts.recover.own` and
+`community.receipts.recover.other` capabilities are removed from the catalog.
+The migration deletes their `role_capability_defaults` and
+`user_capability_overrides` rows only; the grant loader already ignored them,
+so no access decision changes. The verified pre-upgrade backup keeps the removed
+rows, and the upgrade test recovers them from it.
 
 ## Open questions
 

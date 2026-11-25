@@ -27,7 +27,7 @@ def test_version_endpoint_has_independent_compatibility_values(tmp_path):
     assert response.status_code == 200
     version = response.json()
     assert version["release"] == scanner.__version__ == app.version
-    assert version["database_schema"] == "0037_community_master_sets"
+    assert version["database_schema"] == "0038_retire_receipt_capabilities"
     assert version["scanner_behavior"] != version["release"]
     assert version["local_api"] != version["release"]
     assert version["community_api"] is None

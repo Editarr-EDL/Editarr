@@ -115,8 +115,6 @@ class Capability(StrEnum):
     COMMUNITY_IDENTITY_DISCONNECT_OTHER = "community.identity.disconnect.other"
     COMMUNITY_IDENTITY_KEYS_OWN = "community.identity.keys.own"
     COMMUNITY_IDENTITY_KEYS_OTHER = "community.identity.keys.other"
-    COMMUNITY_RECEIPTS_RECOVER_OWN = "community.receipts.recover.own"
-    COMMUNITY_RECEIPTS_RECOVER_OTHER = "community.receipts.recover.other"
 
     # Instance settings and operations.
     CONNECTIONS_VIEW = "connections.view"

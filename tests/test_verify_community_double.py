@@ -23,7 +23,6 @@ from tests.community_identity_support import identity_home
 
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / ".github/skills/verify-editarr/scripts/lib"
-LOOKUP = json.loads((ROOT / "tests/fixtures/community/catalog-lookup-v1.json").read_text())
 PROFILE = json.loads((ROOT / "tests/fixtures/community/enrollment-profile-v1.json").read_text())
 
 
@@ -101,16 +100,6 @@ def test_contributors_start_with_distinct_valid_names(double):
     assert names[0].lower() != names[1].lower()
     bounds = range(PROFILE["nameMinCodePoints"], PROFILE["nameMaxCodePoints"] + 1)
     assert all(len(name) in bounds for name in names)
-
-
-def test_lookup_body_must_match_the_availability_schema(double):
-    _, transport, (member, _), answers = double
-    send(transport, member, "POST", "/v1/availability/batch", b"{}", "empty-lookup")
-    assert answers[-1] == (400, {"error": {"code": "invalid_lookup"}})
-    valid = LOOKUP["availabilityRequest"]
-    found = send(transport, member, "POST", "/v1/availability/batch", valid, "valid-lookup")
-    assert answers[-1][0] == 200, answers[-1]
-    assert [item["id"] for item in found["items"]] == [item["id"] for item in valid["items"]]
 
 
 def test_identity_accepts_only_its_real_methods(double):

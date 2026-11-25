@@ -173,7 +173,7 @@ def test_error_envelope_matches_the_existing_policy_response():
 
 def test_capability_payload_rejects_unknown_capabilities_and_fields():
     payload = {
-        "version": "editarr-capabilities-9",
+        "version": "editarr-capabilities-10",
         "permission_revision": 4,
         "principal": {
             "user_id": 3,

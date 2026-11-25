@@ -69,7 +69,6 @@ from scanner.modeling.model_core import (
     normalize_scan_name,
 )
 from scanner.modeling.model_review_repairs import (
-    ReviewCommunityRepair,
     ReviewRecoveryCounts,
     ReviewRepairSummary,
 )

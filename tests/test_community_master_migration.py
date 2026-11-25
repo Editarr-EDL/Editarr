@@ -166,10 +166,6 @@ def _upgrade_with_backup(path, tmp_path):
     return original
 
 
-def test_head_is_0037():
-    assert adoption.HEAD_REVISION == "0037_community_master_sets"
-
-
 def test_baseline_v1_upgrade_keeps_scans_and_adds_empty_master_tables(tmp_path):
     path = _data_path(tmp_path)
     create_unversioned_fixture(path).dispose()

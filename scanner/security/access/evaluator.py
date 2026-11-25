@@ -49,11 +49,6 @@ _ACCEPTS: Mapping[TargetKind, Callable[[Target, UserId], bool]] = MappingProxyTy
         TargetKind.OTHER_ACCOUNT: lambda target, actor: (
             isinstance(target, AccountRef) and target.user_id != actor
         ),
-        TargetKind.OTHER_ACCOUNT_RESOURCE: lambda target, actor: (
-            isinstance(target, ResourceRef)
-            and target.owner is not None
-            and target.owner.user_id != actor
-        ),
         TargetKind.SCOPED_RECORDS: lambda target, _actor: isinstance(target, ResourceRef),
     }
 )

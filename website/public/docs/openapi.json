@@ -14988,8 +14988,6 @@
           "community.identity.disconnect.other",
           "community.identity.keys.own",
           "community.identity.keys.other",
-          "community.receipts.recover.own",
-          "community.receipts.recover.other",
           "connections.view",
           "connections.test",
           "connections.edit",
@@ -15025,7 +15023,7 @@
         "properties": {
           "version": {
             "type": "string",
-            "const": "editarr-capabilities-9",
+            "const": "editarr-capabilities-10",
             "title": "Version"
           },
           "permission_revision": {
@@ -20235,7 +20233,7 @@
               "type": "string"
             },
             "type": "object",
-            "maxProperties": 121,
+            "maxProperties": 119,
             "minProperties": 1,
             "title": "Overrides",
             "description": "Capability to allow, deny, or inherit"
@@ -21293,30 +21291,6 @@
           "label"
         ],
         "title": "ReviewAudioSource"
-      },
-      "ReviewCommunityRepair": {
-        "properties": {
-          "available": {
-            "type": "boolean",
-            "title": "Available"
-          },
-          "unavailable_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Unavailable Reason"
-          }
-        },
-        "type": "object",
-        "required": [
-          "available"
-        ],
-        "title": "ReviewCommunityRepair"
       },
       "ReviewDeletionChoice": {
         "properties": {
@@ -22383,16 +22357,6 @@
           },
           "recover": {
             "$ref": "#/components/schemas/ReviewRecoveryCounts"
-          },
-          "community": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReviewCommunityRepair"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "type": "object",
@@ -22928,7 +22892,7 @@
               ]
             },
             "type": "object",
-            "maxProperties": 121,
+            "maxProperties": 119,
             "minProperties": 1,
             "title": "Defaults",
             "description": "Capability to grant (true), withhold (false), or reset to the catalog (null)"

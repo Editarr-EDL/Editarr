@@ -74,7 +74,7 @@ rotation status.
 
 The service double is labelled. `lib/community_double.py` judges every request
 with `lib/community-contract.mjs`, which bundles the community service's own route
-methods and body validators. It answers lookups with `missing_identity`. Contributors
+methods and body validators. Contributors
 start with distinct names. A rename to a name another contributor holds, in any
 case, gets 409 `display_name_taken`, and reusing an operation ID with a different
 body gets 409 `operation_conflict`. `tests/test_verify_community_double.py` pins

@@ -21,7 +21,7 @@ export interface PrincipalSummary {
 
 /** What the signed-in account may attempt before per-target narrowing (MU-04). */
 export interface CapabilityPayload {
-  version: "editarr-capabilities-9";
+  version: "editarr-capabilities-10";
   permission_revision: number;
   principal: PrincipalSummary;
   capabilities: string[];

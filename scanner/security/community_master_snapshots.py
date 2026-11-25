@@ -19,8 +19,8 @@ from scanner.formats.community.master_snapshot import (
 )
 from scanner.formats.community.strict_json import MAX_SAFE_INTEGER
 
-from .community_download_receipts import ReceiptKey, parse_receipt_keys, public_bytes
 from .community_framing import framed
+from .community_receipt_keys import ReceiptKey, parse_receipt_keys, public_bytes
 from .community_signatures import is_canonical_service_origin
 
 SNAPSHOT_DOMAIN = "editarr-community-master-snapshot-v1"

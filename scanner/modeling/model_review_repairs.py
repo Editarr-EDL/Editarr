@@ -9,14 +9,8 @@ class ReviewRecoveryCounts(BaseModel):
     removed_accepted_credits: int
 
 
-class ReviewCommunityRepair(BaseModel):
-    available: bool
-    unavailable_reason: str | None = None
-
-
 class ReviewRepairSummary(BaseModel):
     message: str = "This review uses a scan that no longer exists."
     missing_scan_ids: list[str]
     detected_at: AwareDatetime
     recover: ReviewRecoveryCounts
-    community: ReviewCommunityRepair | None = None

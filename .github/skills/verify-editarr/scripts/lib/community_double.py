@@ -3,8 +3,7 @@
 `ProbeService` extends the signature-verifying `ActivityService` test double. Every
 request is first judged by `community-contract.mjs`, which runs the community
 service's own route methods and body validators, so the double refuses what the
-real service refuses. It answers lookups with `missing_identity`, and applies
-signed renames under the real uniqueness and operation-replay rules. Nothing here
+real service refuses. It applies signed renames under the real uniqueness and operation-replay rules. Nothing here
 contacts a real service.
 """
 
@@ -17,7 +16,6 @@ from pathlib import Path
 
 import httpx
 
-from scanner.modeling.community_matching import POLICY_VERSION
 from tests.test_community_activity_http import ActivityService
 
 CONTRACT = Path(__file__).with_name("community-contract.mjs")
@@ -86,7 +84,7 @@ def _failure(status: int, code: str) -> httpx.Response:
 
 
 class ProbeService(ActivityService):
-    """The labelled double with contract-checked requests, lookups, and renames.
+    """The labelled double with contract-checked requests and renames.
 
     Contributors start with distinct generated names. A rename keeps the real
     service's rules: a name another contributor holds, in any case, is taken; the
@@ -118,21 +116,6 @@ class ProbeService(ActivityService):
         verdict = self.judge(request)
         if verdict["status"] != 200:
             return _failure(verdict["status"], verdict["code"])
-        if request.url.path == "/v1/availability/batch":
-            self._signer(request)
-            items = [
-                {
-                    "id": item["id"],
-                    "status": "missing_identity",
-                    "candidateCount": None,
-                    "truncated": False,
-                    "channels": None,
-                }
-                for item in json.loads(request.content)["items"]
-            ]
-            return httpx.Response(
-                200, json={"version": 1, "policyVersion": POLICY_VERSION, "items": items}
-            )
         if request.url.path == "/v1/identity" and request.method == "PATCH":
             return self._rename(request, verdict["facts"])
         return await super().__call__(request)

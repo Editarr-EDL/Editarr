@@ -128,7 +128,9 @@ def test_every_supported_revision_archives_other_files_and_keeps_every_row(tmp_p
 
     assert generation.is_dir()
     assert (
-        adoption._inspect_database(path) == adoption.HEAD_REVISION == "0037_community_master_sets"
+        adoption._inspect_database(path)
+        == adoption.HEAD_REVISION
+        == "0038_retire_receipt_capabilities"
     )
     upgraded, _ = _snapshot(path)
     drop_0031_additions(upgraded, original)

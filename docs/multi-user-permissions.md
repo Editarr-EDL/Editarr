@@ -95,19 +95,23 @@ subject to the caller's export permissions; preserve provenance for retained fil
 
 | Action | user | admin | owner |
 | --- | --- | --- | --- |
-| Search/find filters and download/import scans | Yes | Yes | Yes |
+| Search/find and download community master filter sets | Yes | Yes | Yes |
 | Vote/submit feedback | Own identity | Own identity | Own identity |
 | Publish own review or shared scan evidence | Yes | Yes | Yes |
 | Publish another user's review | No | Yes | Yes |
 | Check/retry/retract publications | Own | Yes | Yes |
 | Manage connection/profile/enrollment/disconnection/key recovery | Own | Own and ordinary users | Yes |
-| Recover/retry own import receipts | Own | Own | Yes |
-| Recover/retry another user's import receipts | No | Account/media-scoped | Yes |
 | Separate operator/moderation dashboard | Outside scope | Outside scope | Outside scope |
 
 Cross-user new publishing uses the acting admin's contributor identity. Existing
 publications retain the original contributor. Deleting a local user does not
 retract remote publications.
+
+The revision protocol's `community.receipts.recover.own` and
+`community.receipts.recover.other` capabilities are retired. Migration
+`0038_retire_receipt_capabilities` removes their stored role defaults and user
+overrides; the retired import-receipt routes answer `410` to anyone with
+`community.download`.
 
 ## Instance settings and operations
 

@@ -1,4 +1,4 @@
-"""Length-prefixed message framing shared by community receipts and master signatures."""
+"""Length-prefixed message framing for community master snapshot receipts and signatures."""
 
 
 def framed(domain: str, fields: tuple[str, ...], issued_at: int | None = None) -> bytes:

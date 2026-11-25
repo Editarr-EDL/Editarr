@@ -8,7 +8,7 @@ See the [account guide](multi-user-guide.md) for workflows, the
 
 | Contract | Version | Pin |
 | --- | --- | --- |
-| Capability inventory | `editarr-capabilities-9` | `contract_digest()` `a3c9b242cf4785d533e79843e3e77688c412430759f27924fc489174c245a9d4` |
+| Capability inventory | `editarr-capabilities-10` | `contract_digest()` `3fbadef64c0239432704aad73b77b1668dfcf86253222051480d8370af25f866` |
 | Route/action inventory | `editarr-route-actions-25` | 248 registered method and path pairs |
 | Export layout and fixtures | `editarr-export-layout-1` | manifest.json SHA-256 c3063858e3ecf2f8982c66a1140f52ab7d806e737ff5c7854b413cdecccf987e |
 | Jellyfin user fixtures | `editarr-jellyfin-users-1` | manifest.json SHA-256 c4fd21e52fa957d1e5794b4de53305ea35b095a53a673ca2a32e7b7c02d9af29 |

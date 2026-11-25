@@ -70,7 +70,6 @@ class SharingSource:
                 terms.append(
                     {
                         "authorId": row.author_id,
-                        "revisionId": row.revision_id,
                         "termsVersion": original.artifact.sharing_terms,
                     }
                 )
