@@ -20,7 +20,7 @@ from scanner.security.access.request_access import request_access
 
 from .community_master_access import authorize_link, invalid, require_capability, respond
 from .community_master_json import filter_json, preferences_json
-from .community_master_models import FilterDecisionRequest, PreferencesRequest
+from .community_master_models import FilterDecisionRequest, FilterId, LinkId, PreferencesRequest
 
 router = APIRouter(prefix="/api/community", tags=["community"])
 
@@ -42,8 +42,8 @@ def _check_values(body: FilterDecisionRequest, category: str) -> dict:
 
 @router.patch("/masters/{link_id}/filters/{filter_id}")
 def decide_filter(
-    link_id: str,
-    filter_id: str,
+    link_id: LinkId,
+    filter_id: FilterId,
     body: FilterDecisionRequest,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),

@@ -58,6 +58,22 @@ def fit_alignment(anchors: Sequence[AnchorPair]) -> dict:
     return {"offsetMs": offset, "scale": scale, "anchors": len(anchors)}
 
 
+def require_in_bounds(
+    ranges: Sequence[tuple[int, int]], alignment: dict, duration_ms: int | None
+) -> None:
+    """Refuse a transform that puts any master range wholly before the local file start
+    or, when the duration is known, wholly after its end (`alignment_out_of_range`).
+
+    A range that only partly leaves the file is kept and clipped where it is used.
+    """
+    scale, offset = alignment["scale"], alignment["offsetMs"]
+    for start, end in ranges:
+        local_start = int(round(start * scale)) + offset
+        local_end = int(round(end * scale)) + offset
+        if local_end <= 0 or (duration_ms is not None and local_start >= duration_ms):
+            raise AlignmentFitError("alignment_out_of_range")
+
+
 def offset_alignment(offset_ms: int) -> dict:
     """An offset-only transform entered directly."""
     return {"offsetMs": int(offset_ms), "scale": 1.0, "anchors": 0}

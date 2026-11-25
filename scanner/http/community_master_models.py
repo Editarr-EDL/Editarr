@@ -7,12 +7,16 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
+from fastapi import Path
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 from scanner.integrations.community.find_targets import FindTarget
 from scanner.modeling.community_master_alignment import MAX_ANCHORS
 
-Token = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.-]{1,128}$")]
+TOKEN = r"^[A-Za-z0-9_.-]{1,128}$"
+Token = Annotated[str, Field(pattern=TOKEN)]
+LinkId = Annotated[str, Path(pattern=TOKEN, max_length=128)]
+FilterId = Annotated[str, Path(pattern=TOKEN, max_length=128)]
 Milliseconds = Annotated[StrictInt, Field(ge=0, le=86_400_000)]
 
 
@@ -94,11 +98,14 @@ class FilterDecisionRequest(_Body):
         return {name: value for name, value in named.items() if value is not None}
 
 
-class PreferencesRequest(_Body):
-    confidence_threshold: Annotated[float, Field(ge=0.0, le=1.0, allow_inf_nan=False)] | None = None
-    show_low_confidence: StrictBool | None = None
+Unit = Annotated[float, Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)]
 
-    model_config = ConfigDict(extra="forbid", strict=False)
+
+class PreferencesRequest(_Body):
+    """Strict JSON numbers and booleans; a string or boolean threshold is refused."""
+
+    confidence_threshold: Unit | None = None
+    show_low_confidence: StrictBool | None = None
 
 
 class VoteRequest(_Body):

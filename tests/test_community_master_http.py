@@ -233,3 +233,83 @@ def test_find_keys_belong_to_one_account_and_media_access_applies(masters):
     masters.hide_media(USER)
     hidden = masters.send("POST", "/find", USER, {"target": masters.target, "label": None})
     assert hidden.status_code == 404
+
+
+def test_download_capability_is_checked_before_confirmation(masters):
+    masters.deny(USER, C.COMMUNITY_DOWNLOAD)
+    body = {
+        "target": masters.target,
+        "find_key": "unknown",
+        "community_version_id": "v_1",
+        "confirmed": False,
+    }
+    refused = masters.send("POST", "/masters", USER, body)
+    assert (refused.status_code, refused.json()["code"]) == (403, "capability_denied")
+
+
+def test_patch_routes_refuse_requests_without_csrf(masters):
+    link = masters.link(USER)
+    headers = dict(masters.app.accounts.unsafe_cookie(USER))
+    headers.pop("X-CSRF-Token")
+    for path, body in (
+        (f"/masters/{link['linkId']}/filters/f_a", {"decision": "verify"}),
+        ("/preferences", {"show_low_confidence": True}),
+    ):
+        masters.app.client.cookies.clear()
+        refused = masters.app.client.patch(API + path, json=body, headers=headers)
+        assert refused.json()["code"] == "csrf_failed", path
+    row = masters.ok("GET", f"/masters/{link['linkId']}", USER)["filters"][0]
+    assert row["state"] == "pending"
+    assert masters.ok("GET", "/preferences", USER)["showLowConfidence"] is False
+
+
+def test_path_identifiers_and_preference_numbers_are_strict(masters):
+    link = masters.link(USER)
+    assert masters.send("GET", "/masters/bad%20id", USER).status_code == 422
+    assert masters.send("GET", "/masters/" + "a" * 129, USER).status_code == 422
+    bad_filter = f"/masters/{link['linkId']}/filters/f%20a"
+    assert masters.send("PATCH", bad_filter, USER, {"decision": "verify"}).status_code == 422
+    for value in ("0.5", True):
+        body = {"confidence_threshold": value}
+        assert masters.send("PATCH", "/preferences", USER, body).status_code == 422
+    assert (
+        masters.ok("PATCH", "/preferences", USER, {"confidence_threshold": 1})[
+            "confidenceThreshold"
+        ]
+        == 1.0
+    )
+
+
+def test_active_filters_are_clipped_to_the_local_file(masters):
+    masters.set_duration(100)
+    filters = (
+        served_filter("f_a", 10_000, 20_000),
+        served_filter("f_b", 95_000, 105_000),
+        served_filter("f_c", 120_000, 130_000),
+    )
+    link = masters.link(USER, "v_1", "2", *filters)
+    active = masters.ok("GET", f"/masters/{link['linkId']}/active-filters", USER)
+    assert [(item["filterId"], item["startMs"], item["endMs"]) for item in active["filters"]] == [
+        ("f_a", 10_000, 20_000),
+        ("f_b", 95_000, 100_000),
+    ]
+    lines = [line for line in active["edl"].splitlines() if not line.startswith("#")]
+    assert lines == ["10.000 20.000 3", "95.000 100.000 3"]
+
+
+def test_repeated_find_and_check_wait_for_the_cooldown(masters, monkeypatch):
+    from scanner.http.community_master_cooldown import cooldowns
+
+    link = masters.link(USER)
+    monkeypatch.setattr(cooldowns, "seconds", 10)
+    masters.find(USER)
+    again = masters.send("POST", "/find", USER, {"target": masters.target, "label": None})
+    assert again.status_code == 429 and again.headers["retry-after"] == "10"
+    assert again.json() == {"code": "rate_limited", "retryable": True, "retryAfter": 10}
+    other_label = {"target": masters.target, "label": {"alias_id": "extended"}}
+    assert masters.send("POST", "/find", USER, other_label).status_code == 200
+    assert masters.find(PEER_USER)["results"]
+    check = f"/masters/{link['linkId']}/check"
+    assert masters.send("POST", check, USER, {}).status_code == 200
+    limited = masters.send("POST", check, USER, {})
+    assert limited.status_code == 429 and limited.json()["code"] == "rate_limited"

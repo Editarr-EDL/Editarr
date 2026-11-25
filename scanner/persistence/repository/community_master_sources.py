@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from scanner.db import CommunityMasterLinkRow
+from scanner.db import CommunityMasterLinkRow, ScanMediaVersionRow, ScanRow
 from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
 from scanner.models import EditAction, McfCategory, McfCategoryFamily, ScanFinding, Severity
 
@@ -47,23 +48,48 @@ class ActiveMasterFilter:
         }
 
 
+def version_duration_ms(db: Session, media_version_id: str) -> int | None:
+    """The local version's playback duration from its completed scans, or None if unknown."""
+    seconds = db.scalar(
+        select(func.max(ScanRow.duration_seconds))
+        .join(ScanMediaVersionRow, ScanMediaVersionRow.scan_id == ScanRow.id)
+        .where(
+            ScanMediaVersionRow.version_id == media_version_id,
+            ScanRow.status == "complete",
+            ScanRow.duration_seconds > 0,
+        )
+    )
+    return int(seconds * 1000) if seconds else None
+
+
+def clamp_range(start_ms: int, end_ms: int, duration_ms: int | None) -> tuple[int, int] | None:
+    """Clip a local range to `[0, duration]`; None when nothing of it remains."""
+    start = max(0, start_ms)
+    end = end_ms if duration_ms is None else min(end_ms, duration_ms)
+    return (start, end) if start < end else None
+
+
 def link_active_filters(
     db: Session, owner_id: int, link: CommunityMasterLinkRow
 ) -> list[ActiveMasterFilter]:
-    """The link's active effective filters in master view order."""
+    """The link's active effective filters in master view order, clipped to the local
+    file; a filter wholly outside it is left out, so no EDL range is empty or negative."""
     view = master_view(db, owner_id, link.id)
+    duration = version_duration_ms(db, link.media_version_id)
     found = []
     for row in view.filters:
         if not row.active:
             continue
         values = row.effective
+        bounds = clamp_range(values["startMs"], values["endMs"], duration)
+        if bounds is None:
+            continue
         found.append(
             ActiveMasterFilter(
                 link.id,
                 row.filter_id,
                 row.category,
-                values["startMs"],
-                values["endMs"],
+                *bounds,
                 values["subcategory"],
                 values["severity"],
                 values["action"],

@@ -111,3 +111,51 @@ def test_file_tier_links_need_no_alignment(masters):
     link = masters.link(USER, "v_1", "2", *FILTERS)
     refused = preview(masters, link["linkId"], {"offset_ms": 0})
     assert refused.json() == {"code": "alignment_not_required", "retryable": False}
+
+
+def test_alignment_must_keep_rows_on_the_local_file(masters):
+    link = masters.link(USER, "v_1", "4", *FILTERS)
+    before = preview(masters, link["linkId"], {"offset_ms": -900_000})
+    assert before.json() == {"code": "alignment_out_of_range", "retryable": False}
+    token = preview(masters, link["linkId"], {"offset_ms": 0}).json()["token"]
+    masters.set_duration(600)
+    after = preview(masters, link["linkId"], {"offset_ms": 0})
+    assert after.json()["code"] == "alignment_out_of_range"
+    refused = approve(masters, link["linkId"], token)
+    assert refused.json() == {"code": "alignment_out_of_range", "retryable": False}
+    assert masters.ok("GET", f"/masters/{link['linkId']}", USER)["link"]["alignment"] is None
+
+
+def test_approval_capability_is_checked_before_confirmation(masters):
+    from scanner.security.access.capability_ids import Capability as C
+
+    link = masters.link(USER, "v_1", "4", *FILTERS)
+    masters.deny(USER, C.COMMUNITY_DOWNLOAD)
+    refused = approve(masters, link["linkId"], "token", confirmed=False)
+    assert (refused.status_code, refused.json()["code"]) == (403, "capability_denied")
+
+
+def test_preview_tokens_expire_and_are_capped_per_account():
+    from scanner.http.community_master_alignment_api import (
+        MAX_PREVIEWS_PER_OWNER,
+        PREVIEW_TTL_SECONDS,
+        AlignmentPreviews,
+    )
+
+    now = [0.0]
+    store = AlignmentPreviews(clock=lambda: now[0])
+
+    def put(owner, link="l_1"):
+        return store.put(owner_id=owner, link_id=link, revision=1, alignment={}, fingerprint="f")
+
+    expiring = put(1)
+    now[0] = PREVIEW_TTL_SECONDS + 1
+    assert store.take(expiring, 1, "l_1") is None
+    other = put(2)
+    first = put(1)
+    later = [put(1) for _ in range(MAX_PREVIEWS_PER_OWNER)]
+    assert store.take(first, 1, "l_1") is None
+    assert store.take(later[0], 1, "l_2") is None
+    assert store.take(later[0], 1, "l_1").owner_id == 1
+    assert store.take(later[0], 1, "l_1") is None
+    assert store.take(other, 2, "l_1").owner_id == 2

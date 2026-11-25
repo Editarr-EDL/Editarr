@@ -26,6 +26,7 @@ from scanner.modeling.community_master_alignment import (
     AnchorPair,
     fit_alignment,
     offset_alignment,
+    require_in_bounds,
 )
 from scanner.modeling.community_master_diff import MasterValues
 from scanner.modeling.community_master_state import aligned
@@ -34,19 +35,26 @@ from scanner.persistence.repository.community_master_links import (
     approve_alignment,
     require_link,
 )
+from scanner.persistence.repository.community_master_sources import version_duration_ms
 from scanner.persistence.write_lock import write_lock
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.grants import PrincipalAccess
 from scanner.security.access.request_access import request_access
 
-from .community_master_access import authorize_link, invalid, require_confirmed, respond
+from .community_master_access import (
+    authorize_link,
+    invalid,
+    require_capability,
+    require_confirmed,
+    respond,
+)
 from .community_master_json import link_json
-from .community_master_models import AlignmentApproval, AlignmentPreviewRequest
+from .community_master_models import AlignmentApproval, AlignmentPreviewRequest, LinkId
 
 router = APIRouter(prefix="/api/community/masters/{link_id}/alignment", tags=["community"])
 
 PREVIEW_TTL_SECONDS = 1800
-MAX_PREVIEWS = 256
+MAX_PREVIEWS_PER_OWNER = 32
 
 
 @dataclass(frozen=True)
@@ -60,7 +68,11 @@ class AlignmentPreviewRecord:
 
 
 class AlignmentPreviews:
-    """A bounded, expiring in-process map of preview token to its previewed transform."""
+    """An expiring in-process map of preview token to its previewed transform.
+
+    Each account keeps at most `MAX_PREVIEWS_PER_OWNER` live previews; a new one
+    evicts that account's oldest, never another account's.
+    """
 
     def __init__(self, *, clock=time.monotonic):
         self.clock = clock
@@ -71,8 +83,9 @@ class AlignmentPreviews:
         with self.lock:
             now = self.clock()
             self.records = {k: v for k, v in self.records.items() if v.expires_at > now}
-            while len(self.records) >= MAX_PREVIEWS:
-                self.records.pop(next(iter(self.records)))
+            owned = [k for k, v in self.records.items() if v.owner_id == fields["owner_id"]]
+            for key in owned[: max(0, len(owned) - MAX_PREVIEWS_PER_OWNER + 1)]:
+                self.records.pop(key)
             token = secrets.token_urlsafe(24)
             self.records[token] = AlignmentPreviewRecord(
                 **fields, expires_at=now + PREVIEW_TTL_SECONDS
@@ -132,6 +145,11 @@ def _fit(body: AlignmentPreviewRequest, rows: dict[str, dict]) -> dict:
     return fit_alignment(pairs)
 
 
+def _require_in_bounds(db: Session, link, rows: dict[str, dict], alignment: dict) -> None:
+    ranges = [(values["startMs"], values["endMs"]) for values in rows.values()]
+    require_in_bounds(ranges, alignment, version_duration_ms(db, link.media_version_id))
+
+
 def _require_fuzzy(link) -> None:
     if link.alignment_state == "not_required":
         raise CommunityFailure("alignment_not_required")
@@ -139,7 +157,7 @@ def _require_fuzzy(link) -> None:
 
 @router.post("/preview")
 def preview(
-    link_id: str,
+    link_id: LinkId,
     body: AlignmentPreviewRequest,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
@@ -151,6 +169,7 @@ def preview(
         _require_fuzzy(link)
         rows = _master_rows(db, link)
         alignment = _fit(body, rows)
+        _require_in_bounds(db, link, rows, alignment)
         token = previews.put(
             owner_id=access.principal.user_id,
             link_id=link.id,
@@ -182,7 +201,7 @@ def preview(
 
 @router.post("/approve")
 def approve(
-    link_id: str,
+    link_id: LinkId,
     body: AlignmentApproval,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
@@ -190,6 +209,7 @@ def approve(
     """Store the previewed transform for `for_revision` and return the link."""
 
     def action():
+        require_capability(access, C.COMMUNITY_DOWNLOAD)
         require_confirmed(body.confirmed)
         owner = access.principal.user_id
         link = authorize_link(db, access, link_id, C.COMMUNITY_DOWNLOAD)
@@ -198,12 +218,14 @@ def approve(
         db.rollback()
         with write_lock(db):
             link = require_link(db, owner, link_id)
+            rows = _master_rows(db, link)
             if (
                 record is None
                 or record.revision != body.for_revision
-                or record.fingerprint != _fingerprint(link, _master_rows(db, link))
+                or record.fingerprint != _fingerprint(link, rows)
             ):
                 raise CommunityFailure("alignment_preview_changed")
+            _require_in_bounds(db, link, rows, record.alignment)
             link = approve_alignment(db, owner, link_id, record.alignment, body.for_revision)
             refresh_local_verification(db, link)
             db.commit()

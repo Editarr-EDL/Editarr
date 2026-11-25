@@ -28,6 +28,7 @@ from scanner.http import (
     review_targets,
 )
 from scanner.http.community_master_alignment_api import previews
+from scanner.http.community_master_cooldown import cooldowns
 from scanner.integrations.community.find_store import finds
 from scanner.integrations.community.find_targets import CapturedFind
 from scanner.integrations.community.transport import CommunityTransport, ServiceEndpoint
@@ -72,6 +73,7 @@ class MasterService(MockService):
         self.vote_failures: list[httpx.Response] = []
         self.votes: list[dict] = []
         self.reports: list[dict] = []
+        self.synced: list[list[str]] = []
 
     def publish(self, version: str, revision: int, *filters: dict) -> None:
         self.published[version] = (revision, filters)
@@ -111,6 +113,7 @@ class MasterService(MockService):
 
     def _sync(self, request):
         sent = {item["versionId"] for item in json.loads(request.content)["items"]}
+        self.synced.append(sorted(sent))
         changed = [change for change in self.sync_changes if change["versionId"] in sent]
         return respond(200, {"version": 1, "changed": changed, "nextRunAllowedAt": 0})
 
@@ -179,6 +182,7 @@ class Masters:
     path: str
     library_id: str
     scans: object
+    scan_id: str
     contributors: dict = field(default_factory=dict)
 
     @property
@@ -215,6 +219,20 @@ class Masters:
         from tests.scan_access_http import LIBRARY_B
 
         self.scans.limit_to_library(user, LIBRARY_B)
+
+    def set_duration(self, seconds: float) -> None:
+        """Bind the seeded completed scan to the local version with a known duration."""
+        from scanner.db import ScanMediaVersionRow
+
+        with self.app.accounts.factory() as db:
+            db.merge(ScanMediaVersionRow(scan_id=self.scan_id, version_id=VERSION_ID))
+            db.get(ScanRow, self.scan_id).duration_seconds = seconds
+            db.commit()
+
+    def deny(self, user, capability) -> None:
+        from scanner.security.access.overrides import OverrideEffect
+
+        self.app.accounts.set_override(user, capability, OverrideEffect.DENY)
 
     def link(self, user, version="v_1", tier="2", *filters) -> dict:
         self.service.publish(version, 1, *(filters or (served_filter("f_a"),)))
@@ -272,6 +290,7 @@ def masters(activities, monkeypatch):
             row.resolved_local_path,
             item.library_id,
             activities,
+            scan,
         )
         for user, home in homes.items():
             connection = identity_connection(db, home.credential_ref, SERVICE)
@@ -288,7 +307,10 @@ def masters(activities, monkeypatch):
     monkeypatch.setattr(
         community_master_targets, "local_version", lambda _db, _target, _sampled: VERSION_ID
     )
+    # Tests that repeat Find and checks opt back into the cooldown.
+    monkeypatch.setattr(cooldowns, "seconds", 0)
     yield state
     client.close()
     finds.records.clear()
     previews.records.clear()
+    cooldowns.until.clear()

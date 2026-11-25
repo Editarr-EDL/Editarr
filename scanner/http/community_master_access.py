@@ -66,6 +66,13 @@ def failure(error: Exception) -> Response:
     if isinstance(error, CommunityFailure):
         if error.code in _HIDDEN:
             raise not_found() from error
+        if error.code == "rate_limited":
+            wait = int(error.details["retryAfter"])
+            response = json_response(
+                {"code": error.code, "retryable": True, "retryAfter": wait}, 429
+            )
+            response.headers["Retry-After"] = str(wait)
+            return response
         details = {key: error.details[key] for key in _DETAILS if key in error.details}
         return conflict(error.code, retryable=error.retryable, **details)
     if isinstance(error, AlignmentFitError):

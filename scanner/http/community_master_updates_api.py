@@ -33,15 +33,16 @@ from .community_master_access import (
     respond,
     respond_async,
 )
+from .community_master_cooldown import cooldowns
 from .community_master_json import sync_json, update_json
-from .community_master_models import AcceptAll, Empty, NotificationsRead, UpdateDecisions
+from .community_master_models import AcceptAll, Empty, LinkId, NotificationsRead, UpdateDecisions
 
 router = APIRouter(prefix="/api/community", tags=["community"])
 
 
 @router.post("/masters/{link_id}/check")
 async def check(
-    link_id: str,
+    link_id: LinkId,
     _body: Empty,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
@@ -50,6 +51,7 @@ async def check(
 
     async def action():
         client = link_client(db, access, link_id, C.COMMUNITY_DOWNLOAD)
+        cooldowns.claim((access.principal.user_id, "check", link_id))
         return await MasterSets(client, access.principal.user_id).check(link_id)
 
     return await respond_async(action)
@@ -57,7 +59,7 @@ async def check(
 
 @router.get("/masters/{link_id}/update")
 def read_update(
-    link_id: str,
+    link_id: LinkId,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
 ):
@@ -82,7 +84,7 @@ def _write(db: Session, operation):
 
 @router.post("/masters/{link_id}/update/decisions")
 def decide(
-    link_id: str,
+    link_id: LinkId,
     body: UpdateDecisions,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
@@ -103,7 +105,7 @@ def decide(
 
 @router.post("/masters/{link_id}/update/accept-all")
 def accept_group(
-    link_id: str,
+    link_id: LinkId,
     body: AcceptAll,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
@@ -171,7 +173,13 @@ async def run_sync(
     async def action():
         from .community_identity_api import local_client
 
-        outcome = await MasterSync(local_client(db, access), access.principal.user_id).run()
+        locate = _locator(db, access)
+        sync = MasterSync(
+            local_client(db, access),
+            access.principal.user_id,
+            visible=lambda link: locate(link.id) is not None,
+        )
+        outcome = await sync.run()
         return _status(db, access, ran=outcome.ran, status=outcome.status)
 
     return await respond_async(action)

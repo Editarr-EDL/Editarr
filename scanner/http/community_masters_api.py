@@ -39,8 +39,9 @@ from .community_master_access import (
     respond,
     respond_async,
 )
+from .community_master_cooldown import cooldowns
 from .community_master_json import filter_json, link_json, preferences_json
-from .community_master_models import ApplyRequest, FindRequest
+from .community_master_models import ApplyRequest, FindRequest, LinkId
 
 router = APIRouter(prefix="/api/community", tags=["community"])
 
@@ -57,6 +58,9 @@ async def find(
         target = await run_in_threadpool(
             targets.resolve_target, db, access, body.target, C.COMMUNITY_SEARCH
         )
+        target_key = body.target.model_dump(mode="json")
+        label_key = body.label.model_dump_json() if body.label is not None else None
+        cooldowns.claim((access.principal.user_id, "find", str(target_key), label_key))
         client = bound_client(db, access, target.media, C.COMMUNITY_SEARCH)
         captured = await run_in_threadpool(capture_find_keys, db, body.target)
         version_id = await run_in_threadpool(targets.local_version, db, target, captured.sampled)
@@ -97,6 +101,7 @@ async def apply_master(
     """Download, verify and link a found version to the target's local version."""
 
     async def action():
+        require_capability(access, C.COMMUNITY_DOWNLOAD)
         require_confirmed(body.confirmed)
         target = await run_in_threadpool(
             targets.resolve_target, db, access, body.target, C.COMMUNITY_DOWNLOAD
@@ -161,7 +166,7 @@ def list_masters(
 
 @router.get("/masters/{link_id}")
 def view_master(
-    link_id: str,
+    link_id: LinkId,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
 ):
@@ -184,7 +189,7 @@ def view_master(
 
 @router.get("/masters/{link_id}/active-filters")
 def active_filters(
-    link_id: str,
+    link_id: LinkId,
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
 ):

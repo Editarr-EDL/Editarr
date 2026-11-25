@@ -1,9 +1,9 @@
 """The account's daily bulk master-set revision check (local API §8, contract §7.5).
 
 A run is claimed at most once per 24 hours per account and service. Every active link
-is sent under one `runId` in batches of 500. Changed versions download their newer
-snapshot for review; merged and unavailable versions mark their links. Each outcome
-records one notification per link.
+the account may still reach is sent under one `runId` in batches of 500. Changed
+versions download their newer snapshot for review; merged and unavailable versions
+mark their links. Each outcome records one notification per link.
 """
 
 from collections import defaultdict
@@ -49,8 +49,11 @@ class SyncOutcome:
 class MasterSync:
     """Run and report the daily sync for one account's identity."""
 
-    def __init__(self, client, owner_id: int, *, clock=utcnow):
+    def __init__(self, client, owner_id: int, *, clock=utcnow, visible=None):
+        """`visible(link)` decides whether a link's local version is still within the
+        account's media access; links it refuses are not sent to the service."""
         self.client = client
+        self.visible = visible
         self.db = client.db
         self.owner_id = owner_id
         self.service = MasterService(client)
@@ -128,6 +131,8 @@ class MasterSync:
 
     async def _run(self, run_id: str) -> list[str]:
         links = links_to_sync(self.db, self.owner_id, self.service_url)
+        if self.visible is not None:
+            links = [link for link in links if self.visible(link)]
         by_version: dict[str, list[tuple[str, int]]] = defaultdict(list)
         unavailable = {link.id for link in links if link.link_state == "unavailable"}
         for link in links:

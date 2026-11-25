@@ -29,7 +29,8 @@ These follow the existing `/api/community/*` routes:
   | 503 | `{code, retryable}` | Retryable failure, or the community service isn't configured |
   | 403 | `capability_denied` | Missing capability |
   | 404 | — | Unknown links, or links owned by another account, so existence isn't revealed |
-  | 422 | Existing validation list | Invalid request |
+  | 422 | Existing validation list | Invalid request, including a `link_id` or `filter_id` path segment that isn't 1–128 of `A–Z a–z 0–9 _ . -` |
+  | 429 | `{code: "rate_limited", retryable: true, retryAfter}` and `Retry-After` | A repeated manual Find or update check inside its cooldown (§2, §8) |
 
   A network or membership failure never becomes an empty result. A 409 or
   503 body may add the contract details `reason` (for `vote_ineligible`) and
@@ -47,11 +48,12 @@ These follow the existing `/api/community/*` routes:
   | `community.search` | find, aliases, master view and lists, active filters, `GET` preferences |
   | `community.download` | download and apply, alignment, filter decisions, `PATCH` preferences, check, update review, sync and notifications |
   | `community.feedback.submit` | votes, reports |
+  | `community.publish.own_review`, `community.publish.scan_evidence`, `community.publish.other_review` | share |
 
   A missing capability is `403 capability_denied` before any link is looked
-  up. Each link route also needs media access, with the route's capability, to
-  one catalog location of the link's local version; otherwise it is `404`.
-  | `community.publish.own_review`, `community.publish.scan_evidence`, `community.publish.other_review` | share |
+  up or any confirmation is checked. Each link route also needs media access,
+  with the route's capability, to one catalog location of the link's local
+  version; otherwise it is `404`.
 
 - **Targets:** a target is the existing
   `{ "source": "jellyfin", "item_id": "…", "media_source_id": "…"|null }`. The
@@ -97,6 +99,11 @@ Response:
 - `alignmentRequired` is true when `tier` isn't `1`–`3`.
 - `linkedLinkId` is the current account's existing link for this local
   version and community version, if one exists.
+- **Cooldown:** an account may Find the same target with the same `label` at
+  most once per 10 seconds. A repeat inside the window returns `429
+  rate_limited` with `retryAfter` (whole seconds) and never reaches the
+  service, even when the earlier call failed. Another label or target isn't
+  limited.
 - `findKey` binds the result to the account, target, file generation and match
   response. It expires after 30 minutes. Another account's key is
   `find_expired`.
@@ -249,7 +256,10 @@ Field rules:
 The read path that saved reviews and EDL export use for a master set as a
 filter source next to scans (no imported scan is generated). It returns the
 link's `active` rows with their `effective` values on the local timeline, and
-the same filters merged by the existing Simple EDL range merging:
+the same filters merged by the existing Simple EDL range merging. Bounds are
+clipped to `[0, duration]` (the duration comes from a completed scan of the
+local version, when one exists), and a filter wholly outside the file is left
+out, so no range is empty or negative:
 
 ```json
 { "version": 1, "linkId": "…", "localVersionId": "mv_…",
@@ -280,6 +290,11 @@ Request:
   offset and drift (the median of pairwise slopes, then the median offset).
   Otherwise it fits only the median offset. A drift beyond ±10% returns
   `409 alignment_out_of_range`.
+- The transform must keep every row on the local file: a row that would end at
+  or before 0, or (when a completed scan of the local version records its
+  duration) start at or after the file's end, returns
+  `409 alignment_out_of_range`. Rows that only partly leave the file are kept
+  and clipped where they are used. Approval checks this again.
 - The transform maps master to local time:
   `local = master × scale + offsetMs`.
 - `audio_track_index` is validated but not used by the backend; the client
@@ -307,7 +322,8 @@ Request: `{ "token": "…", "for_revision": 13, "confirmed": true }`.
   `alignmentState: "approved"`.
 - For the first import, it activates the rows.
 - For an update (§9), it enables **Accept** for that revision's rows.
-- The token is single-use and expires after 30 minutes. An unknown, used,
+- The token is single-use and expires after 30 minutes. Each account keeps
+  at most 32 live previews; a newer preview evicts that account's oldest. An unknown, used,
   expired or another account's token, a `for_revision` other than the
   previewed revision, or rows or revision that changed since the preview,
   returns `409 alignment_preview_changed`.
@@ -482,8 +498,10 @@ The web app calls this on page load. The request is `{}`.
 - **Not due:** if the account's last successful run was less than 24 hours
   ago, or a run is in progress, the route returns the status with
   `ran: false`.
-- **Due:** otherwise, the backend sends all of the account's links in
-  batches of 500 under one `runId`.
+- **Due:** otherwise, the backend sends the account's active and unavailable
+  links in batches of 500 under one `runId`. A link whose local version the
+  account can no longer reach (media access, §1) is skipped: it isn't sent to
+  the service and gets no notification.
   1. For each changed version, it downloads the new snapshot.
   2. It builds the update rows (§9).
   3. It records a notification.
@@ -540,7 +558,9 @@ Response:
   "pendingUpdate": { "new": 3, "changed": 2, "removed": 1, "nowLowConfidence": 0 } }
 ```
 
-This check doesn't use the daily sync allowance. A merged or unavailable
+This check doesn't use the daily sync allowance. An account may check the
+same link at most once per 10 seconds; a repeat returns `429 rate_limited`
+with `retryAfter` and doesn't reach the service. A merged or unavailable
 version marks the link and returns `409 version_merged` (with `mergedInto`)
 or `409 version_unavailable` (`version_not_found` when the service no longer
 knows it).

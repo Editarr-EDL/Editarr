@@ -335,3 +335,57 @@ def test_reports_proxy_to_the_service(masters):
     assert wrong.json() == {"code": "report_ineligible", "retryable": False}
     assert masters.send("POST", path, USER, {**body, "reason": "boring"}).status_code == 422
     assert masters.send("POST", path, PEER_USER, body).status_code == 404
+
+
+def test_download_routes_refuse_without_the_capability(masters):
+    link = masters.link(USER, "v_1", "2", *REVISION_1)
+    base = f"/masters/{link['linkId']}"
+    masters.deny(USER, C.COMMUNITY_DOWNLOAD)
+    for method, path, body in (
+        ("POST", base + "/check", {}),
+        ("GET", base + "/update", None),
+        (
+            "POST",
+            base + "/update/decisions",
+            {"to_revision": 1, "decisions": [{"row_id": "f_a", "decision": "accept"}]},
+        ),
+        ("POST", base + "/update/accept-all", {"to_revision": 1, "group": "new"}),
+        ("POST", base + "/alignment/preview", {"offset_ms": 0}),
+        ("PATCH", base + "/filters/f_a", {"decision": "verify"}),
+        ("PATCH", "/preferences", {"show_low_confidence": True}),
+        ("GET", "/sync", None),
+        ("POST", "/sync/run", {}),
+        ("POST", "/sync/notifications/read", {"all": True}),
+    ):
+        refused = masters.send(method, path, USER, body)
+        assert (refused.status_code, refused.json()["code"]) == (403, "capability_denied"), path
+
+
+def test_feedback_capability_is_checked_before_confirmation(masters):
+    link = masters.link(USER, "v_1", "2", *REVISION_1)
+    path = f"/masters/{link['linkId']}"
+    masters.deny(USER, C.COMMUNITY_FEEDBACK_SUBMIT)
+    for route, body in (
+        ("/filters/f_a/vote", {"vote": "up", "operation_id": "vote-1", "confirmed": False}),
+        ("/filters/f_a/vote/retry", {"operation_id": "vote-1", "confirmed": False}),
+        (
+            "/reports",
+            {"target": {"type": "version", "id": "v_1"}, "reason": "spam", "confirmed": False},
+        ),
+    ):
+        refused = masters.send("POST", path + route, USER, body)
+        assert (refused.status_code, refused.json()["code"]) == (403, "capability_denied"), route
+    assert masters.service.votes == [] and masters.service.reports == []
+
+
+def test_sync_skips_links_the_account_can_no_longer_reach(masters):
+    masters.link(USER, "v_1", "2", *REVISION_1)
+    masters.link(PEER_USER, "v_1", "2", *REVISION_1)
+    masters.service.sync_changes = [{"versionId": "v_1", "status": "changed", "revision": 2}]
+    masters.service.publish("v_1", 2, *REVISION_2)
+    masters.hide_media(USER)
+    ran = masters.ok("POST", "/sync/run", USER, {})
+    assert ran["ran"] is True and ran["notifications"] == []
+    assert masters.service.synced == []
+    assert masters.ok("POST", "/sync/run", PEER_USER, {})["unreadCount"] == 1
+    assert masters.service.synced == [["v_1"]]

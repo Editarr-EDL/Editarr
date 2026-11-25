@@ -5675,6 +5675,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -5724,6 +5726,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -5773,6 +5777,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -5832,6 +5838,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -5891,6 +5899,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           },
@@ -5900,6 +5910,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Filter Id"
             }
           }
@@ -6033,6 +6045,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           },
@@ -6042,6 +6056,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Filter Id"
             }
           }
@@ -6101,6 +6117,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           },
@@ -6110,6 +6128,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Filter Id"
             }
           }
@@ -6169,6 +6189,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -6228,6 +6250,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -6287,6 +6311,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -6336,6 +6362,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -6395,6 +6423,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
             }
           }
@@ -20442,7 +20472,8 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "title": "PreferencesRequest"
+        "title": "PreferencesRequest",
+        "description": "Strict JSON numbers and booleans; a string or boolean threshold is refused."
       },
       "PreviewApproval": {
         "properties": {
