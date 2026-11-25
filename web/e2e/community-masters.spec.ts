@@ -196,7 +196,7 @@ for (const width of [320, 1440]) {
     const versionName = dialog.getByLabel("Version name (optional)");
     await expect(versionName).toHaveValue("");
     await versionName.fill("IMAX");
-    await expect(dialog.getByText("≈4 new, ≈27 confirmations, 3 adjustments, 1 dispute")).toBeVisible();
+    await expect(dialog.getByText("≈4 new, ≈27 confirmations, 3 adjustments")).toBeVisible();
     await expect.poll(() => community.requests.filter((request) => request.path.endsWith("/preview")).at(-1)?.body)
       .toMatchObject({ version_choice: { choice: "other", text: "IMAX" } });
     await expectKeyboardFocusVisible(page, versionName);

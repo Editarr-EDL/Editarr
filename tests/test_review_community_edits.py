@@ -81,8 +81,53 @@ def test_only_direct_edits_mark_a_community_filter_edited(masters, review):
         11.0,
         "high",
     )
-    assert community(refreshed)["f_a"].selected
+    # Turning a filter on or off is the review's own choice, kept across a refresh.
+    assert not community(refreshed)["f_a"].selected
     assert not community(refreshed)["f_b"].selected
+
+
+def test_refresh_keeps_enabled_states_and_brings_new_expressions_to_unedited_filters(
+    masters, review
+):
+    words = {"action": "mute", "category": "language", "subcategory": "swearing"}
+    link = masters.link(
+        USER,
+        "v_1",
+        "2",
+        served_filter("f_on", 10_000, 11_000, expression="damn", **words),
+        served_filter("f_off", 20_000, 21_000, expression="hell", **words),
+        served_filter("f_mine", 30_000, 31_000, expression="heck", **words),
+    )
+    saved = save(masters, review, include(link["linkId"]))
+    assert {fid: row.label for fid, row in community(saved).items()} == {
+        "f_on": "damn",
+        "f_off": "hell",
+        "f_mine": "heck",
+    }
+
+    def edit(filters):
+        for value in filters:
+            if value["community_filter_id"] == "f_off":
+                value.update(selected=False)
+            if value["community_filter_id"] == "f_mine":
+                value.update(label="Heck!", community_edited=True)
+
+    edited = save(masters, review, keep(saved), edit=edit)
+    assert not community(edited)["f_off"].community_edited
+    _publish(
+        masters,
+        link,
+        2,
+        served_filter("f_on", 10_000, 11_000, expression="Damn", **words),
+        served_filter("f_off", 20_000, 21_000, expression="Hell", **words),
+        served_filter("f_mine", 30_000, 31_000, expression="heck", **words),
+    )
+    refreshed = community(save(masters, review, keep(edited, refresh=True)))
+    assert {fid: (row.label, row.selected) for fid, row in refreshed.items()} == {
+        "f_on": ("Damn", True),
+        "f_off": ("Hell", False),
+        "f_mine": ("Heck!", True),
+    }
 
 
 def test_a_filter_outside_the_file_is_added_once_the_master_moves_it_inside(masters, review):

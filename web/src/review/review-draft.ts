@@ -269,12 +269,15 @@ export function snapshotReviewFilters(draft: ReviewDraft, filters: ReviewFilter[
   };
 }
 
-/** Changes to these fields mark a community filter as edited by the user (shared as their verdict). */
-const COMMUNITY_EDIT_FIELDS = ["selected", "start_seconds", "end_seconds", "category", "subcategory", "severity", "edit_action"] as const;
+/**
+ * Changes to these fields mark a community filter as edited by the user (shared as their
+ * verdict). Turning a filter on or off is a personal choice and never counts.
+ */
+const COMMUNITY_EDIT_FIELDS = ["start_seconds", "end_seconds", "category", "subcategory", "severity", "edit_action", "label"] as const;
 
 /**
- * Apply a local filter edit. A direct change to a community filter's enabled state, times,
- * classification, severity or action marks it `community_edited`. A label change marks
+ * Apply a local filter edit. A direct change to a community filter's times, classification,
+ * severity, action or label (its word or phrase) marks it `community_edited`. A label change marks
  * `label_edited` immediately so the display follows the relabel; restoring the loaded label
  * restores its loaded flag (keeping the draft clean).
  */

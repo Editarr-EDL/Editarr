@@ -37,6 +37,7 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
     const classification = classifyCluster(cluster, row, policy);
     row.incumbentSubcategory = classification.subcategory;
     row.incumbentAction = classification.action;
+    row.incumbentExpression = classification.expression;
     return { filterId, cluster, classification, quarantined: row.quarantined };
   });
   const bounds: FilterBounds[] = classified.map(({ filterId, cluster, classification }) =>
@@ -52,9 +53,9 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
     const positive = count.attestations + count.upvotes;
     const negative = count.downvotes + count.disputes + policy.coverageNegativeWeight * count.coverageNegatives;
     const confidence = wilson(positive, negative);
-    const { category, subcategory, severity, action, startMs, endMs, spread, tallies } = classification;
+    const { category, subcategory, severity, action, expression, startMs, endMs, spread, tallies } = classification;
     return {
-      filterId, mergedIds: mergedIds.get(filterId) ?? [], category, subcategory, severity, action, startMs, endMs, spread,
+      filterId, mergedIds: mergedIds.get(filterId) ?? [], category, subcategory, severity, action, expression, startMs, endMs, spread,
       confidence, contributorCount: count.attestations,
       support: { attestations: count.attestations, upvotes: count.upvotes },
       negative: { downvotes: count.downvotes, disputes: count.disputes, coverageNegatives: count.coverageNegatives },

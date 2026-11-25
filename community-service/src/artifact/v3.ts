@@ -2,6 +2,7 @@ import { z } from 'zod';
 import taxonomy from './taxonomy.json';
 import { evidenceKeySchema } from '../versions/keys';
 import { normalizedTitle } from '../versions/normalize';
+import { normalizeExpression } from './expression';
 import { gunzipSingleMember, parseStrictJson, StrictJsonError } from './strict-json';
 
 export const ARTIFACT_V3_SCHEMA = 'community-artifact-3';
@@ -59,6 +60,7 @@ export const artifactV3Schema = z.strictObject({
     proposedFilterId: token.nullable(),
     startMs: safe, endMs: safe, category: z.string(), subcategory: z.string().nullable(),
     severity: z.enum(['low', 'medium', 'high']).nullable(), action: z.enum(['skip', 'mute']).nullable(),
+    expression: z.string().nullable().optional(),
     evidence: z.strictObject({ origin: z.enum(['model', 'manual', 'downloaded']), manualReview: z.boolean(),
       locallyVerified: z.boolean(), modelVersion: z.string().nullable() }),
   })).max(2000),
@@ -89,7 +91,7 @@ function checkBounds(start: number, end: number, duration: number) {
 
 /**
  * Apply the §5.2 rules a schema cannot express. Structural failures are `invalid_submission`;
- * taxonomy and time failures are their `422` codes.
+ * taxonomy and time failures are their `422` codes. Entry expressions are normalized in place.
  */
 export function validateArtifactV3(artifact: ArtifactV3): ArtifactV3 {
   checkWork(artifact.work);
@@ -121,6 +123,11 @@ export function validateArtifactV3(artifact: ArtifactV3): ArtifactV3 {
     const { modelVersion, origin } = entry.evidence;
     if ((modelVersion !== null && new TextEncoder().encode(modelVersion).length > 128) || (origin === 'model' && modelVersion === null))
       throw new ArtifactV3Error('invalid_submission');
+    if (entry.expression !== undefined && entry.expression !== null) {
+      const expression = entry.kind === 'support' && entry.category === 'language' ? normalizeExpression(entry.expression) : null;
+      if (expression === null) throw new ArtifactV3Error('invalid_submission', 'expression');
+      entry.expression = expression;
+    }
     if (!Object.hasOwn(families, entry.category) || (entry.subcategory !== null && familyOf.get(entry.subcategory) !== entry.category))
       throw new ArtifactV3Error('invalid_taxonomy');
     checkBounds(entry.startMs, entry.endMs, duration);

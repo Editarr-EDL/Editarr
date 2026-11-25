@@ -15,6 +15,7 @@ from .artifact_v3_models import (
     ManifestV3,
     WorkError,
     check_work,
+    normalize_expression,
 )
 from .strict_json import (
     StrictJsonError,
@@ -128,6 +129,15 @@ def _check_entries(artifact: ArtifactV3) -> None:
             raise ArtifactV3Error("Support requires subcategory, severity and action")
         if entry.kind != "support" and classification != (None, None, None):
             raise ArtifactV3Error("Only support entries carry a classification")
+        if entry.expression is not None and (
+            entry.kind != "support"
+            or entry.category != "language"
+            or normalize_expression(entry.expression) != entry.expression
+        ):
+            raise ArtifactV3Error(
+                "An expression must be a normalized 1–64 code point word or phrase "
+                "of a language support"
+            )
         evidence = entry.evidence
         if evidence.model_version is not None and _bytes(evidence.model_version) > 128:
             raise ArtifactV3Error("modelVersion exceeds 128 bytes")

@@ -68,14 +68,16 @@ describe("review draft state", () => {
     expect(isReviewDraftDirty(discarded)).toBe(false);
   });
 
-  it("marks only direct edits of a community filter as the user's, never bulk results", () => {
+  it("marks only direct value edits of a community filter as the user's, never toggles or bulk results", () => {
     const community = { ...review.filters[0], id: "c-1", source_scan_id: null, source_finding_id: null,
       community_source_id: "src", community_filter_id: "f_1", community_edited: false };
     const draft = createReviewDraft({ ...review, filters: [...review.filters, community] });
-    expect(updateReviewFilter(draft, "c-1", { label: "word" }).filters[1].community_edited).toBe(false);
+    expect(updateReviewFilter(draft, "c-1", { label: community.label }).filters[1].community_edited).toBe(false);
+    expect(updateReviewFilter(draft, "c-1", { label: "Word!" }).filters[1].community_edited).toBe(true);
     expect(updateReviewFilter(draft, "c-1", { selected: true }).filters[1].community_edited).toBe(false);
-    expect(updateReviewFilter(draft, "c-1", { selected: false }).filters[1].community_edited).toBe(true);
+    expect(updateReviewFilter(draft, "c-1", { selected: false }).filters[1].community_edited).toBe(false);
     expect(updateReviewFilter(draft, "c-1", { start_seconds: 1.5 }).filters[1].community_edited).toBe(true);
+    expect(updateReviewFilter(draft, "c-1", { severity: "low" }).filters[1].community_edited).toBe(true);
     expect(updateReviewFilter(draft, "filter-1", { selected: false }).filters[0].community_edited).toBeUndefined();
     const defaulted = applyReviewFilterResult(draft, { filters: [review.filters[0], { ...community, selected: false }] });
     expect(defaulted.filters[1]).toMatchObject({ selected: false, community_edited: false });

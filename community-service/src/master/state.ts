@@ -52,13 +52,13 @@ export async function loadVersionState(db: SqlDatabase, versionId: string, absor
     db.prepare(`SELECT s.submission_id, s.digest, s.contributor_id, a.accepted_seq, a.duration_ms, a.quarantined, s.match_keys_json
       FROM version_acceptances a JOIN submissions s USING (submission_id) WHERE a.version_id IN (SELECT value FROM json_each(?))`).bind(ids),
     db.prepare(`SELECT e.submission_id, e.entry_id, e.kind, e.proposed_filter_id, e.start_ms, e.end_ms, e.category, e.subcategory,
-      e.severity, e.action, e.origin, e.locally_verified, e.quarantined, f.prior_filter_id FROM submission_entries e
+      e.severity, e.action, e.expression, e.origin, e.locally_verified, e.quarantined, f.prior_filter_id FROM submission_entries e
       JOIN version_acceptances a USING (submission_id)
       LEFT JOIN filter_attestations f ON f.submission_id = e.submission_id AND f.entry_id = e.entry_id
       WHERE a.version_id IN (SELECT value FROM json_each(?))`).bind(ids),
     db.prepare(`SELECT c.submission_id, c.category, c.ordinal, c.start_ms, c.end_ms FROM submission_coverage c
       JOIN version_acceptances a USING (submission_id) WHERE a.version_id IN (SELECT value FROM json_each(?))`).bind(ids),
-    db.prepare(`SELECT filter_id, created_seq, incumbent_subcategory, incumbent_action, state, merged_into, quarantined
+    db.prepare(`SELECT filter_id, created_seq, incumbent_subcategory, incumbent_action, incumbent_expression, state, merged_into, quarantined
       FROM filter_registry WHERE version_id IN (SELECT value FROM json_each(?))`).bind(ids),
     db.prepare(`SELECT v.filter_id, v.contributor_id, v.vote, v.excluded FROM filter_votes v JOIN filter_registry r USING (filter_id)
       WHERE r.version_id IN (SELECT value FROM json_each(?))`).bind(ids),
@@ -78,7 +78,7 @@ export async function loadVersionState(db: SqlDatabase, versionId: string, absor
     list.push({ entryId: row.entry_id as string, kind: row.kind as EntryInput['kind'], proposedFilterId: row.proposed_filter_id as string | null,
       startMs: row.start_ms as number, endMs: row.end_ms as number, category: row.category as string,
       subcategory: row.subcategory as string | null, severity: row.severity as EntryInput['severity'],
-      action: row.action as EntryInput['action'], origin: row.origin as EntryInput['origin'],
+      action: row.action as EntryInput['action'], expression: (row.expression as string | null) ?? null, origin: row.origin as EntryInput['origin'],
       locallyVerified: row.locally_verified === 1, priorFilterId: (row.prior_filter_id as string | null) ?? null });
   }
   for (const row of [...coverage.results].sort((a, b) => (a.ordinal as number) - (b.ordinal as number))) {
@@ -104,6 +104,7 @@ export async function loadVersionState(db: SqlDatabase, versionId: string, absor
       vote: row.vote as VoteInput['vote'], excluded: row.excluded === 1 })),
     registry: registry.results.map(row => ({ filterId: row.filter_id as string, createdSeq: row.created_seq as number,
       incumbentSubcategory: row.incumbent_subcategory as string | null, incumbentAction: row.incumbent_action as RegistryEntry['incumbentAction'],
+      incumbentExpression: (row.incumbent_expression as string | null) ?? null,
       state: row.state as RegistryEntry['state'], mergedInto: row.merged_into as string | null, quarantined: row.quarantined === 1 })),
     quarantinedContributors: quarantined.results.map(row => row.contributor_id as string),
     quarantinedSubmissions: submissions.results.filter(row => row.quarantined === 1).map(row => row.submission_id as string),

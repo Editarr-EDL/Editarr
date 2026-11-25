@@ -88,7 +88,8 @@ review until its alignment is approved.
 ## Browse the community filters
 
 The **Community** tab lists each linked set's filters with their time, category,
-severity, action, confidence and contributor count. It is for browsing, voting and
+the word or phrase of a language filter, severity, action, confidence and
+contributor count. It is for browsing, voting and
 checking for updates; you enable, disable and adjust filters in the saved reviews
 that include them. Notification links from **Filter updates** open this tab.
 
@@ -98,8 +99,9 @@ that include them. Notification links from **Filter updates** open this tab.
 - A filter is **Low Confidence** when its negative signals outweigh its support
   (attestations plus upvotes). Negatives come from downvotes, disputes, and other
   contributors' shared submissions that scanned that channel (audio or video) over
-  that range without finding the filter; by default each counts as one downvote. Your local
-  scans never count toward anything unless you share them.
+  that range without finding the filter; by default each of those counts as a
+  quarter of a downvote. Your local scans never count toward anything unless you
+  share them.
 - **Minimum confidence** and **Show Low Confidence filters** decide which filters
   start enabled when a review includes the set or brings in new filters with
   Refresh: filters below your threshold, and Low Confidence filters unless you show
@@ -124,13 +126,16 @@ results, next to the scan filters. Each shows its community source, confidence,
 contributor count and version; filters below your minimum confidence, and Low
 Confidence filters unless you show them, start disabled.
 
-From then on community filters are ordinary review filters. Enable or disable them,
-edit their times, category, severity or action, preview or delete them exactly like
-scan filters; an **Edited** label marks the ones you changed yourself. Enabling or
-disabling a whole group at once counts as your edit of each filter it changes.
-Changes made by **Apply Filter Defaults** don't count as your edits. Once you edit a
+From then on community filters are ordinary review filters. A community language
+filter's label is the word or phrase the community flagged. Enable or disable them,
+edit their times, category, severity, action or label, preview or delete them
+exactly like scan filters; an **Edited** label marks the ones you changed yourself.
+Turning filters on or off, one at a time or a whole group at once, is your personal
+choice for this review: it never counts as an edit and is never shared. Changes
+made by **Apply Filter Defaults** don't count as your edits either. Once you edit a
 community filter it stays marked Edited, even if you later set it back to its
-original values, and sharing the review sends it as your verdict. Your instance's filter
+original values, and sharing the review sends it as your verdict while it is
+enabled. Your instance's filter
 policy applies to them like any other filter, and EDL and MCF exports, published
 sidecars and filtered subtitles use them the same way.
 
@@ -142,8 +147,9 @@ earlier exports show as out of date:
 
 - filters you edited keep your changes, even when the community merged them into
   another filter;
-- filters you didn't edit take the new community values (including ones only
-  Apply Filter Defaults changed);
+- filters you didn't edit take the new community values, including a new word or
+  phrase as their label (and including ones only Apply Filter Defaults changed),
+  and stay on or off as you left them;
 - new filters are added, enabled or disabled by your current minimum confidence and
   Low Confidence setting;
 - filters the community no longer serves stay in the review marked **Removed from
@@ -152,10 +158,11 @@ earlier exports show as out of date:
 - a filter that was left out because it lay outside your file is added once the
   community moves it inside.
 
-Reviews made before this version keep their community filters. Decisions you made
-in the Community tab then (adjusting, confirming above your threshold, or rejecting
-a filter) become edits of those reviews' filters: a rejected filter appears disabled
-and marked Edited. Decisions on sets no review included no longer apply.
+Reviews made before this version keep their community filters. Filters you adjusted
+in the Community tab then become edits of those reviews' filters. A filter you
+rejected appears disabled, and one you confirmed below your threshold stays
+enabled; neither is marked Edited, since turning a filter on or off isn't an edit.
+Decisions on sets no review included no longer apply.
 
 Unchecking the entry and saving removes the set and its filters from the review. A
 set that still needs alignment can't be included or refreshed until you approve its
@@ -167,9 +174,10 @@ exports and publishes EDL and MCF files beside the media file. A review needs at
 least one scan or community filter to export.
 
 Filtered subtitles follow one rule for every filter: an enabled language mute on
-the audio channel removes the word or phrase in its label. Community filters arrive
-without one, so they don't change subtitles unless you give them a label, exactly
-like any other filter without a word.
+the audio channel removes the word or phrase in its label. A community language
+mute's label is the community's word or phrase, so it filters subtitles like a
+scan filter; one without a word doesn't change subtitles unless you give it a
+label, exactly like any other filter without a word.
 
 ## Share your filters
 
@@ -179,17 +187,19 @@ represents with the version picker (Theatrical, another listed version, or
 chosen. The work needs a TMDB or TVDB ID, plus season and episode for TV.
 
 The preview shows the exact public payload and an approximate summary such as
-"≈4 new, ≈27 confirmations, 3 adjustments, 1 dispute". The numbers are estimates
+"≈4 new, ≈27 confirmations, 3 adjustments". The numbers are estimates
 because the service makes the final match. Your cues and coverage are shared;
 coverage tells the service which channels (audio or video) and time ranges your
 scan analyzed, so community filters there that your scan did not find count
-against them. When you share a review, the community filters you edited are shared
-as your verdicts on them: one that is enabled confirms it with your times,
-category, severity and action (an adjustment when you changed them), and one you
-disabled after it started enabled disputes it. A filter that started disabled and
-is still disabled isn't shared, and neither are community filters you didn't touch,
-filters from another community version than the set you share against, or ones the
-community no longer serves. Private file paths, credentials and alternate-track
+against them. A language cue shares the word or phrase in its label (up to 64
+characters), without saying who flagged it. When you share a review, the enabled
+community filters you edited are shared as your verdicts on them, confirming each
+with your times, category, severity, action and word or phrase (an adjustment when
+you changed them). Disabled community filters are never shared, whether or not you
+edited them: turning a filter off is personal and doesn't dispute it. To tell the
+community a filter is wrong, vote it down. Community filters you didn't edit,
+filters from another community version than the set you share against, and ones
+the community no longer serves aren't shared either. Private file paths, credentials and alternate-track
 inventories are excluded. Confirm rights and standing reuse permission before
 approving.
 

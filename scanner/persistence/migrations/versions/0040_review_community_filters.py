@@ -18,15 +18,16 @@ a filter with no remaining range stays only in the snapshot.
 The snapshot's entries become the link's master values of the snapshot's revision
 (its kept verified snapshot, else the link's rows), with the owner's threshold and
 Low Confidence preference deciding each filter's starting state, and the digest is
-recomputed for them. Measured against them, a stored filter the owner adjusted (or
-enabled below the threshold) counts as edited by the user, a filter the owner had
-rejected becomes a disabled, edited filter, and the master's other filters, which
-the snapshot left out, are added disabled. A snapshot without a link keeps its
-stored filters as their own defaults. Community-tab decisions of links that no
-review includes no longer apply; their rows are kept. A database built by the earlier
-published 0039 has `community_master_preferences.hide_rejected_downvoted`; it is renamed
-to `hide_downvoted`, keeping each account's value. No other row changes. The
-adoption path runs this only after its verified, recoverable backup.
+recomputed for them. Measured against them, a stored filter the owner adjusted counts
+as edited by the user, and keeps its enabled state; turning a filter on or off is never
+an edit. A filter the owner had rejected becomes a disabled, unedited filter, like the
+master's other filters the snapshot left out, which are added disabled. A snapshot
+without a link keeps its stored filters as their own defaults. Community-tab decisions
+of links that no review includes no longer apply; their rows are kept. A database
+built by the earlier published 0039 has
+`community_master_preferences.hide_rejected_downvoted`; it is renamed to
+`hide_downvoted`, keeping each account's value. No other row changes. The adoption
+path runs this only after its verified, recoverable backup.
 """
 
 import hashlib
@@ -144,19 +145,18 @@ def _master_entry(item, alignment, info, preferences):
 
 
 def _masters(bind, link_id, revision, alignment, preferences):
-    """The link's master filters as of `revision`, and the link's stored decision states.
+    """The link's master filters as of `revision`.
 
     The verified snapshot of that revision is used when kept; otherwise the link's
     present rows (their last applied master values).
     """
     if link_id is None:
-        return {}, {}
+        return {}
     rows = bind.exec_driver_sql(
-        "SELECT filter_id, category, baseline_json, info_json, state, present "
+        "SELECT filter_id, category, baseline_json, info_json, present "
         "FROM community_master_filters WHERE link_id = ?",
         (link_id,),
     ).fetchall()
-    states = {row[0]: row[4] for row in rows}
     stored = bind.exec_driver_sql(
         "SELECT snapshot_bytes FROM community_master_snapshots WHERE link_id = ? AND revision = ?",
         (link_id, revision),
@@ -168,19 +168,18 @@ def _masters(bind, link_id, revision, alignment, preferences):
     except (ValueError, KeyError, TypeError):
         masters = {}
     if not masters:
-        for filter_id, category, baseline, info, _state, present in rows:
+        for filter_id, category, baseline, info, present in rows:
             if present:
                 item = {**json.loads(baseline), "filterId": filter_id, "category": category}
                 masters[filter_id] = _master_entry(item, alignment, json.loads(info), preferences)
-    return masters, states
+    return masters
 
 
-def _differs(entry, values, selected):
-    """Whether stored values or the enabled state differ from an entry's defaults."""
+def _differs(entry, values):
+    """Whether stored values differ from an entry's defaults; the enabled state never counts."""
     category, subcategory = _classification(entry)
     return (
-        selected != entry["default_selected"]
-        or (category, subcategory) != _classification(values)
+        (category, subcategory) != _classification(values)
         or _severity(values.get("severity")) != _severity(entry.get("severity"))
         or (values.get("edit_action") == "mute") != (entry.get("edit_action") == "mute")
         or max(0, int(values["start_ms"])) != max(0, int(entry["start_ms"]))
@@ -192,10 +191,9 @@ def _source_rows(bind, review_id, source):
     """Snapshot entries and review filters for one stored 0039 snapshot.
 
     Its filters were the link's active filters with the owner's decisions applied. With
-    the link's master values as the defaults, an adjusted filter counts as edited, a
-    rejected one becomes a disabled, edited filter, and other filters the snapshot left
-    out are added disabled. Without master values the stored filters are their own
-    defaults.
+    the link's master values as the defaults, an adjusted filter counts as edited, and a
+    rejected one, like other filters the snapshot left out, is added disabled and
+    unedited. Without master values the stored filters are their own defaults.
     """
     source_id, link_id, revision, alignment_json, encoded = source
     legacy = {entry["filter_id"]: entry for entry in json.loads(encoded)}
@@ -208,7 +206,7 @@ def _source_rows(bind, review_id, source):
         (owner,),
     ).first() or (0.0, False)
     alignment = json.loads(alignment_json) if alignment_json else None
-    masters, states = _masters(bind, link_id, revision, alignment, preferences)
+    masters = _masters(bind, link_id, revision, alignment, preferences)
     entries, rows = [], []
     for filter_id in sorted(set(masters) | set(legacy)):
         entry = masters.get(filter_id)
@@ -218,10 +216,9 @@ def _source_rows(bind, review_id, source):
             values, selected, edited = stored, entry["default_selected"], False
         elif stored is not None:
             selected = _classification(stored)[0] is not None
-            values, edited = stored, _differs(entry, stored, selected)
+            values, edited = stored, _differs(entry, stored)
         else:
-            rejected = states.get(filter_id) == "rejected"
-            values, selected, edited = entry, False, rejected
+            values, selected, edited = entry, False, False
         entries.append(entry)
         rows.append((filter_id, values, selected, edited))
     return entries, rows

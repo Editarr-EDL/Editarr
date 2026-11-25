@@ -61,8 +61,11 @@ for (const width of [320, 1440]) {
     await page.getByRole("button", { name: "Done" }).click();
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect.poll(() => saves[1]?.filters.find((filter) => filter.community_filter_id === "f_lang")?.start_seconds).toBe(905);
-    expect(saves[1].filters.find((filter) => filter.community_filter_id === "f_fight")?.selected).toBe(false);
-    await expect(byTime(page).getByText("Edited")).toHaveCount(2);
+    // The language filter carries its word as its label; adjusting it is an edit, turning one off isn't.
+    expect(saves[1].filters.find((filter) => filter.community_filter_id === "f_lang")).toMatchObject({ label: "damn", community_edited: true });
+    expect(saves[1].filters.find((filter) => filter.community_filter_id === "f_fight"))
+      .toMatchObject({ selected: false, community_edited: false });
+    await expect(byTime(page).getByText("Edited")).toHaveCount(1);
     await check(page, "review-community-edited", width);
 
     // The Community tab is read-only for decisions and only downloads the newer filters.
@@ -87,7 +90,8 @@ for (const width of [320, 1440]) {
     await expect.poll(() => saves[2]?.community_memberships).toEqual([{ source_id: "snap-1", refresh: true }]);
     await expect(included.getByText("Community filters changed since included.")).toHaveCount(0);
     await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(4);
-    // Edits stay; the filter no longer served is flagged and stays disabled; the new one arrives enabled.
+    // Edits stay, and a filter turned off stays off; the filter no longer served is flagged and stays
+    // disabled; the new one arrives enabled.
     await expect(row(page, "10:00").getByRole("checkbox")).not.toBeChecked();
     await expect(row(page, "15:05")).toContainText("Edited");
     await expect(row(page, "20:00")).toContainText("Removed from community");

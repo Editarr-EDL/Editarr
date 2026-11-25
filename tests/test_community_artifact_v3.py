@@ -21,7 +21,7 @@ from scanner.formats.community.artifact_v3 import (
     encode_artifact_v3,
     parse_manifest_v3,
 )
-from scanner.formats.community.artifact_v3_models import ArtifactV3
+from scanner.formats.community.artifact_v3_models import ArtifactV3, normalize_expression
 from scanner.formats.community.strict_json import (
     StrictJsonError,
     canonical_json_bytes,
@@ -73,7 +73,8 @@ def test_round_trip_and_canonical_bytes_are_stable():
     assert text.startswith(
         '{"schemaVersion":"community-artifact-3","submissionId":"sub_01J9Z3K5C6Q"'
     )
-    assert '"scale":1,' in text and " " not in text.replace("The Matrix", "")
+    assert '"scale":1,' in text
+    assert " " not in text.replace("The Matrix", "").replace("Crème brûlée", "")
     assert json.loads(text) == artifact_value()
     assert first.digest == hashlib.sha256(first.gzip_bytes).hexdigest()
     assert artifact_file_keys(first.artifact) == (
@@ -207,6 +208,15 @@ INVALID = {
         mutate("entries.0.evidence.modelVersion", "m" * 129),
         "invalid_submission",
     ),
+    "expression on non-language": (mutate("entries.0.expression", "damn"), "invalid_submission"),
+    "expression on dispute": (mutate("entries.1.expression", "damn"), "invalid_submission"),
+    "expression blank": (mutate("entries.2.expression", "  "), "invalid_submission"),
+    "expression untrimmed": (mutate("entries.2.expression", " damn"), "invalid_submission"),
+    "expression not NFC": (mutate("entries.2.expression", "cre\u0300me"), "invalid_submission"),
+    "expression control": (mutate("entries.2.expression", "da\u0007mn"), "invalid_submission"),
+    "expression format": (mutate("entries.2.expression", "da\u200bmn"), "invalid_submission"),
+    "expression too long": (mutate("entries.2.expression", "x" * 65), "invalid_submission"),
+    "expression type": (mutate("entries.2.expression", 7), "invalid_submission"),
     "title bytes": (mutate("work.title", "é" * 257), "invalid_submission"),
     "normalized title code points": (mutate("work.title", "a b " * 64 + "c"), "invalid_submission"),
 }
@@ -230,7 +240,7 @@ def test_valid_kinds_and_null_identity_variants_are_accepted():
     value["entries"][0]["evidence"].update(origin="model", modelVersion="m-1")
     add_entry(kind="coverage_negative", subcategory=None, severity=None, action=None)(value)
     value["coverage"][0]["intervals"] = [{"startMs": 0, "endMs": 10}, {"startMs": 10, "endMs": 20}]
-    assert len(decode_artifact_v3(raw_gzip(value)).artifact.entries) == 3
+    assert len(decode_artifact_v3(raw_gzip(value)).artifact.entries) == 4
 
 
 def deflate_member(data: bytes, flags: int = 0, header_extra: bytes = b"") -> bytes:
@@ -400,6 +410,23 @@ def test_tampered_or_untrusted_submissions_are_rejected():
         with pytest.raises(ArtifactSignatureError) as error:
             verify(signed, historical_key=key)
         assert error.value.code == "key_mismatch"
+
+
+def test_language_expressions_normalize_and_may_be_absent():
+    assert normalize_expression("  Cre\u0300me brûlée\u00a0") == "Crème brûlée"
+    assert normalize_expression("😀" * 64) == "😀" * 64
+    assert normalize_expression("😀" * 65) is None
+    assert normalize_expression("da\nmn") is None and normalize_expression(None) is None
+    value = artifact_value()
+    value["entries"][2]["expression"] = "😀" * 64
+    assert decode_artifact_v3(raw_gzip(value)).artifact.entries[2].expression == "😀" * 64
+    for entry in value["entries"]:
+        del entry["expression"]
+    assert [item.expression for item in decode_artifact_v3(raw_gzip(value)).artifact.entries] == [
+        None,
+        None,
+        None,
+    ]
 
 
 def test_normalized_title_may_have_exactly_256_code_points():

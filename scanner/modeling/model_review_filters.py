@@ -42,8 +42,8 @@ class ReviewFilter(BaseModel):
     community_source_id: str | None = Field(default=None, max_length=36)
     community_filter_id: str | None = Field(default=None, max_length=128)
     # A community filter the user edited directly; bulk defaults leave it unset. Clients
-    # set it when the user changes a community filter's enabled state, times,
-    # classification, severity or action. It never resets.
+    # set it when the user changes a community filter's times, classification,
+    # severity, action or label; turning it on or off never counts. It never resets.
     community_edited: bool | None = None
     source: Literal["audio", "visual"]
     category: McfCategoryFamily | None

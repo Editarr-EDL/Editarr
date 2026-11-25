@@ -40,7 +40,6 @@ class Estimates:
     new_filters: int
     confirmations: int
     adjustments: int
-    disputes: int
 
     def as_json(self) -> dict:
         return {
@@ -48,7 +47,6 @@ class Estimates:
             "newFilters": self.new_filters,
             "confirmations": self.confirmations,
             "adjustments": self.adjustments,
-            "disputes": self.disputes,
         }
 
 
@@ -90,16 +88,14 @@ def estimate(
     cue_count: int,
     supports: int = 0,
     adjustments: int = 0,
-    disputes: int = 0,
 ) -> Estimates:
     """≈ new filters (unproposed cues), confirmations (cues proposing an existing filter,
-    and supported community filters), adjustments (supported community filters the user
-    changed) and disputes (community filters the user disabled)."""
+    and supported community filters) and adjustments (supported community filters the
+    user changed)."""
     return Estimates(
         new_filters=cue_count - len(proposals),
         confirmations=len(proposals) + supports,
         adjustments=adjustments,
-        disputes=disputes,
     )
 
 

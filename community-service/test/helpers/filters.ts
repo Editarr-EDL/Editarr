@@ -90,7 +90,8 @@ export function workedExample() {
   return mergeInput([
     submission('sub_A', 'c_A', [
       support('e1', 600_000, 605_000),
-      support('e2', 1_200_000, 1_203_000, { category: 'language', subcategory: 'swearing', severity: 'low', action: 'mute' }),
+      support('e2', 1_200_000, 1_203_000, { category: 'language', subcategory: 'swearing', severity: 'low', action: 'mute',
+        expression: 'Damn' }),
     ]),
     submission('sub_B', 'c_B', [
       support('e1', 600_300, 605_400, { severity: 'high' }),

@@ -30,7 +30,7 @@ export const DEFAULT_MASTER_POLICY: Readonly<MasterPolicy> = Object.freeze({
   matchToleranceMs: 500,
   severityWeights: Object.freeze({ low: 1, medium: 1, high: 3 }),
   confidenceFloor: 0.05,
-  coverageNegativeWeight: 1,
+  coverageNegativeWeight: 0.25,
   candidatePromotionContributors: 3,
   alignmentSearchMs: 30_000,
   alignmentMinAnchors: 3,

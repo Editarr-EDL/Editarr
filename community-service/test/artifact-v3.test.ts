@@ -15,6 +15,7 @@ const code = async (promise: Promise<unknown> | (() => unknown)) => {
 };
 const artifact = (changes: Record<string, unknown> = {}) => ({ ...fixture.artifact, ...changes });
 const entry = (changes: Record<string, unknown>) => artifact({ entries: [{ ...fixture.artifact.entries[0], ...changes }] });
+const language = (changes: Record<string, unknown>) => artifact({ entries: [{ ...fixture.artifact.entries[2], ...changes }] });
 
 describe('community-artifact-3 cross-language vectors (§5)', () => {
   it('verifies the shared fixture bytes, digest, signature base and envelope exactly as given', async () => {
@@ -87,9 +88,24 @@ describe('artifact validation codes (§5.2, §7.2)', () => {
     ['classified dispute', artifact({ entries: [{ ...fixture.artifact.entries[1], severity: 'low' }] }), 'invalid_submission'],
     ['model without version', entry({ evidence: { ...fixture.artifact.entries[0].evidence, origin: 'model' } }), 'invalid_submission'],
     ['integer written as fraction', null, 'invalid_submission'],
+    ['expression on a non-language support', entry({ expression: 'damn' }), 'invalid_submission'],
+    ['expression on a dispute', artifact({ entries: [{ ...fixture.artifact.entries[1], expression: 'damn' }] }), 'invalid_submission'],
+    ['blank expression', language({ expression: '   ' }), 'invalid_submission'],
+    ['expression over 64 code points', language({ expression: '😀'.repeat(65) }), 'invalid_submission'],
+    ['control character in expression', language({ expression: 'da\u0007mn' }), 'invalid_submission'],
+    ['format character in expression', language({ expression: 'da\u200bmn' }), 'invalid_submission'],
+    ['non-string expression', language({ expression: 7 }), 'invalid_submission'],
   ])('%s', async (_name, value, expected) => {
     const source = value === null ? fixture.canonicalJson.replace('"durationMs":8160512', '"durationMs":8160512.0') : JSON.stringify(value);
     expect(await code(decodeArtifactV3(gzip(source)))).toBe(expected);
+  });
+
+  it('normalizes language expressions to trimmed NFC and accepts entries without one', async () => {
+    const decoded = await decodeArtifactV3(gzip(language({ expression: '  Cre\u0300me brûlée\u00a0' })));
+    expect(decoded.artifact.entries[0].expression).toBe('Crème brûlée');
+    expect((await decodeArtifactV3(gzip(language({ expression: '😀'.repeat(64) })))).artifact.entries[0].expression).toHaveLength(128);
+    const { expression: _expression, ...withoutKey } = fixture.artifact.entries[2];
+    expect((await decodeArtifactV3(gzip(artifact({ entries: [withoutKey] })))).artifact.entries[0].expression).toBeUndefined();
   });
 
   it('binds the manifest to the exact gzip bytes and artifact identity', async () => {

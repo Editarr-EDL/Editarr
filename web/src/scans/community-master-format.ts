@@ -43,11 +43,11 @@ export function filterVisible(filter: MasterFilter, preferences: MasterPreferenc
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-/** Render sharing estimates as "≈N new, ≈M confirmations, K adjustments, D disputes". */
+/** Render sharing estimates as "≈N new, ≈M confirmations, K adjustments". */
 export function estimateText({ estimates }: Pick<MasterSharingSummary, "estimates">) {
   const approx = estimates.approximate ? "≈" : "";
   return [`${approx}${estimates.newFilters} new`, `${approx}${plural(estimates.confirmations, "confirmation")}`,
-    plural(estimates.adjustments, "adjustment"), plural(estimates.disputes, "dispute")].join(", ");
+    plural(estimates.adjustments, "adjustment")].join(", ");
 }
 
 export type PickerValue = { selection: string; otherText: string };

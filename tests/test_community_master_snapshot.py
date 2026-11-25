@@ -101,6 +101,7 @@ def test_verified_newer_revision():
     verified = verify(response())
     assert verified.snapshot.revision == 13
     assert verified.snapshot.filters[1].merged_ids == ["f_old"]
+    assert [item.expression for item in verified.snapshot.filters] == [None, "Damn"]
     assert verified.snapshot_bytes == encode(snapshot_value())
     assert verify(response(), known_revision=None).snapshot.version_id == "v_12ab"
     retired = (key_record(SERVICE_KEY, "retired"),)
@@ -185,6 +186,11 @@ def snapshot_mutations():
     yield "no identity", encode(change(lambda v: v["work"].update(tmdb=None)))
     yield "movie numbering", encode(change(lambda v: v["work"].update(season=1)))
     yield "float revision", json.dumps(change(lambda v: v.update(revision=13.0))).encode()
+    yield (
+        "expression on non-language",
+        encode(change(lambda v: v["filters"][0].update(expression="damn"))),
+    )
+    yield "empty expression", encode(change(lambda v: v["filters"][1].update(expression="")))
     yield "too large", encode(snapshot_value()) + b" " * 2_000_000
 
 
@@ -192,6 +198,14 @@ def snapshot_mutations():
 def test_snapshot_strict_parse_failures(case):
     with pytest.raises(MasterSnapshotError):
         parse_master_snapshot(case[1])
+
+
+def test_snapshots_without_expressions_still_parse():
+    value = snapshot_value()
+    for item in value["filters"]:
+        del item["expression"]
+    filters = parse_master_snapshot(encode(value)).filters
+    assert [item.expression for item in filters] == [None, None]
 
 
 def test_snapshot_filter_limit():

@@ -1,7 +1,8 @@
 """Upgrade to 0040 turns stored community snapshot filters into review filters, losing nothing.
 
 Snapshots of a link measure their stored filters against the link's master values, so
-the owner's earlier Community-tab decisions become review edits.
+the owner's earlier adjustments become review edits; rejected filters become disabled,
+and enabling or disabling a filter is never an edit.
 """
 
 import json
@@ -239,10 +240,13 @@ def test_snapshot_filters_become_review_filters_after_existing_ones(upgraded):
     assert [row[11] for row in rows] == list(range(len(rows)))
     assert [(row[0], row[6], row[7], row[4], row[10], row[13]) for row in linked] == [
         ("f_ok", 101.0, 102.0, "high", 1, 0),
+        # Adjusted: an edit of the user's.
         ("f_adj", 201.5, 202.0, "low", 1, 1),
-        ("f_rej", 301.0, 302.0, "high", 0, 1),
+        # Rejected: disabled, but turning a filter off is never an edit.
+        ("f_rej", 301.0, 302.0, "high", 0, 0),
         ("f_low", 401.0, 402.0, "high", 0, 0),
-        ("f_touch", 501.0, 502.0, "high", 1, 1),
+        # Enabled below the threshold: kept enabled, and not an edit either.
+        ("f_touch", 501.0, 502.0, "high", 1, 0),
     ]
     assert rows[0][0] is None and rows[0][12] == "scan"
     detached = [row for row in rows[1:] if row[0] not in {item["filterId"] for item in MASTER}]

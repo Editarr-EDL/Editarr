@@ -32,8 +32,8 @@ describe("preference filtering", () => {
 });
 
 it("formats estimates and version choices", () => {
-  expect(estimateText({ estimates: { approximate: true, newFilters: 4, confirmations: 27, adjustments: 3, disputes: 1 } }))
-    .toBe("≈4 new, ≈27 confirmations, 3 adjustments, 1 dispute");
+  expect(estimateText({ estimates: { approximate: true, newFilters: 4, confirmations: 27, adjustments: 3 } }))
+    .toBe("≈4 new, ≈27 confirmations, 3 adjustments");
   expect(versionChoice({ selection: "", otherText: "" })).toBeNull();
   expect(versionChoice({ selection: "theatrical", otherText: "x" })).toEqual({ choice: "alias", alias_id: "theatrical" });
   expect(versionChoice({ selection: OTHER, otherText: "  IMAX " })).toEqual({ choice: "other", text: "IMAX" });

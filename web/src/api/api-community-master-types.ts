@@ -36,6 +36,8 @@ export type MasterLink = MasterLinkSummary;
 
 export type FilterValues = {
   startMs: number; endMs: number; subcategory: string | null; severity: string | null; action: string;
+  /** A language filter's word or phrase, or null. */
+  expression?: string | null;
 };
 export type MasterValues = FilterValues & {
   spread: { startMs: number; endMs: number } | null; confidence: number; contributorCount: number;
@@ -88,7 +90,7 @@ export type CheckResult = { version: 1; changed: boolean; latestRevision: number
 export type VersionChoice = { choice: "alias"; alias_id: string } | { choice: "other"; text: string | null };
 /** Master-set fields that the community-artifact-3 sharing preview adds to the manual sharing preview. */
 export type MasterSharingSummary = {
-  estimates: { approximate: boolean; newFilters: number; confirmations: number; adjustments: number; disputes: number };
+  estimates: { approximate: boolean; newFilters: number; confirmations: number; adjustments: number };
   versionChoice: { choice: "alias"; aliasId: string; label: string } | { choice: "other"; text: string | null; label: string };
   work: { kind: string; tmdb: string | null; tvdb: string | null; title: string; year: number | null };
   entryCount: number; warnings: string[];

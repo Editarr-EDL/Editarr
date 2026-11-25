@@ -5,11 +5,13 @@
 | --- | --- |
 | Kept review or scan cue | `support`, proposing the master filter it overlaps |
 | Edited, enabled community review filter | `support` of its master filter, with the user's values |
-| Edited, disabled community review filter | `dispute` of its master filter |
-| Untouched community review filter | not shared |
+| Disabled or untouched community review filter | not shared |
 | Completed scan stages | `coverage`, for every category on the channel they analyzed |
 
-All times are milliseconds on the local file timeline.
+A language support carries its label (the flagged word or phrase) as its `expression`
+when the label is a valid expression. Editarr never sends `dispute` entries: turning a
+filter off is personal, and a 👎 vote is the only negative a user casts. All times are
+milliseconds on the local file timeline.
 """
 
 import json
@@ -32,7 +34,7 @@ from scanner.modeling.community_match_keys import FileKey, HashKey
 from scanner.modeling.community_work_identity import WorkIdentity
 from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
 
-from .submission_attestations import review_attestations
+from .submission_attestations import cue_expression, review_attestations
 
 MAX_ENTRIES = 2000
 MAX_INTERVALS = 512
@@ -146,6 +148,7 @@ def _cues(data: dict, kind: str, duration_ms: int, warnings: list[str]):
                     "subcategory": subcategory,
                     "severity": severity,
                     "action": "mute" if row.get("edit_action") == "mute" else "skip",
+                    "expression": cue_expression(category, row.get("label")),
                     "evidence": _evidence(origin, review, verified, _model_version(scan)),
                 },
             )
@@ -272,6 +275,6 @@ def project_submission(
     artifact = ArtifactV3.model_validate(document, strict=True, by_alias=True, by_name=False)
     return Projection(
         artifact,
-        estimate(proposals, len(cues), attested.supports, attested.adjustments, attested.disputes),
+        estimate(proposals, len(cues), attested.supports, attested.adjustments),
         tuple(sorted(set(warnings))),
     )

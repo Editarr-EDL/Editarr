@@ -5,11 +5,13 @@ with the master values on the local timeline (milliseconds), and one ordinary re
 filter per entry that the user may enable, disable or adjust. These helpers decide
 which filters start enabled, turn an entry into review filter values, compare a filter
 with its defaults, and map snapshot IDs across a refresh. Whether the *user* edited a
-filter is recorded on the review filter itself (`community_edited`), so bulk changes
-such as Apply Filter Defaults don't count.
+filter is recorded on the review filter itself (`community_edited`): only direct changes
+to its times, classification, severity, action or label (the expression) count, never
+turning it on or off, nor bulk changes such as Apply Filter Defaults.
 
 Entry keys: `filter_id`, `category`, `subcategory`, `severity`, `edit_action`,
-`start_ms`, `end_ms`, `low_confidence`, `confidence`, `contributor_count`,
+`expression` (the language filter's word or phrase, or null), `start_ms`, `end_ms`,
+`low_confidence`, `confidence`, `contributor_count`,
 `default_selected`, optional `initial` (`{start_ms, end_ms}` when the review filter was
 clipped to the runtime), `outside` (true when no review filter was added because the
 filter lay wholly outside the runtime) and `served` (false for a filter the master no
@@ -53,9 +55,14 @@ def served(entry: Mapping) -> bool:
 
 def snapshot_digest(entries: Iterable[Mapping]) -> str:
     """Identify the served master values of a snapshot; informational fields, defaults
-    and kept removed filters are left out, so only a master change counts."""
+    and kept removed filters are left out, so only a master change counts. An expression
+    is appended only when present, so digests of entries without one are unchanged."""
     document = [
-        [entry["filter_id"], *(entry.get(name) for name in MATERIAL)]
+        [
+            entry["filter_id"],
+            *(entry.get(name) for name in MATERIAL),
+            *([entry["expression"]] if entry.get("expression") else []),
+        ]
         for entry in entries
         if served(entry)
     ]
@@ -87,7 +94,7 @@ def clip(entry: Mapping, runtime_ms: int | None) -> tuple[int, int] | None:
 
 def filter_values(entry: Mapping) -> dict:
     """Review filter values for an entry's defaults: a mute is an audio mute, a skip a
-    skip of both channels; labels and descriptions stay empty."""
+    skip of both channels; the label is the expression, and descriptions stay empty."""
     category, subcategory = classification(entry)
     start_ms, end_ms = initial_bounds(entry)
     mute = entry.get("edit_action") == "mute"
@@ -98,7 +105,7 @@ def filter_values(entry: Mapping) -> dict:
         "severity": entry.get("severity") or None,
         "mcf_channel": "audio" if mute else "both",
         "mcf_comment": None,
-        "label": None,
+        "label": entry.get("expression") or None,
         "details": None,
         "group_key": None,
         "start_seconds": start_ms / 1000,
@@ -109,10 +116,10 @@ def filter_values(entry: Mapping) -> dict:
     }
 
 
-def values_changed(values, entry: Mapping | None, *, selection: bool = True) -> bool:
+def values_changed(values, entry: Mapping | None) -> bool:
     """Whether a review filter's values differ from its entry's defaults: its bounds (to
-    the millisecond), classification, severity, action and, with `selection`, its enabled
-    state. `values` is any object with review filter attributes. Without an entry the
+    the millisecond), classification, severity, action and label. Its enabled state never
+    counts. `values` is any object with review filter attributes. Without an entry the
     filter can't be compared and counts as changed."""
     if entry is None:
         return True
@@ -120,8 +127,8 @@ def values_changed(values, entry: Mapping | None, *, selection: bool = True) -> 
     start_ms, end_ms = initial_bounds(entry)
     end = getattr(values, "end_seconds", None)
     return (
-        (selection and bool(values.selected) != expected["selected"])
-        or round(values.start_seconds * 1000) != start_ms
+        round(values.start_seconds * 1000) != start_ms
+        or (getattr(values, "label", None) or None) != expected["label"]
         or end is None
         or round(end * 1000) != end_ms
         or any(
