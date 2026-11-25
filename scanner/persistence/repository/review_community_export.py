@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
-from scanner.formats.subtitle_redaction import SubtitleMute
 from scanner.mcf import McfCueEntry
 from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
 from scanner.models import McfCategory, McfChannel
@@ -90,15 +89,3 @@ def mcf_entries(filters: list[ActiveMasterFilter], offset: int) -> list[McfCueEn
             )
         )
     return entries
-
-
-def subtitle_mutes(
-    filters: Iterable[ActiveMasterFilter], duration_seconds: float | None
-) -> tuple[SubtitleMute, ...]:
-    """Language mutes for subtitle redaction. Community filters carry no words, so
-    each one removes the subtitle cues it overlaps."""
-    return tuple(
-        SubtitleMute(item.start_ms / 1000, item.end_ms / 1000, "", whole_cue=True)
-        for item in exportable(filters, duration_seconds=duration_seconds)
-        if item.category == "language" and item.action == "mute"
-    )

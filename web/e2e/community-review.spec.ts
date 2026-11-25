@@ -94,7 +94,8 @@ for (const width of [320, 1440]) {
     const review = { ...mockReview("review-c", "Community only", "source-1"), community_sources: [{
       source_id: "snap-1", link_id: community.state.link!.linkId, community_version_id: "v_extended", label: "Extended Edition",
       tier: "4", match_percent: 30, master_revision: 12, alignment: null, captured_at: "2026-11-24T00:00:00", state: "current",
-      link_state: "active", filters: community.snapshotFilters() }] };
+      link_state: "active", filters: community.snapshotFilters() }],
+      community_subtitles: { applied: 0, needs_audio_scan: 1, unaligned: 0 } };
     await page.route("**/api/library-items/movie-1/reviews*", (route) => route.request().method() === "GET"
       ? json(route, [review]) : route.fallback());
     await page.route("**/api/reviews/review-c", (route) => json(route, review));
@@ -103,6 +104,11 @@ for (const width of [320, 1440]) {
     const open = page.getByRole("button", { name: "Open review Community only" });
     if (await open.isVisible()) await open.click();
     await expect(page.getByRole("region", { name: "Community review filters table" })).toContainText("Community · Extended Edition");
+    const note = /1 community mute not applied to subtitles: run an audio scan/;
+    await expect(page.getByText(note)).toBeVisible();
+    await chooseWorkflowStep(page, "Subtitles");
+    await expect(page.getByRole("tabpanel", { name: "Subtitles" }).getByText(note)).toBeVisible();
+    await page.screenshot({ path: `test-results/community-subtitle-note-${width}.png`, fullPage: true });
     const exportButton = await chooseExportFormat(page, "EDL");
     await exportButton.click();
     const dialog = page.getByRole("dialog", { name: "Export" });

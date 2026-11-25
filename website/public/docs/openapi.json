@@ -15265,6 +15265,28 @@
         ],
         "title": "CommunitySourceReference"
       },
+      "CommunitySubtitleSummary": {
+        "properties": {
+          "applied": {
+            "type": "integer",
+            "title": "Applied",
+            "default": 0
+          },
+          "needs_audio_scan": {
+            "type": "integer",
+            "title": "Needs Audio Scan",
+            "default": 0
+          },
+          "unaligned": {
+            "type": "integer",
+            "title": "Unaligned",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "CommunitySubtitleSummary",
+        "description": "How the review's community language mutes reach filtered subtitles.\n\n`applied` mutes align with a word-level language finding of a local audio scan and\nredact its words; `needs_audio_scan` mutes wait for a completed local audio scan of\nthe version; `unaligned` mutes overlap no local language finding. Only applied\nmutes change subtitles."
+      },
       "CommunityTargetApproval": {
         "properties": {
           "source": {
@@ -23421,6 +23443,9 @@
             },
             "type": "array",
             "title": "Community Sources"
+          },
+          "community_subtitles": {
+            "$ref": "#/components/schemas/CommunitySubtitleSummary"
           }
         },
         "type": "object",

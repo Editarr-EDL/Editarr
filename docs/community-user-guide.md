@@ -49,6 +49,8 @@ scans of this item's other versions and other local files and associates the one
 you choose. It is enabled when this item's other versions, its previous versions,
 pending imports or linked scans have scans, or when another file of the same movie or
 episode has a scan you can see; otherwise it is disabled with an explanation.
+That check is quick and doesn't read your files, so a search can still come back
+with "No recoverable scans matched this file."
 
 Each result card shows the version name, a **Match %** and the filter and
 contributor counts. Match % reflects the strongest evidence that links your file
@@ -132,10 +134,17 @@ refresh them. Duplicating a review copies its snapshots.
 A review can contain only community filters: with no scans included, it still
 exports and publishes EDL and MCF files beside the media file from its stored
 community filters. A review needs at least one scan or community filter to export.
-The timeline summary counts included community filters. Exports clip them to the
-file's runtime and apply your instance's enforced severities; a filter whose
-classification is invalid is marked "not exported" and left out. In filtered
-subtitles, a community language mute removes the subtitle lines it overlaps.
+The timeline summary and the Community filters table show included community
+filters as exports render them: clipped to the file's runtime and with your
+instance's enforced severities (marked "enforced"). A filter whose classification is
+invalid, or that lies outside the file, is marked "not exported" and left out.
+
+Filtered subtitles need the words that were said, which community filters don't
+have. A community language mute changes subtitles only when the version has a
+completed local audio scan with a language finding that overlaps it; the scan's words
+are then removed exactly as for your own filters. Otherwise subtitles are left alone,
+and the Review and Subtitles steps say how many community mutes weren't applied and
+whether an audio scan is needed.
 
 ## Share your filters
 

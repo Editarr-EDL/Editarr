@@ -21,8 +21,6 @@ class SubtitleMute:
     start: float
     end: float
     expression: str
-    # A mute without known words (a community filter) removes every cue it overlaps.
-    whole_cue: bool = False
 
 
 def _marker_text(marker: str) -> str:
@@ -152,8 +150,7 @@ class SubtitleRedaction:
 def redact_subtitles(
     document: SubtitleDocument, mutes: tuple[SubtitleMute, ...]
 ) -> SubtitleRedaction:
-    """Remove only unique literal word sequences among cues overlapping each mute, and
-    every cue a `whole_cue` mute overlaps."""
+    """Remove only unique literal word sequences among cues overlapping each mute."""
     timeline = sorted(enumerate(document.cues), key=lambda row: row[1].start)
     starts = [cue.start for _, cue in timeline]
     latest_ends = []
@@ -166,7 +163,6 @@ def redact_subtitles(
 
     removed = defaultdict(set)
     overlapping = set()
-    whole = set()
     for mute in mutes:
         phrase = _tokens(mute.expression)
         candidates = []
@@ -176,9 +172,6 @@ def redact_subtitles(
             if cue.end <= mute.start:
                 continue
             overlapping.add(index)
-            if mute.whole_cue:
-                whole.add(index)
-                continue
             if not phrase or len(candidates) > 1:
                 continue
             for span in cue_words(index).matching_positions(phrase, mute):
@@ -192,5 +185,4 @@ def redact_subtitles(
         index: cue_words(index).remove(document.cues[index].text, spans)
         for index, spans in removed.items()
     }
-    replacements.update(dict.fromkeys(whole))
     return SubtitleRedaction(document, replacements, frozenset(overlapping))

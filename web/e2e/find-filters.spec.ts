@@ -139,7 +139,7 @@ for (const width of [320, 1440]) {
     await expect(trigger).toBeEnabled();
     await trigger.click();
     const dialog = page.getByRole("dialog", { name: "Recover Scans" });
-    await expect(dialog.getByText("No local scans match this file.")).toBeVisible();
+    await expect(dialog.getByText("No recoverable scans matched this file.")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Associate Selected" })).toBeDisabled();
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
     await expectNoAccessibilityViolations(page);

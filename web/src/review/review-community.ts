@@ -86,7 +86,33 @@ export function entryFilters(entry: CommunityEntry): { filters: ReviewCommunityF
   return { filters: entry.live ?? [], preview: true };
 }
 
-/** Whether a saved review has evidence to export: a scan, or a community snapshot with filters. */
+/** A stored snapshot's filters that exports use: those with a valid classification. */
+export function usableFilters(source: ReviewCommunitySource): ReviewCommunityFilter[] {
+  const unusable = new Set(source.unusable_filter_ids ?? []);
+  return source.filters.filter((filter) => !unusable.has(filter.filter_id));
+}
+
+/** Whether a saved review has evidence to export: a scan, or a community snapshot with a usable filter. */
 export function hasExportEvidence(review: Pick<SavedReview, "memberships" | "community_sources">): boolean {
-  return review.memberships.length > 0 || !!review.community_sources?.some((source) => source.filters.length > 0);
+  return review.memberships.length > 0 || !!review.community_sources?.some((source) => usableFilters(source).length > 0);
+}
+
+/** A community filter as exports render it: clipped to the known runtime (null when wholly
+ * outside it) and with the review owner's enforced severity for its subcategory. */
+export function asExported(filter: ReviewCommunityFilter, durationSeconds: number | null,
+  enforced: Partial<Record<string, string>> = {}): ReviewCommunityFilter | null {
+  const start = Math.max(0, filter.start_seconds);
+  const end = durationSeconds ? Math.min(filter.end_seconds, durationSeconds) : filter.end_seconds;
+  if (start >= end) return null;
+  return { ...filter, start_seconds: start, end_seconds: end, severity: enforced[filter.subcategory] ?? filter.severity };
+}
+
+/** The included community filters the review's exports would contain, for the timeline summary. */
+export function exportedCommunityFilters(entries: CommunityEntry[], durationSeconds: number | null,
+  enforced: Partial<Record<string, string>> = {}): ReviewCommunityFilter[] {
+  return entries.flatMap((entry) => {
+    const unusable = new Set(entry.source && !entry.refreshStaged ? entry.source.unusable_filter_ids ?? [] : []);
+    return entryFilters(entry).filters.filter((filter) => !unusable.has(filter.filter_id))
+      .flatMap((filter) => asExported(filter, durationSeconds, enforced) ?? []);
+  });
 }

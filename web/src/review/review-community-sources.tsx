@@ -1,5 +1,6 @@
+import type { CommunitySubtitleSummary } from "../api/api-review-types";
 import type { ReviewDraft } from "./review-draft";
-import { entryFilters, setCommunityIncluded, stageCommunityRefresh, type CommunityEntry } from "./review-community";
+import { asExported, entryFilters, setCommunityIncluded, stageCommunityRefresh, type CommunityEntry } from "./review-community";
 import { filterName, percent } from "../scans/community-master-format";
 import { formatTime } from "../shared/display";
 
@@ -55,8 +56,13 @@ export function ReviewCommunityEntries({ entries, draft, disabled, maySearch, on
   })}</>;
 }
 
-/** Read-only results for the community filters the draft includes, next to the scan results. */
-export function ReviewCommunityResults({ entries }: { entries: CommunityEntry[] }) {
+/** Read-only results for the community filters the draft includes, next to the scan results.
+ * Times and severities are shown as exports render them: clipped to `durationSeconds` and with
+ * the review owner's `enforced` severities, marked where they replace the community value. */
+export function ReviewCommunityResults({ entries, durationSeconds = null, enforced = {}, subtitles }: {
+  entries: CommunityEntry[]; durationSeconds?: number | null; enforced?: Partial<Record<string, string>>;
+  subtitles?: CommunitySubtitleSummary;
+}) {
   const rows = entries.flatMap((entry) => {
     const { filters, preview } = entryFilters(entry);
     return filters.map((filter) => ({ entry, filter, preview }));
@@ -67,20 +73,39 @@ export function ReviewCommunityResults({ entries }: { entries: CommunityEntry[] 
       <h3 id="review-community-results-heading">Community filters</h3>
       <p>{rows.length} {rows.length === 1 ? "result" : "results"} from community filter sets. Change them in the Community tab, then refresh them here.</p>
     </div></div>
+    <CommunitySubtitleNote summary={subtitles} />
     {rows.length > 0 && <div className="library-table-wrap" role="region" tabIndex={0} aria-label="Community review filters table">
       <table className="scan-filter-table review-community-table">
         <thead><tr><th scope="col">Time</th><th scope="col">Filter</th><th scope="col">Severity</th>
           <th scope="col">Action</th><th scope="col">Confidence</th><th scope="col">Source</th></tr></thead>
-        <tbody>{rows.map(({ entry, filter, preview }) => <tr key={`${entry.key}:${filter.filter_id}`}>
-          <td data-label="Time">{formatTime(filter.start_seconds)}–{formatTime(filter.end_seconds)}</td>
+        <tbody>{rows.map(({ entry, filter, preview }) => {
+          const shown = asExported(filter, durationSeconds, enforced);
+          const unusable = entry.source?.unusable_filter_ids?.includes(filter.filter_id);
+          return <tr key={`${entry.key}:${filter.filter_id}`}>
+          <td data-label="Time">{formatTime((shown ?? filter).start_seconds)}–{formatTime((shown ?? filter).end_seconds)}</td>
           <th scope="row" data-label="Filter">{filterName(filter)}
-            {entry.source?.unusable_filter_ids?.includes(filter.filter_id) && <small className="muted-copy"> (not exported)</small>}</th>
-          <td data-label="Severity">{filter.severity || "—"}</td>
+            {(unusable || !shown) && <small className="muted-copy"> (not exported{unusable ? "" : ": outside the file"})</small>}</th>
+          <td data-label="Severity">{(shown ?? filter).severity || "—"}
+            {shown && shown.severity !== filter.severity && <small className="muted-copy"> (enforced; community: {filter.severity})</small>}</td>
           <td data-label="Action">{filter.edit_action === "mute" ? "Mute" : "Skip"}</td>
           <td data-label="Confidence">{filter.confidence === null ? "—" : percent(filter.confidence)}</td>
           <td data-label="Source">Community · {entry.label}{preview && <small className="muted-copy"> (not saved yet)</small>}</td>
-        </tr>)}</tbody>
+        </tr>;
+        })}</tbody>
       </table>
     </div>}
   </section>;
+}
+
+const mutes = (count: number) => `${count} community ${count === 1 ? "mute" : "mutes"}`;
+
+/** Explain which saved community language mutes filtered subtitles leave out, and why. */
+export function CommunitySubtitleNote({ summary }: { summary?: CommunitySubtitleSummary }) {
+  if (!summary || (!summary.needs_audio_scan && !summary.unaligned)) return null;
+  return <div className="community-notice community-subtitle-note">
+    {summary.needs_audio_scan > 0 && <p>{mutes(summary.needs_audio_scan)} not applied to subtitles: run an audio scan of
+      this version so they can be matched to the spoken words.</p>}
+    {summary.unaligned > 0 && <p>{mutes(summary.unaligned)} not applied to subtitles: not aligned with a local language
+      finding from the audio scan.</p>}
+  </div>;
 }

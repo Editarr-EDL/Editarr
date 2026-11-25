@@ -59,6 +59,10 @@ export interface ReviewCommunityFilter {
 /** How a stored snapshot compares with its master link's active filters now. */
 export type ReviewCommunitySourceState = "current" | "changed" | "alignment_required" | "link_unavailable";
 
+/** How community language mutes reach filtered subtitles: only `applied` ones (aligned with a
+ * word-level finding of a local audio scan) change them. */
+export interface CommunitySubtitleSummary { applied: number; needs_audio_scan: number; unaligned: number }
+
 /** A snapshot of one master link's active filters that the review uses for results and exports. */
 export interface ReviewCommunitySource {
   source_id: string;
@@ -166,6 +170,7 @@ export interface SavedReview extends SavedReviewSummary, ReviewPolicyToken {
   synchronization: ReviewSynchronization;
   accepted_credits: AcceptedCreditsProvenance | null;
   community_sources?: ReviewCommunitySource[];
+  community_subtitles?: CommunitySubtitleSummary;
 }
 
 export interface ReviewCreate {

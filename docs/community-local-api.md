@@ -298,9 +298,15 @@ adds:
   versions for a community-only review; retained publications keep the runtime they
   used), apply the review owner's enforced severities, and leave out a filter whose
   subcategory doesn't belong to its category in both EDL and MCF; such filters are
-  listed in `unusable_filter_ids`. Subtitle redaction treats each snapshot `language`
-  mute as removing every subtitle cue it overlaps, since community filters carry no
-  words.
+  listed in `unusable_filter_ids`. A community-only review's runtime comes from the
+  shortest completed scan of its local versions, or else from probing its media file.
+- Community filters carry no words, so a snapshot `language` mute changes filtered
+  subtitles only through a word-level language finding of a completed local audio
+  scan of the review's version that it aligns with (same top-level category,
+  overlapping on the local timeline, as for "Locally verified"); that finding's words
+  are then redacted exactly like a scan mute. Other community mutes leave subtitles
+  untouched. `SavedReview.community_subtitles` reports
+  `{ "applied": n, "needs_audio_scan": n, "unaligned": n }`.
 - `state` compares the snapshot with the link now: `changed` when the link's active
   filters differ (confidence alone doesn't count), `alignment_required` when the
   link awaits alignment, and `link_unavailable` when the link was deleted, is
@@ -319,8 +325,8 @@ adds:
   unreplaced link to a local version of the review's target; a link awaiting
   alignment is refused. These are `422 invalid_membership` errors (or
   `403 capability_denied`).
-- A review needs at least one scan **or** one community snapshot with filters to
-  export. A community-only review (no scans) exports, downloads and publishes EDL and
+- A review needs at least one scan **or** one community snapshot with a usable
+  (correctly classified) filter to export. A community-only review (no scans) exports, downloads and publishes EDL and
   MCF sidecars from its snapshots beside the review target's own file, which must
   still match the review's bound Editarr version; its publications list no
   `exported_scans`, and their retained export snapshot carries the community filters

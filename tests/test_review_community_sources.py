@@ -382,3 +382,109 @@ def test_snapshots_are_unclipped_so_a_later_runtime_is_not_a_change(masters, rev
     assert [line for line in edl.decode().splitlines() if not line.startswith("#")] == [
         "95.000 100.000 3"
     ]
+
+
+def test_community_only_export_needs_a_usable_filter_and_clips_to_the_probed_file(
+    masters, review, monkeypatch
+):
+    from scanner import repository as root
+    from scanner.persistence.repository.repository_review_operations import (
+        export_saved_review_edl,
+    )
+
+    def export(db, stored):
+        return export_saved_review_edl(
+            db,
+            review,
+            stored.revision,
+            policy_revision=stored.policy_revision,
+            policy_owner_id=stored.policy_owner_id,
+        )
+
+    link = masters.link(USER, "v_1", "2", served_filter("f_wrong", 10_000, 20_000))
+    _community_only(masters, review, link["linkId"])
+    # The service refuses misclassified filters, so only a stored snapshot can hold one.
+    with masters.app.accounts.factory() as db:
+        row = db.scalars(select(ReviewCommunitySourceRow)).one()
+        row.filters_json = row.filters_json.replace('"punching"', '"swearing"')
+        db.commit()
+    with session(masters) as db:
+        stored = get_saved_review(db, review)
+        assert stored.community_sources[0].unusable_filter_ids == ["f_wrong"]
+        with pytest.raises(ReviewMembershipError, match="at least one scan or community filter"):
+            export(db, stored)
+
+    masters.service.publish("v_2", 1, served_filter("f_tail", 95_000, 130_000))
+    replaced = masters.apply(USER, "v_2", replace=True).json()["link"]
+    save(masters, review, [])
+    save(masters, review, include(replaced["linkId"]))
+    monkeypatch.setattr(root, "get_video_duration", lambda _path: 100.0)
+    with session(masters) as db:
+        export(db, get_saved_review(db, review))
+    sidecar = masters.scans.file("masters").with_suffix(".edl")
+    lines = [line for line in sidecar.read_text().splitlines() if not line.startswith("#")]
+    assert lines == ["95.000 100.000 3"]
+
+
+SWEAR = served_filter(
+    "f_swear", 39_000, 42_000, category="language", subcategory="swearing", action="mute"
+)
+
+
+def _audio_word(masters, start, end, word):
+    """Make the seeded scan a completed audio scan with one word-level language finding."""
+    from scanner.db import ScanFindingRow, ScanRow
+
+    with masters.app.accounts.factory() as db:
+        db.get(ScanRow, masters.scan_id).scan_audio = True
+        db.add(
+            ScanFindingRow(
+                scan_id=masters.scan_id,
+                category="language",
+                subcategory="swearing",
+                start_seconds=start,
+                end_seconds=end,
+                label=word,
+                source="audio",
+                edit_action="mute",
+            )
+        )
+        db.commit()
+
+
+def _subtitle_mutes(masters, review):
+    from scanner.persistence.repository.review_community_subtitles import (
+        community_subtitle_mutes,
+    )
+
+    with session(masters) as db:
+        result = community_subtitle_mutes(db, db.get(SavedReviewRow, review), None)
+        detail = get_saved_review(db, review).community_subtitles
+    assert detail == result.summary
+    return result
+
+
+@pytest.mark.parametrize(
+    ("word", "applied"), [((40.0, 40.5), True), ((80.0, 80.5), False), (None, False)]
+)
+def test_community_mutes_reach_subtitles_only_through_an_aligned_local_word(
+    masters, review, word, applied
+):
+    from scanner.formats.subtitle_redaction import redact_subtitles
+    from scanner.formats.subtitles import parse_subtitles
+
+    link = masters.link(USER, "v_1", "2", SWEAR)
+    save(masters, review, include(link["linkId"]))
+    if word is not None:
+        _audio_word(masters, *word, "damn")
+    result = _subtitle_mutes(masters, review)
+    summary = result.summary.model_dump()
+    expected = {"applied": 0, "needs_audio_scan": 0, "unaligned": 0}
+    expected["applied" if applied else "unaligned" if word else "needs_audio_scan"] = 1
+    assert summary == expected
+    content = b"1\r\n00:00:39,000 --> 00:00:42,000\r\nWell damn it.\r\n"
+    redaction = redact_subtitles(parse_subtitles(content, "srt"), result.mutes)
+    rendered = redaction.document.render(redaction.replacements)
+    assert (b"damn" not in rendered) is applied
+    if applied:
+        assert result.mutes[0].expression == "damn"

@@ -45,6 +45,20 @@ class ReviewCommunityFilter(BaseModel):
     confidence: float | None = None
 
 
+class CommunitySubtitleSummary(BaseModel):
+    """How the review's community language mutes reach filtered subtitles.
+
+    `applied` mutes align with a word-level language finding of a local audio scan and
+    redact its words; `needs_audio_scan` mutes wait for a completed local audio scan of
+    the version; `unaligned` mutes overlap no local language finding. Only applied
+    mutes change subtitles.
+    """
+
+    applied: int = 0
+    needs_audio_scan: int = 0
+    unaligned: int = 0
+
+
 class ReviewCommunitySource(BaseModel):
     """A stored community filter snapshot and how it compares with its link now.
 

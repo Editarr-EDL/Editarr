@@ -11,7 +11,7 @@ import { ReviewScanInfo, reviewScanName } from "./review-scan-source";
 import { ShareAction } from "../scans/sharing-dialog";
 import { useReviewAccountLabel } from "./review-access";
 import { ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
-import { entryFilters, hasExportEvidence } from "./review-community";
+import { exportedCommunityFilters, hasExportEvidence } from "./review-community";
 import { useReviewCommunity } from "./use-review-community";
 import {
   isReviewDraftDirty, isReviewDraftContentDirty, updateReviewFilter,
@@ -51,6 +51,12 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       || draftNameValidation.normalized === selected.name
     ));
   const combinedScans = availableScans.filter((scan) => scan.scan_audio && scan.scan_video);
+  // The runtime exports clip community filters to: the shortest included scan, else the version's.
+  const scanRuntimes = availableScans.filter((scan) => draft.memberships.some((value) => value.scan_id === scan.id))
+    .flatMap((scan) => scan.duration_seconds ? [scan.duration_seconds] : []);
+  const version = workspace.item.versions?.find((value) => value.id === workspace.mediaSourceId);
+  const runtime = scanRuntimes.length ? Math.min(...scanRuntimes) : version?.duration_seconds || workspace.item.duration_seconds || null;
+  const enforced: Partial<Record<string, string>> = selected?.policy_locked_severities ?? {};
   const hasCombinedMembership = combinedScans.some((scan) => draft.memberships.some((membership) => membership.scan_id === scan.id));
 
   const overview = <SavedReviewOverview
@@ -75,9 +81,11 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       previewDisabled={!access.preview}
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
-      communityFilters={community.entries.flatMap((entry) => entryFilters(entry).filters)}
+      communityFilters={exportedCommunityFilters(community.entries, runtime, enforced)}
     />;
-  const results = <div className="review-results-with-community">{overview}<ReviewCommunityResults entries={community.entries} /></div>;
+  const results = <div className="review-results-with-community">{overview}
+    <ReviewCommunityResults entries={community.entries} durationSeconds={runtime} enforced={enforced}
+      subtitles={selected?.community_subtitles} /></div>;
   const memberships = <div className="saved-review-memberships">
         <strong>Included scans</strong>
         {availableScans.map((scan) => {

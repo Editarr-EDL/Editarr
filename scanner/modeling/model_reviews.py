@@ -24,7 +24,11 @@ from .model_core import (
     _validate_mcf_comment,
 )
 from .model_publications import ExportPublication
-from .model_review_community import ReviewCommunityMembership, ReviewCommunitySource
+from .model_review_community import (
+    CommunitySubtitleSummary,
+    ReviewCommunityMembership,
+    ReviewCommunitySource,
+)
 from .model_review_repairs import ReviewRepairSummary
 from .model_scans import (
     AcceptedCreditsProvenance,
@@ -107,6 +111,7 @@ class SavedReview(SavedReviewSummary):
     synchronization: ReviewSynchronization
     accepted_credits: AcceptedCreditsProvenance | None = None
     community_sources: list[ReviewCommunitySource] = Field(default_factory=list)
+    community_subtitles: CommunitySubtitleSummary = Field(default_factory=CommunitySubtitleSummary)
 
 
 class ReviewFilterInput(ReviewFilter, ReviewWriteModel):

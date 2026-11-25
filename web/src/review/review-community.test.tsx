@@ -4,8 +4,8 @@ import { afterEach, expect, it } from "vitest";
 import type { MasterLinkSummary } from "../api/api-community-master-types";
 import type { ReviewCommunityFilter, ReviewCommunitySource, SavedReview } from "../api/api-review-types";
 import { masterLink } from "../scans/community-master-test-fixtures";
-import { communityEntries, entryFilters, filtersDiffer, hasExportEvidence, setCommunityIncluded, stageCommunityRefresh } from "./review-community";
-import { ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
+import { communityEntries, entryFilters, exportedCommunityFilters, filtersDiffer, hasExportEvidence, setCommunityIncluded, stageCommunityRefresh } from "./review-community";
+import { CommunitySubtitleNote, ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
 import { createReviewDraft, isReviewDraftDirty, type ReviewDraft } from "./review-draft";
 
 afterEach(cleanup);
@@ -93,4 +93,31 @@ it("treats a review with only community filters as exportable, but not one with 
 
 it("counts a category change as changed, like the server", () => {
   expect(filtersDiffer([filter("f1", 10)], [filter("f1", 10, { category: "language" })])).toBe(true);
+});
+
+it("needs a usable community filter to export", () => {
+  expect(hasExportEvidence(review([source({ unusable_filter_ids: ["f1", "f2"] })]))).toBe(false);
+  expect(hasExportEvidence(review([source({ unusable_filter_ids: ["f1"] })]))).toBe(true);
+});
+
+it("summarizes and lists community filters as exports render them", () => {
+  const stored = source({ filters: [filter("f1", 10), filter("f2", 98), filter("f3", 200), filter("bad", 20)], unusable_filter_ids: ["bad"] });
+  const draft = createReviewDraft(review([stored]));
+  const entries = communityEntries(draft, [stored], [], {});
+  const enforced = { punching: "low" };
+  expect(exportedCommunityFilters(entries, 100, enforced).map((value) => [value.filter_id, value.end_seconds, value.severity]))
+    .toEqual([["f1", 15, "low"], ["f2", 100, "low"]]);
+  render(<ReviewCommunityResults entries={entries} durationSeconds={100} enforced={enforced} />);
+  const table = screen.getByRole("region", { name: "Community review filters table" });
+  expect(table).toHaveTextContent("low (enforced; community: high)");
+  expect(table).toHaveTextContent("(not exported: outside the file)");
+  expect(table).toHaveTextContent("(not exported)");
+});
+
+it("explains community mutes that filtered subtitles leave out", () => {
+  const { rerender } = render(<CommunitySubtitleNote summary={{ applied: 1, needs_audio_scan: 0, unaligned: 0 }} />);
+  expect(screen.queryByText(/not applied to subtitles/)).not.toBeInTheDocument();
+  rerender(<CommunitySubtitleNote summary={{ applied: 0, needs_audio_scan: 2, unaligned: 1 }} />);
+  expect(screen.getByText(/2 community mutes not applied to subtitles: run an audio scan/)).toBeVisible();
+  expect(screen.getByText(/1 community mute not applied to subtitles: not aligned with a local language finding/)).toBeVisible();
 });

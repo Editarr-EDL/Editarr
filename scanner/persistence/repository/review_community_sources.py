@@ -320,7 +320,8 @@ def move_link_sources(db: Session, old_link_id: str, new_link_id: str) -> None:
 
 def community_duration(db: Session, review: SavedReviewRow) -> float | None:
     """The shortest known runtime of the review's local versions, in seconds, for
-    clipping a community-only review's exports; None when no completed scan records one."""
+    clipping a community-only review's exports; None when no completed scan records one,
+    and the export then probes the media file itself."""
     from .community_master_sources import version_duration_ms
 
     known = [

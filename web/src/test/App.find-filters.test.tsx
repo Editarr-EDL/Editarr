@@ -89,7 +89,7 @@ it("uses item metadata and can search when the catalog withholds all paths", asy
     item_name: "Example Movie", item_type: "Movie", duration_seconds: 120,
     scene_name: null, release_group: null, media_format: "MKV", media_provider_id: null,
   }]);
-  expect(within(dialog).getByText("No local scans match this file.")).toBeVisible();
+  expect(within(dialog).getByText("No recoverable scans matched this file.")).toBeVisible();
   expect(within(dialog).getByRole("button", { name: "Associate Selected" })).toBeDisabled();
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   rerender(<AuthenticationGate><MediaDetail {...props} item={{ ...mediaItem, path: null, versions: [] }} /></AuthenticationGate>);

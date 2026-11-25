@@ -42,7 +42,7 @@ export function FindFiltersDialog({
         </div>
       </label>
       </div>)}
-    </div> : <p className="muted-copy">No local scans match this file.</p>}
+    </div> : <p className="muted-copy">No recoverable scans matched this file.</p>}
     {results?.map((entry) => <details key={entry.candidate.id}>
       <summary tabIndex={0}>Local provenance: {entry.candidate.label}</summary>
       <p>Created: {entry.match.scan.created_at}; filters: {entry.match.scan.finding_count}</p>

@@ -72,7 +72,7 @@ def prepare_review_export(
         default=None,
     )
     if duration is None and not scans:
-        duration = community_duration(db, review)
+        duration = community_duration(db, review) or _probed_duration(media)
     if export_format == ExportFormat.MCF:
         preflight = preflight_saved_review_mcf(db, review_id, prepared=policy)
         if not preflight.eligible:
@@ -170,3 +170,12 @@ def render_review_export(review, policy, export_format, duration, community=(), 
         content = export_edl_content(findings).encode("utf-8")
         format_revision = review.edl_content_revision
     return content, format_revision
+
+
+def _probed_duration(media: Path) -> float | None:
+    """The runtime of a community-only review's media file when no scan records one."""
+    try:
+        seconds = root.get_video_duration(str(media))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return seconds if seconds and seconds > 0 else None

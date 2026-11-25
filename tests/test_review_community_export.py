@@ -8,7 +8,6 @@ from scanner.persistence.repository.review_community_export import (
     edl_findings,
     exportable,
     mcf_entries,
-    subtitle_mutes,
     unusable_filter_ids,
 )
 
@@ -49,10 +48,4 @@ def test_exports_clip_drop_misclassified_and_apply_enforced_severities():
         (2, McfCategory.punching, Severity.LOW, "both"),
         (3, McfCategory.punching, Severity.LOW, "audio"),
         (4, McfCategory.swearing, Severity.HIGH, "audio"),
-    ]
-
-
-def test_only_language_mutes_redact_subtitles_as_whole_cues():
-    assert [(m.start, m.end, m.whole_cue) for m in subtitle_mutes(FILTERS, 100)] == [
-        (40.0, 41.0, True)
     ]
