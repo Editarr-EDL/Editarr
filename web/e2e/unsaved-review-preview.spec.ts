@@ -1,4 +1,4 @@
-import { workflowStep } from "./workflow-actions";
+import { chooseFilterAction, setReviewSource, workflowStep } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { authenticationStatus, json, mockApi } from "./app-fixtures";
 
@@ -21,7 +21,7 @@ async function openDraftFilter(page: Page) {
   const dialog = page.getByRole("dialog", { name: "New Review" });
   await dialog.getByLabel("New review name").fill("Draft for preview");
   await dialog.getByRole("button", { name: "Start new review" }).click();
-  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
+  await setReviewSource(page, "Unnamed scan");
   await workflowStep(page, "Review").click();
   await panel.getByLabel("Sort", { exact: true }).selectOption("category");
   const video = panel.getByRole("region", { name: "Video review filters", exact: true });
@@ -46,7 +46,7 @@ test("previews an unselected evidence filter with its unsaved timing", async ({ 
   const { panel, video, preview } = await openDraftFilter(page);
   await expect(preview).toBeEnabled();
   await video.getByRole("checkbox", { name: /^Include / }).uncheck();
-  await video.getByRole("button", { name: /^Edit filter / }).click();
+  await chooseFilterAction(page, video, /^Edit filter /);
   await video.getByLabel(/^Filter .* start seconds$/).fill("11.5");
   await video.getByLabel(/^Filter .* end seconds$/).fill("16.5");
   const [request] = await Promise.all([

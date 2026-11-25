@@ -1,4 +1,4 @@
-import { exportAction, openWorkflowStep, revealMediaFiles, useCategorySort } from "./review-workflow-test-helpers";
+import { exportAction, findFilterAction, openReviewSources, openWorkflowStep, queryFilterAction, revealMediaFiles, useCategorySort } from "./review-workflow-test-helpers";
 import { act, cleanup, fireEvent, render as renderComponent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -88,59 +88,63 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
-    const role = await screen.findByLabelText("Review role for Combined scan · Scan #7");
-    expect(role).toHaveValue("both");
+    // The role is chosen per combined scan in the Sources popover, which opening a row's menu closes.
+    const role = async () => within(await openReviewSources()).findByLabelText("Review role for Combined scan · Scan #7");
+    expect(await role()).toHaveValue("both");
     expect(screen.getByRole("table", { name: "Review filters by time" })).toBeVisible();
     await useCategorySort();
     await openFirstReviewFindingGroup(await screen.findByRole("region", { name: "Audio review filters" }));
     await openFirstReviewFindingGroup(screen.getByRole("region", { name: "Video review filters" }));
-    const audioToggle = screen.getByRole("button", { name: "Edit filter audio-filter" });
-    const videoToggle = screen.getByRole("button", { name: "Edit filter video-filter" });
     expect(screen.queryByRole("group", { name: "Audio filter" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Video filter" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete filter audio-filter" }).closest("td")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Delete filter video-filter" }).closest("td")).not.toBeNull();
-    fireEvent.click(audioToggle);
+    for (const menu of screen.getAllByRole("button", { name: /^More actions for / })) expect(menu.closest("td")).not.toBeNull();
+    expect(await findFilterAction("Delete filter audio-filter")).toBeEnabled();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(await findFilterAction("Delete filter video-filter")).toBeEnabled();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.click(await findFilterAction("Edit filter audio-filter"));
     expect(screen.getByRole("group", { name: "Audio filter" })).toBeVisible();
-    fireEvent.click(videoToggle);
+    fireEvent.click(await findFilterAction("Edit filter video-filter"));
     expect(screen.queryByRole("group", { name: "Audio filter" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Video filter" })).toBeVisible();
 
-    fireEvent.change(role, { target: { value: "audio" } });
-    expect(screen.getByRole("button", { name: "Edit filter audio-filter" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Edit filter video-filter" })).not.toBeInTheDocument();
-    fireEvent.change(role, { target: { value: "both" } });
-    expect(screen.getByRole("button", { name: "Edit filter video-filter" })).toBeVisible();
+    fireEvent.change(await role(), { target: { value: "audio" } });
+    expect(await findFilterAction("Edit filter audio-filter")).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(queryFilterAction("Edit filter video-filter")).toBeNull();
+    fireEvent.change(await role(), { target: { value: "both" } });
+    expect(await findFilterAction("Edit filter video-filter")).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(findingRequests).toBe(0);
 
-    fireEvent.change(role, { target: { value: "audio" } });
+    fireEvent.change(await role(), { target: { value: "audio" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(saves).toHaveLength(1));
     expect(saves[0].memberships).toEqual([{ scan_id: scan.id, role: "audio" }]);
     expect(saves[0].filters.map((filter) => filter.source)).toEqual(["audio"]);
 
-    fireEvent.change(role, { target: { value: "both" } });
+    fireEvent.change(await role(), { target: { value: "both" } });
     await waitFor(() => expect(findingRequests).toBe(1));
     await useCategorySort();
     const refreshedVideoSection = await screen.findByRole("region", { name: "Video review filters" });
-    if (!within(refreshedVideoSection).queryByRole("button", { name: /^Edit filter / })) {
+    if (!within(refreshedVideoSection).queryByRole("button", { name: /^More actions for / })) {
       await openFirstReviewFindingGroup(refreshedVideoSection);
     }
-    fireEvent.click(within(refreshedVideoSection).getByRole("button", { name: /^Edit filter / }));
+    fireEvent.click(await findFilterAction(/^Edit filter /, refreshedVideoSection));
     expect(await screen.findByRole("group", { name: "Video filter" })).toBeVisible();
-    fireEvent.change(role, { target: { value: "video" } });
+    fireEvent.change(await role(), { target: { value: "video" } });
     expect(screen.queryByRole("group", { name: "Audio filter" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(saves).toHaveLength(2));
     expect(saves[1].memberships).toEqual([{ scan_id: scan.id, role: "video" }]);
 
-    fireEvent.change(role, { target: { value: "both" } });
+    fireEvent.change(await role(), { target: { value: "both" } });
     await waitFor(() => expect(findingRequests).toBe(2));
     const refreshedAudioSection = await screen.findByRole("region", { name: "Audio review filters" });
-    if (!within(refreshedAudioSection).queryByRole("button", { name: /^Edit filter / })) {
+    if (!within(refreshedAudioSection).queryByRole("button", { name: /^More actions for / })) {
       await openFirstReviewFindingGroup(refreshedAudioSection);
     }
-    fireEvent.click(within(refreshedAudioSection).getByRole("button", { name: /^Edit filter / }));
+    fireEvent.click(await findFilterAction(/^Edit filter /, refreshedAudioSection));
     expect(await screen.findByRole("group", { name: "Audio filter" })).toBeVisible();
   });
 
@@ -272,7 +276,7 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
     await useCategorySort();
     await openFirstReviewFindingGroup(await screen.findByRole("region", { name: "Audio review filters" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit filter audio-filter" }));
+    fireEvent.click(await findFilterAction("Edit filter audio-filter"));
     fireEvent.change(await screen.findByLabelText("Filter audio-filter label"), { target: { value: "Dirty local edit" } });
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
     fireEvent.change(screen.getByLabelText("Duplicate review name"), { target: { value: "Existing review" } });
@@ -284,7 +288,7 @@ describe("production saved-review UI authority", () => {
     await waitFor(() => expect(duplicateNames).toEqual(["Existing review"]));
     expect(within(screen.getByRole("table", { name: "Saved reviews" })).getAllByRole("button", { name: /^Open review / })).toHaveLength(2);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Edit filter audio-filter-copy" }));
+    fireEvent.click(await findFilterAction("Edit filter audio-filter-copy"));
     const copiedLabel = await screen.findByLabelText("Filter audio-filter-copy label");
     fireEvent.change(copiedLabel, { target: { value: "Unsaved after conflict" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
@@ -489,7 +493,7 @@ describe("production saved-review UI authority", () => {
 
     await useCategorySort();
     await openFirstReviewFindingGroup(await screen.findByRole("region", { name: "Audio review filters" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit filter audio-filter" }));
+    fireEvent.click(await findFilterAction("Edit filter audio-filter"));
     fireEvent.change(screen.getByLabelText("Filter audio-filter label"), { target: { value: "Changed after export" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(reviewRow).toHaveTextContent("EDL · Outdated"));

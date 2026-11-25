@@ -124,9 +124,10 @@ that include them. Notification links from **Filter updates** open this tab.
 
 ## Use community filters in a saved review
 
-Linking a set never changes a saved review. In the **Review** tab, **Included
-scans** lists a **Community filters** entry for each set linked to this version.
-Check it and save the review to add **all** of the set's filters to the review's
+Linking a set never changes a saved review. In the **Review** tab, the Filters
+toolbar's **Sources** button opens **Included scans**, which lists each scan and a
+**Community ·** entry for each set linked to this version. Check it and save the
+review to add **all** of the set's filters to the review's
 results, next to the scan filters. Each shows its community source, confidence,
 contributor count and version; filters below your minimum confidence, and Low
 Confidence filters unless you show them, start disabled.
@@ -134,7 +135,7 @@ Confidence filters unless you show them, start disabled.
 From then on community filters are ordinary review filters. A community language
 filter's label is the word or phrase the community flagged. Enable or disable them,
 edit their times, category, severity, action or label, preview or delete them
-exactly like scan filters; an **Edited** label marks the ones you changed yourself.
+(**Edit** and **Delete** are in each row's **⋯** menu) exactly like scan filters; an **Edited** label marks the ones you changed yourself.
 Turning filters on or off, one at a time or a whole group at once, is your personal
 choice for this review: it never counts as an edit and is never shared. Changes
 made by **Apply Filter Defaults** don't count as your edits either. Once you edit a
@@ -145,9 +146,9 @@ policy applies to them like any other filter, and EDL and MCF exports, published
 sidecars and filtered subtitles use them the same way.
 
 Later changes to the set don't touch the review. **Check for filter updates** (or
-the daily check) downloads the newest filters for the set; the review entry then
-shows **Community filters changed since included** with **Refresh community
-filters**. Refreshing and saving brings the changes in as a new review revision, so
+the daily check) downloads the newest filters for the set; the **Sources** button
+then shows a dot, and the set's entry shows **Community filters changed since
+included** with **Refresh community filters**. Refreshing and saving brings the changes in as a new review revision, so
 earlier exports show as out of date:
 
 - filters you edited keep your changes, even when the community merged them into
@@ -181,7 +182,7 @@ with the reason in its tooltip, when your account can't vote, when the set the
 review included was deleted, replaced or belongs to another account, or when the
 community no longer serves the filter (it still shows the vote you last gave it).
 If your votes couldn't be loaded, use **Retry loading votes** on the set's entry
-under **Included scans**.
+under **Sources**.
 
 Unchecking the entry and saving removes the set and its filters from the review. A
 set that still needs alignment can't be included or refreshed until you approve its

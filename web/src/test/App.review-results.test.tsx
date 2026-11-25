@@ -1,4 +1,4 @@
-import { exportAction, openWorkflowStep, revealMediaFiles, useCategorySort } from "./review-workflow-test-helpers";
+import { exportAction, findFilterAction, openReviewSources, openWorkflowStep, revealMediaFiles, useCategorySort } from "./review-workflow-test-helpers";
 import { act, cleanup, fireEvent, render as renderComponent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -273,7 +273,9 @@ describe("production saved-review UI authority", () => {
     expect(screen.getByText("Skipped Time 0:10")).toBeVisible();
     expect(screen.getByRole("img", { name: "1 selected results across 2 scans" })).toBeVisible();
     expect(screen.queryByText(/Imported from input\.edl/)).not.toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Primary" })).toBeChecked();
+    const sources = await openReviewSources();
+    expect(within(sources).getByRole("checkbox", { name: "Primary" })).toBeChecked();
+    fireEvent.click(within(sources).getByRole("button", { name: "Done" }));
     expect(screen.getAllByRole("button", { name: "Show scan details for Primary" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("No objectionable content detected")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show No Objectionable Content" }));
@@ -322,9 +324,9 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(linkedResult);
     expect(await screen.findByText("2/2 results")).toBeVisible();
 
-    const audioTimeHeader = within(audioSection).getByRole("columnheader", { name: "Time" });
-    expect(audioTimeHeader).toHaveAttribute("aria-sort", "ascending");
-    expect(audioTimeHeader).toHaveTextContent("Time ▲");
+    const audioTimeSort = within(audioSection).getByRole("button", { name: "Time, ascending" });
+    expect(audioTimeSort).toHaveAttribute("aria-pressed", "true");
+    expect(audioTimeSort).toHaveTextContent("Time ▲");
     expect(screen.queryByRole("group", { name: "Sort saved review results" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Apply Filter Defaults" }));
     expect(await screen.findByText("1/2 results")).toBeVisible();
@@ -334,7 +336,7 @@ describe("production saved-review UI authority", () => {
     expect(previewButton).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(previewButton).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Edit filter visual-1" }));
+    fireEvent.click(await findFilterAction("Edit filter visual-1"));
     fireEvent.change(screen.getByLabelText("Filter visual-1 start seconds"), { target: { value: "10.5" } });
     expect(previewButton).toBeEnabled();
   });
@@ -377,6 +379,8 @@ describe("production saved-review UI authority", () => {
     renderComponent(<AuthenticationGate><App /></AuthenticationGate>);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
+    // A section's sort buttons are named by column, with the active one's direction.
+    const sortButton = (section: HTMLElement, label: string) => within(section).getByRole("button", { name: new RegExp(`^${label}(, (ascending|descending))?$`) });
     await useCategorySort();
     const videoSection = await screen.findByRole("region", { name: "Video review filters" });
     await within(videoSection).findByRole("button", { name: /Violence family/ });
@@ -403,11 +407,11 @@ describe("production saved-review UI authority", () => {
     const alphaGroup = within(videoSection).getByRole("button", { name: /alpha finding group/ });
     const commonGroup = within(videoSection).getByRole("button", { name: /common finding group/ });
     expect(commonGroup.compareDocumentPosition(alphaGroup)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    fireEvent.click(within(videoSection).getByRole("button", { name: "Time" }));
+    fireEvent.click(sortButton(videoSection, "Time"));
     expect(alphaGroup.compareDocumentPosition(commonGroup)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    fireEvent.click(within(videoSection).getByRole("button", { name: "Description" }));
+    fireEvent.click(sortButton(videoSection, "Description"));
     expect(alphaGroup.compareDocumentPosition(commonGroup)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    fireEvent.click(within(videoSection).getByRole("button", { name: "Time" }));
+    fireEvent.click(sortButton(videoSection, "Time"));
     expect(commonGroup.compareDocumentPosition(alphaGroup)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(commonGroup).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(commonGroup);
@@ -419,27 +423,28 @@ describe("production saved-review UI authority", () => {
       "Include Low severity at 0:30",
       "Include None severity at 0:40",
     ]);
-    const videoTimeHeader = within(videoSection).getByRole("columnheader", { name: "Time" });
-    expect(videoTimeHeader).toHaveAttribute("aria-sort", "ascending");
-    expect(videoTimeHeader).toHaveTextContent("Time ▲");
-    fireEvent.click(within(videoSection).getByRole("button", { name: "Severity" }));
+    const videoTimeSort = within(videoSection).getByRole("button", { name: "Time, ascending" });
+    expect(videoTimeSort).toHaveAttribute("aria-pressed", "true");
+    expect(videoTimeSort).toHaveTextContent("Time ▲");
+    fireEvent.click(sortButton(videoSection, "Severity"));
     expect(rowNames()).toEqual([
       "Include None severity at 0:40",
       "Include Low severity at 0:30",
       "Include Medium severity at 0:20",
       "Include High severity at 0:10",
     ]);
-    fireEvent.click(within(videoSection).getByRole("button", { name: "Severity" }));
+    fireEvent.click(sortButton(videoSection, "Severity"));
     expect(rowNames()).toEqual([
       "Include High severity at 0:10",
       "Include Medium severity at 0:20",
       "Include Low severity at 0:30",
       "Include None severity at 0:40",
     ]);
-    expect(within(videoSection).getByRole("columnheader", { name: "Severity" })).toHaveTextContent("Severity ▼");
+    expect(within(videoSection).getByRole("button", { name: "Severity, descending" })).toHaveTextContent("Severity ▼");
+    expect(within(videoSection).getByRole("button", { name: "Time" })).toHaveAttribute("aria-pressed", "false");
 
     const audioSection = screen.getByRole("region", { name: "Audio review filters" });
-    expect(within(audioSection).getByRole("columnheader", { name: "Time" })).toHaveAttribute("aria-sort", "ascending");
+    expect(within(audioSection).getByRole("button", { name: "Time, ascending" })).toHaveAttribute("aria-pressed", "true");
     await openFirstReviewFindingGroup(audioSection);
     const murderGroup = within(audioSection).getByRole("button", { name: /murder finding group/ });
     expect(murderGroup).toBeVisible();
@@ -447,11 +452,11 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(murderGroup);
     const audioRowNames = () => within(screen.getByRole("region", { name: "Audio review filters" })).getAllByRole("checkbox", { name: /^Include / }).map((checkbox) => checkbox.getAttribute("aria-label"));
     expect(audioRowNames()).toEqual(["Include swearing at 0:10", "Include murder at 0:30"]);
-    fireEvent.click(within(screen.getByRole("region", { name: "Audio review filters" })).getByRole("button", { name: "Description" }));
+    fireEvent.click(sortButton(screen.getByRole("region", { name: "Audio review filters" }), "Description"));
     expect(audioRowNames()).toEqual(["Include murder at 0:30", "Include swearing at 0:10"]);
-    fireEvent.click(within(screen.getByRole("region", { name: "Audio review filters" })).getByRole("button", { name: "Description" }));
+    fireEvent.click(sortButton(screen.getByRole("region", { name: "Audio review filters" }), "Description"));
     expect(audioRowNames()).toEqual(["Include swearing at 0:10", "Include murder at 0:30"]);
-    expect(within(videoSection).getByRole("columnheader", { name: "Severity" })).toHaveAttribute("aria-sort", "descending");
+    expect(within(videoSection).getByRole("button", { name: "Severity, descending" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(alphaGroup);
     fireEvent.click(weapons);
