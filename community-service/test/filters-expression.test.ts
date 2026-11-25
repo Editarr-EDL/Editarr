@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mergeVersion, snapshotFilter } from '../src/filters';
-import { mergeInput, persist, shuffleInput, submission, support } from './helpers/filters';
+import { deriveFilterId, mergeVersion, SNAPSHOT_MAX_BYTES, snapshotBytes, snapshotFilter } from '../src/filters';
+import { digestOf, mergeInput, persist, shuffleInput, submission, support, VERSION_ID, vote } from './helpers/filters';
 
 const word = (entryId: string, expression: string | null) => support(entryId, 1000, 2000,
   { category: 'language', subcategory: 'swearing', action: 'mute', expression });
@@ -46,5 +46,29 @@ describe('expression vote (§6.7)', () => {
     expect(mergeVersion(state).revision).toEqual({ revision: 1, changed: false });
     const changed = { ...state, submissions: contributors(['Hell']) };
     expect(mergeVersion(changed).revision).toEqual({ revision: 2, changed: true });
+  });
+});
+
+describe('snapshot size cap (§7.3)', () => {
+  it('stops serving the lowest-priority filters until the worst-case snapshot fits', () => {
+    const longest = '😀'.repeat(64);
+    const entries = Array.from({ length: 4000 }, (_, index) => support(`e${index}`, index * 2000, index * 2000 + 1000,
+      { category: 'language', subcategory: 'swearing', action: 'mute', expression: longest }));
+    const votes = [vote(deriveFilterId(VERSION_ID, digestOf('sub_0'), 'e3999'), 'c_fan', 'up')];
+    const result = mergeVersion(mergeInput([submission('sub_0', 'c_0', entries)], { votes }));
+    expect(result.filters).toHaveLength(4000);
+    const served = result.servedFilters;
+    expect(served.length).toBeGreaterThan(2000);
+    expect(served.length).toBeLessThan(4000);
+    const bytes = snapshotBytes(result.servedContent, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+    expect(bytes.byteLength).toBeLessThanOrEqual(SNAPSHOT_MAX_BYTES);
+    // The upvoted filter has the highest confidence and stays; ties keep the earliest filters.
+    expect(served.at(-1)!.startMs).toBe(3999 * 2000);
+    expect(served.slice(0, -1).map(filter => filter.startMs)).toEqual(served.slice(0, -1).map((_, index) => index * 2000));
+    // Adding back the next filter in serving order would exceed the limit.
+    const next = result.filters.find(filter => !filter.served)!;
+    const grown = JSON.parse(result.servedContent) as { filters: unknown[] };
+    grown.filters.push(snapshotFilter(next));
+    expect(() => snapshotBytes(JSON.stringify(grown), Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)).toThrow('snapshot_too_large');
   });
 });

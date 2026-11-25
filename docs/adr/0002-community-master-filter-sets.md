@@ -216,7 +216,8 @@ The owner decided these on 2026-11-25; they amend U5, U6 and the edit rule above
   the `dispute` kind for compatibility, but Editarr doesn't send it, and a 👎 vote
   is the only negative a user casts.
 - **W4 Turning filters on or off is not an edit.** `community_edited` is set only by
-  direct changes to times, subcategory, severity, action or the expression (label).
+  direct changes to times, subcategory, severity, action or the expression (the label of
+  a language filter; a label elsewhere is not an expression).
   Sharing sends a `support` only for enabled, edited community filters. On Refresh
   unedited filters take the new master values and keep the enabled state the
   review gave them; new filters start per the threshold and Low Confidence.

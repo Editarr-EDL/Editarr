@@ -198,3 +198,25 @@ def test_locally_verified_uses_the_review_filters_own_bounds_even_when_detached(
 def get_saved_review_for(masters, review_id):
     with session(masters) as db:
         return get_saved_review(db, review_id)
+
+
+def test_a_label_is_an_adjustment_only_on_a_language_filter():
+    from types import SimpleNamespace
+
+    from scanner.modeling.community_review_filters import filter_values, values_changed
+
+    for category, subcategory, changed in (
+        ("language", "swearing", True),
+        ("violence", "punching", False),
+    ):
+        entry = {
+            "filter_id": "f",
+            "category": category,
+            "subcategory": subcategory,
+            "severity": "high",
+            "edit_action": "mute",
+            "start_ms": 1_000,
+            "end_ms": 2_000,
+        }
+        values = SimpleNamespace(**{**filter_values(entry), "label": "my word"})
+        assert values_changed(values, entry) is changed

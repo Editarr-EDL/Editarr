@@ -303,7 +303,7 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   Confidence is off, arrives disabled. Changing the preferences later changes no
   review.
 - **`community_edited`** is true once the user directly changed the filter's times,
-  classification, severity, action or label (its expression). The web app sets it on
+  classification, severity, action or, for a language filter, label (its expression). The web app sets it on
   those edits. Turning a filter on or off, alone or by group, is a personal choice
   of the review and never counts; nor do bulk changes such as Apply Filter Defaults.
   Clients send it back on save; once set it never resets, and the server ignores it
@@ -824,6 +824,13 @@ digest is recomputed in the new form, so a snapshot whose link hasn't changed re
 `current`. Decisions on links that no review includes no longer apply anywhere; the
 `community_master_filters` decision columns, update rows and dismissals are kept
 unused. No other row changes.
+
+**Development databases from the earlier 0040.** Builds of this branch before the
+owner's W4 decision (ADR 0002) shipped a 0040 that counted turning a filter on or off
+as an edit and made rejected decisions edited. 0040 was changed in place because it
+was never released, so no released database is affected. A development database
+already upgraded with that earlier 0040 isn't upgraded again; restore it from the
+pre-0040 backup the adoption path wrote before upgrading, and upgrade again.
 
 The migration runs only after the verified, recoverable backup, and its downgrade
 refuses while any community review filter exists. The upgrade tests start from

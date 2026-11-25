@@ -26,11 +26,11 @@ Token = Annotated[str, Field(pattern=TOKEN)]
 def normalize_expression(value: str | None) -> str | None:
     """A language filter's word or phrase as shared (§5.2), or None when it can't be.
 
-    Control (Cc) and format (Cf) characters make it unusable; otherwise it is NFC
-    normalized and trimmed, and must then hold 1–64 code points.
+    Control (Cc), format (Cf) and lone surrogate (Cs) characters make it unusable;
+    otherwise it is NFC normalized and trimmed, and must then hold 1–64 code points.
     """
     if not isinstance(value, str) or any(
-        unicodedata.category(character) in ("Cc", "Cf") for character in value
+        unicodedata.category(character) in ("Cc", "Cf", "Cs") for character in value
     ):
         return None
     normalized = unicodedata.normalize("NFC", value).strip()

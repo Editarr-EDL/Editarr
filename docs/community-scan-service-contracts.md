@@ -476,7 +476,7 @@ submitter's file playback timeline.
 | `entries[].startMs`, `entries[].endMs` | Integers with `0 ≤ startMs < endMs ≤ durationMs` |
 | `entries[].category` | A top-level MCF family from `taxonomy.json` |
 | `entries[].subcategory`, `entries[].severity`, `entries[].action` | For `support`, all three are required: a token in the category's taxonomy family, `low`/`medium`/`high`, and `skip`/`mute`. For other kinds, all three must be null. |
-| `entries[].expression` | Optional; absent or null, or the flagged word or phrase of a `language` `support` entry. It must contain no control (Unicode Cc) or format (Cf) characters and, after NFC normalization and trimming surrounding white space, hold 1–64 code points. The service stores the normalized value; Editarr sends it already normalized. A non-null expression on another category or kind is `400 invalid_submission`. It carries no contributor information and is merged per filter (§6.7) |
+| `entries[].expression` | Optional; absent or null, or the flagged word or phrase of a `language` `support` entry. It must contain no control (Unicode Cc), format (Cf) or lone surrogate (Cs) characters and, after NFC normalization and trimming surrounding white space, hold 1–64 code points. The service stores the normalized value; Editarr sends it already normalized. A non-null expression on another category or kind is `400 invalid_submission`. It carries no contributor information and is merged per filter (§6.7) |
 | `entries[].evidence.origin` | `model` (local scan finding), `manual` (user-created), or `downloaded` (from a community master set) |
 | `entries[].evidence.manualReview` | Boolean. True when a person reviewed, edited or approved the cue |
 | `entries[].evidence.locallyVerified` | Boolean. True when a local scan cue is the user's own or was adjusted, or the cue overlaps a local model finding of the same category (D21). For an attestation of a downloaded community filter only the overlap counts ([ADR 0002](adr/0002-community-master-filter-sets.md) U7) |
@@ -745,9 +745,18 @@ attestation signal on the filter. Votes follow merges through
 | `Neg` | `downvotes + disputes + coverageNegativeWeight × coverageNegatives` (default weight 0.25, so a coverage negative counts as a quarter of a downvote) |
 | `confidence` | `wilson(S, Neg)`. With `n = S + Neg + 2`, `p = (S + 1) / n` and `z = 1.96`, the lower bound is `(p + z²/2n − z·sqrt(p(1−p)/n + z²/4n²)) / (1 + z²/n)`, clamped to 0..1 and rounded as `floor(x × 1e9 + 0.5) / 1e9`. This is the same as `community-ranking-wilson-1`. |
 | `lowConfidence` | `Neg > S` |
-| served | `confidence ≥ confidenceFloor` (default 0.05). The filter must also not be quarantined, and its version must not be quarantined. |
+| served | `confidence ≥ confidenceFloor` (default 0.05). The filter must also not be quarantined, and its version must not be quarantined. At most `maxServedFilters` filters are served, and the snapshot must fit its byte limit (see **Serving caps** below) |
 
 Low Confidence filters are still served. Clients hide them by default.
+
+**Serving caps.** Serving priority is the highest `confidence` first, then
+snapshot order (§7.3). The service first keeps at most `maxServedFilters` filters
+in that priority. Then, if the snapshot bytes (§7.3) with the largest possible
+`revision` and `generatedAt` (9,007,199,254,740,991 each) would exceed
+2,000,000 bytes, it stops serving the lowest-priority remaining filter, one at a
+time, until they fit. A filter left out by a cap stays in the registry with
+`served = false`, like one below the floor. With 4,000 filters carrying 64-code
+point, 4-byte-per-character expressions, the size cap applies.
 
 Low Confidence needs negatives to exceed support: one downvote or dispute
 against one attestation gives `wilson(1, 1)` = 0.150035709 and is not Low
@@ -1019,7 +1028,9 @@ Snapshot rules:
   (§6.9). Like the rest of the snapshot it names no contributor. Clients accept
   snapshots without the key and read it as null.
 - There are at most `maxServedFilters` filters (default 4,000), and the
-  snapshot is at most 2,000,000 bytes.
+  snapshot is at most 2,000,000 bytes. The service enforces both by leaving out
+  the lowest-priority filters (§6.8, Serving caps), so a valid version never
+  produces an oversized snapshot.
 - `generatedAt` is the time the revision was created. Bytes for a revision
   are immutable.
 

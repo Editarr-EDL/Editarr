@@ -118,17 +118,19 @@ def filter_values(entry: Mapping) -> dict:
 
 def values_changed(values, entry: Mapping | None) -> bool:
     """Whether a review filter's values differ from its entry's defaults: its bounds (to
-    the millisecond), classification, severity, action and label. Its enabled state never
-    counts. `values` is any object with review filter attributes. Without an entry the
-    filter can't be compared and counts as changed."""
+    the millisecond), classification, severity, action and, for a language filter, its
+    label (the expression). Its enabled state never counts. `values` is any object with
+    review filter attributes. Without an entry the filter can't be compared and counts
+    as changed."""
     if entry is None:
         return True
     expected = filter_values(entry)
     start_ms, end_ms = initial_bounds(entry)
     end = getattr(values, "end_seconds", None)
+    language = _value(getattr(values, "category", None)) == "language"
     return (
         round(values.start_seconds * 1000) != start_ms
-        or (getattr(values, "label", None) or None) != expected["label"]
+        or (language and (getattr(values, "label", None) or None) != expected["label"])
         or end is None
         or round(end * 1000) != end_ms
         or any(

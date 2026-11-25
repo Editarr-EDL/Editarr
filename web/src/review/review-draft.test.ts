@@ -74,6 +74,9 @@ describe("review draft state", () => {
     const draft = createReviewDraft({ ...review, filters: [...review.filters, community] });
     expect(updateReviewFilter(draft, "c-1", { label: community.label }).filters[1].community_edited).toBe(false);
     expect(updateReviewFilter(draft, "c-1", { label: "Word!" }).filters[1].community_edited).toBe(true);
+    // A label is an expression only on a language filter.
+    const visual = createReviewDraft({ ...review, filters: [...review.filters, { ...community, category: "violence" as const }] });
+    expect(updateReviewFilter(visual, "c-1", { label: "Word!" }).filters[1].community_edited).toBe(false);
     expect(updateReviewFilter(draft, "c-1", { selected: true }).filters[1].community_edited).toBe(false);
     expect(updateReviewFilter(draft, "c-1", { selected: false }).filters[1].community_edited).toBe(false);
     expect(updateReviewFilter(draft, "c-1", { start_seconds: 1.5 }).filters[1].community_edited).toBe(true);

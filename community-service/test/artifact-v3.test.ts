@@ -2,6 +2,7 @@ import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import fixture from './fixtures/community-v3/artifact-v3.json';
 import { ArtifactV3Error, decodeArtifactV3, parseManifestV3 } from '../src/artifact/v3';
+import { normalizeExpression } from '../src/artifact/expression';
 import { readEnvelope, signatureBase, verifySubmission } from '../src/artifact/signatures';
 import { gunzipSingleMember, parseStrictJson } from '../src/artifact/strict-json';
 
@@ -94,10 +95,19 @@ describe('artifact validation codes (§5.2, §7.2)', () => {
     ['expression over 64 code points', language({ expression: '😀'.repeat(65) }), 'invalid_submission'],
     ['control character in expression', language({ expression: 'da\u0007mn' }), 'invalid_submission'],
     ['format character in expression', language({ expression: 'da\u200bmn' }), 'invalid_submission'],
+    ['lone surrogate in expression', null, 'invalid_submission'],
     ['non-string expression', language({ expression: 7 }), 'invalid_submission'],
-  ])('%s', async (_name, value, expected) => {
-    const source = value === null ? fixture.canonicalJson.replace('"durationMs":8160512', '"durationMs":8160512.0') : JSON.stringify(value);
+  ])('%s', async (name, value, expected) => {
+    const source = value !== null ? JSON.stringify(value) : name.startsWith('lone')
+      ? JSON.stringify(language({ expression: 'EXPR' })).replace('"EXPR"', '"da\\ud800mn"')
+      : fixture.canonicalJson.replace('"durationMs":8160512', '"durationMs":8160512.0');
     expect(await code(decodeArtifactV3(gzip(source)))).toBe(expected);
+  });
+
+  it('rejects lone surrogates in expressions but keeps paired ones', () => {
+    expect(normalizeExpression('da\ud800mn')).toBeNull();
+    expect(normalizeExpression('\udc00')).toBeNull();
+    expect(normalizeExpression('😀 damn')).toBe('😀 damn');
   });
 
   it('normalizes language expressions to trimmed NFC and accepts entries without one', async () => {
