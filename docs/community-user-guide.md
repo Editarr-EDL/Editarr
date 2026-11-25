@@ -112,10 +112,15 @@ that include them. Notification links from **Filter updates** open this tab.
   the list. It only hides them. A filter you vote down while it is on stays listed
   until you change a list setting or reopen the set. The setting belongs to your
   account.
-- Use **Thumbs up** or **Thumbs down** to vote on an individual filter. Votes
-  require a current community connection and your downloaded copy of the set; you
-  cannot vote on your own filters. A vote that could not be sent stays pending with
-  **Retry vote**, which resends the same saved intent.
+- Each filter has a vote button that shows your vote at a glance: a dashed
+  **Vote ▾** when you haven't voted, a green 👍 or a red 👎 when you have. Select
+  it (or press the down arrow on it) to open 👍 **Thumbs up**, 👎 **Thumbs down**
+  and ‒ **No vote**, which clears your vote; arrow keys move between them and
+  Escape closes the menu. Votes are sent right away and require a current
+  community connection and your downloaded copy of the set; you cannot vote on
+  your own filters. A vote that could not be sent stays pending with
+  **Retry vote**, which resends the same saved intent. You can also vote from a
+  saved review (below).
 
 ## Use community filters in a saved review
 
@@ -163,6 +168,20 @@ in the Community tab then become edits of those reviews' filters. A filter you
 rejected appears disabled, and one you confirmed below your threshold stays
 enabled; neither is marked Edited, since turning a filter on or off isn't an edit.
 Decisions on sets no review included no longer apply.
+
+### Vote from a review
+
+Each community filter in the review's results has the same vote button as the
+Community tab, beside **Preview**, so you can vote after previewing or aligning
+it. Scan and manual filters have none. Votes are sent right away to the set the
+filter came from: they don't change the review, aren't part of **Save Changes**,
+and show in the Community tab too. A filter whose community ID was merged into
+another votes on the filter that continues it. The button is shown unavailable,
+with the reason in its tooltip, when your account can't vote, when the set the
+review included was deleted, replaced or belongs to another account, or when the
+community no longer serves the filter (it still shows the vote you last gave it).
+If your votes couldn't be loaded, use **Retry loading votes** on the set's entry
+under **Included scans**.
 
 Unchecking the entry and saving removes the set and its filters from the review. A
 set that still needs alignment can't be included or refreshed until you approve its

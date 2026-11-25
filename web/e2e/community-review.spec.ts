@@ -54,6 +54,38 @@ for (const width of [320, 1440]) {
     await expect(page.getByRole("region", { name: "Timeline summary" })).toContainText("0 selected scans and 3 community filters");
     await check(page, "review-community-included", width);
 
+    // Each community row votes right beside its Preview, immediately and outside the review's save.
+    const vote = (time: string) => row(page, time).getByRole("button", { name: /^Your vote: / });
+    await expect(vote("10:00")).toHaveAttribute("data-vote", "up");
+    await expect(vote("15:00")).toHaveAttribute("data-vote", "none");
+    await expect(vote("20:00")).toHaveAttribute("data-vote", "none");
+    await vote("20:00").click();
+    const menu = page.getByRole("menu", { name: /^Vote for / });
+    await expect(menu.getByRole("menuitemradio", { name: "No vote" })).toBeFocused();
+    await menu.getByRole("menuitemradio", { name: "Thumbs down" }).click();
+    await expect(vote("20:00")).toHaveAttribute("data-vote", "down");
+    // Preview and the vote sit side by side, and action labels never break mid-word.
+    const preview = row(page, "20:00").getByRole("button", { name: /^Preview filter/ });
+    const [previewBox, voteBox] = [await preview.boundingBox(), await vote("20:00").boundingBox()];
+    expect(Math.abs(previewBox!.y + previewBox!.height / 2 - (voteBox!.y + voteBox!.height / 2))).toBeLessThan(4);
+    expect(voteBox!.x).toBeGreaterThan(previewBox!.x + previewBox!.width);
+    for (const name of [/^Preview filter/, /^Edit filter/, /^Delete filter/]) {
+      const button = row(page, "20:00").getByRole("button", { name });
+      expect(await button.evaluate((element) => getComputedStyle(element).whiteSpace === "nowrap" && element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+    expect(community.requests.filter((request) => request.path.endsWith("/vote")).map((request) => [request.path, request.body]))
+      .toEqual([["masters/link-v_extended/filters/f_gone/vote", expect.objectContaining({ vote: "down", confirmed: true })]]);
+    await expect(page.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+    await vote("15:00").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(menu).toBeVisible();
+    await expectNoAccessibilityViolations(page);
+    await page.screenshot({ path: `test-results/cm-review-votes/review-vote-menu-${width}.png` });
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(vote("15:00")).toBeFocused();
+    await check(page, "review-votes", width);
+
     // Disable one and adjust another exactly like a scan filter.
     await row(page, "10:00").getByRole("checkbox").uncheck();
     await row(page, "15:00").getByRole("button", { name: /^Edit filter/ }).click();
@@ -97,12 +129,22 @@ for (const width of [320, 1440]) {
     await expect(row(page, "20:00")).toContainText("Removed from community");
     await expect(row(page, "20:00").getByRole("checkbox")).not.toBeChecked();
     await expect(row(page, "30:00").getByRole("checkbox")).toBeChecked();
+    // A filter no longer served can't be voted on but still shows the last vote; the new one can.
+    await expect(vote("20:00")).toHaveAttribute("aria-disabled", "true");
+    await expect(vote("20:00")).toHaveAttribute("data-vote", "down");
+    await expect(vote("20:00")).toHaveAccessibleDescription(/no longer serves this filter/);
+    await expect(vote("30:00")).toHaveAttribute("data-vote", "none");
+    await expect(vote("30:00")).not.toHaveAttribute("aria-disabled");
+    // At desktop width the filter table, actions included, fits without sideways scrolling.
+    if (width === 1440) expect(await byTime(page).evaluate((table) => table.parentElement!.scrollWidth - table.parentElement!.clientWidth)).toBe(0);
     await check(page, "review-refreshed-removed", width);
     // The flags show with the time, visible without scrolling the table sideways.
     const flag = row(page, "20:00").getByText("Removed from community");
     await flag.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
     await expect(flag).toBeInViewport({ ratio: 1 });
-    await expect(row(page, "15:05").getByText("Edited")).toBeInViewport({ ratio: 1 });
+    const edited = row(page, "15:05").getByText("Edited");
+    await edited.evaluate((element) => element.scrollIntoView({ block: "nearest", inline: "nearest" }));
+    await expect(edited).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: `test-results/cm-review-uniform/review-removed-flag-${width}.png` });
   });
 }

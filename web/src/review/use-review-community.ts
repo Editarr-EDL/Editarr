@@ -57,5 +57,5 @@ export function useReviewCommunity(workspace: Workspace) {
     const fresh = latest.find((value) => value.source_id === source.source_id);
     return fresh ? { ...source, state: fresh.state, link_state: fresh.link_state } : source;
   });
-  return { maySearch, entries: workspace.draft ? communityEntries(workspace.draft, sources, links) : [] };
+  return { maySearch, sources, entries: workspace.draft ? communityEntries(workspace.draft, sources, links) : [] };
 }

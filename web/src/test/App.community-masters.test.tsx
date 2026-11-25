@@ -61,7 +61,7 @@ it("shows the read-only Community tab: filters, votes and the update check, with
   expect(await screen.findByRole("tab", { name: "Community" })).toHaveAttribute("aria-selected", "true");
   const panel = await screen.findByRole("region", { name: "Community filters" });
   fireEvent.click(await within(panel).findByRole("button", { name: "Show filters" }));
-  expect(await within(panel).findByRole("button", { name: /^Thumbs up/ })).toBeInTheDocument();
+  expect(await within(panel).findByRole("button", { name: /^Your vote: none\. Change vote for / })).toBeInTheDocument();
   expect(within(panel).getByRole("checkbox", { name: "Hide downvoted filters" })).toBeInTheDocument();
   for (const name of [/^Confirm/, /^Reject/, /^Reset/, "Review"]) expect(within(panel).queryByRole("button", { name })).toBeNull();
   fireEvent.click(within(panel).getByRole("button", { name: "Check for filter updates" }));

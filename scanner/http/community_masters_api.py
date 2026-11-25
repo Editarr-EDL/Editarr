@@ -23,6 +23,7 @@ from scanner.persistence.repository.community_master_sources import (
     link_active_filters,
 )
 from scanner.persistence.repository.review_access import ReviewAccess, not_found
+from scanner.persistence.repository.review_community_filters import link_merges
 from scanner.persistence.rows.db_media_identity import MediaVersionLocatorRow
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.grants import PrincipalAccess
@@ -175,11 +176,13 @@ def view_master(
     def action():
         authorize_link(db, access, link_id, C.COMMUNITY_SEARCH)
         view = master_view(db, access.principal.user_id, link_id)
+        merges = link_merges(db, view.link)
         result = {
             "version": 1,
             "link": link_json(db, view.link),
             "preferences": preferences_json(view.preferences),
-            "filters": [filter_json(row) for row in view.filters],
+            "filters": [filter_json(row, merges.get(row.filter_id, ())) for row in view.filters],
+            "retiredVotes": dict(view.retired_votes),
         }
         db.rollback()
         return result

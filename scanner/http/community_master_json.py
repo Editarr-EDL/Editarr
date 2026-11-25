@@ -53,9 +53,12 @@ def preferences_json(preferences: Preferences) -> dict:
     }
 
 
-def filter_json(view: MasterFilterView) -> dict:
+def filter_json(view: MasterFilterView, merged_ids: tuple[str, ...] = ()) -> dict:
+    """One master view filter; `mergedIds` are the earlier filter IDs it continues, so a
+    review filter still keyed by one of them finds its vote."""
     return {
         "filterId": view.filter_id,
+        "mergedIds": list(merged_ids),
         "category": view.category,
         "master": view.master,
         "locallyVerified": view.locally_verified,

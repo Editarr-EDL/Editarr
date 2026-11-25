@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useMcfRegistry } from "../shared/mcf-registry";
 import { ReviewScanInfo, reviewScanSourceLabel } from "./review-scan-source";
 import type { Scan } from "../api/api-scan-types";
@@ -78,6 +78,7 @@ export function SavedReviewOverview({
   cuesEditable = true,
   metadataEditable = true,
   defaultSort = "category",
+  renderFilterVote,
 }: {
   filters: SavedReview["filters"];
   memberships: SavedReview["memberships"];
@@ -98,6 +99,8 @@ export function SavedReviewOverview({
   cuesEditable?: boolean;
   metadataEditable?: boolean;
   defaultSort?: "time" | "category";
+  /** Renders a community filter's vote control beside its Preview; `name` describes the filter. */
+  renderFilterVote?: (filter: SavedReview["filters"][number], name: string) => ReactNode;
 }) {
   const { registry } = useMcfRegistry();
   const [sort, setSort] = useState(defaultSort);
@@ -161,6 +164,11 @@ export function SavedReviewOverview({
   const timelineEnd = Math.max(1, ...scans.map((scan) => scan.duration_seconds || 0), ...timelineFilters.map((filter) => filter.end_seconds ?? filter.start_seconds + 1));
   const timelineRanges = savedReviewTimelineRanges(timelineFilters);
 
+  const voteName = (filter: SavedReview["filters"][number], source: "audio" | "visual", categoryName: string) => {
+    const description = savedReviewFilterDescription(filter, filterSourceOrigin(filter, scanById)) || categoryName;
+    return `${source === "audio" ? censorAudioWord(description) : description} at ${formatTime(filter.start_seconds)}`;
+  };
+
   const renderResult = (item: TieredReviewResult, source: "audio" | "visual", key: string, categoryName: string) => {
     const result = item.result;
     const sourceScans = result.scanIds.map((id) => scanById.get(id)).filter((scan): scan is Scan => !!scan);
@@ -185,7 +193,8 @@ export function SavedReviewOverview({
           <CommunityFilterSource filters={result.filters} /></td>
         <td><span className="finding-preview"><span className="saved-review-filter-actions">{result.filters.map(filter => <span className="saved-review-filter-action" key={filter.id}>
           {requiredIds.has(filter.id) && <small>Required by instance policy</small>}
-          <button type="button" className="btn-secondary compact-button" aria-label={`Preview filter ${filter.id}`} onClick={() => onPreviewFilter(filter)} disabled={busy || previewDisabled}>Preview</button>
+          <span className="saved-review-filter-primary"><button type="button" className="btn-secondary compact-button" aria-label={`Preview filter ${filter.id}`} onClick={() => onPreviewFilter(filter)} disabled={busy || previewDisabled}>Preview</button>
+          {renderFilterVote && isCommunityFilter(filter) && renderFilterVote(filter, voteName(filter, source, categoryName))}</span>
           <button type="button" className="btn-secondary compact-button" aria-label={`Edit filter ${filter.id}`} aria-expanded={editingFilterId === filter.id} disabled={busy} onClick={() => setEditingFilterId(current => current === filter.id ? null : filter.id)}>Edit</button>
           <button type="button" className="danger-button compact-button" aria-label={`Delete filter ${filter.id}`} disabled={busy || !cuesEditable || requiredIds.has(filter.id)} onClick={() => { if (editingFilterId === filter.id) setEditingFilterId(null); onDeleteFilter(filter.id); }}>Delete</button>
         </span>)}</span>{preview && result.filters.some(filter => filter.id === preview.filterId) && (source === "audio" ? <audio aria-label={`Mute preview for ${rowName} at ${formatTime(result.startSeconds)}`} controls src={preview.url}>Your browser does not support audio previews.</audio> : <video aria-label={`Video preview for ${rowName} at ${formatTime(result.startSeconds)}`} controls src={preview.url}>Your browser does not support video previews.</video>)}</span></td>

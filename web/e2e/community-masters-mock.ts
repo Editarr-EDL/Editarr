@@ -67,6 +67,8 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     expression: item.master.expression ?? null, startMs: item.master.startMs, endMs: item.master.endMs, confidence: item.master.confidence,
     contributorCount: item.master.contributorCount, lowConfidence: item.master.lowConfidence, startsEnabled: startsEnabled(item) })) };
   const link = () => mock.state.link!;
+  // Votes on filters a newer revision no longer serves, as the master view keeps them.
+  const retiredVotes: Record<string, "up" | "down"> = {};
 
   await page.route(/\/api\/community\//, async (route) => {
     const request = route.request();
@@ -103,7 +105,7 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     if (linkPath && mock.state.link) {
       const action = linkPath[2] ?? "";
       if (action === "") return json(route, { version: 1, link: link(), preferences,
-        filters: filters.map((item) => ({ ...item, active: active(item) })) });
+        filters: filters.map((item) => ({ ...item, active: active(item) })), retiredVotes });
       if (action === "alignment/preview") return json(route, { version: 1, token: "align-1",
         alignment: { offsetMs: body.offset_ms ?? 0, scale: 1, anchors: 0 }, rows: filters.map((item) => ({ filterId: item.filterId,
           alignedStartMs: item.master.startMs + (body.offset_ms ?? 0), alignedEndMs: item.master.endMs + (body.offset_ms ?? 0) })) });
@@ -111,10 +113,16 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
         mock.state.link = { ...mock.state.link, alignmentState: "approved", alignment: { offsetMs: 0, scale: 1, anchors: 0 }, alignmentRevision: 12 };
         return json(route, { version: 1, link: link() });
       }
-      if (action.endsWith("/vote")) return json(route, { version: 1, state: "completed", result: { accepted: true } });
+      const voted = action.match(/^filters\/([^/]+)\/vote$/);
+      if (voted) {
+        // Votes stick, so a reloaded view or review shows them.
+        filters = filters.map((item) => item.filterId === voted[1] ? { ...item, myVote: body.vote === "none" ? null : body.vote } : item);
+        return json(route, { version: 1, state: "completed", result: { accepted: true } });
+      }
       if (action === "check") {
         const changed = mock.state.link.latestRevision < 13;
         if (changed) {
+          for (const item of filters) if (item.myVote && item.filterId === "f_gone") retiredVotes[item.filterId] = item.myVote;
           filters = [filters[0], saying(filter("f_lang", "language", 901_000, "swearing", 0.4, {}, false, "high"), "Damn"),
             filter("f_new", "violence", 1_800_000, "violence", 0.7)];
           mock.state.link = { ...mock.state.link, appliedRevision: 13, latestRevision: 13 };

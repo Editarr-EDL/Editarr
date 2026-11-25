@@ -12,3 +12,11 @@ export const COMMUNITY_FILTERS_CHANGED_EVENT = "editarr:community-filters-change
 export function notifyCommunityFiltersChanged() {
   window.dispatchEvent(new Event(COMMUNITY_FILTERS_CHANGED_EVENT));
 }
+
+export const COMMUNITY_VOTE_CHANGED_EVENT = "editarr:community-vote-changed";
+export type CommunityVoteChange = { linkId: string; filterId: string; myVote: "up" | "down" | null };
+
+/** Tell other open views (the Community tab, reviews) that the account's vote on a served filter changed. */
+export function notifyCommunityVoteChanged(change: CommunityVoteChange) {
+  window.dispatchEvent(new CustomEvent<CommunityVoteChange>(COMMUNITY_VOTE_CHANGED_EVENT, { detail: change }));
+}
