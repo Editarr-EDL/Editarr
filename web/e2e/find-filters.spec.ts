@@ -1,4 +1,4 @@
-import { chooseWorkflowStep } from "./workflow-actions";
+import { chooseWorkflowStep, openReviewSources } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, items, json, mockApi } from "./app-fixtures";
 
@@ -108,7 +108,10 @@ for (const width of [320, 1440]) {
     await page.getByRole("button", { name: "New Review" }).click();
     await page.getByLabel("New review name").fill("Reuse local filters");
     await page.getByRole("button", { name: "Start new review" }).click();
-    await expect(page.getByRole("checkbox", { name: new RegExp(scan.name) })).toBeVisible();
+    const sources = await openReviewSources(page);
+    await expect(sources.getByRole("checkbox", { name: new RegExp(scan.name) })).toBeVisible();
+    // A long scan name wraps inside the Sources popover rather than widening the page.
+    await expectNoHorizontalPageOverflow(page);
     expect(communityRequests).toEqual([]);
   });
 

@@ -1,6 +1,6 @@
 /**
  * Community filters are normal review filters (docs/community-local-api.md §3, ADR 0002 U1–U5): the
- * Review tab's Included scans offers each master set, its filters join the normal results where they
+ * Review tab's Sources popover (Included scans) offers each master set, its filters join the normal results where they
  * are enabled, disabled and adjusted like scan filters, the Community tab only browses, votes and
  * downloads updates, and Refresh brings community changes in while keeping the user's edits.
  */
@@ -8,7 +8,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi } from "./app-fixtures";
 import { mockCommunityMasters } from "./community-masters-mock";
 import { mockCommunityReview } from "./community-review-mock";
-import { chooseExportFormat, chooseWorkflowStep } from "./workflow-actions";
+import { chooseExportFormat, chooseFilterAction, chooseWorkflowStep, openReviewSources, setReviewSource } from "./workflow-actions";
 
 async function openReview(page: Page, name: string) {
   await page.goto("/#/library/movies/item/movie-1");
@@ -37,11 +37,25 @@ for (const width of [320, 1440]) {
     const saves = await mockCommunityReview(page, community);
     await openReview(page, "Community review");
 
-    const included = page.getByRole("complementary", { name: "Review scan evidence" });
-    const entry = included.getByRole("checkbox", { name: "Community filters · Extended Edition" });
+    const sourcesButton = page.getByRole("button", { name: /^Sources · / });
+    await expect(sourcesButton).toHaveAccessibleName("Sources · 0 of 1");
+    const included = await openReviewSources(page);
+    const entry = included.getByRole("checkbox", { name: "Community · Extended Edition" });
+    await expect(entry).toBeFocused();
     await expect(entry).not.toBeChecked();
     await entry.check();
     await expect(included.getByText(/Saving the review adds these community filters to the results/)).toBeVisible();
+    await expect(sourcesButton).toHaveAccessibleName("Sources · 1 of 1");
+    // The popover fits the window and passes axe; Escape closes it and returns focus to the button.
+    await expectNoHorizontalPageOverflow(page);
+    await expectNoAccessibilityViolations(page);
+    const box = await included.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/cm-review-uniform/review-sources-${width}.png` });
+    await page.keyboard.press("Escape");
+    await expect(included).toHaveCount(0);
+    await expect(sourcesButton).toBeFocused();
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect.poll(() => saves[0]?.community_memberships).toEqual([{ link_id: "link-v_extended" }]);
 
@@ -65,14 +79,27 @@ for (const width of [320, 1440]) {
     await menu.getByRole("menuitemradio", { name: "Thumbs down" }).click();
     await expect(vote("20:00")).toHaveAttribute("data-vote", "down");
     // Preview and the vote sit side by side, and action labels never break mid-word.
-    const preview = row(page, "20:00").getByRole("button", { name: /^Preview filter/ });
+    const preview = row(page, "20:00").getByRole("button", { name: /^Preview / });
     const [previewBox, voteBox] = [await preview.boundingBox(), await vote("20:00").boundingBox()];
     expect(Math.abs(previewBox!.y + previewBox!.height / 2 - (voteBox!.y + voteBox!.height / 2))).toBeLessThan(4);
     expect(voteBox!.x).toBeGreaterThan(previewBox!.x + previewBox!.width);
-    for (const name of [/^Preview filter/, /^Edit filter/, /^Delete filter/]) {
-      const button = row(page, "20:00").getByRole("button", { name });
+    const more = row(page, "20:00").getByRole("button", { name: /^More actions for .* at 20:00$/ });
+    const moreBox = await more.boundingBox();
+    expect(Math.abs(moreBox!.y + moreBox!.height / 2 - (voteBox!.y + voteBox!.height / 2))).toBeLessThan(4);
+    expect(moreBox!.x).toBeGreaterThan(voteBox!.x + voteBox!.width);
+    for (const button of [preview, more]) {
       expect(await button.evaluate((element) => getComputedStyle(element).whiteSpace === "nowrap" && element.scrollWidth <= element.clientWidth)).toBe(true);
     }
+    // Edit and Delete sit in the row's "⋯" menu, a keyboard-operable menu button.
+    await more.focus();
+    await page.keyboard.press("Enter");
+    const rowMenu = page.getByRole("menu", { name: /^More actions for .* at 20:00$/ });
+    await expect(rowMenu.getByRole("menuitem", { name: /^Edit / })).toBeFocused();
+    await expect(rowMenu.getByRole("menuitem", { name: /^Delete / })).toBeEnabled();
+    await expectNoAccessibilityViolations(page);
+    await page.keyboard.press("Escape");
+    await expect(rowMenu).toHaveCount(0);
+    await expect(more).toBeFocused();
     expect(community.requests.filter((request) => request.path.endsWith("/vote")).map((request) => [request.path, request.body]))
       .toEqual([["masters/link-v_extended/filters/f_gone/vote", expect.objectContaining({ vote: "down", confirmed: true })]]);
     await expect(page.getByRole("button", { name: "Save Changes" })).toBeDisabled();
@@ -88,7 +115,7 @@ for (const width of [320, 1440]) {
 
     // Disable one and adjust another exactly like a scan filter.
     await row(page, "10:00").getByRole("checkbox").uncheck();
-    await row(page, "15:00").getByRole("button", { name: /^Edit filter/ }).click();
+    await chooseFilterAction(page, row(page, "15:00"), /^Edit /);
     await page.getByRole("spinbutton", { name: /start seconds/ }).fill("905");
     await page.getByRole("button", { name: "Done" }).click();
     await page.getByRole("button", { name: "Save Changes" }).click();
@@ -111,6 +138,9 @@ for (const width of [320, 1440]) {
     await check(page, "community-tab", width);
 
     await chooseWorkflowStep(page, "Review");
+    // The Sources button marks the change; its popover explains it beside the set.
+    await expect(sourcesButton).toHaveAccessibleName("Sources · 1 of 1, community filters changed");
+    await openReviewSources(page);
     await expect(included.getByText("Community filters changed since included.")).toBeVisible();
     // The review keeps its filters until the user refreshes them.
     await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(3);
@@ -118,9 +148,14 @@ for (const width of [320, 1440]) {
     await check(page, "review-refresh-available", width);
     await included.getByRole("button", { name: "Refresh community filters" }).click();
     await expect(included.getByText(/Refresh staged\. Save the review to bring in the community changes/)).toBeVisible();
+    await expect(included.getByRole("checkbox", { name: "Community · Extended Edition" })).toBeFocused();
+    await included.getByRole("button", { name: "Done" }).click();
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect.poll(() => saves[2]?.community_memberships).toEqual([{ source_id: "snap-1", refresh: true }]);
+    await expect(sourcesButton).toHaveAccessibleName("Sources · 1 of 1");
+    await openReviewSources(page);
     await expect(included.getByText("Community filters changed since included.")).toHaveCount(0);
+    await included.getByRole("button", { name: "Done" }).click();
     await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(4);
     // Edits stay, and a filter turned off stays off; the filter no longer served is flagged and stays
     // disabled; the new one arrives enabled.
@@ -135,10 +170,10 @@ for (const width of [320, 1440]) {
     await expect(vote("20:00")).toHaveAccessibleDescription(/no longer serves this filter/);
     await expect(vote("30:00")).toHaveAttribute("data-vote", "none");
     await expect(vote("30:00")).not.toHaveAttribute("aria-disabled");
-    // At desktop width the filter table, actions included, fits without sideways scrolling.
-    if (width === 1440) expect(await byTime(page).evaluate((table) => table.parentElement!.scrollWidth - table.parentElement!.clientWidth)).toBe(0);
+    // The filter table, actions included, fits without sideways scrolling at every width.
+    expect(await byTime(page).evaluate((table) => table.parentElement!.scrollWidth - table.parentElement!.clientWidth)).toBe(0);
     await check(page, "review-refreshed-removed", width);
-    // The flags show with the time, visible without scrolling the table sideways.
+    // The flags show in the row's details line, visible without scrolling the table sideways.
     const flag = row(page, "20:00").getByText("Removed from community");
     await flag.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
     await expect(flag).toBeInViewport({ ratio: 1 });
@@ -157,8 +192,7 @@ for (const width of [320, 1440]) {
     const community = await mockCommunityMasters(page, { linked: true });
     await mockCommunityReview(page, community, "Community only");
     await openReview(page, "Community only");
-    await page.getByRole("complementary", { name: "Review scan evidence" })
-      .getByRole("checkbox", { name: "Community filters · Extended Edition" }).check();
+    await setReviewSource(page, "Community · Extended Edition");
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect(page.getByText("Community · Extended Edition").first()).toBeVisible();
     await chooseWorkflowStep(page, "Subtitles");

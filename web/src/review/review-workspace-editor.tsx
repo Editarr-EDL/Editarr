@@ -6,11 +6,9 @@ import { ExportDialog } from "./review-export-dialog";
 import { ReviewDeletionDialog } from "./review-deletion-dialog";
 import { canDownload, publishDestinations } from "./export-model";
 import { usePrincipal } from "../auth/auth-gate";
-import { scanLabel } from "../shared/display";
-import { ReviewScanInfo, reviewScanName } from "./review-scan-source";
 import { ShareAction } from "../scans/sharing-dialog";
 import { useReviewAccountLabel } from "./review-access";
-import { ReviewCommunityEntries } from "./review-community-sources";
+import { ReviewSourcesMenu } from "./review-sources-menu";
 import { hasExportEvidence } from "./review-community";
 import { useReviewCommunity } from "./use-review-community";
 import { useReviewCommunityVotes } from "./use-review-community-votes";
@@ -52,8 +50,10 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       isReviewDraftContentDirty(draft)
       || draftNameValidation.normalized === selected.name
     ));
-  const combinedScans = availableScans.filter((scan) => scan.scan_audio && scan.scan_video);
-  const hasCombinedMembership = combinedScans.some((scan) => draft.memberships.some((membership) => membership.scan_id === scan.id));
+  const sources = <ReviewSourcesMenu scans={availableScans} draft={draft} entries={community.entries} maySearch={community.maySearch}
+    disabled={busy || !access.field("evidence")} onToggleScan={(scan, included) => void toggleScanMembership(scan, included)}
+    onChangeRole={(scan, role) => void changeScanMembership(scan, role)} onChange={setDraft}
+    votesFailed={votes.loadFailed} onRetryVotes={votes.retry} />;
 
   const overview = <SavedReviewOverview
       requiredFilterIds={selected?.policy_required_filter_ids}
@@ -78,53 +78,15 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
       renderFilterVote={votes.renderVote}
+      sources={sources}
     />;
-  const results = overview;
-  const memberships = <div className="saved-review-memberships">
-        <strong>Included scans</strong>
-        {availableScans.map((scan) => {
-          const included = draft.memberships.some((membership) => membership.scan_id === scan.id);
-          return <span className="review-scan-source" key={scan.id}>
-            <label><input
-              type="checkbox"
-              checked={included}
-              disabled={busy || !access.field("evidence")}
-              onChange={(event) => void toggleScanMembership(scan, event.target.checked)}
-            /> {reviewScanName(scan)}</label>
-            <ReviewScanInfo scans={[scan]} />
-          </span>;
-        })}
-        <ReviewCommunityEntries entries={community.entries} draft={draft} maySearch={community.maySearch}
-          disabled={busy || !access.field("evidence")} onChange={setDraft}
-          votesFailed={votes.loadFailed} onRetryVotes={votes.retry} />
-      </div>;
-  const roles = hasCombinedMembership && <div className="saved-review-membership-roles">
-      <strong>Combined scan roles</strong>
-      {combinedScans.map((scan) => {
-        const membership = draft.memberships.find((item) => item.scan_id === scan.id);
-        return membership && <label className="field" key={scan.id}>
-          <span>{reviewScanName(scan)}</span>
-          <select
-            aria-label={`Review role for ${scanLabel(scan)}`}
-            value={membership.role}
-            disabled={busy || !access.field("evidence")}
-            onChange={(event) => void changeScanMembership(scan, event.target.value as typeof membership.role)}
-          >
-            <option value="audio">Audio only</option>
-            <option value="video">Video only</option>
-            <option value="both">Audio and video</option>
-          </select>
-        </label>;
-      })}
-    </div>;
-  const evidence = <aside className="guided-review-evidence" aria-label="Review scan evidence">{memberships}{roles}</aside>;
-  const saveControls = <div className="button-row review-save-actions">
-        <button type="button" className="btn-primary" onClick={() => void save()} disabled={saveDisabled}>
+  const saveControls = <div className="button-row saved-review-header-group review-save-actions">
+        <button type="button" className="btn-primary compact-button" onClick={() => void save()} disabled={saveDisabled}>
           {busy ? "Saving…" : selected ? "Save Changes" : "Save Review"}
         </button>
         <button
           type="button"
-          className="btn-secondary"
+          className="btn-secondary compact-button"
           onClick={() => {
             setDraft(discardReviewDraft(draft));
             setMetadataCandidates([]);
@@ -133,7 +95,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
           }}
           disabled={busy || !isReviewDraftDirty(draft)}
         >Discard</button>
-        {exportable && <button type="button" className="btn-secondary" aria-haspopup="dialog"
+        {exportable && <button type="button" className="btn-secondary compact-button" aria-haspopup="dialog"
           disabled={busy || Boolean(conflict) || isReviewDraftDirty(draft)}
           title={busy ? "Wait for the current review action to finish" : isReviewDraftDirty(draft) ? "Save or discard review changes before exporting" : undefined}
           onClick={() => { setError(null); setDialog("export"); }}>Export</button>}
@@ -177,7 +139,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
           >✎</button>}
         </>}
       </div>
-      {selected && <div className="button-row saved-review-current-actions">
+      {selected && <div className="button-row saved-review-header-group saved-review-current-actions">
         {!guided && <ShareAction source={{ kind: "review", id: selected.id }} name={selected.name}
           disabled={busy || isReviewDraftDirty(draft)} />}
         {access.duplicate && <button
@@ -194,19 +156,14 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
           disabled={busy || Boolean(conflict)}
         >Delete Review</button>}
       </div>}
-      {guided && saveControls}
+      <span className="saved-review-header-spacer" aria-hidden="true" />
+      {saveControls}
     </div>
     {selected && <p className="muted-copy">Current owner: {accountLabel(selected.owner_id)}. Historical author: {accountLabel(selected.original_author_id)}. Policy source: {selected.policy_owner_id === selected.owner_id ? "current review owner" : accountLabel(selected.policy_owner_id)}, revision {selected.policy_revision}.</p>}
-    {guided ? <div className="guided-review-editor">{evidence}{results}</div> : results}
-    <div className="saved-review-editor">
-      {editingReviewName && draft.name && draftNameValidation?.error && <span className="form-error" role="alert">
-        {draftNameValidation.error}
-      </span>}
-      {!guided && memberships}
-      {!guided && saveControls}
-
-    </div>
-    {!guided && roles}
+    {editingReviewName && draft.name && draftNameValidation?.error && <span className="form-error" role="alert">
+      {draftNameValidation.error}
+    </span>}
+    {overview}
     <div className="button-row">
       <button
         type="button"

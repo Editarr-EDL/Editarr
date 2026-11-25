@@ -8,8 +8,8 @@ type Filter = SavedReview["filters"][number];
 export const communityResultCount = (filters: Filter[]) => filters.filter(isCommunityFilter).length;
 
 /**
- * Source details of a result row's community filters: the community version, its confidence badge,
- * contributor count and Locally verified icon. Renders nothing for scan filters.
+ * Source details of a result row's community filters for its muted meta line: the community version, its
+ * compact confidence badge, contributor count and Locally verified icon. Renders nothing for scan filters.
  */
 export function CommunityFilterSource({ filters }: { filters: Filter[] }) {
   const community = filters.filter((filter) => filter.community);
@@ -18,18 +18,15 @@ export function CommunityFilterSource({ filters }: { filters: Filter[] }) {
     const info = filter.community!;
     return <span className="review-community-filter" key={filter.id}>
       <span className="review-community-label">Community · {info.label}</span>
-      {info.confidence !== null && <ConfidenceBadge confidence={info.confidence} low={info.low_confidence} />}
-      {info.contributor_count !== null && <small className="muted-copy">
-        {info.contributor_count} {info.contributor_count === 1 ? "contributor" : "contributors"}</small>}
+      {info.confidence !== null && <ConfidenceBadge confidence={info.confidence} low={info.low_confidence} compact />}
+      {info.contributor_count !== null && <span>
+        {info.contributor_count} {info.contributor_count === 1 ? "contributor" : "contributors"}</span>}
       {info.locally_verified && <LocallyVerifiedIcon />}
     </span>;
   })}</span>;
 }
 
-/**
- * The "Edited" and "Removed from community" flags of a result row's community filters, shown with
- * its time so they stay visible on narrow screens where the table scrolls sideways.
- */
+/** The "Edited" and "Removed from community" flags of a result row's community filters. */
 export function CommunityFilterFlags({ filters }: { filters: Filter[] }) {
   const edited = filters.some((filter) => filter.community && filter.community_edited);
   const removed = filters.some((filter) => filter.community?.removed);

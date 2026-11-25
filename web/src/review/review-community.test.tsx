@@ -77,8 +77,8 @@ it("offers Refresh only for a changed, refreshable snapshot and explains the sta
 
 it("blocks including a link that awaits alignment and explains a new inclusion", () => {
   render(<Entries sources={[]} links={[masterLink({ alignmentState: "required" }), masterLink({ linkId: "link-2", label: "Extended" })]} />);
-  expect(screen.getByRole("checkbox", { name: "Community filters · Theatrical" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("checkbox", { name: "Community filters · Extended" }));
+  expect(screen.getByRole("checkbox", { name: "Community · Theatrical" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Community · Extended" }));
   expect(screen.getByText(/Saving the review adds these community filters to the results/)).toBeInTheDocument();
 });
 
@@ -87,7 +87,8 @@ it("labels a community filter's source with its version, confidence, contributor
     removed: true, locally_verified: true } })];
   render(<><CommunityFilterSource filters={filters} /><CommunityFilterFlags filters={filters} /></>);
   expect(screen.getByText("Community · Theatrical")).toBeInTheDocument();
-  expect(screen.getByText("50% confidence")).toBeInTheDocument();
+  // A compact "50%" badge, still named as confidence for assistive technology.
+  expect(screen.getByText("50%")).toHaveTextContent(/^50% confidence$/);
   expect(screen.getByText("3 contributors")).toBeInTheDocument();
   expect(screen.getByText("Edited")).toBeInTheDocument();
   expect(screen.getByText("Removed from community")).toBeInTheDocument();

@@ -1,4 +1,4 @@
-import { openWorkflowStep } from "./review-workflow-test-helpers";
+import { openReviewSources, openWorkflowStep } from "./review-workflow-test-helpers";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MediaDetail } from "../catalog/media-detail";
@@ -62,7 +62,7 @@ it("recovers local scans for Jellyfin and the selected review version", async ()
   fireEvent.click(screen.getByRole("button", { name: "New Review" }));
   fireEvent.change(screen.getByLabelText("New review name"), { target: { value: "Reuse found evidence" } });
   fireEvent.click(screen.getByRole("button", { name: "Start new review" }));
-  expect(await screen.findByRole("checkbox", { name: /Found local evidence/ })).toBeVisible();
+  expect(await within(await openReviewSources()).findByRole("checkbox", { name: /Found local evidence/ })).toBeVisible();
 });
 
 it("uses item metadata and can search when the catalog withholds all paths", async () => {

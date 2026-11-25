@@ -387,7 +387,7 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   link no longer serves (showing its `retiredVotes` entry), a link the caller can't
   read, or an account without `community.feedback.submit` shows the vote
   unavailable. A failed read other than `404` offers **Retry loading votes** on the
-  snapshot's Included scans entry.
+  snapshot's Included scans entry (the Review tab's Sources popover).
 - Duplicating a review copies every snapshot with its filters; the link reference
   is kept only when the duplicate's owner owns the link. Deleting an account's
   master state keeps snapshots and filters and clears their link; transferring it,

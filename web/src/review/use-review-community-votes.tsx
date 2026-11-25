@@ -19,7 +19,7 @@ export const voteUnavailable = {
   detached: "This filter’s community version is no longer linked, so it can’t be voted on here.",
   notServed: "The community no longer serves this filter, so it can’t be voted on.",
   loading: "Loading your vote…",
-  loadFailed: "Couldn’t load your votes. Use Retry loading votes under Included scans.",
+  loadFailed: "Couldn’t load your votes. Use Retry loading votes under Sources.",
 };
 
 /** The served filter a review filter votes on: its own master filter, or the one that merged it (`mergedIds`). */

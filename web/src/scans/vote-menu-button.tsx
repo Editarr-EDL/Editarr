@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { popupHost, useAnchoredPopup } from "../ui/use-anchored-popup";
 import type { MyVote, VoteValue } from "../api/api-community-master-types";
 
 const choices: Array<{ value: VoteValue; label: string; glyph: string }> = [
@@ -8,17 +9,6 @@ const choices: Array<{ value: VoteValue; label: string; glyph: string }> = [
   { value: "none", label: "No vote", glyph: "‒" },
 ];
 const stateLabel = (vote: MyVote) => vote === "up" ? "Thumbs up" : vote === "down" ? "Thumbs down" : "none";
-const menuGap = 6;
-
-/** The pill's nearest scrolling ancestor, whose visible bounds it must stay in for the menu to stay open. */
-function scrollingAncestor(element: Element): Element | null {
-  for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
-    const { overflowX, overflowY } = getComputedStyle(node);
-    if (/(auto|scroll|hidden)/.test(`${overflowX} ${overflowY}`)) return node;
-  }
-  return null;
-}
-const viewportInset = 8;
 
 /**
  * A compact vote control: a status pill showing the current vote ("Vote ▾" dashed when none, a green 👍 or
@@ -43,7 +33,7 @@ export function VoteMenuButton({ value, name, busy = false, unavailable = null, 
 
   // The menu renders inside the pill's landmark or dialog, so it stays in the page's regions and any focus trap.
   const setOpen = (next: boolean | ((was: boolean) => boolean)) => {
-    setHost(trigger.current?.closest("dialog, [role='dialog'], main, [role='main']") ?? document.body);
+    setHost(popupHost(trigger.current));
     setOpenState(next);
   };
   const close = (refocus = true) => {
@@ -51,56 +41,22 @@ export function VoteMenuButton({ value, name, busy = false, unavailable = null, 
     if (refocus) trigger.current?.focus();
   };
 
-  useLayoutEffect(() => {
-    if (!open) return;
-    /** Close once the pill can't be seen, keeping keyboard focus on the pill rather than losing it. */
-    const dismiss = () => {
+  useAnchoredPopup(open, trigger, menu, {
+    // Close once the pill can't be seen, keeping keyboard focus on the pill rather than losing it.
+    onHide: () => {
       setOpenState(false);
       if (menu.current?.contains(document.activeElement)) trigger.current?.focus({ preventScroll: true });
-    };
-    /** Keep the menu under the pill (or above it near the bottom); close it once the pill scrolls out of view. */
-    const place = () => {
-      const button = trigger.current;
-      const popup = menu.current;
-      if (!button || !popup) return;
-      const anchor = button.getBoundingClientRect();
-      const viewWidth = document.documentElement.clientWidth;
-      const measured = anchor.width > 0 || anchor.height > 0;
-      if (measured && (anchor.bottom <= 0 || anchor.top >= window.innerHeight || anchor.right <= 0 || anchor.left >= viewWidth)) {
-        dismiss();
-        return;
-      }
-      const { width, height } = popup.getBoundingClientRect();
-      const below = anchor.bottom + menuGap;
-      const above = anchor.top - menuGap - height;
-      popup.style.top = `${below + height > window.innerHeight - viewportInset && above >= viewportInset ? above : below}px`;
-      popup.style.left = `${Math.max(viewportInset, Math.min(anchor.right - width, viewWidth - width - viewportInset))}px`;
-      popup.style.visibility = "visible";
-    };
-    place();
-    const items = menu.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]');
-    (menu.current?.querySelector<HTMLElement>('[aria-checked="true"]') ?? items?.[0])?.focus({ preventScroll: true });
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Element;
-      if (menu.current?.contains(target) || trigger.current?.contains(target)) return;
+    },
+    onOutside: (target) => {
       // Clicking another control moves focus there; clicking elsewhere returns it to the pill.
       setOpen(false);
       if (!target.closest?.("button, a, input, select, textarea, [tabindex]")) trigger.current?.focus();
-    };
-    // A pill scrolled out of its table or list is hidden even while still inside the window.
-    const observer = typeof IntersectionObserver === "undefined" || !trigger.current ? null
-      : new IntersectionObserver((records) => { if (records.some((record) => !record.isIntersecting)) dismiss(); },
-        { root: scrollingAncestor(trigger.current) });
-    if (observer && trigger.current) observer.observe(trigger.current);
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", place, true);
-    window.addEventListener("resize", place);
-    return () => {
-      observer?.disconnect();
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("scroll", place, true);
-      window.removeEventListener("resize", place);
-    };
+    },
+  });
+  useLayoutEffect(() => {
+    if (!open) return;
+    const items = menu.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]');
+    (menu.current?.querySelector<HTMLElement>('[aria-checked="true"]') ?? items?.[0])?.focus({ preventScroll: true });
   }, [open]);
 
   useEffect(() => { if (busy || unavailable) setOpen(false); }, [busy, unavailable]);

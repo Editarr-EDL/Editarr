@@ -1,5 +1,5 @@
 .scan-review { gap: 15px; }
-.saved-review-overview { display: grid; padding: 14px 0; border-bottom: 1px solid #303641; }
+.saved-review-overview { display: grid; grid-template-columns: minmax(0, 1fr); margin-block: 12px; }
 .saved-review-table-actions { margin-bottom: -8px; }
 .saved-review-table-wrap { max-height: 256px; }
 .saved-review-table th:nth-child(2), .saved-review-table td:nth-child(2) { width: 220px; }
@@ -7,19 +7,16 @@
 .saved-review-table tr.selected td { background: #202b3d; }
 .saved-review-table-select { width: 100%; padding: 0; border: 0; color: #dce8ff; background: transparent; font: inherit; text-align: left; }
 .saved-review-table-select:hover:not(:disabled) { text-decoration: underline; }
-.saved-review-current-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; border-top: 1px solid #303641; }
+.saved-review-current-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-top: 14px; border-top: 1px solid #303641; }
 .saved-review-panel > .saved-review-current-header { order: 1; }
 .saved-review-panel > .mcf-review-metadata { order: 2; }
 .saved-review-panel > .saved-review-overview { order: 3; }
-.saved-review-panel > .saved-review-editor { order: 4; }
-.saved-review-panel > .saved-review-membership-roles { order: 5; }
 .saved-review-panel > .button-row:not(.saved-review-table-actions) { order: 6; }
 .saved-review-current-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .saved-review-current-title h3 { margin: 0; overflow-wrap: anywhere; color: #e8effa; font-size: 20px; text-align: left; }
 .saved-review-rename-button { flex: 0 0 auto; font-size: 16px; line-height: 1; }
 .saved-review-name-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .saved-review-name-editor input { min-width: min(320px, 60vw); }
-.saved-review-current-actions { flex: 0 0 auto; justify-content: flex-end; }
 .mcf-preflight-issues { display: grid; gap: 7px; padding: 12px; border: 1px solid #8a4846; border-radius: 7px; background: #351f21; }
 .mcf-preflight-issues h3, .mcf-preflight-issues p, .mcf-preflight-issues ul { margin: 0; }
 .mcf-preflight-issues ul { display: grid; gap: 4px; padding-left: 20px; }
@@ -28,12 +25,9 @@
 .managed-export-list > section { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px; border: 1px solid #394252; border-radius: 7px; }
 .managed-export-list > section > div:first-child { display: grid; gap: 3px; min-width: 0; }
 .managed-export-list small { color: #aeb7c5; overflow-wrap: anywhere; }
-.saved-review-editor { display: grid; gap: 12px; }
 .saved-review-panel { grid-template-columns: minmax(0, 1fr); overflow-x: hidden; }
-.saved-review-memberships { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .review-scan-source { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .review-scan-info-entry { display: grid; gap: 2px; }
-.saved-review-memberships > strong { flex-basis: 100%; }
 .mcf-review-metadata { display: grid; gap: 12px; }
 .review-timing-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid #3b4658; border-radius: 7px; background: #171d26; }
 .review-timing-header > div:first-child { display: grid; gap: 4px; min-width: 0; }
@@ -118,34 +112,8 @@
 .scan-finding-table > summary label { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; color: #dce3ee; cursor: pointer; font-size: 13px; font-weight: 650; }
 .scan-finding-table input[type="checkbox"] { width: auto; accent-color: #8dafef; }
 .scan-finding-table .library-table-wrap { border: 0; border-top: 1px solid #303641; border-radius: 0; }
-.scan-filter-table { width: 100%; min-width: 570px; border-collapse: collapse; color: #dce3ee; font-size: 13px; }
-.scan-filter-table th, .scan-filter-table td { padding: 9px 12px; border-bottom: 1px solid #303641; text-align: left; vertical-align: middle; }
-.scan-filter-table th { color: #aab8cc; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
-.scan-filter-table tbody tr:last-child td { border-bottom: 0; }
-.scan-filter-table td:first-child { width: 42px; text-align: center; }
-.scan-filter-table td:nth-child(2) { width: 106px; color: #a6b9da; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.scan-filter-table td:nth-child(4) { min-width: 116px; }
-.saved-review-overview .library-table-wrap { width: 100%; max-width: 100%; overflow-x: hidden; }
-.combined-scan-filter-table { width: 100%; max-width: 100%; min-width: 0; table-layout: auto; }
-.combined-scan-filter-table th:first-child, .combined-scan-filter-table td:first-child, .combined-scan-filter-table th:nth-child(2), .combined-scan-filter-table td:nth-child(2) { width: 0; min-width: 0; }
-.combined-scan-filter-table th:nth-child(4), .combined-scan-filter-table td:nth-child(4) { width: 140px; min-width: 0; }
-.combined-scan-filter-table th:nth-child(5), .combined-scan-filter-table td:nth-child(5) { width: 240px; min-width: 0; }
-.combined-scan-filter-table.has-video-preview { width: 100%; max-width: 100%; min-width: 0; }
-.combined-scan-filter-table.has-video-preview .finding-preview { min-width: 0; }
-.combined-scan-filter-table.has-video-preview .finding-preview video { display: block; width: 240px; min-width: 0; max-width: 100%; aspect-ratio: 16 / 9; max-height: none; object-fit: contain; }
-.combined-scan-filter-table td:nth-child(3), .combined-scan-filter-table td:nth-child(4) { overflow-wrap: anywhere; }
-.merged-descriptions { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.merged-descriptions { display: grid; gap: 4px; }
 .merged-description-item + .merged-description-item { padding-top: 4px; border-top: 1px solid #303641; }
-.finding-scan-attribution { color: #b9cbed; font-weight: 700; white-space: normal; }
-.saved-review-filter-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; width: 100%; }
-.saved-review-filter-action { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-/* Preview and a community filter's vote stay side by side; Edit and Delete may wrap below them. */
-.saved-review-filter-primary { display: inline-flex; flex-wrap: nowrap; align-items: flex-start; gap: 6px; }
-.saved-review-filter-primary .master-votes { flex-wrap: wrap; justify-content: flex-end; }
-.saved-review-filter-action .compact-button { white-space: nowrap; overflow-wrap: normal; }
-.combined-scan-filter-table .finding-preview { justify-items: end; min-width: 0; width: 100%; }
-.combined-scan-filter-table .finding-preview audio { width: 220px; min-width: 0; max-width: 100%; }
-.combined-scan-filter-table .finding-preview video { min-width: 0; max-width: 100%; }
 .saved-review-filter-editor-row > td { padding: 0; background: #151a22; }
 .saved-review-filter-editor-row .saved-review-filter { padding: 14px 16px; }
 .combined-result-group + .combined-result-group .combined-result-group-header th { border-top: 1px solid #3a4351; }
@@ -167,12 +135,6 @@
 .combined-result-hierarchy-header.hierarchy-subcategory button { padding-left: 28px; }
 .combined-result-hierarchy-header.hierarchy-group button, .combined-result-hierarchy-header.hierarchy-group .combined-result-group-use { background: #151c27; }
 .combined-result-hierarchy-header.hierarchy-group button { padding-left: 44px; }
-.tiered-review-table th:nth-child(4), .tiered-review-table td:nth-child(4) { width: 82px; }
-.tiered-review-table th:nth-child(5), .tiered-review-table td:nth-child(5) { width: 170px; }
-.tiered-review-table th:nth-child(6), .tiered-review-table td:nth-child(6) { width: 220px; }
-.tiered-review-table td:nth-child(3), .tiered-review-table td:nth-child(4), .tiered-review-table td:nth-child(5), .tiered-review-table td:nth-child(6) { overflow-wrap: anywhere; }
-.saved-review-overview .tiered-review-table-wrap { overflow-x: auto; }
-.tiered-review-table { min-width: 820px; }
 .linked-result-indicator { display: inline-block; margin-left: 4px; color: #a9c4f3; font-size: 12px; line-height: 1; }
 .video-scan-filter-table.has-video-preview { min-width: 750px; table-layout: fixed; }
 .video-scan-filter-table.has-video-preview th:first-child, .video-scan-filter-table.has-video-preview td:first-child { width: 42px; }

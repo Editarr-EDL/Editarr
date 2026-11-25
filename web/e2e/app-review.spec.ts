@@ -1,4 +1,4 @@
-import { chooseExportFormat, chooseWorkflowStep } from "./workflow-actions";
+import { chooseExportFormat, chooseFilterAction, chooseWorkflowStep, setReviewSource } from "./workflow-actions";
 import { expect, test } from "@playwright/test";
 import { MockReviewFilter, expectNoAccessibilityViolations, mockApi } from "./app-fixtures";
 
@@ -30,8 +30,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   const openFirstReviewFilterEditor = async () => {
     if (await panel.getByLabel(/Filter .* label/).count()) return;
     await expandReviewFilterGroups();
-    const editButton = panel.getByRole("button", { name: /^Edit filter / }).first();
-    if (await editButton.getAttribute("aria-expanded") !== "true") await editButton.click();
+    await chooseFilterAction(page, panel, /^Edit /);
   };
   const version = page.getByLabel("Media version");
   await expect(version).toHaveValue("source-1");
@@ -46,7 +45,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   let dialog = page.getByRole("dialog", { name: "New Review" });
   await dialog.getByLabel("New review name").fill("Review A");
   await dialog.getByRole("button", { name: "Start new review" }).click();
-  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
+  await setReviewSource(page, "Unnamed scan");
   await openFirstReviewFilterEditor();
   await expect(panel.getByLabel(/Filter .* label/)).toHaveValue("Visual content");
   await expect(panel.getByRole("heading", { name: "Review A", level: 3 })).toBeVisible();
@@ -118,7 +117,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   await page.getByRole("dialog", { name: "Delete review" }).getByRole("button", { name: "Delete review" }).click();
   await expect(panel.getByRole("row").filter({ hasText: "Review B copy" })).toHaveCount(0);
   await panel.getByRole("button", { name: "Open review Review B renamed" }).click();
-  await panel.getByRole("checkbox", { name: "Unnamed scan", exact: true }).check();
+  await setReviewSource(page, "Unnamed scan");
   await panel.getByRole("button", { name: "Save Changes" }).click();
 
   await (await chooseExportFormat(page, "EDL")).click();
@@ -176,7 +175,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
     start_seconds: 1.25, end_seconds: 2.75, edit_action: "skip",
   }));
   await expandReviewFilterGroups();
-  await expect(panel.getByRole("button", { name: /^Edit filter / })).toHaveCount(2);
+  await expect(panel.getByRole("button", { name: /^More actions for / })).toHaveCount(2);
   await (await chooseExportFormat(page, "EDL")).click();
   await page.getByRole("dialog", { name: "Export" }).getByRole("button", { name: "Publish EDL" }).click();
   await expect(page.getByRole("dialog", { name: "Export" }).getByRole("status")).toContainText("Published EDL");

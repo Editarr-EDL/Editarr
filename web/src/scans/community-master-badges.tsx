@@ -23,11 +23,17 @@ export function MatchPercent({ value }: { value: number }) {
 export const LOW_CONFIDENCE_TOOLTIP = "More people disputed, voted down or didn't find this filter than confirmed or voted it up. "
   + "Low Confidence filters stay hidden here, and start disabled in reviews, unless you show them.";
 
-/** Confidence badge; Low Confidence rows are labelled explicitly and explained in a tooltip. */
-export function ConfidenceBadge({ confidence, low }: { confidence: number; low: boolean }) {
+/**
+ * Confidence badge; Low Confidence rows are labelled explicitly and explained in a tooltip.
+ * @param compact Shows "80%" or "Low · 20%", naming the confidence for assistive technology only.
+ */
+export function ConfidenceBadge({ confidence, low, compact = false }: { confidence: number; low: boolean; compact?: boolean }) {
   return <span className="master-confidence-cell">
-    <span className={`master-badge master-confidence${low ? " master-low-confidence" : ""}`}>
-      {low ? `Low Confidence · ${percent(confidence)}` : `${percent(confidence)} confidence`}
+    <span className={`master-badge master-confidence${low ? " master-low-confidence" : ""}${compact ? " master-confidence-compact" : ""}`}>
+      {compact
+        ? low ? <>Low<span className="visually-hidden"> Confidence</span> · {percent(confidence)}</>
+          : <>{percent(confidence)}<span className="visually-hidden"> confidence</span></>
+        : low ? `Low Confidence · ${percent(confidence)}` : `${percent(confidence)} confidence`}
     </span>
     {low && <InfoButton label="About Low Confidence">{LOW_CONFIDENCE_TOOLTIP}</InfoButton>}
   </span>;
