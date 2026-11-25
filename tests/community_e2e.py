@@ -324,12 +324,12 @@ def donate(author, *, lose_response=False):
 
 
 def find_and_download(application):
-    """Find the shared version by its file keys and apply its master set directly."""
+    """Find the shared version by its file keys, apply it and open the master view through
+    the local HTTP routes the web app uses (local API §2–§3)."""
     find_filters(application)
-    outcome = application.master("find_download")
-    assert "error" not in outcome, outcome
-    found, link = outcome["found"], outcome["link"]
-    assert found["findKey"] and found["error"] is None, found
+    target = TARGET | {"media_source_id": None}
+    found = application.request("POST", "/api/community/find", {"target": target, "label": None})
+    assert found["version"] == 1 and found["findKey"] and found["error"] is None, found
     assert {"sha256_sampled", "md5_quick"} <= set(found["keysUsed"]), found
     (result,) = found["results"]
     assert (result["tier"], result["matchPercent"], result["alignmentRequired"]) == (
@@ -337,13 +337,35 @@ def find_and_download(application):
         80,
         False,
     ), result
-    assert (link["tier"], link["alignmentState"], link["linkState"]) == (
+    assert result["linkedLinkId"] is None, result
+    applied = application.request(
+        "POST",
+        "/api/community/masters",
+        {
+            "target": target,
+            "find_key": found["findKey"],
+            "community_version_id": result["communityVersionId"],
+            "confirmed": True,
+        },
+    )["link"]
+    assert (applied["tier"], applied["alignmentState"], applied["linkState"]) == (
         "2",
         "not_required",
         "active",
-    )
-    assert link["filters"] and all(item["active"] for item in link["filters"]), link
-    return found, link
+    ), applied
+    listed = application.request("GET", f"/api/community/masters?item_id={JELLYFIN_ITEM}")
+    assert [item["linkId"] for item in listed["links"]] == [applied["linkId"]], listed
+    path = f"/api/community/masters/{applied['linkId']}"
+    view = application.request("GET", path)
+    assert set(view["link"]["pendingUpdate"].values()) == {0}, view
+    assert view["preferences"] == {"confidenceThreshold": 0.0, "showLowConfidence": False}, view
+    assert view["filters"] and all(item["active"] for item in view["filters"]), view
+    active = application.request("GET", f"{path}/active-filters")
+    assert {item["filterId"] for item in active["filters"]} == {
+        item["filterId"] for item in view["filters"]
+    }, active
+    assert active["edl"].startswith("## Editarr Simple EDL"), active
+    return found, {**view["link"], "filters": view["filters"]}
 
 
 def exercise(configuration):

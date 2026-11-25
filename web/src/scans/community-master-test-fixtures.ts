@@ -16,7 +16,8 @@ export function masterFilter(overrides: Partial<MasterFilter> & { confidence?: n
 export function masterLink(overrides: Partial<MasterLink> = {}): MasterLink {
   return { linkId: "link-1", localVersionId: "mv_1", communityVersionId: "v_12ab", label: "Theatrical", status: "confirmed",
     unconfirmed: false, tier: "2", matchPercent: 80, appliedRevision: 12, latestRevision: 12, alignmentState: "not_required",
-    alignment: null, pendingUpdate: null, ...overrides };
+    aliasId: "theatrical", alignment: null, alignmentRevision: null, pendingUpdate: { new: 0, changed: 0, removed: 0, nowLowConfidence: 0 },
+    linkState: "active", mergedInto: null, ...overrides };
 }
 
 export function masterView(filters: MasterFilter[], link: Partial<MasterLink> = {}): MasterView {
@@ -24,10 +25,14 @@ export function masterView(filters: MasterFilter[], link: Partial<MasterLink> = 
 }
 
 const values = (startMs: number) => ({ startMs, endMs: startMs + 5000, subcategory: "punching", severity: "high", action: "skip" });
+const baseline = (startMs: number) => ({ ...values(startMs), lowConfidence: false, present: true });
+/** New master values of an update row starting at `startMs`. */
+export const newMasterValues = (startMs: number) => ({ ...baseline(startMs), spread: null, confidence: 0.4, contributorCount: 4,
+  support: { attestations: 4, upvotes: 0 }, negative: { downvotes: 0, disputes: 0, coverageNegatives: 0 } });
 
 export function updateRow(rowId: string, overrides: Partial<UpdateRow> = {}): UpdateRow {
   return { rowId, filterId: rowId, category: "violence", touched: false, changedFields: ["startMs"], mine: null,
-    oldMaster: values(600_000), newMaster: values(601_000), mergedInto: null, allowed: ["accept", "dismiss"], canAccept: true, ...overrides };
+    oldMaster: baseline(600_000), newMaster: newMasterValues(601_000), mergedInto: null, allowed: ["accept", "dismiss"], canAccept: true, ...overrides };
 }
 
 export function masterUpdate(groups: Partial<MasterUpdate["groups"]>, overrides: Partial<MasterUpdate> = {}): MasterUpdate {

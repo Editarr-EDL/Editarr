@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { applyCommunityMaster, findCommunityVersions } from "../api/api-community-masters";
 import type { FindLabel, FindResponse, FindResult, MasterTarget } from "../api/api-community-master-types";
 import { useCan } from "../auth/auth-gate";
@@ -36,9 +36,10 @@ function VersionCard({ result, busy, canApply, onApply }: {
 /**
  * Find community master sets for a local version and show them as version cards. The first search
  * uses Theatrical; the version picker then appears to search another version. Applying a different
- * version while another is linked asks for confirmation and then replaces the link.
+ * version while another is linked asks for confirmation (also when the server answers
+ * `replace_required`) and then replaces the link. `findOnOpen` searches once as soon as it is shown.
  */
-export function MasterFindResults({ target }: { target: MasterTarget }) {
+export function MasterFindResults({ target, findOnOpen = false }: { target: MasterTarget; findOnOpen?: boolean }) {
   const maySearch = useCan("community.search");
   const mayApply = useCan("community.download");
   const [label, setLabel] = useState<PickerValue>({ selection: "theatrical", otherText: "" });
@@ -46,6 +47,13 @@ export function MasterFindResults({ target }: { target: MasterTarget }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [replacing, setReplacing] = useState<FindResult | null>(null);
+  const searchedOnOpen = useRef(false);
+  useEffect(() => {
+    // A ref, not state, so a development double effect doesn't search twice and hit the Find cooldown.
+    if (!findOnOpen || !maySearch || searchedOnOpen.current) return;
+    searchedOnOpen.current = true;
+    void find(false);
+  });
   if (!maySearch) return null;
 
   const find = async (refresh: boolean) => {
@@ -68,7 +76,10 @@ export function MasterFindResults({ target }: { target: MasterTarget }) {
         ? `${result.label} filters added. Align them on the item page before they apply.`
         : `${result.label} filters added to this item.`, error: false });
       notifyCommunityMastersChanged();
-    } catch (reason) { setMessage({ text: masterErrorText(reason), error: true }); }
+    } catch (reason) {
+      if (!replace && (reason as { code?: string }).code === "replace_required") setReplacing(result);
+      else setMessage({ text: masterErrorText(reason), error: true });
+    }
     finally { setBusy(false); }
   };
 

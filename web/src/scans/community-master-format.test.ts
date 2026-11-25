@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { UpdateRow } from "../api/api-community-master-types";
 import { masterFilter } from "./community-master-test-fixtures";
-import { acceptAllRows, bannerText, estimateText, filterActive, filterVisible, versionChoice, OTHER } from "./community-master-format";
+import { MasterApiError } from "../api/api-community-masters";
+import { acceptAllRows, bannerText, estimateText, filterActive, filterVisible, masterErrorText, versionChoice, OTHER } from "./community-master-format";
 
 describe("preference filtering", () => {
   const defaults = { confidenceThreshold: 0, showLowConfidence: false };
@@ -18,6 +19,10 @@ describe("preference filtering", () => {
     expect(filterActive(touched, defaults, false)).toBe(true);
     expect(filterActive(touched, defaults, true)).toBe(false);
     expect(filterActive(masterFilter({ touched: true, state: "rejected" }), defaults, false)).toBe(false);
+    const low = masterFilter({ lowConfidence: true, confidence: 0.3 });
+    expect(filterActive(low, defaults, false)).toBe(false);
+    expect(filterActive(low, { ...defaults, showLowConfidence: true }, false)).toBe(true);
+    expect(filterActive(low, { confidenceThreshold: 0.5, showLowConfidence: true }, false)).toBe(false);
   });
 });
 
@@ -36,4 +41,17 @@ it("accepts all only untouched rows whose Accept is enabled", () => {
   const row = (rowId: string, touched: boolean, canAccept: boolean): UpdateRow => ({ rowId, filterId: rowId, category: "violence",
     touched, changedFields: [], mine: null, oldMaster: null, newMaster: null, mergedInto: null, allowed: ["accept", "dismiss"], canAccept });
   expect(acceptAllRows([row("a", false, true), row("b", true, true), row("c", false, false)]).map((item) => item.rowId)).toEqual(["a"]);
+});
+
+it("explains route failures, including the rate-limit wait and validation details", () => {
+  expect(masterErrorText(new MasterApiError("rate_limited", true, 429, null, null, 7))).toBe("Please wait 7 seconds before trying again.");
+  expect(masterErrorText(new MasterApiError("rate_limited", true, 429, null, null, 1))).toBe("Please wait 1 second before trying again.");
+  expect(masterErrorText(new MasterApiError("validation_failed", false, 422, null, null, null, ["Send either anchors or offset_ms"])))
+    .toBe("Some of the values aren’t valid: Send either anchors or offset_ms.");
+  expect(masterErrorText(new MasterApiError("validation_failed", false, 422))).toMatch(/values aren’t valid/);
+  for (const code of ["replace_required", "confirmation_required", "alignment_not_required", "alignment_out_of_range",
+    "version_unavailable", "version_not_found", "report_ineligible", "vote_pending", "operation_conflict",
+    "receipt_owner_mismatch", "link_unavailable", "not_connected", "rotation_pending", "not_configured", "not_found"]) {
+    expect(masterErrorText(new MasterApiError(code, false, 409)), code).not.toBe("Community filters are unavailable right now.");
+  }
 });

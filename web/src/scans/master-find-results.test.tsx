@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { applyCommunityMaster, fetchVersionAliases, findCommunityVersions } from "../api/api-community-masters";
+import { applyCommunityMaster, fetchVersionAliases, findCommunityVersions, MasterApiError } from "../api/api-community-masters";
 import type { FindResult } from "../api/api-community-master-types";
 import { masterLink } from "./community-master-test-fixtures";
 import { MasterFindResults } from "./master-find-results";
@@ -45,4 +45,21 @@ it("shows version cards and confirms before replacing the linked version", async
   expect(await screen.findByText(/Align them on the item page/)).toBeInTheDocument();
   expect(changed).toHaveBeenCalled();
   window.removeEventListener("editarr:community-masters-changed", changed);
+});
+
+it("opens the replace confirmation when the server answers replace_required", async () => {
+  vi.mocked(fetchVersionAliases).mockResolvedValue({ version: 1, choices: [{ kind: "other", label: "Other" }] });
+  vi.mocked(findCommunityVersions).mockResolvedValue({ version: 1, findKey: "fk", localVersionId: "mv", keysUsed: [], error: null,
+    results: [result({ communityVersionId: "v3", label: "Extended" })] });
+  vi.mocked(applyCommunityMaster).mockRejectedValueOnce(new MasterApiError("replace_required", false, 409))
+    .mockResolvedValueOnce({ version: 1, link: masterLink({ linkId: "link-3" }) });
+  render(<MasterFindResults target={target} findOnOpen />);
+  fireEvent.click(await screen.findByRole("button", { name: "Use Extended filters" }));
+  const confirm = await screen.findByRole("group", { name: "Replace community filters" });
+  expect(confirm).toHaveTextContent("Replace the current version with Extended?");
+  expect(screen.queryByRole("alert")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(applyCommunityMaster).toHaveBeenLastCalledWith({ target, findKey: "fk", communityVersionId: "v3", replace: true }));
+  expect(await screen.findByText("Extended filters added to this item.")).toBeInTheDocument();
+  expect(findCommunityVersions).toHaveBeenCalledOnce();
 });
