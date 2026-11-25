@@ -88,7 +88,8 @@ for (const width of [320, 1440]) {
     await expect(panel.getByRole("button", { name: "Approve alignment" })).toBeDisabled();
     await panel.getByRole("button", { name: "Preview alignment" }).click();
     await expect(panel.getByText("Offset 0.000 s")).toBeVisible();
-    await expect(panel.getByRole("region", { name: "Aligned filter times" }).getByRole("row")).toHaveCount(4);
+    await expect(panel.getByRole("list", { name: "Aligned filter times" }).getByRole("listitem")).toHaveCount(3);
+    await expectKeyboardFocusVisible(page, panel.getByRole("button", { name: "Play clip at 20:00.000" }));
     await checkLayout(page, "alignment", width);
     await panel.getByRole("button", { name: "Approve alignment" }).click();
     await expect(panel.getByRole("heading", { name: "Align before applying" })).toHaveCount(0);
@@ -135,7 +136,7 @@ for (const width of [320, 1440]) {
     await expect(banner).toBeVisible();
     await panel.getByRole("button", { name: "Review" }).click();
     await expect(panel.getByRole("heading", { name: /Review filter updates · revision 12 → 13/ })).toBeVisible();
-    const changed = panel.getByRole("region", { name: "Changed" });
+    const changed = panel.getByRole("region", { name: "Changed", exact: true });
     const tables = changed.getByRole("table", { name: "Changed fields" });
     await expect(tables.first().getByRole("row").nth(1)).toHaveText(/Severity\s*Medium\s*→\s*High/);
     await expect(tables.nth(1).getByRole("row").first()).toHaveText(/Field\s*Mine\s*Old/);
@@ -147,8 +148,8 @@ for (const width of [320, 1440]) {
     expect(community.requests.find((request) => request.path.endsWith("update/accept-all"))?.body).toEqual({ to_revision: 13, group: "changed" });
     await changed.getByRole("button", { name: /^Keep mine Violence · Punching/ }).click();
     await expect(changed).toHaveCount(0);
-    await panel.getByRole("region", { name: "New" }).getByRole("button", { name: /^Dismiss/ }).click();
-    await panel.getByRole("region", { name: "Removed" }).getByRole("button", { name: /^Accept Nudity/ }).click();
+    await panel.getByRole("region", { name: "New", exact: true }).getByRole("button", { name: /^Dismiss/ }).click();
+    await panel.getByRole("region", { name: "Removed", exact: true }).getByRole("button", { name: /^Accept Nudity/ }).click();
     await expect(panel.getByText("All updates are reviewed.")).toBeVisible();
     expect(community.requests.filter((request) => request.path.endsWith("update/decisions")).map((request) => request.body)).toEqual([
       { to_revision: 13, decisions: [{ row_id: "f_fight", decision: "keep_mine" }] },

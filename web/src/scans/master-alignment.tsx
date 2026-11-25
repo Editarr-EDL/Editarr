@@ -90,18 +90,16 @@ export function MasterAlignment({ linkId, target, filters, forRevision, prefill,
     {preview && <div className="master-alignment-preview">
       <p role="status"><strong>Offset {(preview.alignment.offsetMs / 1000).toFixed(3)} s</strong>
         {preview.alignment.scale !== 1 && ` · drift ×${preview.alignment.scale.toFixed(5)}`} · {preview.alignment.anchors} {preview.alignment.anchors === 1 ? "anchor" : "anchors"}</p>
-      <div className="scan-verification-cues" tabIndex={0} role="region" aria-label="Aligned filter times">
-        <table className="library-table"><thead><tr><th scope="col">Filter</th><th scope="col">Aligned time</th><th scope="col">Clip</th></tr></thead>
-          <tbody>{preview.rows.map((row) => {
-            const filter = byId.get(row.filterId);
-            const range = { startMs: row.alignedStartMs, endMs: row.alignedEndMs };
-            return <tr key={row.filterId}><td>{filter ? filterName(filter) : row.filterId}</td><td>{formatRange(range)}</td>
-              <td><button type="button" className="btn-secondary compact-button" disabled={clips.loading !== null}
-                aria-label={`Play clip at ${formatMs(row.alignedStartMs)}`}
-                onClick={() => void clips.play(row.filterId, rangePreview({ ...range, action: filter?.action ?? "skip" }))}>
-                {clips.loading === row.filterId ? "Loading…" : "▶ Play"}</button></td></tr>;
-          })}</tbody></table>
-      </div>
+      <ol className="master-aligned-rows" aria-label="Aligned filter times">{preview.rows.map((row) => {
+        const filter = byId.get(row.filterId);
+        const range = { startMs: row.alignedStartMs, endMs: row.alignedEndMs };
+        return <li key={row.filterId}><span>{filter ? filterName(filter) : row.filterId}</span>
+          <span className="master-aligned-time">{formatRange(range)}</span>
+          <button type="button" className="btn-secondary compact-button" disabled={clips.loading !== null}
+            aria-label={`Play clip at ${formatMs(row.alignedStartMs)}`}
+            onClick={() => void clips.play(row.filterId, rangePreview({ ...range, action: filter?.action ?? "skip" }))}>
+            {clips.loading === row.filterId ? "Loading…" : "▶ Play"}</button></li>;
+      })}</ol>
       <FilterClipPlayer clip={clips.clip} error={clips.error} />
     </div>}
     <div className="button-row">

@@ -41,12 +41,21 @@ export function filterVisible(filter: MasterFilter, preferences: MasterPreferenc
   return filter.master.confidence >= preferences.confidenceThreshold;
 }
 
-/** Mirror the contract's `active` rule so preference changes apply before the server round trip. */
+const IN_EFFECT: MasterFilter["state"][] = ["pending", "verified", "adjusted"];
+
+/**
+ * Mirror the backend `is_active` rule so preference changes apply before the server round trip. A
+ * touched row is active only in an in-effect state, ignoring the threshold. An untouched Low Confidence
+ * row also needs the toggle (which admits the `low_confidence` state); every untouched row needs
+ * confidence ≥ threshold.
+ */
 export function filterActive(filter: MasterFilter, preferences: MasterPreferences, alignmentRequired: boolean) {
-  if (alignmentRequired) return false;
-  const states = preferences.showLowConfidence ? ["pending", "verified", "adjusted", "low_confidence"] : ["pending", "verified", "adjusted"];
-  if (!states.includes(filter.state)) return false;
-  return filter.touched || filterVisible(filter, preferences);
+  if (alignmentRequired || !filter.master.present) return false;
+  if (filter.touched) return IN_EFFECT.includes(filter.state);
+  if (filter.master.lowConfidence) {
+    if (!preferences.showLowConfidence || ![...IN_EFFECT, "low_confidence"].includes(filter.state)) return false;
+  } else if (!IN_EFFECT.includes(filter.state)) return false;
+  return filter.master.confidence >= preferences.confidenceThreshold;
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;

@@ -7,6 +7,8 @@ import { masterErrorText, OTHER, type PickerValue } from "./community-master-for
 import { notifyCommunityMastersChanged } from "./community-master-events";
 import { VersionPicker } from "./version-picker";
 
+const THEATRICAL: PickerValue = { selection: "theatrical", otherText: "" };
+
 function findLabel({ selection, otherText }: PickerValue): FindLabel {
   if (!selection) return null;
   if (selection === OTHER) return otherText.trim() ? { text: otherText.trim() } : null;
@@ -37,12 +39,15 @@ function VersionCard({ result, busy, canApply, onApply }: {
  * Find community master sets for a local version and show them as version cards. The first search
  * uses Theatrical; the version picker then appears to search another version. Applying a different
  * version while another is linked asks for confirmation (also when the server answers
- * `replace_required`) and then replaces the link. `findOnOpen` searches once as soon as it is shown.
+ * `replace_required`) and then replaces the link. `findOnOpen` searches once as soon as it is shown,
+ * with `initialLabel` (Theatrical by default).
  */
-export function MasterFindResults({ target, findOnOpen = false }: { target: MasterTarget; findOnOpen?: boolean }) {
+export function MasterFindResults({ target, findOnOpen = false, initialLabel = THEATRICAL }: {
+  target: MasterTarget; findOnOpen?: boolean; initialLabel?: PickerValue;
+}) {
   const maySearch = useCan("community.search");
   const mayApply = useCan("community.download");
-  const [label, setLabel] = useState<PickerValue>({ selection: "theatrical", otherText: "" });
+  const [label, setLabel] = useState<PickerValue>(initialLabel);
   const [response, setResponse] = useState<FindResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);

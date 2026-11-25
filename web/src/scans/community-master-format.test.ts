@@ -23,6 +23,12 @@ describe("preference filtering", () => {
     expect(filterActive(low, defaults, false)).toBe(false);
     expect(filterActive(low, { ...defaults, showLowConfidence: true }, false)).toBe(true);
     expect(filterActive(low, { confidenceThreshold: 0.5, showLowConfidence: true }, false)).toBe(false);
+    const touchedLow = masterFilter({ lowConfidence: true, touched: true, state: "low_confidence", myVote: "up" });
+    expect(filterActive(touchedLow, { ...defaults, showLowConfidence: true }, false)).toBe(false);
+    expect(filterActive(masterFilter({ touched: true, state: "adjusted", lowConfidence: true }), defaults, false)).toBe(true);
+    expect(filterActive(masterFilter({ state: "verified", lowConfidence: true }), { ...defaults, showLowConfidence: true }, false)).toBe(true);
+    const absent = masterFilter({ touched: true, state: "verified" });
+    expect(filterActive({ ...absent, master: { ...absent.master, present: false } }, defaults, false)).toBe(false);
   });
 });
 

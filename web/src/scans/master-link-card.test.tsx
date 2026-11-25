@@ -5,6 +5,7 @@ import { checkMasterUpdates } from "../api/api-community-updates";
 import { masterFilter, masterLink, masterView } from "./community-master-test-fixtures";
 import { notifyCommunityMastersChanged } from "./community-master-events";
 import { MasterLinkCard } from "./master-link-card";
+import { linkPickerValue } from "./master-link-state";
 
 vi.mock("../api/api-community-masters", async (original) => ({
   ...await original<typeof import("../api/api-community-masters")>(), fetchCommunityMaster: vi.fn(),
@@ -66,17 +67,18 @@ it("reloads its banner when the daily sync settles", async () => {
   expect(await screen.findByText("Community filters updated: 2 new, 0 changed, 0 removed.")).toBeInTheDocument();
 });
 
-it("shows a merged link's state and finds community versions again", async () => {
-  vi.mocked(fetchCommunityMaster).mockResolvedValue(masterView([masterFilter()], { linkState: "merged", mergedInto: "v_2" }));
+it("shows a merged link's state and finds community versions again for its version", async () => {
+  const merged = { linkState: "merged" as const, mergedInto: "v_2", aliasId: "extended", label: "Extended Edition" };
+  vi.mocked(fetchCommunityMaster).mockResolvedValue(masterView([masterFilter()], merged));
   vi.mocked(findCommunityVersions).mockResolvedValue({ version: 1, findKey: "fk", localVersionId: "mv_1", keysUsed: [], error: null, results: [] });
   vi.mocked(fetchVersionAliases).mockResolvedValue({ version: 1, choices: [{ kind: "other", label: "Other" }] });
-  render(<MasterLinkCard summary={masterLink({ linkState: "merged", mergedInto: "v_2" })} target={target} onChanged={vi.fn()} />);
+  render(<MasterLinkCard summary={masterLink(merged)} target={target} onChanged={vi.fn()} />);
   expect(screen.getByText("Merged")).toBeInTheDocument();
   expect(screen.getByText(/merged this version into another one/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Check for filter updates" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Find again" }));
   expect(await screen.findByText("No community versions match this file.")).toBeInTheDocument();
-  expect(findCommunityVersions).toHaveBeenCalledExactlyOnceWith(target, { alias_id: "theatrical" }, false);
+  expect(findCommunityVersions).toHaveBeenCalledExactlyOnceWith(target, { alias_id: "extended" }, false);
 });
 
 it("shows an unavailable state after a check finds the version gone", async () => {
@@ -88,5 +90,15 @@ it("shows an unavailable state after a check finds the version gone", async () =
   fireEvent.click(screen.getByRole("button", { name: "Check for filter updates" }));
   expect(await screen.findByText("The community no longer offers this version. Find community filters again.")).toBeInTheDocument();
   expect(await screen.findByText("Unavailable")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Find again" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Check for filter updates" })).toBeNull();
+  vi.mocked(findCommunityVersions).mockResolvedValue({ version: 1, findKey: "fk", localVersionId: "mv_1", keysUsed: [], error: null, results: [] });
+  vi.mocked(fetchVersionAliases).mockResolvedValue({ version: 1, choices: [{ kind: "other", label: "Other" }] });
+  fireEvent.click(screen.getByRole("button", { name: "Find again" }));
+  await screen.findByText("No community versions match this file.");
+  expect(findCommunityVersions).toHaveBeenCalledExactlyOnceWith(target, { alias_id: "theatrical" }, false);
+});
+
+it("finds an unlisted version again by its text label", () => {
+  expect(linkPickerValue({ aliasId: null, label: "IMAX" })).toEqual({ selection: "__other__", otherText: "IMAX" });
+  expect(linkPickerValue({ aliasId: null, label: "Other" })).toEqual({ selection: "__other__", otherText: "" });
 });

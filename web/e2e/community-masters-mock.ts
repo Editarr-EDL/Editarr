@@ -75,12 +75,15 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     filter("f_lang", "language", 900_000, "profanity", 0.3),
     filter("f_gone", "nudity", 1_200_000, "nudity", 0.2, {}, true),
   ];
+  // The backend `is_active` rule (scanner/modeling/community_master_state.py).
+  const inEffect = ["pending", "verified", "adjusted"];
   const active = (item: MasterFilter) => {
-    if (mock.state.link?.alignmentState === "required") return false;
-    const states = preferences.showLowConfidence ? ["pending", "verified", "adjusted", "low_confidence"] : ["pending", "verified", "adjusted"];
-    if (!states.includes(item.state)) return false;
-    if (item.touched) return true;
-    return (!item.master.lowConfidence || preferences.showLowConfidence) && item.master.confidence >= preferences.confidenceThreshold;
+    if (mock.state.link?.alignmentState === "required" || !item.master.present) return false;
+    if (item.touched) return inEffect.includes(item.state);
+    if (item.master.lowConfidence) {
+      if (!preferences.showLowConfidence || ![...inEffect, "low_confidence"].includes(item.state)) return false;
+    } else if (!inEffect.includes(item.state)) return false;
+    return item.master.confidence >= preferences.confidenceThreshold;
   };
   const link = () => ({ ...mock.state.link!, pendingUpdate: counts });
   const remaining = () => ({ ...update, groups: { ...update.groups } });

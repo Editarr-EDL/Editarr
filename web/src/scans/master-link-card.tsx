@@ -72,14 +72,14 @@ export function MasterLinkCard({ summary, target, onChanged }: {
         <span className="muted-copy">Revision {link.appliedRevision}</span>
       </div>
       <div className="button-row">
-        {mayDownload && link.linkState !== "merged" && <button type="button" className="btn-secondary compact-button" disabled={checking}
+        {mayDownload && !linkStale(link.linkState) && <button type="button" className="btn-secondary compact-button" disabled={checking}
           onClick={() => void check()}>{checking ? "Checking…" : "Check for filter updates"}</button>}
         <button type="button" className="btn-secondary compact-button" aria-expanded={expanded} aria-controls={listId}
           onClick={() => setExpanded(!expanded)}>{expanded ? "Hide filters" : "Show filters"}</button>
       </div>
     </header>
     {checkMessage && <p role="status" className="form-status">{checkMessage}</p>}
-    {linkStale(link.linkState) && <MasterLinkStateNotice state={link.linkState} target={target} />}
+    {linkStale(link.linkState) && <MasterLinkStateNotice link={link} target={target} />}
     {pending && updateTotal(pending) > 0 && !reviewing && <div className="master-update-banner" role="status">
       <span>{bannerText(pending)}</span>
       {mayDownload && <button type="button" className="btn-primary compact-button" onClick={() => setReviewing(true)}>Review</button>}
