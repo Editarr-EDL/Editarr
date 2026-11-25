@@ -41,11 +41,21 @@ export function filterVisible(filter: MasterFilter, preferences: MasterPreferenc
   return filter.master.confidence >= preferences.confidenceThreshold;
 }
 
-/** Mirror the contract's `active` rule so preference changes apply before the server round trip. */
+const IN_EFFECT: MasterFilter["state"][] = ["pending", "verified", "adjusted"];
+
+/**
+ * Mirror the backend `is_active` rule so preference changes apply before the server round trip. A
+ * touched row is active only in an in-effect state, ignoring the threshold. An untouched Low Confidence
+ * row also needs the toggle (which admits the `low_confidence` state); every untouched row needs
+ * confidence ≥ threshold.
+ */
 export function filterActive(filter: MasterFilter, preferences: MasterPreferences, alignmentRequired: boolean) {
-  if (alignmentRequired) return false;
-  if (!["pending", "verified", "adjusted"].includes(filter.state)) return false;
-  return filter.touched || filterVisible(filter, preferences);
+  if (alignmentRequired || !filter.master.present) return false;
+  if (filter.touched) return IN_EFFECT.includes(filter.state);
+  if (filter.master.lowConfidence) {
+    if (!preferences.showLowConfidence || ![...IN_EFFECT, "low_confidence"].includes(filter.state)) return false;
+  } else if (!IN_EFFECT.includes(filter.state)) return false;
+  return filter.master.confidence >= preferences.confidenceThreshold;
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -84,14 +94,30 @@ export function versionChoice({ selection, otherText }: PickerValue): VersionCho
 const errorMessages: Record<string, string> = {
   network_unavailable: "Community service is offline. Try again.",
   service_unavailable: "Community service is unavailable. Try again later.",
+  not_configured: "Community sharing isn’t set up on this server.",
+  not_connected: "Connect to the community service in Settings first.",
+  rotation_pending: "Your community key is being rotated. Try again once it finishes.",
   capability_denied: "Your account can’t do this.",
+  not_found: "This item or community filter set is no longer available to you.",
+  validation_failed: "Some of the values aren’t valid. Check them and try again.",
+  confirmation_required: "Confirm this action and try again.",
   find_expired: "These results expired. Find community filters again.",
   target_changed: "This file changed. Find community filters again.",
+  replace_required: "This file already uses another community version. Confirm to replace it.",
   version_merged: "This version was merged into another one. Find community filters again.",
+  version_unavailable: "The community no longer offers this version. Find community filters again.",
+  version_not_found: "The community service no longer knows this version. Find community filters again.",
+  link_unavailable: "That community filter set is no longer in use for this file. Refresh and try again.",
   snapshot_invalid: "The downloaded filter set couldn’t be verified.",
+  alignment_not_required: "This version already matches your file, so it doesn’t need alignment.",
+  alignment_out_of_range: "That alignment moves filters off your file or drifts too far. Check the anchor times.",
   alignment_preview_changed: "The alignment preview changed. Preview it again.",
   filter_state_changed: "This filter changed elsewhere. Refresh and try again.",
   vote_ineligible: "You can’t vote on this filter.",
+  vote_pending: "Another vote on this filter is still being sent. Try again in a moment.",
+  operation_conflict: "This vote conflicts with one already sent. Refresh and vote again.",
+  receipt_owner_mismatch: "Download this filter set again with your account before voting or reporting.",
+  report_ineligible: "You can only report the version this file uses.",
   decision_not_allowed: "That choice isn’t available for this filter.",
   update_changed: "A newer update arrived. Review the latest changes.",
   work_identity_required: "Add a TMDB or TVDB ID (with season and episode for TV) before sharing.",
@@ -102,10 +128,16 @@ const voteReasons: Record<string, string> = {
   receipt_required: "Download this filter set again before voting.",
 };
 
-/** User-facing text for a community master route failure. */
+type ErrorDetails = { code: string; reason?: string | null; retryAfter?: number | null; validation?: string[] };
+
+/** User-facing text for a community master route failure, including the rate-limit wait and 422 details. */
 export function masterErrorText(reason: unknown) {
   if (typeof reason !== "object" || reason === null || !("code" in reason)) return errorMessages.network_unavailable;
-  const { code, reason: detail } = reason as { code: string; reason?: string | null };
+  const { code, reason: detail, retryAfter, validation } = reason as ErrorDetails;
   if (code === "vote_ineligible" && detail && voteReasons[detail]) return voteReasons[detail];
+  if (code === "rate_limited") {
+    return retryAfter ? `Please wait ${plural(retryAfter, "second")} before trying again.` : "Please wait a moment before trying again.";
+  }
+  if (code === "validation_failed" && validation?.length) return `Some of the values aren’t valid: ${validation[0].replace(/\.$/, "")}.`;
   return errorMessages[code] ?? "Community filters are unavailable right now.";
 }

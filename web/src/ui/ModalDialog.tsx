@@ -28,7 +28,7 @@ export function ModalDialog({
     const escape = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
       const modals = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
-      if (event.key !== "Escape" || !onClose || !dialog || dialog.contains(document.activeElement)
+      if (event.key !== "Escape" || event.defaultPrevented || !onClose || !dialog || dialog.contains(document.activeElement)
         || modals[modals.length - 1] !== dialog) return;
       event.preventDefault();
       onClose();
@@ -55,6 +55,8 @@ export function ModalDialog({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" && event.key !== "Tab") return;
+    // An open tooltip or menu inside the dialog already handled this Escape.
+    if (event.key === "Escape" && event.defaultPrevented) return;
     // Nested dialogs share this keydown as it bubbles, so only the innermost one handles it.
     event.preventDefault();
     event.stopPropagation();

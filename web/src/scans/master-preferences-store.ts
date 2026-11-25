@@ -16,14 +16,16 @@ export type PreferenceSnapshot = {
   error: string | null;
 };
 const empty: PreferenceSnapshot = { saved: null, displayed: null, pending: false, error: null };
-const same = (a: MasterPreferences | null, b: MasterPreferences | null) =>
+export const samePreferences = (a: MasterPreferences | null, b: MasterPreferences | null) =>
   !!a && !!b && a.confidenceThreshold === b.confidenceThreshold && a.showLowConfidence === b.showLowConfidence;
 
 /**
  * Account preference store shared by every master link card. Changes show at once, save after a
  * short pause, flush immediately on `flush()`, and only the latest save's response is applied.
  */
-export function createPreferenceStore(save: typeof saveMasterPreferences = saveMasterPreferences) {
+export function createPreferenceStore(
+  save: (value: MasterPreferences) => Promise<MasterPreferences> = saveMasterPreferences,
+) {
   let snapshot = empty;
   let owner: number | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -76,7 +78,7 @@ export function createPreferenceStore(save: typeof saveMasterPreferences = saveM
     },
     flush,
     /** Whether the shown preferences are the saved ones, so server-computed `active` flags apply. */
-    synced: () => !snapshot.pending && same(snapshot.displayed, snapshot.saved),
+    synced: () => !snapshot.pending && samePreferences(snapshot.displayed, snapshot.saved),
   };
 }
 

@@ -7,13 +7,15 @@ import { bannerText, masterErrorText, updateTotal } from "./community-master-for
 import { COMMUNITY_MASTERS_CHANGED_EVENT } from "./community-master-events";
 import { MasterAlignment, type AlignableFilter } from "./master-alignment";
 import { MasterFilterList, MasterPreferenceControls } from "./master-filter-list";
+import { linkStale, MasterLinkStateBadge, MasterLinkStateNotice } from "./master-link-state";
 import { MasterUpdateReview } from "./master-update-review";
-import { useMasterPreferences } from "./master-preferences-store";
+import { samePreferences, useMasterPreferences } from "./master-preferences-store";
 import { useMasterView } from "./use-master-view";
 
 /**
  * One linked community version on the item page: summary, the "Check for filter updates" button,
- * the update banner and review, the first-import alignment gate and the filter list.
+ * the update banner and review, the first-import alignment gate and the filter list. A merged or
+ * unavailable link shows its state with a Find again action instead of the update check.
  */
 export function MasterLinkCard({ summary, target, onChanged }: {
   summary: MasterLinkSummary; target: MasterTarget; onChanged: () => void;
@@ -49,7 +51,13 @@ export function MasterLinkCard({ summary, target, onChanged }: {
       setCheckMessage(result.changed ? null : outstanding
         ? "No newer filters. You still have updates to review." : "These community filters are up to date.");
       if (result.changed || outstanding) await master.reload();
-    } catch (reason) { setCheckMessage(masterErrorText(reason)); }
+    } catch (reason) {
+      setCheckMessage(masterErrorText(reason));
+      // The check marks a merged or vanished version on the link, so show its new state.
+      if (["version_merged", "version_unavailable", "version_not_found"].includes((reason as { code?: string }).code ?? "")) {
+        await master.reload();
+      }
+    }
     finally { setChecking(false); }
   };
   const settled = () => { void master.reload(); onChanged(); };
@@ -60,16 +68,18 @@ export function MasterLinkCard({ summary, target, onChanged }: {
         <h3 id={heading}>{link.label}</h3>
         <MatchPercent value={link.matchPercent} />
         {link.unconfirmed && <UnconfirmedLabel />}
+        <MasterLinkStateBadge state={link.linkState} />
         <span className="muted-copy">Revision {link.appliedRevision}</span>
       </div>
       <div className="button-row">
-        {mayDownload && <button type="button" className="btn-secondary compact-button" disabled={checking}
+        {mayDownload && !linkStale(link.linkState) && <button type="button" className="btn-secondary compact-button" disabled={checking}
           onClick={() => void check()}>{checking ? "Checking…" : "Check for filter updates"}</button>}
         <button type="button" className="btn-secondary compact-button" aria-expanded={expanded} aria-controls={listId}
           onClick={() => setExpanded(!expanded)}>{expanded ? "Hide filters" : "Show filters"}</button>
       </div>
     </header>
     {checkMessage && <p role="status" className="form-status">{checkMessage}</p>}
+    {linkStale(link.linkState) && <MasterLinkStateNotice link={link} target={target} />}
     {pending && updateTotal(pending) > 0 && !reviewing && <div className="master-update-banner" role="status">
       <span>{bannerText(pending)}</span>
       {mayDownload && <button type="button" className="btn-primary compact-button" onClick={() => setReviewing(true)}>Review</button>}
@@ -84,7 +94,7 @@ export function MasterLinkCard({ summary, target, onChanged }: {
       {expanded && master.view && preferences.displayed && <>
         <MasterPreferenceControls preferences={preferences.displayed} onChange={preferences.change} />
         {preferences.error && <p className="form-error" role="alert">{preferences.error}</p>}
-        <MasterFilterList view={master.view} preferences={preferences.displayed} serverActive={preferences.synced}
+        <MasterFilterList view={master.view} preferences={preferences.displayed} serverActive={preferences.synced && samePreferences(preferences.displayed, master.view.preferences)}
           canVote={mayVote} canDecide={mayDownload} onFilter={master.replaceFilter} />
       </>}
       {expanded && !master.view && !master.error && <p role="status">Loading community filters…</p>}

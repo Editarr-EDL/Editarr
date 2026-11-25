@@ -31,7 +31,7 @@ export function MasterUpdateRow({ row, group, busy, clipLoading, onDecide, onPla
       {row.mergedInto && <span className="muted-copy">Merged into another filter</span>}
     </div>
     <MiniTimeline mine={row.touched ? row.mine : null} oldMaster={row.oldMaster} newMaster={row.newMaster} />
-    <MasterFieldChanges row={row} />
+    <MasterFieldChanges row={row} label={label} />
     <div className="button-row master-update-actions">
       {clipRange && <button type="button" className="btn-secondary compact-button" disabled={clipLoading}
         aria-label={`Preview clip for ${label}`} onClick={() => onPlay(clipRange)}>{clipLoading ? "Loading…" : "▶ Preview"}</button>}

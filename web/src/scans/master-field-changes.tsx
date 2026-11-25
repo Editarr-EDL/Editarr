@@ -21,14 +21,16 @@ export function fieldValue(field: string, values: Values) {
 
 /**
  * Old → new values for each changed field. Rows the user edited add a "Mine" column, so mine, the
- * old master value and the new master value are compared side by side.
+ * old master value and the new master value are compared side by side. Narrow screens scroll the
+ * table inside a focusable group named after `label`.
  */
-export function MasterFieldChanges({ row }: { row: UpdateRow }) {
+export function MasterFieldChanges({ row, label }: { row: UpdateRow; label: string }) {
   if (!row.changedFields.length) return null;
   const mine = row.touched;
   const oldMaster = row.oldMaster as Values;
   const newMaster = row.newMaster as Values;
-  return <table className="master-field-changes">
+  return <div className="master-field-changes-scroll" role="group" tabIndex={0} aria-label={`Changed fields for ${label}`}>
+    <table className="master-field-changes">
     <caption className="visually-hidden">Changed fields</caption>
     <thead><tr><th scope="col">Field</th>{mine && <th scope="col">Mine</th>}<th scope="col">Old</th>
       <th scope="col"><span className="visually-hidden">changes to</span></th><th scope="col">New</th></tr></thead>
@@ -37,5 +39,6 @@ export function MasterFieldChanges({ row }: { row: UpdateRow }) {
       {mine && <td>{fieldValue(field, row.mine as Values)}</td>}
       <td>{fieldValue(field, oldMaster)}</td><td aria-hidden="true">→</td><td>{fieldValue(field, newMaster)}</td>
     </tr>)}</tbody>
-  </table>;
+    </table>
+  </div>;
 }

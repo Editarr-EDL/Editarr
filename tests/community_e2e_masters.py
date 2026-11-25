@@ -1,7 +1,8 @@
 """Drive the master-set client integration inside one journey installation.
 
-The local master-set routes are added separately, so the journey calls the same
-integration the routes will call, against the installation's real database, identity
+Find, download and the master view go through the local HTTP routes
+(`tests.community_e2e.find_and_download`). The later service steps call the same
+integration the routes call, against the installation's real database, identity
 and the loopback service. Run as `python -m tests.community_e2e_app master` with a
 JSON action on stdin; prints a JSON result or `{"error": code, "details": {...}}`.
 """
@@ -83,18 +84,9 @@ async def _act(db, action: dict):
     client, owner = _client(db)
     kind = action["action"]
     masters = MasterSets(client, owner)
-    if kind in ("find", "find_download"):
-        # Find keys live in the application process, so a download follows in this one.
+    if kind == "find":
         captured = capture_find_keys(db, TARGET)
-        found = await masters.find(captured, _local_version(db, captured))
-        if kind == "find" or not found["results"]:
-            return found
-        link = await masters.download(
-            find_key=found["findKey"],
-            community_version_id=found["results"][0]["communityVersionId"],
-            guard=captured.guard,
-        )
-        return {"found": found, "link": _view(db, owner, link.id)}
+        return await masters.find(captured, _local_version(db, captured))
     if kind == "view":
         return _view(db, owner, action["link_id"])
     if kind == "check":

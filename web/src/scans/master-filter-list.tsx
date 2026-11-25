@@ -57,7 +57,7 @@ export function MasterFilterList({ view, preferences, serverActive = false, canV
     <p className="muted-copy" role="status">{visible.length} {visible.length === 1 ? "filter" : "filters"} shown
       {hidden > 0 && ` · ${hidden} hidden by your confidence settings`}</p>
     {error && <p className="form-error" role="alert">{error}</p>}
-    {visible.length > 0 && <div className="community-results-scroll" role="region" aria-label="Community filters" tabIndex={0}>
+    {visible.length > 0 && <div className="community-results-scroll" role="region" aria-label={`${link.label} filters`} tabIndex={0}>
       <table className="community-results-table master-filter-table">
         <thead><tr><th scope="col">Time</th><th scope="col">Filter</th><th scope="col">Confidence</th>
           <th scope="col">Contributors</th><th scope="col">Status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>

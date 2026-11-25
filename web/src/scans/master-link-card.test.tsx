@@ -1,13 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { fetchCommunityMaster } from "../api/api-community-masters";
+import { fetchCommunityMaster, fetchVersionAliases, findCommunityVersions, MasterApiError } from "../api/api-community-masters";
 import { checkMasterUpdates } from "../api/api-community-updates";
 import { masterFilter, masterLink, masterView } from "./community-master-test-fixtures";
 import { notifyCommunityMastersChanged } from "./community-master-events";
 import { MasterLinkCard } from "./master-link-card";
+import { linkPickerValue } from "./master-link-state";
 
 vi.mock("../api/api-community-masters", async (original) => ({
   ...await original<typeof import("../api/api-community-masters")>(), fetchCommunityMaster: vi.fn(),
+  findCommunityVersions: vi.fn(), fetchVersionAliases: vi.fn(),
   previewMasterAlignment: vi.fn(), approveMasterAlignment: vi.fn() }));
 vi.mock("../api/api-community-updates", () => ({ checkMasterUpdates: vi.fn(), fetchMasterUpdate: vi.fn(() => new Promise(() => {})) }));
 vi.mock("../auth/auth-gate", async (original) => ({ ...await original<typeof import("../auth/auth-gate")>(), useCan: () => true }));
@@ -36,7 +38,7 @@ it("checks on demand and shows the update banner with counts and Review", async 
 
 it("reports when a check finds nothing new and gates a fuzzy first import behind alignment", async () => {
   vi.mocked(fetchCommunityMaster).mockResolvedValue(masterView([masterFilter({ active: false })], { alignmentState: "required", tier: "4" }));
-  vi.mocked(checkMasterUpdates).mockResolvedValue({ version: 1, changed: false, latestRevision: 12, pendingUpdate: null });
+  vi.mocked(checkMasterUpdates).mockResolvedValue({ version: 1, changed: false, latestRevision: 12, pendingUpdate: { new: 0, changed: 0, removed: 0, nowLowConfidence: 0 } });
   render(<MasterLinkCard summary={masterLink({ alignmentState: "required" })} target={target} onChanged={vi.fn()} />);
   expect(await screen.findByRole("heading", { name: "Align before applying" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Show filters" }));
@@ -63,4 +65,40 @@ it("reloads its banner when the daily sync settles", async () => {
   await waitFor(() => expect(fetchCommunityMaster).toHaveBeenCalledTimes(1));
   notifyCommunityMastersChanged();
   expect(await screen.findByText("Community filters updated: 2 new, 0 changed, 0 removed.")).toBeInTheDocument();
+});
+
+it("shows a merged link's state and finds community versions again for its version", async () => {
+  const merged = { linkState: "merged" as const, mergedInto: "v_2", aliasId: "extended", label: "Extended Edition" };
+  vi.mocked(fetchCommunityMaster).mockResolvedValue(masterView([masterFilter()], merged));
+  vi.mocked(findCommunityVersions).mockResolvedValue({ version: 1, findKey: "fk", localVersionId: "mv_1", keysUsed: [], error: null, results: [] });
+  vi.mocked(fetchVersionAliases).mockResolvedValue({ version: 1, choices: [{ kind: "other", label: "Other" }] });
+  render(<MasterLinkCard summary={masterLink(merged)} target={target} onChanged={vi.fn()} />);
+  expect(screen.getByText("Merged")).toBeInTheDocument();
+  expect(screen.getByText(/merged this version into another one/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Check for filter updates" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Find again" }));
+  expect(await screen.findByText("No community versions match this file.")).toBeInTheDocument();
+  expect(findCommunityVersions).toHaveBeenCalledExactlyOnceWith(target, { alias_id: "extended" }, false);
+});
+
+it("shows an unavailable state after a check finds the version gone", async () => {
+  vi.mocked(fetchCommunityMaster).mockResolvedValueOnce(masterView([masterFilter()]))
+    .mockResolvedValueOnce(masterView([masterFilter()], { linkState: "unavailable" }));
+  vi.mocked(checkMasterUpdates).mockRejectedValue(new MasterApiError("version_unavailable", false, 409));
+  render(<MasterLinkCard summary={masterLink()} target={target} onChanged={vi.fn()} />);
+  await waitFor(() => expect(fetchCommunityMaster).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Check for filter updates" }));
+  expect(await screen.findByText("The community no longer offers this version. Find community filters again.")).toBeInTheDocument();
+  expect(await screen.findByText("Unavailable")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Check for filter updates" })).toBeNull();
+  vi.mocked(findCommunityVersions).mockResolvedValue({ version: 1, findKey: "fk", localVersionId: "mv_1", keysUsed: [], error: null, results: [] });
+  vi.mocked(fetchVersionAliases).mockResolvedValue({ version: 1, choices: [{ kind: "other", label: "Other" }] });
+  fireEvent.click(screen.getByRole("button", { name: "Find again" }));
+  await screen.findByText("No community versions match this file.");
+  expect(findCommunityVersions).toHaveBeenCalledExactlyOnceWith(target, { alias_id: "theatrical" }, false);
+});
+
+it("finds an unlisted version again by its text label", () => {
+  expect(linkPickerValue({ aliasId: null, label: "IMAX" })).toEqual({ selection: "__other__", otherText: "IMAX" });
+  expect(linkPickerValue({ aliasId: null, label: "Other" })).toEqual({ selection: "__other__", otherText: "" });
 });

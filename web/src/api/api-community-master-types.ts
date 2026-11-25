@@ -24,11 +24,14 @@ export type AlignmentState = "not_required" | "required" | "approved";
 export type Alignment = { offsetMs: number; scale: number; anchors: number };
 export type UpdateCounts = { new: number; changed: number; removed: number; nowLowConfidence: number };
 
+/** `merged` and `unavailable` links keep their rows; the item page offers Find again. `replaced` is history. */
+export type LinkState = "active" | "merged" | "unavailable" | "replaced";
 export type MasterLinkSummary = {
-  linkId: string; localVersionId: string; communityVersionId: string; label: string;
+  linkId: string; localVersionId: string; communityVersionId: string; label: string; aliasId: string | null;
   status: VersionStatus; unconfirmed: boolean; tier: MatchTier; matchPercent: number;
   appliedRevision: number; latestRevision: number; alignmentState: AlignmentState;
-  alignment: Alignment | null; pendingUpdate: UpdateCounts | null;
+  alignment: Alignment | null; alignmentRevision: number | null; pendingUpdate: UpdateCounts;
+  linkState: LinkState; mergedInto: string | null;
 };
 export type MasterLink = MasterLinkSummary;
 
@@ -47,7 +50,9 @@ export type MasterFilter = {
   filterId: string; category: string; master: MasterValues; local: FilterValues | null; effective: FilterValues;
   state: FilterState; touched: boolean; locallyVerified: boolean; myVote: MyVote; active: boolean;
 };
+export type MasterFilterResult = { version: 1 } & MasterFilter;
 export type MasterPreferences = { confidenceThreshold: number; showLowConfidence: boolean };
+export type MasterPreferencesResult = { version: 1 } & MasterPreferences;
 export type MasterView = { version: 1; link: MasterLink; preferences: MasterPreferences; filters: MasterFilter[] };
 
 export type AlignmentAnchorRequest = { filter_id: string; local_start_ms: number };
@@ -56,7 +61,7 @@ export type AlignmentPreviewRequest =
   | { anchors: null; offset_ms: number; audio_track_index: number | null };
 export type AlignmentPreview = {
   version: 1; token: string; alignment: Alignment;
-  rows: { filterId: string; alignedStartMs: number; alignedEndMs: number; clipToken: string }[];
+  rows: { filterId: string; alignedStartMs: number; alignedEndMs: number }[];
 };
 
 export type FilterDecision =
@@ -65,7 +70,14 @@ export type FilterDecision =
       subcategory?: string; severity?: string; action?: string };
 
 export type VoteValue = "up" | "down" | "none";
-export type ReportRequest = { target: { type: "filter" | "version"; id: string }; reason: string; note: string };
+export type ReportReason = "spam" | "inaccurate" | "privacy" | "rights" | "other";
+export type ReportRequest = { target: { type: "filter" | "version"; id: string }; reason: ReportReason; note?: string | null };
+/** Vote and report envelope around the hosted service result. */
+export type FeedbackResult = { version: 1; state: "completed"; result: unknown };
+
+/** One in-effect filter of a link on the local timeline (`GET …/active-filters`). */
+export type ActiveMasterFilter = { linkId: string; filterId: string; category: string } & FilterValues;
+export type ActiveMasterFilters = { version: 1; linkId: string; localVersionId: string; filters: ActiveMasterFilter[]; edl: string };
 
 export type SyncNotification = {
   notificationId: string; linkId: string; itemId: string; mediaSourceId: string | null; title: string;
@@ -76,13 +88,15 @@ export type SyncStatus = {
   version: 1; ran: boolean; state: "idle" | "running" | "failed"; lastRunAt: number | null;
   nextDueAt: number | null; lastError: string | null; unreadCount: number; notifications: SyncNotification[];
 };
-export type CheckResult = { version: 1; changed: boolean; latestRevision: number; pendingUpdate: UpdateCounts | null };
+export type CheckResult = { version: 1; changed: boolean; latestRevision: number; pendingUpdate: UpdateCounts };
 
+/** A row's accepted master values: the value fields plus `lowConfidence` and presence. */
+export type BaselineValues = FilterValues & { lowConfidence: boolean; present: boolean };
 export type UpdateGroup = "new" | "changed" | "removed" | "nowLowConfidence";
 export type UpdateDecision = "accept" | "keep_mine" | "dismiss";
 export type UpdateRow = {
   rowId: string; filterId: string; category: string; touched: boolean; changedFields: string[];
-  mine: FilterValues | null; oldMaster: MasterValues | FilterValues | null; newMaster: MasterValues | FilterValues | null;
+  mine: FilterValues | null; oldMaster: BaselineValues | null; newMaster: MasterValues | null;
   mergedInto: string | null; allowed: UpdateDecision[]; canAccept: boolean;
 };
 export type MasterUpdate = {
@@ -96,5 +110,5 @@ export type MasterSharingSummary = {
   estimates: { approximate: boolean; newFilters: number; confirmations: number; adjustments: number; disputes: number };
   versionChoice: { choice: "alias"; aliasId: string; label: string } | { choice: "other"; text: string | null; label: string };
   work: { kind: string; tmdb: string | null; tvdb: string | null; title: string; year: number | null };
-  entryCount: number;
+  entryCount: number; warnings: string[];
 };

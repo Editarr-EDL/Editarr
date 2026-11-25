@@ -33,6 +33,8 @@ const messages: Record<string, string> = {
   sharing_consent_required: "The terms changed. Review the updated summary before sharing.",
   publication_limit: "The contribution exceeds configured upload bounds. Share a smaller revision.",
   operation_conflict: "The saved publication conflicts with service state. Check its outcome before proceeding.",
+  work_identity_required: "Add a TMDB or TVDB ID (with season and episode for TV) before sharing.",
+  link_unavailable: "The community filter set for this file changed. Close this dialog and try again.",
 };
 function errorText(code: string) {
   return messages[code] || failureMessage(code);

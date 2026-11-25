@@ -16,6 +16,10 @@
 .master-unconfirmed:hover, .master-unconfirmed[aria-expanded="true"], .master-unconfirmed:focus-visible { background: #3a3220; }
 .master-low-confidence { border-color: #8a5a40; color: #ffc19e; }
 .master-touched { border-color: #58709a; color: #b9d6ff; }
+.master-link-state { border-color: #8a5a40; color: #ffc19e; background: #2b211b; }
+.master-link-state-notice { display: grid; gap: 8px; min-width: 0; }
+.master-link-state-notice p { margin: 0; }
+.master-link-state-notice > .btn-secondary { justify-self: start; }
 .master-verified-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
   color: #a0dfbe; background: transparent; cursor: help; }
 .master-verified-icon svg { width: 16px; height: 16px; }
@@ -28,11 +32,23 @@
 .master-threshold { display: inline-flex; align-items: center; gap: 8px; }
 .master-threshold input { width: min(220px, 50vw); }
 .master-threshold output { min-width: 3.5em; color: #c8d2e2; font-variant-numeric: tabular-nums; }
-.master-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.master-toggle { display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; }
+.master-toggle input { flex: none; width: auto; margin: 0; }
 
 .master-filter-list { display: grid; gap: 8px; min-width: 0; }
 .master-filter-list > p { margin: 0; }
 .master-filter-table th[scope="row"] { font-weight: 600; text-align: left; }
+.master-filter-table thead th:nth-child(1) { width: 9.5rem; }
+.master-filter-table thead th:nth-child(2) { width: auto; }
+.master-filter-table thead th:nth-child(3) { width: 11.5rem; }
+.master-filter-table thead th:nth-child(4) { width: 8.5rem; }
+.master-filter-table thead th:nth-child(5) { width: 9.5rem; }
+.master-filter-table thead th { white-space: nowrap; }
+.master-filter-table :is(th, td) { overflow-wrap: normal; }
+.master-filter-table thead th:nth-child(6) { width: 15.5rem; }
+.master-filter-table .community-row-actions { flex-wrap: wrap; gap: 4px; }
+.master-filter-table .community-row-actions .btn-secondary { overflow-wrap: normal; white-space: nowrap; }
+.master-filter-table .master-votes { flex-wrap: nowrap; }
 .master-filter-table th[scope="row"] small, .master-status small { display: block; font-weight: 400; }
 .master-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .master-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -53,8 +69,15 @@
 .master-alignment p { margin: 0; }
 .master-alignment-mode { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; border: 0; }
 .master-alignment-mode legend { margin-bottom: 4px; font-weight: 600; }
-.master-alignment-mode label { display: inline-flex; align-items: center; gap: 6px; }
+.master-alignment-mode label { display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; }
+.master-alignment-mode input { flex: none; width: auto; margin: 0; }
 .master-alignment-preview { display: grid; gap: 8px; }
+.master-aligned-rows { display: grid; gap: 0; max-height: 16rem; margin: 0; padding: 0; overflow-y: auto; list-style: none;
+  border: 1px solid #3b4351; border-radius: 7px; }
+.master-aligned-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px 12px;
+  padding: 6px 8px; border-top: 1px solid #2f3642; font-size: 13px; }
+.master-aligned-rows li:first-child { border-top: 0; }
+.master-aligned-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .master-update-group { display: grid; gap: 6px; }
 .master-update-group-heading { justify-content: space-between; }
@@ -89,6 +112,14 @@
   .master-timeline-track { grid-template-columns: 3em minmax(60px, 1fr); }
   .master-timeline-range { grid-column: 2; }
   .master-preferences { align-items: stretch; flex-direction: column; }
+  .master-threshold { display: flex; flex-wrap: wrap; }
+  .master-threshold label { flex: 1 0 100%; }
+  .master-threshold input { flex: 1 1 auto; width: auto; min-width: 0; }
+  /* The filter table keeps its columns and scrolls inside its labelled region instead of squeezing them. */
+  .master-filter-table { min-width: 1000px; }
+  .master-aligned-rows li { grid-template-columns: minmax(0, 1fr) auto; }
+  .master-aligned-rows li > span:first-child { grid-column: 1 / -1; }
+
   .master-update-actions > button, .master-version-card > button { min-height: 44px; }
 }
 
@@ -96,4 +127,14 @@
 .master-field-changes th, .master-field-changes td { padding: 2px 10px 2px 0; text-align: left; font-variant-numeric: tabular-nums; }
 .master-field-changes thead th { color: #a4adbb; font-weight: 600; }
 .master-field-changes tbody th { color: #c8d2e2; font-weight: 600; }
+/* Keep focused controls clear of the floating scans button when they scroll into view. */
+.master-link :is(input, select, button, [tabindex]) { scroll-margin-top: 88px; }
+/* Single-column grids shrink to the card instead of growing to their widest row. */
+.master-link, .master-alignment, .master-update-review, .master-update-group, .master-update-rows, .master-update-row,
+.master-link-state-notice { grid-template-columns: minmax(0, 1fr); }
+.master-field-changes-scroll { max-width: 100%; overflow-x: auto; }
+.master-field-changes th, .master-field-changes td { white-space: nowrap; }
+@media (max-width: 600px) {
+  .master-field-changes th, .master-field-changes td { padding-right: 6px; }
+}
 .master-confidence-cell { display: inline-flex; align-items: center; gap: 4px; }
