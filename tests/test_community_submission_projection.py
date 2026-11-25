@@ -178,10 +178,9 @@ def test_without_a_link_every_cue_is_new_and_coverage_comes_from_completed_stage
     assert projection.estimates.new_filters == 1
 
 
+# commercial_content and dispensable_scenes are never claimed: no automated stage detects them.
 VIDEO_CATEGORIES = [
-    "commercial_content",
     "discrimination",
-    "dispensable_scenes",
     "drugs",
     "fear",
     "nudity",
@@ -191,7 +190,7 @@ VIDEO_CATEGORIES = [
 
 
 @pytest.mark.parametrize("model", ["nudenet", "shieldstral", "qwen3-vl-8b", None])
-def test_visual_coverage_claims_every_video_category_regardless_of_model(model):
+def test_visual_coverage_claims_every_detectable_video_category_regardless_of_model(model):
     settings = {} if model is None else {"video_model": model}
     coverage, _projection = _coverage(_stage("visual", **settings))
     assert sorted(coverage) == VIDEO_CATEGORIES

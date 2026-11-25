@@ -91,7 +91,8 @@ users and must keep their data.
   negative prior) (D9, D14, D17).
 - Coverage is per channel, not per model: a shared scan covers every audio
   category for the ranges it analyzed audio, and every video category for the
-  ranges it analyzed the picture. A coverage negative counts as a full downvote
+  ranges it analyzed the picture, except `commercial_content` and
+  `dispensable_scenes`, which no automated stage detects. A coverage negative counts as a full downvote
   by default (`coverageNegativeWeight` 1.0, operator-configurable); the owner
   replaced the earlier 0.25 proposal. Local scans count toward nothing unless
   they are shared.

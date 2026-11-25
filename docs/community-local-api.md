@@ -459,7 +459,7 @@ The projection builds the entries as follows:
 | `rejected` row | A `dispute` entry |
 | `verified` or `adjusted` row not covered by a cue | A `support` entry with `origin: "downloaded"` and `locallyVerified: true`, carrying the effective values |
 | Untouched downloaded row | Not shared |
-| Local scan coverage | `coverage`: each completed audio stage covers every audio category, and each completed visual stage every video category, for its analyzed ranges, whichever model ran. Saved reviews send none |
+| Local scan coverage | `coverage`: each completed audio stage covers every audio category, and each completed visual stage every video category except `commercial_content` and `dispensable_scenes`, for its analyzed ranges, whichever model ran. Saved reviews send none |
 
 The response:
 
