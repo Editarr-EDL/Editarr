@@ -302,10 +302,14 @@ adds:
   shortest completed scan of its local versions, or else from probing its media file.
 - Community filters carry no words, so a snapshot `language` mute changes filtered
   subtitles only through a word-level language finding of a completed local audio
-  scan of the review's version that it aligns with (same top-level category,
+  scan of the review's version (a generated scan bound to one of the review's local
+  versions, or unbound and of the review's item and source, as export accepts them)
+  that it aligns with (same top-level category,
   overlapping on the local timeline, as for "Locally verified"); that finding's words
   are then redacted exactly like a scan mute. Other community mutes leave subtitles
-  untouched. `SavedReview.community_subtitles` reports
+  untouched; a mute a scan mute already covers redacts once. Both the subtitle step and
+  the summary clip community filters to the same runtime exports use.
+  `SavedReview.community_subtitles` reports
   `{ "applied": n, "needs_audio_scan": n, "unaligned": n }`.
 - `state` compares the snapshot with the link now: `changed` when the link's active
   filters differ (confidence alone doesn't count), `alignment_required` when the

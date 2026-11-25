@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from scanner.db import SavedReviewRow, ScanFindingRow, ScanMediaVersionRow, ScanRow
@@ -22,6 +22,7 @@ from scanner.models import CommunitySubtitleSummary, McfCategoryFamily
 
 from .review_community_export import exportable
 from .review_community_sources import review_filters, review_version_ids
+from .version_reuse import source_pending_reuse
 
 
 @dataclass(frozen=True)
@@ -30,23 +31,46 @@ class CommunitySubtitleMutes:
     summary: CommunitySubtitleSummary
 
 
+def _accepted_scan_ids(db: Session, review: SavedReviewRow) -> list[str]:
+    """Completed local audio scans of the review's version, as export and "Locally
+    verified" accept them: bound to one of the review's local versions, or unbound and
+    of the review's item and source. Scans awaiting version-reuse alignment are skipped."""
+    versions = review_version_ids(db, review)
+    source = review.media_source_id or ""
+    candidates = db.execute(
+        select(ScanRow, ScanMediaVersionRow.version_id)
+        .outerjoin(ScanMediaVersionRow, ScanMediaVersionRow.scan_id == ScanRow.id)
+        .where(
+            ScanRow.status == "complete",
+            ScanRow.scan_audio.is_(True),
+            ScanRow.origin == "generated",
+            or_(
+                ScanMediaVersionRow.version_id.in_(versions),
+                (ScanRow.media_item_id == review.media_item_id)
+                & (func.coalesce(ScanRow.media_source_id, "") == source),
+            ),
+        )
+    ).all()
+    return [
+        scan.id
+        for scan, version in candidates
+        if not source_pending_reuse(scan)
+        and (
+            version in versions
+            if version is not None
+            else scan.media_item_id == review.media_item_id
+        )
+    ]
+
+
 def _local_words(
     db: Session, review: SavedReviewRow
 ) -> list[tuple[float, float | None, str]] | None:
     """Word-level language findings of the version's completed local audio scans, or None
     when the version has no such scan."""
-    versions = review_version_ids(db, review)
-    bound = select(ScanMediaVersionRow.scan_id).where(ScanMediaVersionRow.version_id.in_(versions))
-    scans = select(ScanRow.id).where(
-        ScanRow.status == "complete",
-        ScanRow.scan_audio.is_(True),
-        ScanRow.origin == "generated",
-        or_(
-            ScanRow.id.in_(bound),
-            (ScanRow.media_item_id == review.media_item_id)
-            & (ScanRow.media_source_id == (review.media_source_id or None)),
-        ),
-    )
+    scans = _accepted_scan_ids(db, review)
+    if not scans:
+        return None
     rows = db.execute(
         select(
             ScanFindingRow.start_seconds, ScanFindingRow.end_seconds, ScanFindingRow.label
@@ -58,7 +82,7 @@ def _local_words(
             ScanFindingRow.end_seconds > ScanFindingRow.start_seconds,
         )
     ).all()
-    return [tuple(row) for row in rows] or None
+    return [tuple(row) for row in rows]
 
 
 def community_subtitle_mutes(

@@ -330,3 +330,18 @@ def community_duration(db: Session, review: SavedReviewRow) -> float | None:
         if (value := version_duration_ms(db, version)) is not None
     ]
     return min(known) / 1000 if known else None
+
+
+def export_runtime(db: Session, review: SavedReviewRow, scans, probe=None) -> float | None:
+    """The runtime exports clip community filters to, in seconds.
+
+    The shortest runtime among the review's scans; for a review without scans, the
+    shortest completed scan of its local versions, else `probe()` (the export probes
+    its media file; readers that must not touch media pass None).
+    """
+    durations = [scan.duration_seconds for scan in scans if scan.duration_seconds is not None]
+    if durations:
+        return min(durations)
+    if scans:
+        return None
+    return community_duration(db, review) or (probe() if probe else None)

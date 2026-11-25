@@ -22,7 +22,7 @@ from scanner.models import (
 
 from . import review_community_export as community_export
 from .repository_mcf_preflight import _signature_value, filter_mcf_value
-from .review_community_sources import community_duration
+from .review_community_sources import export_runtime
 from .review_community_sources import review_filters as community_filters
 from .review_export_target import _review_export_scans
 from .review_policy import (
@@ -67,12 +67,7 @@ def prepare_review_export(
     require_policy_revision(policy, policy_revision, policy_owner_id)
     require_policy_evidence(policy)
     memberships, scans, media = _review_export_scans(db, review)
-    duration = min(
-        (scan.duration_seconds for scan in scans.values() if scan.duration_seconds is not None),
-        default=None,
-    )
-    if duration is None and not scans:
-        duration = community_duration(db, review) or _probed_duration(media)
+    duration = export_runtime(db, review, list(scans.values()), lambda: _probed_duration(media))
     if export_format == ExportFormat.MCF:
         preflight = preflight_saved_review_mcf(db, review_id, prepared=policy)
         if not preflight.eligible:

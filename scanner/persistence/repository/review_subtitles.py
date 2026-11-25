@@ -33,6 +33,7 @@ from scanner.runtime.subtitle_transcript import (
 )
 
 from .repository_paths import resolve_local_path
+from .review_community_sources import export_runtime
 from .review_community_subtitles import community_subtitle_mutes
 from .review_export_target import _review_export_scans
 from .review_policy import prepare_review_policy, require_policy_evidence, require_policy_revision
@@ -123,7 +124,7 @@ def review_subtitle_evidence(
     if review.media_source_id != (target.source.media_source_id or ""):
         raise SubtitleError("subtitle_media_changed", "The selected media version changed")
     _require_unambiguous_name(db, target, media)
-    mutes = tuple(
+    scan_mutes = tuple(
         SubtitleMute(item.start_seconds, item.end_seconds, item.label)
         for item in policy_export_filters(policy, duration_seconds=target.source.duration_seconds)
         if item.selected
@@ -134,7 +135,13 @@ def review_subtitle_evidence(
         and item.end_seconds is not None
         and item.end_seconds > item.start_seconds
         and item.label
-    ) + community_subtitle_mutes(db, review, target.source.duration_seconds).mutes
+    )
+    runtime = export_runtime(
+        db, review, list(scans.values()), lambda: target.source.duration_seconds
+    )
+    community = community_subtitle_mutes(db, review, runtime).mutes
+    # A community mute redacts through a local finding that a scan mute may already use.
+    mutes = tuple(dict.fromkeys(scan_mutes + community))
     return ReviewSubtitleEvidence(
         target.source.media_source_id or "",
         media,
