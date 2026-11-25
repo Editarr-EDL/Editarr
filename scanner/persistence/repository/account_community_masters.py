@@ -24,6 +24,7 @@ from scanner.db import (
 )
 
 from .community_master_links import live_link
+from .review_community_sources import detach_link_sources, move_link_sources
 
 _LINK_CHILDREN = (
     CommunitySyncNotificationRow,
@@ -65,6 +66,7 @@ def delete_master_state(db: Session, user_id: int) -> int:
     so the result does not depend on foreign-key enforcement.
     """
     links = select(CommunityMasterLinkRow.id).where(CommunityMasterLinkRow.owner_id == user_id)
+    detach_link_sources(db, db.scalars(links).all())
     db.execute(
         delete(CommunitySyncNotificationRow).where(CommunitySyncNotificationRow.owner_id == user_id)
     )
@@ -92,10 +94,11 @@ def transfer_master_state(db: Session, user_id: int, destination_id: int) -> int
         db.scalars(select(CommunityMasterLinkRow).where(CommunityMasterLinkRow.owner_id == user_id))
     )
     for link in links:
-        if link.link_state != "replaced" and live_link(
-            db, destination_id, link.media_version_id, link.service_url
+        if link.link_state != "replaced" and (
+            kept := live_link(db, destination_id, link.media_version_id, link.service_url)
         ):
             link.link_state = "replaced"
+            move_link_sources(db, link.id, kept.id)
         link.owner_id = destination_id
         db.flush()
     db.execute(

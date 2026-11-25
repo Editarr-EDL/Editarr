@@ -7,10 +7,10 @@ import { COMMUNITY_MASTERS_CHANGED_EVENT } from "./community-master-events";
 import { MasterLinkCard } from "./master-link-card";
 
 /**
- * Item page section for the current account's community master sets on one local version. Renders
- * nothing until a link exists, so pages without community filters are unchanged.
+ * The current account's community master sets on one local version, as link cards. Renders nothing
+ * without `community.search`; without links it shows `emptyText`, or nothing when that is omitted.
  */
-export function CommunityMasterPanel({ target }: { target: MasterTarget }) {
+export function CommunityMasterPanel({ target, emptyText }: { target: MasterTarget; emptyText?: string }) {
   const maySearch = useCan("community.search");
   const [links, setLinks] = useState<MasterLinkSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -37,10 +37,10 @@ export function CommunityMasterPanel({ target }: { target: MasterTarget }) {
     return () => controller.abort();
   }, [maySearch, itemId, mediaSourceId, attempt]);
 
-  if (!maySearch || (!links.length && !error)) return null;
+  if (!maySearch) return null;
+  if (!links.length && !error) return emptyText ? <p className="muted-copy" role="status">{emptyText}</p> : null;
   const itemTarget = { source: "jellyfin" as const, item_id: itemId, media_source_id: mediaSourceId };
-  return <section className="community-masters" aria-label="Community filters">
-    <h2>Community filters</h2>
+  return <section className="community-masters" aria-label="Community filter sets">
     {error && <p className="form-error" role="alert">{error}{" "}
       <button type="button" className="btn-secondary compact-button" onClick={reload}>Retry</button></p>}
     {links.map((link) => <MasterLinkCard key={link.linkId} summary={link} target={itemTarget} onChanged={reload} />)}

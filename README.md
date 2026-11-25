@@ -30,7 +30,8 @@ plugin—to use during playback. Editarr never modifies your media files.
 - **Several users.** Owner, admin, and user roles. Reviews and exports are
   private to each person, and each account has its own API key.
 - **Community sharing (optional).** Share scans and reviews with the Editarr
-  community and use **Find Filters** to reuse filters others have made.
+  community, and use **Find Filters** in an item's **Community** tab to reuse
+  filters others have made.
 - **API.** Every feature is available through a documented REST API.
 
 ## Requirements

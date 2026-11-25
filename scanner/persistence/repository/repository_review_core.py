@@ -49,6 +49,7 @@ from .repository_rows import (
     _scan_from_row,
     _utc,
 )
+from .review_community_sources import review_sources
 from .review_filter_tracking import label_edits, load_source_findings, with_label_provenance
 from .review_policy import prepare_review_policy
 from .review_policy_display import locked_severities
@@ -104,6 +105,7 @@ def _review_detail(
         ),
         synchronization=_review_synchronization(row.synchronization),
         accepted_credits=_accepted_credits_provenance(row.accepted_credits),
+        community_sources=review_sources(db, row),
     )
     del sources  # held until here so the identity map keeps the batched findings
     return detail

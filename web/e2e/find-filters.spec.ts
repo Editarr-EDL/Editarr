@@ -16,7 +16,7 @@ const existing = { ...scan, id: "existing-local", scan_id: 2, name: "Already lin
 const unchecked = { ...scan, id: "unchecked-local", scan_id: 8, name: "Leave unassociated" };
 
 for (const width of [320, 1440]) {
-  test(`${width}px local discovery, keyboard cancellation, selection and review reuse`, async ({ page }) => {
+  test(`${width}px Recover Scans: local discovery, keyboard cancellation, selection and review reuse`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockApi(page);
     let associated = false;
@@ -54,10 +54,13 @@ for (const width of [320, 1440]) {
     await page.getByRole("button", { name: "Open Example Movie" }).click();
     await page.getByLabel("Media version").selectOption("source-2");
     await chooseWorkflowStep(page, "Scans");
-    const trigger = page.getByRole("button", { name: "Find Filters" });
+    const trigger = page.getByRole("button", { name: "Recover Scans" });
+    await expect(trigger).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Find Filters" })).toHaveCount(0);
+    await page.screenshot({ path: `test-results/recover-scans-enabled-${width}.png`, fullPage: true });
     expect(searches).toEqual([]);
     await trigger.click();
-    let dialog = page.getByRole("dialog", { name: "Found Filters" });
+    let dialog = page.getByRole("dialog", { name: "Recover Scans" });
     const selected = dialog.getByRole("checkbox", { name: new RegExp(`^Associate ${scan.name}`) });
     await expect(selected).toBeFocused();
     await expect(selected).toBeChecked();
@@ -66,29 +69,27 @@ for (const width of [320, 1440]) {
     expect(searches[0]).toMatchObject({ source: "jellyfin", item_id: "movie-1", media_source_id: "source-2",
       duration_seconds: 5700, scene_name: items[0].versions[1].scene_name, release_group: "OTHER" });
     expect(searches[0]).not.toHaveProperty("source_path");
-    await expect(dialog.getByRole("button", { name: "Find community versions" })).toBeEnabled();
-    await page.keyboard.press("Shift+Tab");
-    await expect(dialog.getByRole("button", { name: "Find community versions" })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(selected).toBeFocused();
+    // Recovery is local only: community versions are found from the Community tab.
+    await expect(dialog.getByRole("button", { name: "Find community versions" })).toHaveCount(0);
     await expectNoHorizontalPageOverflow(page);
     await expectNoAccessibilityViolations(page);
     const contentFits = await dialog.locator(".candidate-scan > div").evaluateAll((elements) =>
       elements.every((element) => element.scrollWidth <= element.clientWidth));
     expect(contentFits).toBe(true);
     await page.screenshot({ path: `test-results/css47-found-${width}.png`, fullPage: true });
+    await page.screenshot({ path: `test-results/recover-scans-dialog-${width}.png`, fullPage: true });
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     await expect(trigger).toBeFocused();
     expect(associations).toEqual([]);
     await trigger.click();
-    dialog = page.getByRole("dialog", { name: "Found Filters" });
+    dialog = page.getByRole("dialog", { name: "Recover Scans" });
     await dialog.getByRole("checkbox", { name: /Associate Leave unassociated/ }).uncheck();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(trigger).toBeFocused();
     expect(associations).toEqual([]);
     await trigger.click();
-    dialog = page.getByRole("dialog", { name: "Found Filters" });
+    dialog = page.getByRole("dialog", { name: "Recover Scans" });
     await expect(dialog.getByRole("checkbox", { name: /Associate Leave unassociated/ })).toBeChecked();
     await dialog.getByRole("checkbox", { name: /Associate Leave unassociated/ }).uncheck();
     await dialog.getByRole("button", { name: "Associate Selected" }).click();
@@ -130,13 +131,13 @@ for (const width of [320, 1440]) {
     await page.goto("/#/library/movies");
     await page.getByRole("button", { name: "Open Example Movie" }).click();
     await chooseWorkflowStep(page, "Scans");
-    const trigger = page.getByRole("button", { name: "Find Filters" });
+    const trigger = page.getByRole("button", { name: "Recover Scans" });
     await trigger.click();
     await expect(page.getByRole("status")).toContainText("Local lookup unavailable");
     await expect(trigger).toBeEnabled();
     await trigger.click();
-    const dialog = page.getByRole("dialog", { name: "Found Filters" });
-    await expect(dialog.getByText("No matching filter scans were found.")).toBeVisible();
+    const dialog = page.getByRole("dialog", { name: "Recover Scans" });
+    await expect(dialog.getByText("No local scans match this file.")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Associate Selected" })).toBeDisabled();
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
     await expectNoAccessibilityViolations(page);
@@ -152,5 +153,26 @@ for (const width of [320, 1440]) {
     await dialog.getByRole("button", { name: "Associate Selected" }).click();
     await expect(dialog).toHaveCount(0);
     expect(associationCount).toBe(2);
+  });
+
+  test(`${width}px Recover Scans is disabled and explained when nothing can be recovered`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockApi(page);
+    for (const path of ["**/api/scans/history", "**/api/scans/queue", "**/api/library-items/movie-1/scans"]) {
+      await page.route(path, (route) => json(route, []));
+    }
+    await page.route("**/api/media/audio-tracks?*", (route) => json(route, {
+      file_version: "a".repeat(64), tracks: [], selection: null, selection_stale: false,
+    }));
+    await page.goto("/#/library/movies");
+    await page.getByRole("button", { name: "Open Example Movie" }).click();
+    await chooseWorkflowStep(page, "Scans");
+    const trigger = page.getByRole("button", { name: "Recover Scans" });
+    await expect(trigger).toBeDisabled();
+    await expect(trigger).toHaveAccessibleDescription(/no local scans of this item, its previous versions or other files/);
+    await expect(page.getByText(/no local scans of this item/)).toBeVisible();
+    await expectNoHorizontalPageOverflow(page);
+    await expectNoAccessibilityViolations(page);
+    await page.screenshot({ path: `test-results/recover-scans-disabled-${width}.png`, fullPage: true });
   });
 }

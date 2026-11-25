@@ -13,6 +13,15 @@ describe("preference filtering", () => {
     expect(filterVisible(masterFilter({ lowConfidence: true }), { ...defaults, showLowConfidence: true })).toBe(true);
   });
 
+  it("hides rejected and downvoted rows when asked without changing which rows are active", () => {
+    const hide = { ...defaults, hideRejectedDownvoted: true };
+    const down = masterFilter({ touched: true, myVote: "down" });
+    expect(filterVisible(down, hide)).toBe(false);
+    expect(filterVisible(masterFilter({ touched: true, state: "rejected" }), hide)).toBe(false);
+    expect(filterVisible(down, defaults)).toBe(true);
+    expect(filterActive(down, hide, false)).toBe(filterActive(down, defaults, false));
+  });
+
   it("keeps touched rows regardless of threshold and toggle, and gates activity on alignment and state", () => {
     const touched = masterFilter({ confidence: 0.05, lowConfidence: true, touched: true, state: "verified" });
     expect(filterVisible(touched, { confidenceThreshold: 0.9, showLowConfidence: false })).toBe(true);

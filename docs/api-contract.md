@@ -909,6 +909,13 @@ UTC `imported_at` and have no execution duration; import creation is a separate 
   boundary. Mutations use the current
   review `revision`; content changes also advance `content_revision` and affected format
   revisions. Saves include the complete editable `mcf_document` and `synchronization`.
+- Community filter snapshots: `SavedReview.community_sources` lists the community
+  master-set snapshots a review includes; create and save requests take
+  `community_memberships` (omitted on save keeps them). Results and EDL/MCF exports
+  use only the stored snapshot filters. Including a link or refreshing a snapshot needs
+  `community.search` and evidence-edit permission, and only the review owner may take a
+  snapshot of their own link; see
+  [review membership](community-local-api.md#saved-review-community-filter-snapshots).
 - Manual filters: `new_manual_filters` in saved-review create/save requests stages
   human-authored audio mute and visual skip filters with required MCF classification. The successful transaction creates
   or reuses the target version's Manual evidence scan and returns assigned provenance;

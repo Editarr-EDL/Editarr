@@ -31,7 +31,9 @@ import { legacyExports, normalizedExportStatus, withoutLegacyExport } from "../r
 import { applicationUrl } from "../shared/runtime-urls";
 import { communityReviewScans } from "../review/community-review-scans";
 import { useCan } from "../auth/auth-gate";
-import { useMediaFilterFinding } from "./use-media-filter-finding";
+import { useScanRecovery } from "./use-scan-recovery";
+import { CommunityTab } from "../scans/community-tab";
+import type { ItemRouteStep } from "../routes";
 
 export type Breadcrumb = { label: string; route?: string };
 
@@ -46,7 +48,7 @@ export function LibraryBreadcrumbs({
 }
 
 /** Manage one catalog item, its scan history, versions, and saved reviews. */
-export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDirtyChange, stableIdentity, initialSourceId }: { item: JellyfinMediaItem; breadcrumbs: Breadcrumb[]; onNavigate: (route: string) => void; seasonNumber?: number | null; onDirtyChange: (dirty: boolean) => void; stableIdentity?: EditarrItem; initialSourceId?: string | null }) {
+export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDirtyChange, stableIdentity, initialSourceId, initialStep }: { item: JellyfinMediaItem; breadcrumbs: Breadcrumb[]; onNavigate: (route: string) => void; seasonNumber?: number | null; onDirtyChange: (dirty: boolean) => void; stableIdentity?: EditarrItem; initialSourceId?: string | null; initialStep?: ItemRouteStep }) {
   usePageTitle(item.name);
   const mayScan = useCan("scans.start");
   const mayVerify = useCan("reviews.import.upload");
@@ -107,7 +109,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const scanContext = JSON.stringify([item.id, selectedReviewMediaSourceId]);
   const currentScanContext = useRef(scanContext);
   currentScanContext.current = scanContext;
-  const [scanResult, setScanResult] = useState<{ context: string; scans: Scan[]; error: string | null; linked?: Scan[]; linkedError?: string } | null>(null);
+  const [scanResult, setScanResult] = useState<{ context: string; scans: Scan[]; error: string | null; linked?: Scan[]; linkedError?: string; otherScans?: boolean } | null>(null);
   const scans = scanResult?.context === scanContext ? scanResult.scans : [];
   const linkedScans = scanResult?.context === scanContext ? scanResult.linked || [] : [];
   const linkedError = scanResult?.context === scanContext ? scanResult.linkedError : undefined;
@@ -151,7 +153,10 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
           target.target_item_id === item.id && target.media_source_id === selectedReviewMediaSourceId)
       ));
       if (currentScanContext.current !== scanContext) return IDLE_SCAN_POLL_MS;
-      setScanResult({ context: scanContext, scans: loaded, error: null, ...links });
+      // Completed scans of other files or items are what Recover Scans can match.
+      const loadedIds = new Set(loaded.map((scan) => scan.id));
+      const otherScans = history.some((scan) => scan.status === "complete" && !loadedIds.has(scan.id));
+      setScanResult({ context: scanContext, scans: loaded, error: null, otherScans, ...links });
       return scanPollDelay(loaded);
     }
     catch (error) {
@@ -159,8 +164,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       return IDLE_SCAN_POLL_MS;
     }
   }, [item.id, item.library_id, mayReadHistory, mayReadLinkedScans, mayViewOwnJobs, mayViewOtherJobs, scanContext, selectedReviewMediaSourceId]);
-  const filters = useMediaFilterFinding({ item, sourceId: selectedReviewMediaSourceId, version: selectedReviewVersion,
-    verifyImports: !!stableIdentity, loadScans, onMessage: setMessage });
   const [identified, setIdentified] = useState<{ source: string; id: string } | null>(null);
   const currentVersion = identified?.source === scanContext ? identified.id
     : stableIdentity?.current_versions?.find((version) => version.item_id === item.id
@@ -189,6 +192,11 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const pendingImports = versionScans.filter(isPending);
   const readyScans = versionScans.filter((scan) => !isPending(scan) && !previousIds.has(scan.id));
   const reviewScans = communityReviewScans(readyScans, { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId });
+  const recovery = useScanRecovery({ item, sourceId: selectedReviewMediaSourceId, version: selectedReviewVersion,
+    verifyImports: !!stableIdentity, loadScans, onMessage: setMessage,
+    recoverable: versionScans.length > 0 || pendingImports.length > 0 || linkedScans.length > 0
+      || !!(scanResult?.context === scanContext && scanResult.otherScans)
+      || previousVersions.some((previous) => previous.scans.length > 0) });
   useScanPolling(loadScans, loadScans);
   useEffect(() => {
     if (!mayScan || !showNewScan) return;
@@ -331,9 +339,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       onSourceChange={selectReviewVersion} onManageLegacyExports={mayDeleteLegacy && Object.values(legacyExports(activeExportStatus)).some((status) => status.present)
         ? () => setShowManageExports(true) : undefined} />
     {message && <p className="form-status" role="status">{message}</p>}
-    {filters.masterPanel}
-    {filters.dialog}
-    <SavedReviewPanel item={item} seasonNumber={seasonNumber} mediaSourceId={selectedReviewMediaSourceId} stableVersionId={currentVersion} scans={reviewScans}
+    {recovery.dialog}
+    <SavedReviewPanel initialStep={initialStep} item={item} seasonNumber={seasonNumber} mediaSourceId={selectedReviewMediaSourceId} stableVersionId={currentVersion} scans={reviewScans}
       importedReview={importedReview} exportStatus={activeExportStatus} onExportStatusChange={updateActiveExportStatus}
       onDirtyChange={handleReviewDirtyChange} onSaved={() => void loadScans()}
       onImported={(result) => {
@@ -345,7 +352,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       guided={{
         scanStart: mayScan && <button type="button" className="btn-primary" ref={newScanTriggerRef}
           onClick={() => openNewScan()}>New Scan</button>,
-        findFilters: filters.button,
+        recoverScans: recovery.button,
+        community: <CommunityTab target={{ source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId }} />,
         scanHistory: <>
           {scansError
           ? <div className="load-error" role="alert"><span>{scansError}</span>

@@ -20,7 +20,9 @@ from scanner.models import (
     Severity,
 )
 
+from .community_master_sources import as_findings
 from .repository_mcf_preflight import _signature_value, filter_mcf_value
+from .review_community_sources import review_filters as community_filters
 from .review_export_target import _review_export_scans
 from .review_policy import (
     PreparedReviewPolicy,
@@ -70,14 +72,19 @@ def prepare_review_export(
         preflight = preflight_saved_review_mcf(db, review_id, prepared=policy)
         if not preflight.eligible:
             raise root.IncompleteMcfReview(preflight)
-    content, format_revision = render_review_export(review, policy, export_format, duration)
+    content, format_revision = render_review_export(
+        review, policy, export_format, duration, community_filters(review)
+    )
     return PreparedReviewExport(
         review, policy, tuple(memberships), media, export_format, format_revision, content
     )
 
 
-def render_review_export(review, policy, export_format, duration):
-    """Render prepared live or retained review values through the same format serializers."""
+def render_review_export(review, policy, export_format, duration, community=()):
+    """Render prepared live or retained review values through the same format serializers.
+
+    `community` holds the stored community filter snapshots the review includes.
+    """
     filters = policy_export_filters(policy, duration_seconds=duration)
     if export_format == ExportFormat.MCF:
         document = ReviewMcfDocument.model_validate(review.mcf_document, from_attributes=True)
@@ -106,6 +113,7 @@ def render_review_export(review, policy, export_format, duration):
             for position, review_filter in enumerate(filters)
             if review_filter.selected
         ]
+        entries.extend(_community_mcf_entries(community, len(entries)))
         content = export_mcf_content(document, entries)
         format_revision = review.mcf_content_revision
     else:
@@ -137,6 +145,37 @@ def render_review_export(review, policy, export_format, duration):
                 (value for value in filters if value.selected), 1
             )
         ]
+        findings.extend(
+            finding.model_copy(update={"id": len(findings) + position})
+            for position, finding in enumerate(
+                as_findings(list(community), scan_id="community-master"), 1
+            )
+        )
         content = export_edl_content(findings).encode("utf-8")
         format_revision = review.edl_content_revision
     return content, format_revision
+
+
+def _community_mcf_entries(community, offset: int) -> list[McfCueEntry]:
+    """MCF payloads for community filters whose subcategory belongs to their category."""
+    entries = []
+    for item in community:
+        finding = as_findings([item], scan_id="community-master")[0]
+        if finding.subcategory is None:
+            continue
+        position = offset + len(entries)
+        entries.append(
+            McfCueEntry(
+                cue_index=position,
+                payload_index=0,
+                line_number=position + 1,
+                start_seconds=finding.start_seconds,
+                end_seconds=finding.end_seconds,
+                category=finding.category,
+                subcategory=finding.subcategory,
+                severity=finding.severity,
+                mcf_channel=McfChannel.AUDIO if item.action == "mute" else McfChannel.BOTH,
+                mcf_comment=None,
+            )
+        )
+    return entries

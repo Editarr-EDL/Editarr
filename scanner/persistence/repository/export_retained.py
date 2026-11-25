@@ -6,6 +6,7 @@ from scanner.models import ExportFormat, ReviewFilter, SavedReview, ScanFinding
 from scanner.settings.filter_defaults import enforce_filter_policy
 
 from .repository_mcf_preflight import _mcf_document_issues, _mcf_filter_issues
+from .review_community_sources import snapshot_filters
 from .review_export_content import render_review_export
 from .review_policy import PreparedReviewPolicy, ReviewPolicyConflict, owner_policy
 from .review_policy_evidence import covers_evidence, evidence_interval, snap_evidence
@@ -124,4 +125,5 @@ def prepare_retained_export(db, row, snapshot):
         )
     ):
         raise ReviewPolicyConflict("Retained MCF content is incomplete")
-    return render_review_export(review, prepared, row.format, duration)[0]
+    community = snapshot_filters(snapshot["review"])
+    return render_review_export(review, prepared, row.format, duration, community)[0]

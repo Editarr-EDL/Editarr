@@ -7,7 +7,7 @@ import { emptyExportStatus } from "./export-status";
 import { SavedReviewPanel } from "./review-workspace";
 
 const access = vi.hoisted(() => ({ principal: null as Principal | null }));
-vi.mock("../auth/auth-gate", () => ({ usePrincipal: () => access.principal, useOptionalAuthenticationGate: () => null }));
+vi.mock("../auth/auth-gate", () => ({ usePrincipal: () => access.principal, useOptionalAuthenticationGate: () => null, useCan: () => false }));
 vi.mock("../api/api-service", () => ({ fetchMcfRegistry: vi.fn(async () => ({ families: [] })), applyFilterDefaults: vi.fn() }));
 vi.mock("../scans/sharing-dialog", () => ({ ShareAction: () => null }));
 

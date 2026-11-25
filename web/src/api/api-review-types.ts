@@ -44,6 +44,42 @@ export interface ReviewScanMembership {
   role: ReviewScanRole;
 }
 
+/** One stored community filter on the local timeline, in seconds. */
+export interface ReviewCommunityFilter {
+  filter_id: string;
+  category: string;
+  subcategory: string;
+  severity: string;
+  edit_action: ReviewEditAction;
+  start_seconds: number;
+  end_seconds: number;
+  confidence: number | null;
+}
+
+/** How a stored snapshot compares with its master link's active filters now. */
+export type ReviewCommunitySourceState = "current" | "changed" | "alignment_required" | "link_unavailable";
+
+/** A snapshot of one master link's active filters that the review uses for results and exports. */
+export interface ReviewCommunitySource {
+  source_id: string;
+  link_id: string | null;
+  community_version_id: string;
+  label: string;
+  tier: string | null;
+  match_percent: number | null;
+  master_revision: number;
+  alignment: Record<string, unknown> | null;
+  captured_at: string;
+  state: ReviewCommunitySourceState;
+  link_state: string | null;
+  filters: ReviewCommunityFilter[];
+}
+
+/** Keep a stored snapshot (`source_id`), take a new one from it (`refresh`), or include a link (`link_id`). */
+export type ReviewCommunityMembership =
+  | { source_id: string; refresh?: boolean; link_id?: never }
+  | { link_id: string; source_id?: never; refresh?: never };
+
 export interface ReviewScanReference {
   scan: Scan;
   role: ReviewScanRole;
@@ -127,11 +163,13 @@ export interface SavedReview extends SavedReviewSummary, ReviewPolicyToken {
   mcf_document: ReviewMcfDocument;
   synchronization: ReviewSynchronization;
   accepted_credits: AcceptedCreditsProvenance | null;
+  community_sources?: ReviewCommunitySource[];
 }
 
 export interface ReviewCreate {
   name: string;
   memberships?: ReviewScanMembership[];
+  community_memberships?: ReviewCommunityMembership[];
   filters?: ReviewFilterInput[] | null;
   new_manual_filters?: NewManualReviewFilter[];
   mcf_metadata_seed?: McfMetadataSeedRequest | null;
@@ -167,6 +205,7 @@ export interface ReviewSave extends ReviewPolicyToken {
   synchronization: ReviewSynchronization;
   accepted_credits?: AcceptedCreditsReference | null;
   new_manual_filters?: NewManualReviewFilter[];
+  community_memberships?: ReviewCommunityMembership[];
 }
 
 export interface ReviewRetimeRequest extends ReviewPolicyToken {

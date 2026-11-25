@@ -36,6 +36,7 @@ export const filterName = (filter: { category: string; subcategory?: string | nu
  * Confidence toggle; untouched rows need confidence ≥ threshold and, when Low Confidence, the toggle.
  */
 export function filterVisible(filter: MasterFilter, preferences: MasterPreferences) {
+  if (preferences.hideRejectedDownvoted && (filter.state === "rejected" || filter.myVote === "down")) return false;
   if (filter.touched) return true;
   if (filter.master.lowConfidence && !preferences.showLowConfidence) return false;
   return filter.master.confidence >= preferences.confidenceThreshold;

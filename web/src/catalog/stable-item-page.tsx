@@ -83,6 +83,7 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
   const titleId = route.kind === "title" ? route.titleId : null;
   const itemId = route.itemId || (route.kind === "library" ? route.seriesId : undefined);
   const sourceId = route.kind === "library" ? route.sourceId : undefined;
+  const step = route.step;
   const routeKey = JSON.stringify([titleId, itemId, legacyLibrary, requestedVersion, sourceId]);
   const [state, setState] = useState<{
     routeKey: string; identity?: EditarrItem; exactVersion?: ExplicitVersion | null; failed?: boolean;
@@ -110,18 +111,18 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
         version.item_id === itemId && version.media_source_id === sourceId)?.version_id : undefined;
       if (!titleId && (sourceVersion || !result.choose_version)) {
         const liveItem = result.active_items.length > 1 ? result.active_item?.id : undefined;
-        onReplace(editarrItemRoute(result.title_id, sourceVersion || result.selected_version_id || undefined, liveItem));
+        onReplace(editarrItemRoute(result.title_id, sourceVersion || result.selected_version_id || undefined, liveItem, step));
       }
     }).catch(() => { if (active) setState({ routeKey, failed: true }); });
     return () => { active = false; };
-  }, [titleId, itemId, legacyLibrary, requestedVersion, sourceId, routeKey, onReplace]);
+  }, [titleId, itemId, legacyLibrary, requestedVersion, sourceId, step, routeKey, onReplace]);
 
   if (failed && route.kind === "library" && itemId) {
     const library = libraries.find((entry) => entry.id === legacyLibrary);
     if (library && !route.itemId && route.seriesId) return <SeriesSeasonsPage library={library} seriesId={route.seriesId} />;
     if (library) return <CatalogItemBoundary source="jellyfin" itemId={itemId} onUnavailable={onUnavailable}>
       <MediaDetailPage library={library} itemId={itemId} seasonId={route.seasonId}
-        seriesId={route.seriesId} onNavigate={onNavigate} onDirtyChange={onDirtyChange} />
+        seriesId={route.seriesId} onNavigate={onNavigate} onDirtyChange={onDirtyChange} initialStep={step} />
     </CatalogItemBoundary>;
   }
   if (failed) return <div className="content-page"><p role="alert">This library item is unavailable.</p></div>;
@@ -146,7 +147,7 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
     return <CatalogItemBoundary source="jellyfin" itemId={activeItem.id} onUnavailable={onUnavailable}>
       <MediaDetail key={`${activeItem.id}:${initialSourceId || ""}`} item={activeItem} breadcrumbs={crumbs}
         seasonNumber={activeItem.season_number} onNavigate={onNavigate} onDirtyChange={onDirtyChange}
-        stableIdentity={identity} initialSourceId={initialSourceId} />
+        stableIdentity={identity} initialSourceId={initialSourceId} initialStep={step} />
     </CatalogItemBoundary>;
   }
   return <div className="content-page media-detail">

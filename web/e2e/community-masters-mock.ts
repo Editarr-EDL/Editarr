@@ -3,6 +3,7 @@ import { json } from "./app-fixtures";
 import type {
   FindResult, MasterFilter, MasterLink, MasterPreferences, MasterUpdate, UpdateCounts, UpdateRow,
 } from "../src/api/api-community-master-types";
+import type { ReviewCommunityFilter } from "../src/api/api-review-types";
 import { sharingContextFixture, sharingPreviewFixture } from "../src/scans/sharing-test-fixtures";
 
 const values = (startMs: number, subcategory: string, severity = "high", action = "skip") =>
@@ -52,14 +53,19 @@ export function pendingUpdate(): MasterUpdate {
   } };
 }
 
-export type CommunityMastersMock = { requests: { method: string; path: string; body: unknown }[]; state: { link: MasterLink | null } };
+export type CommunityMastersMock = {
+  requests: { method: string; path: string; body: unknown }[];
+  state: { link: MasterLink | null };
+  /** The linked set's active filters now, in a saved review's snapshot form. */
+  snapshotFilters: () => ReviewCommunityFilter[];
+};
 
 /**
  * Serve every `/api/community/*` route used by master sets, the daily sync and sharing with a small
  * in-memory account state. Register after `mockApi` so these routes take priority.
  */
 export async function mockCommunityMasters(page: Page, options: { linked?: boolean } = {}): Promise<CommunityMastersMock> {
-  let preferences: MasterPreferences = { confidenceThreshold: 0, showLowConfidence: false };
+  let preferences: MasterPreferences = { confidenceThreshold: 0, showLowConfidence: false, hideRejectedDownvoted: false };
   let counts = noUpdate;
   let update = pendingUpdate();
   let notificationsRead = false;
@@ -69,7 +75,10 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     alignmentState: result.alignmentRequired ? "required" : "not_required", alignment: null, alignmentRevision: null,
     pendingUpdate: noUpdate, linkState: "active", mergedInto: null });
   const mock: CommunityMastersMock = { requests: [], state: { link: options.linked ? { ...linkFor(findResults[1]), alignmentState: "approved",
-    alignment: { offsetMs: 0, scale: 1, anchors: 0 }, alignmentRevision: 12 } : null } };
+    alignment: { offsetMs: 0, scale: 1, anchors: 0 }, alignmentRevision: 12 } : null },
+  snapshotFilters: () => filters.filter(active).map((item) => ({ filter_id: item.filterId, category: item.category,
+    subcategory: item.effective.subcategory ?? "", severity: item.effective.severity ?? "", edit_action: item.effective.action as "skip",
+    start_seconds: item.effective.startMs / 1000, end_seconds: item.effective.endMs / 1000, confidence: item.master.confidence })) };
   const filters = [
     filter("f_fight", "violence", 600_000, "punching", 0.8, { state: "verified", touched: true, locallyVerified: true, myVote: "up" }),
     filter("f_lang", "language", 900_000, "profanity", 0.3),
@@ -119,7 +128,8 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     }
     if (path === "masters" && method === "GET") return json(route, { version: 1, links: mock.state.link ? [link()] : [] });
     if (path === "preferences") {
-      if (method === "PATCH") preferences = { confidenceThreshold: body.confidence_threshold, showLowConfidence: body.show_low_confidence };
+      if (method === "PATCH") preferences = { confidenceThreshold: body.confidence_threshold, showLowConfidence: body.show_low_confidence,
+        hideRejectedDownvoted: body.hide_rejected_downvoted };
       return json(route, { version: 1, ...preferences });
     }
     const linkPath = path.match(/^masters\/([^/]+)(?:\/(.*))?$/);
@@ -135,6 +145,17 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
         return json(route, { version: 1, link: link() });
       }
       if (action.endsWith("/vote")) return json(route, { version: 1, state: "completed", result: { accepted: true } });
+      if (action === "active-filters") return json(route, { version: 1, linkId: mock.state.link.linkId, localVersionId: "mv_1",
+        filters: filters.filter(active).map((item) => ({ linkId: mock.state.link!.linkId, filterId: item.filterId, category: item.category,
+          ...item.effective, confidence: item.master.confidence })), edl: "" });
+      const decided = action.match(/^filters\/([^/]+)$/)?.[1];
+      if (decided && method === "PATCH") {
+        const index = filters.findIndex((item) => item.filterId === decided);
+        const states = { verify: "verified", reject: "rejected", reset: "pending" } as const;
+        filters[index] = { ...filters[index], touched: body.decision !== "reset",
+          state: states[body.decision as keyof typeof states] ?? filters[index].state };
+        return json(route, { version: 1, ...filters[index], active: active(filters[index]) });
+      }
       if (action === "check") {
         counts = { new: 1, changed: 2, removed: 1, nowLowConfidence: 0 };
         return json(route, { version: 1, changed: true, latestRevision: 13, pendingUpdate: counts });

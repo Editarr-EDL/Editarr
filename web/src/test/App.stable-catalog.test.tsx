@@ -208,7 +208,7 @@ it("lists associated scans with their original source ID and keeps them pending 
   window.location.hash = "#title/stable-chuck";
   render(<AuthenticationGate><App /></AuthenticationGate>);
   await openWorkflowStep("Scans");
-  fireEvent.click(screen.getByRole("button", { name: "Find Filters" }));
+  fireEvent.click(screen.getByRole("button", { name: "Recover Scans" }));
   fireEvent.click(await screen.findByRole("button", { name: "Associate Selected" }));
   const previous = await screen.findByRole("region", { name: "Previous version scans" });
   expect(within(previous).getByText(/^Linked earlier scan · Scan #7$/)).toBeVisible();

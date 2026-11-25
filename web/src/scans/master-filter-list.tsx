@@ -4,12 +4,14 @@ import type { MasterFilter, MasterPreferences, MasterView } from "../api/api-com
 import { ConfidenceBadge, LocallyVerifiedIcon } from "./community-master-badges";
 import { filterActive, filterName, filterVisible, formatRange, masterErrorText, percent } from "./community-master-format";
 import { MasterVoteButtons } from "./master-vote-buttons";
+import { notifyCommunityFiltersChanged } from "./community-master-events";
 
 const stateLabels: Record<MasterFilter["state"], string> = {
   pending: "From community", verified: "Confirmed", adjusted: "Adjusted", rejected: "Rejected", low_confidence: "Low Confidence",
 };
 
-/** Threshold slider and the "Show Low Confidence filters" toggle (off by default). */
+/** Threshold slider and the "Show Low Confidence filters" and "Hide rejected and downvoted filters"
+ * toggles (both off by default). Hiding only affects which rows the list shows. */
 export function MasterPreferenceControls({ preferences, disabled, onChange }: {
   preferences: MasterPreferences; disabled?: boolean; onChange: (value: MasterPreferences) => void;
 }) {
@@ -25,6 +27,9 @@ export function MasterPreferenceControls({ preferences, disabled, onChange }: {
     <label className="master-toggle"><input type="checkbox" checked={preferences.showLowConfidence} disabled={disabled}
       onChange={(event) => onChange({ ...preferences, showLowConfidence: event.target.checked })} />
       Show Low Confidence filters</label>
+    <label className="master-toggle"><input type="checkbox" checked={!!preferences.hideRejectedDownvoted} disabled={disabled}
+      onChange={(event) => onChange({ ...preferences, hideRejectedDownvoted: event.target.checked })} />
+      Hide rejected and downvoted filters</label>
   </div>;
 }
 
@@ -48,14 +53,17 @@ export function MasterFilterList({ view, preferences, serverActive = false, canV
   const decide = async (filter: MasterFilter, decision: "verify" | "reject" | "reset") => {
     setBusy(filter.filterId);
     setError(null);
-    try { onFilter(await decideMasterFilter(link.linkId, filter.filterId, { decision, expected_state: filter.state })); }
+    try {
+      onFilter(await decideMasterFilter(link.linkId, filter.filterId, { decision, expected_state: filter.state }));
+      notifyCommunityFiltersChanged();
+    }
     catch (reason) { setError(masterErrorText(reason)); }
     finally { setBusy(null); }
   };
 
   return <div className="master-filter-list">
     <p className="muted-copy" role="status">{visible.length} {visible.length === 1 ? "filter" : "filters"} shown
-      {hidden > 0 && ` · ${hidden} hidden by your confidence settings`}</p>
+      {hidden > 0 && ` · ${hidden} hidden by your filter settings`}</p>
     {error && <p className="form-error" role="alert">{error}</p>}
     {visible.length > 0 && <div className="community-results-scroll" role="region" aria-label={`${link.label} filters`} tabIndex={0}>
       <table className="community-results-table master-filter-table">

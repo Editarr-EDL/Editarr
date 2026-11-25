@@ -34,6 +34,7 @@ class ActiveMasterFilter:
     subcategory: str
     severity: str
     action: str
+    confidence: float | None = None
 
     def as_json(self) -> dict:
         return {
@@ -45,6 +46,7 @@ class ActiveMasterFilter:
             "subcategory": self.subcategory,
             "severity": self.severity,
             "action": self.action,
+            "confidence": self.confidence,
         }
 
 
@@ -93,6 +95,7 @@ def link_active_filters(
                 values["subcategory"],
                 values["severity"],
                 values["action"],
+                row.master.get("confidence"),
             )
         )
     return found

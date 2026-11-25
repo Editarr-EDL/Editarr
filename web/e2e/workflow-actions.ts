@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-type WorkflowStep = "Scans" | "Review" | "Subtitles" | "Publish";
+type WorkflowStep = "Community" | "Scans" | "Review" | "Subtitles" | "Publish";
 
 export function workflowStep(page: Page, name: WorkflowStep) {
   return page.getByRole("tablist", { name: "Library item workflow" }).getByRole("tab", { name, exact: true });

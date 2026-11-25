@@ -221,6 +221,7 @@ export function useSavedReviewWorkspace({
           synchronization: draft.synchronization,
           accepted_credits: draft.acceptedCredits,
           new_manual_filters: draft.newManualFilters,
+          community_memberships: draft.communityMemberships,
         })
         : await createSavedReview({ ...reviewTarget, stable_version_id: stableVersionId }, {
           name: draftNameValidation.normalized,
@@ -228,6 +229,7 @@ export function useSavedReviewWorkspace({
           filters: reviewDraftFilters(draft),
           new_manual_filters: draft.newManualFilters,
           mcf_metadata_seed: draft.mcfMetadataSeed,
+          community_memberships: draft.communityMemberships.filter((value) => value.link_id),
         });
       if (!isCurrent()) return;
       setConflict(null);

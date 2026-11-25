@@ -110,6 +110,9 @@ users and must keep their data.
   A "Locally verified" badge marks filters the user confirmed or that overlap
   a local finding (D21).
 - Local adjustments become attestations on the next share (D22).
+- A saved review includes a master set as a snapshot of the link's active
+  filters, taken when it is included or refreshed. Later master-set changes only
+  flag the review as changed until the user refreshes and saves it.
 
 ## Consequences
 

@@ -202,6 +202,8 @@ class CommunityMasterPreferenceRow(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     confidence_threshold = Column(Float, nullable=False, server_default=text("0"))
     show_low_confidence = Column(Boolean, nullable=False, server_default=false())
+    # 0039: hide rejected and downvoted rows from the master filter list only.
+    hide_rejected_downvoted = Column(Boolean, nullable=False, server_default=false())
 
 
 class CommunitySyncStateRow(Base):

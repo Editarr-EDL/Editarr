@@ -22,7 +22,7 @@ export function CommunityUpdatesEntry({ sync, onNavigate }: {
   const unread = sync.status?.unreadCount ?? 0;
 
   const open = (notification: SyncNotification) => {
-    if (!onNavigate(libraryItemRoute(notification.libraryId, notification.itemId, notification.mediaSourceId))) return;
+    if (!onNavigate(libraryItemRoute(notification.libraryId, notification.itemId, notification.mediaSourceId, "community"))) return;
     if (!notification.read) void sync.markRead([notification.notificationId]);
   };
 
@@ -36,7 +36,7 @@ export function CommunityUpdatesEntry({ sync, onNavigate }: {
     {expanded && <div id={listId} className="sidebar-children">
       <ul className="community-updates-list">{notifications.map((notification) => <li key={notification.notificationId}>
         <a className={`sidebar-link nested${notification.read ? "" : " community-update-unread"}`}
-          href={`#/${libraryItemRoute(notification.libraryId, notification.itemId, notification.mediaSourceId)}`}
+          href={`#/${libraryItemRoute(notification.libraryId, notification.itemId, notification.mediaSourceId, "community")}`}
           onClick={(event) => { event.preventDefault(); open(notification); }}>
           <span>{notification.title}</span><small>{kindText[notification.kind]}</small>
         </a>

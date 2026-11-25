@@ -47,6 +47,7 @@ from .repository_review_retime import (
 from .repository_review_retime import (
     retime_saved_review_draft as retime_saved_review_draft,
 )
+from .review_community_sources import copy_sources, prepare_sources
 from .review_filter_tracking import track_manual_edits
 from .review_policy import (
     policy_write,
@@ -187,6 +188,7 @@ def _save_saved_review(
     root._validate_review_mcf_runtime(data.mcf_document, memberships, review=row)
     root._validate_synchronization_document(data.synchronization, data.mcf_document)
     inputs = list(data.filters) + manual_filters
+    community_rows = prepare_sources(db, row, data.community_memberships)
     old_signatures = _revision_signatures(
         row.memberships,
         row.filters,
@@ -214,9 +216,10 @@ def _save_saved_review(
         requested_memberships,
         inputs,
     )
-    content_changed = old_signatures[0] != new_signatures[0]
-    edl_changed = old_signatures[1] != new_signatures[1]
-    mcf_changed = old_signatures[2] != new_signatures[2]
+    community_changed = community_rows is not None
+    content_changed = old_signatures[0] != new_signatures[0] or community_changed
+    edl_changed = old_signatures[1] != new_signatures[1] or community_changed
+    mcf_changed = old_signatures[2] != new_signatures[2] or community_changed
     name_changed = old_name != data.name
     if not content_changed and not name_changed:
         _claim_review_revision(db, row.id, data.revision)
@@ -244,6 +247,8 @@ def _save_saved_review(
     row.mcf_document = root._review_mcf_document_row(row.id, data.mcf_document)
     row.synchronization = root._review_synchronization_row(row.id, data.synchronization)
     row.accepted_credits = accepted_credits
+    if community_rows is not None:
+        row.community_sources = community_rows
     try:
         bind_review_evidence(db, row)
         prepare_review_policy(db, row)
@@ -383,6 +388,7 @@ def duplicate_saved_review(
             accepted_at=accepted.accepted_at,
         )
     copy_review_evidence(db, source, duplicate)
+    copy_sources(source, duplicate)
     prepare_review_policy(db, duplicate)
     db.commit()
     db.refresh(duplicate)

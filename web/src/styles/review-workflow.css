@@ -23,7 +23,7 @@
 .review-workflow { display: grid; gap: 12px; min-width: 0; }
 .review-workflow [hidden] { display: none; }
 .review-workflow > [role="tabpanel"] { min-width: 0; }
-.review-workflow-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.review-workflow-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .review-workflow-tabs > button {
   min-width: 0;
   min-height: 46px;
@@ -43,7 +43,18 @@
 }
 .workflow-release-panel { display: grid; gap: 14px; }
 .workflow-review-picker { max-width: min(100%, 360px); }
-.workflow-scan-actions { margin-block-start: 14px; }
+.workflow-scan-actions { margin-block-start: 14px; align-items: flex-start; }
+.recover-scans-action { display: inline-grid; gap: 4px; max-width: 320px; }
+.community-tab { display: grid; gap: 14px; }
+.community-tab .section-heading { flex-wrap: wrap; gap: 12px; }
+.review-results-with-community { display: grid; gap: 16px; min-width: 0; }
+.review-scan-source.review-community-source { display: grid; justify-items: start; gap: 4px; }
+.review-community-source > label { display: flex; align-items: flex-start; gap: 6px; }
+.review-community-source > label > input { flex: none; width: auto; margin-block-start: 3px; }
+.review-community-source > label > span { min-width: 0; }
+.review-community-changed { color: #f3c969; font-weight: 600; }
+.review-community-table { min-width: 560px; }
+.review-community-table tbody th { font: inherit; font-weight: 600; text-transform: none; letter-spacing: normal; color: inherit; }
 .review-workflow .saved-review-panel { overflow: visible; }
 .review-workflow .saved-review-current-header { flex-wrap: wrap; }
 .review-workflow .review-save-actions { margin: 0; }
@@ -133,6 +144,10 @@
 
 @media (max-width: 1010px) {
   .guided-review-editor { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 420px) {
+  .review-workflow-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {

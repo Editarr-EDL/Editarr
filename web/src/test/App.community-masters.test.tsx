@@ -34,10 +34,10 @@ it("requests the daily sync on load and links updated items to the notified vers
   expect(calls.filter((call) => call.path === "/api/community/sync/run")).toEqual([{ path: "/api/community/sync/run", method: "POST", body: {} }]);
   fireEvent.click(entry);
   const link = screen.getByRole("link", { name: /The Matrix/ });
-  expect(link).toHaveAttribute("href", "#/library/movies/item/movie-1/source/source-1");
+  expect(link).toHaveAttribute("href", "#/library/movies/item/movie-1/source/source-1/community");
   fireEvent.click(link);
-  // The item page resolves the notified media source to its exact Editarr version.
-  await waitFor(() => expect(window.location.hash).toBe("#title/title-1/version/ver-1"));
+  // The item page resolves the notified media source to its exact Editarr version, on its Community tab.
+  await waitFor(() => expect(window.location.hash).toBe("#title/title-1/version/ver-1/community"));
   expect(calls).toContainEqual({ path: "/api/community/sync/notifications/read", method: "POST", body: { notification_ids: ["n1"] } });
 });
 
@@ -62,7 +62,9 @@ it("shows the item page banner, reviews the update and accepts all except edited
     }
     return baseApi(input, init);
   }));
-  render(<AuthenticationGate><MediaDetail item={mediaItem} breadcrumbs={[]} onNavigate={vi.fn()} onDirtyChange={vi.fn()} /></AuthenticationGate>);
+  render(<AuthenticationGate><MediaDetail item={mediaItem} breadcrumbs={[]} onNavigate={vi.fn()} onDirtyChange={vi.fn()}
+    initialStep="community" /></AuthenticationGate>);
+  expect(await screen.findByRole("tab", { name: "Community" })).toHaveAttribute("aria-selected", "true");
   const panel = await screen.findByRole("region", { name: "Community filters" });
   expect(await within(panel).findByText("Community filters updated: 1 new, 2 changed, 0 removed.")).toBeInTheDocument();
   fireEvent.click(within(panel).getByRole("button", { name: "Review" }));

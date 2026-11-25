@@ -5988,7 +5988,7 @@
           "community"
         ],
         "summary": "Save Preferences",
-        "description": "Save either preference; they decide which untouched rows are active.",
+        "description": "Save any preference. The threshold and Low Confidence toggle decide which untouched\nrows are active; hiding rejected and downvoted rows affects only the list.",
         "operationId": "save_preferences_api_community_preferences_patch",
         "requestBody": {
           "content": {
@@ -18533,6 +18533,14 @@
             ],
             "title": "Mcf Metadata Seed"
           },
+          "community_memberships": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunityMembership"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Community Memberships"
+          },
           "media_source_id": {
             "anyOf": [
               {
@@ -20466,6 +20474,17 @@
               }
             ],
             "title": "Show Low Confidence"
+          },
+          "hide_rejected_downvoted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hide Rejected Downvoted"
           }
         },
         "additionalProperties": false,
@@ -21291,6 +21310,215 @@
           "label"
         ],
         "title": "ReviewAudioSource"
+      },
+      "ReviewCommunityFilter": {
+        "properties": {
+          "filter_id": {
+            "type": "string",
+            "title": "Filter Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "subcategory": {
+            "type": "string",
+            "title": "Subcategory"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "edit_action": {
+            "type": "string",
+            "enum": [
+              "mute",
+              "skip"
+            ],
+            "title": "Edit Action"
+          },
+          "start_seconds": {
+            "type": "number",
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "type": "number",
+            "title": "End Seconds"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filter_id",
+          "category",
+          "subcategory",
+          "severity",
+          "edit_action",
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "ReviewCommunityFilter",
+        "description": "One snapshot filter on the local timeline, in seconds."
+      },
+      "ReviewCommunityMembership": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "link_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "refresh": {
+            "type": "boolean",
+            "title": "Refresh",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReviewCommunityMembership",
+        "description": "One included community filter snapshot in a save request.\n\n`{source_id}` keeps a stored snapshot, `{source_id, refresh: true}` takes a new\nsnapshot from the same link, and `{link_id}` includes a link with a new snapshot.\nSaved snapshots that a request leaves out are removed."
+      },
+      "ReviewCommunitySource": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "link_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "community_version_id": {
+            "type": "string",
+            "title": "Community Version Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "match_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Percent"
+          },
+          "master_revision": {
+            "type": "integer",
+            "title": "Master Revision"
+          },
+          "alignment": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment"
+          },
+          "captured_at": {
+            "type": "string",
+            "title": "Captured At"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "current",
+              "changed",
+              "alignment_required",
+              "link_unavailable"
+            ],
+            "title": "State"
+          },
+          "link_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link State"
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunityFilter"
+            },
+            "type": "array",
+            "title": "Filters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "link_id",
+          "community_version_id",
+          "label",
+          "master_revision",
+          "captured_at",
+          "state"
+        ],
+        "title": "ReviewCommunitySource",
+        "description": "A stored community filter snapshot and how it compares with its link now.\n\n`state` is `current` (the link's active filters still equal the snapshot),\n`changed` (they differ; a refresh would update the snapshot), `alignment_required`\n(the link awaits alignment, so it can't be refreshed) or `link_unavailable` (the\nlink was deleted, replaced or belongs to another account). The review always uses\n`filters`, whatever the state."
       },
       "ReviewDeletionChoice": {
         "properties": {
@@ -22610,6 +22838,21 @@
             },
             "type": "array",
             "title": "New Manual Filters"
+          },
+          "community_memberships": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ReviewCommunityMembership"
+                },
+                "type": "array",
+                "maxItems": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Memberships"
           }
         },
         "additionalProperties": false,
@@ -23093,6 +23336,13 @@
                 "type": "null"
               }
             ]
+          },
+          "community_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunitySource"
+            },
+            "type": "array",
+            "title": "Community Sources"
           }
         },
         "type": "object",

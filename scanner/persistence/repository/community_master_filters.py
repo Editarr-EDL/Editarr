@@ -91,11 +91,15 @@ def effective_values(row: CommunityMasterFilterRow, alignment: Mapping | None) -
 
 
 def get_preferences(db: Session, owner_id: int) -> Preferences:
-    """The account's preferences, or the defaults (0.0, False)."""
+    """The account's preferences, or the defaults (0.0, False, False)."""
     row = db.get(CommunityMasterPreferenceRow, owner_id)
     if row is None:
         return Preferences()
-    return Preferences(row.confidence_threshold, bool(row.show_low_confidence))
+    return Preferences(
+        row.confidence_threshold,
+        bool(row.show_low_confidence),
+        bool(row.hide_rejected_downvoted),
+    )
 
 
 def set_preferences(
@@ -104,20 +108,26 @@ def set_preferences(
     *,
     confidence_threshold: float | None = None,
     show_low_confidence: bool | None = None,
+    hide_rejected_downvoted: bool | None = None,
 ) -> Preferences:
-    """Update either preference; the threshold must be within 0..1."""
+    """Update any preference left non-None; the threshold must be within 0..1."""
     if confidence_threshold is not None and not 0.0 <= confidence_threshold <= 1.0:
         raise ValueError("confidence_threshold must be between 0 and 1")
     row = db.get(CommunityMasterPreferenceRow, owner_id)
     if row is None:
         row = CommunityMasterPreferenceRow(
-            owner_id=owner_id, confidence_threshold=0.0, show_low_confidence=False
+            owner_id=owner_id,
+            confidence_threshold=0.0,
+            show_low_confidence=False,
+            hide_rejected_downvoted=False,
         )
         db.add(row)
     if confidence_threshold is not None:
         row.confidence_threshold = float(confidence_threshold)
     if show_low_confidence is not None:
         row.show_low_confidence = bool(show_low_confidence)
+    if hide_rejected_downvoted is not None:
+        row.hide_rejected_downvoted = bool(hide_rejected_downvoted)
     db.flush()
     return get_preferences(db, owner_id)
 

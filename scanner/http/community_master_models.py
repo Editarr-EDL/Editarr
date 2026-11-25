@@ -106,6 +106,7 @@ class PreferencesRequest(_Body):
 
     confidence_threshold: Unit | None = None
     show_low_confidence: StrictBool | None = None
+    hide_rejected_downvoted: StrictBool | None = None
 
 
 class VoteRequest(_Body):

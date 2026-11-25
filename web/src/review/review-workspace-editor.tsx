@@ -10,6 +10,8 @@ import { scanLabel } from "../shared/display";
 import { ReviewScanInfo, reviewScanName } from "./review-scan-source";
 import { ShareAction } from "../scans/sharing-dialog";
 import { useReviewAccountLabel } from "./review-access";
+import { ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
+import { useReviewCommunity } from "./use-review-community";
 import {
   isReviewDraftDirty, isReviewDraftContentDirty, updateReviewFilter,
   deleteReviewFilter, discardReviewDraft, stageManualReviewFilter,
@@ -24,6 +26,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
   const accountLabel = useReviewAccountLabel(workspace.selected);
   const me = usePrincipal()?.userId ?? null;
   const [dialog, setDialog] = useState<"export" | "delete" | null>(null);
+  const community = useReviewCommunity(workspace);
   const {
     scans, selected, draft, busy, preview, editingReviewName, reviewNameBeforeEdit,
     showManualFilter, preflightFocusFilterId, draftNameValidation,
@@ -72,6 +75,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
     />;
+  const results = <div className="review-results-with-community">{overview}<ReviewCommunityResults entries={community.entries} /></div>;
   const memberships = <div className="saved-review-memberships">
         <strong>Included scans</strong>
         {availableScans.map((scan) => {
@@ -86,6 +90,8 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
             <ReviewScanInfo scans={[scan]} />
           </span>;
         })}
+        <ReviewCommunityEntries entries={community.entries} draft={draft} maySearch={community.maySearch}
+          disabled={busy || !access.field("evidence")} onChange={setDraft} />
       </div>;
   const roles = hasCombinedMembership && <div className="saved-review-membership-roles">
       <strong>Combined scan roles</strong>
@@ -186,7 +192,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       {guided && saveControls}
     </div>
     {selected && <p className="muted-copy">Current owner: {accountLabel(selected.owner_id)}. Historical author: {accountLabel(selected.original_author_id)}. Policy source: {selected.policy_owner_id === selected.owner_id ? "current review owner" : accountLabel(selected.policy_owner_id)}, revision {selected.policy_revision}.</p>}
-    {guided ? <div className="guided-review-editor">{evidence}{overview}</div> : overview}
+    {guided ? <div className="guided-review-editor">{evidence}{results}</div> : results}
     <div className="saved-review-editor">
       {editingReviewName && draft.name && draftNameValidation?.error && <span className="form-error" role="alert">
         {draftNameValidation.error}

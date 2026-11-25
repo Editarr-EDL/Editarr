@@ -19,6 +19,8 @@ MASTER_TABLES = (
     "community_master_preferences",
     "community_sync_state",
     "community_sync_notifications",
+    # 0039: saved reviews' community master links.
+    "review_community_sources",
 )
 RETIRED_TABLES = {
     "retired_community_imports": "community_imports",
