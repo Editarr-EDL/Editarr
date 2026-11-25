@@ -123,10 +123,16 @@
 .saved-review-filter-results > .finding-group + .finding-group { margin-block-start: 16px; }
 .review-filter-actions { padding-block-start: 9px; border-block-start: 1px solid #303641; }
 
-@media (max-width: 1010px) {
-  }
+/* With the sidebar beside it the tab row is narrow, so the five labels shrink to fit on one line. */
+@media (min-width: 561px) and (max-width: 900px) {
+  .review-workflow-tabs { gap: 6px; }
+  .review-workflow-tabs > button { padding-inline: 4px; font-size: 14px; }
+}
+@media (min-width: 761px) and (max-width: 800px) {
+  .review-workflow-tabs > button { font-size: 13px; }
+}
 
-@media (max-width: 420px) {
+@media (max-width: 460px) {
   .review-workflow-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 

@@ -3,11 +3,14 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 const popupGap = 6;
 const viewportInset = 8;
 
-/** The trigger's nearest scrolling ancestor, whose visible bounds it must stay in for its popup to stay open. */
-function scrollingAncestor(element: Element): Element | null {
+/**
+ * The trigger's nearest user-scrollable ancestor, whose visible bounds it must stay in for its popup to stay open.
+ * Ancestors that only clip (`hidden`, `clip`) are skipped, so a rounded wrapper can't hide the list that scrolls.
+ */
+export function scrollingAncestor(element: Element): Element | null {
   for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
     const { overflowX, overflowY } = getComputedStyle(node);
-    if (/(auto|scroll|hidden)/.test(`${overflowX} ${overflowY}`)) return node;
+    if (/(auto|scroll)/.test(`${overflowX} ${overflowY}`)) return node;
   }
   return null;
 }

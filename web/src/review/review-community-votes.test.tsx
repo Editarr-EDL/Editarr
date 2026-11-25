@@ -72,7 +72,7 @@ it("shows each community row's vote, leaves scan rows without one and follows me
   expect(pillIn("Fight f_none")).toHaveAccessibleName("Your vote: none. Change vote for Fight f_none at 1:40");
   expect(pillIn("Fight f_old")).toHaveAttribute("data-vote", "down");
   expect(pillIn("Scan fight")).toBeNull();
-  expect(within(row("Scan fight")).getByRole("button", { name: "Preview filter row-scan" })).toBeInTheDocument();
+  expect(within(row("Scan fight")).getByRole("button", { name: "Preview Scan fight at 5:00" })).toBeInTheDocument();
 
   // A row still keyed by an ID its served filter merged votes on that served filter, immediately.
   fireEvent.click(pillIn("Fight f_old")!);

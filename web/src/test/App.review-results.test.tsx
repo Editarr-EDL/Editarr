@@ -332,11 +332,11 @@ describe("production saved-review UI authority", () => {
     expect(await screen.findByText("1/2 results")).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("1 selection, 0 severity, and 0 channel changes");
 
-    const previewButton = screen.getByRole("button", { name: "Preview filter visual-1" });
+    const previewButton = screen.getByRole("button", { name: "Preview Fight in hallway at 0:10" });
     expect(previewButton).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(previewButton).toBeEnabled();
-    fireEvent.click(await findFilterAction("Edit filter visual-1"));
+    fireEvent.click(await findFilterAction("Edit Fight in hallway at 0:10"));
     fireEvent.change(screen.getByLabelText("Filter visual-1 start seconds"), { target: { value: "10.5" } });
     expect(previewButton).toBeEnabled();
   });

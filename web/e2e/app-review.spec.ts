@@ -30,7 +30,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   const openFirstReviewFilterEditor = async () => {
     if (await panel.getByLabel(/Filter .* label/).count()) return;
     await expandReviewFilterGroups();
-    await chooseFilterAction(page, panel, /^Edit filter /);
+    await chooseFilterAction(page, panel, /^Edit /);
   };
   const version = page.getByLabel("Media version");
   await expect(version).toHaveValue("source-1");

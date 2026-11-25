@@ -79,7 +79,7 @@ for (const width of [320, 1440]) {
     await menu.getByRole("menuitemradio", { name: "Thumbs down" }).click();
     await expect(vote("20:00")).toHaveAttribute("data-vote", "down");
     // Preview and the vote sit side by side, and action labels never break mid-word.
-    const preview = row(page, "20:00").getByRole("button", { name: /^Preview filter/ });
+    const preview = row(page, "20:00").getByRole("button", { name: /^Preview / });
     const [previewBox, voteBox] = [await preview.boundingBox(), await vote("20:00").boundingBox()];
     expect(Math.abs(previewBox!.y + previewBox!.height / 2 - (voteBox!.y + voteBox!.height / 2))).toBeLessThan(4);
     expect(voteBox!.x).toBeGreaterThan(previewBox!.x + previewBox!.width);
@@ -94,8 +94,8 @@ for (const width of [320, 1440]) {
     await more.focus();
     await page.keyboard.press("Enter");
     const rowMenu = page.getByRole("menu", { name: /^More actions for .* at 20:00$/ });
-    await expect(rowMenu.getByRole("menuitem", { name: /^Edit filter/ })).toBeFocused();
-    await expect(rowMenu.getByRole("menuitem", { name: /^Delete filter/ })).toBeEnabled();
+    await expect(rowMenu.getByRole("menuitem", { name: /^Edit / })).toBeFocused();
+    await expect(rowMenu.getByRole("menuitem", { name: /^Delete / })).toBeEnabled();
     await expectNoAccessibilityViolations(page);
     await page.keyboard.press("Escape");
     await expect(rowMenu).toHaveCount(0);
@@ -115,7 +115,7 @@ for (const width of [320, 1440]) {
 
     // Disable one and adjust another exactly like a scan filter.
     await row(page, "10:00").getByRole("checkbox").uncheck();
-    await chooseFilterAction(page, row(page, "15:00"), /^Edit filter/);
+    await chooseFilterAction(page, row(page, "15:00"), /^Edit /);
     await page.getByRole("spinbutton", { name: /start seconds/ }).fill("905");
     await page.getByRole("button", { name: "Done" }).click();
     await page.getByRole("button", { name: "Save Changes" }).click();

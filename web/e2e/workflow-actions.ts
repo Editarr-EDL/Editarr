@@ -30,7 +30,7 @@ export async function setReviewSource(page: Page, name: string, included = true)
   await sources.getByRole("button", { name: "Done" }).click();
 }
 
-/** Choose an action (e.g. /^Edit filter/) from the "⋯" menu of the first filter row in `scope` offering it. */
+/** Choose an action (e.g. /^Edit /) from the "⋯" menu of the first filter row in `scope` offering it. */
 export async function chooseFilterAction(page: Page, scope: Locator, name: string | RegExp) {
   const menus = scope.getByRole("button", { name: /^More actions for / });
   for (let index = 0; index < await menus.count(); index += 1) {

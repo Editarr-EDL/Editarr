@@ -88,8 +88,8 @@ it("renders server-decided selection and severity locks without disabling permit
     onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
   fireEvent.click(await screen.findByRole("button", { name: "More actions for Fight at 0:01" }));
   const menu = screen.getByRole("menu", { name: "More actions for Fight at 0:01" });
-  expect(within(menu).getByRole("menuitem", { name: "Edit filter required" })).toBeEnabled();
-  expect(within(menu).getByRole("menuitem", { name: "Delete filter required" })).toBeDisabled();
+  expect(within(menu).getByRole("menuitem", { name: "Edit Fight at 0:01" })).toBeEnabled();
+  expect(within(menu).getByRole("menuitem", { name: "Delete Fight at 0:01" })).toBeDisabled();
   fireEvent.keyDown(menu, { key: "Escape" });
   expect(screen.getByRole("checkbox", { name: /Selected.*required by instance policy/ })).toBeDisabled();
   expect(await screen.findByRole("radio", { name: "High" })).toBeChecked();
@@ -263,5 +263,5 @@ it("lists community filters as normal results with their community source", asyn
   fireEvent.click(within(table).getByRole("checkbox", { name: /at 0:30/ }));
   expect(onToggleFilters).toHaveBeenCalledWith(["row-c2"], true);
   fireEvent.click(within(table).getByRole("button", { name: "More actions for punching at 0:10" }));
-  expect(screen.getByRole("menuitem", { name: "Edit filter row-c1" })).toBeEnabled();
+  expect(screen.getByRole("menuitem", { name: "Edit punching at 0:10" })).toBeEnabled();
 });

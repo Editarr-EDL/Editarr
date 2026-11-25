@@ -40,7 +40,7 @@
   border-top: 1px solid #303641; color: #8f9bb0; font-size: 12px; }
 
 /* Filter rows. */
-.review-filter-table-wrap { border: 1px solid #303641; border-radius: 10px; overflow: hidden; }
+.review-filter-table-wrap { border: 1px solid #303641; border-radius: 10px; overflow: clip; }
 .review-filter-table { width: 100%; border-collapse: collapse; color: #dce3ee; font-size: 13px; }
 .review-filter-table :is(th, td) { border-bottom: 0; }
 .review-filter-table tbody > tr { border-top: 1px solid #262b35; }
@@ -51,7 +51,9 @@
 .review-filter-table thead .review-filter-actions-cell { text-align: right; }
 /* Filters not in use read muted; colors, not opacity, keep the text legible. */
 .review-filter-row.is-off .review-filter-line { color: #a4adbb; }
-.review-filter-row.is-off .review-chip { background: #252a33; }
+.review-filter-row.is-off :is(.review-chip, .review-filter-meta .master-badge, .review-filter-meta .master-confidence-compact) {
+  border-color: transparent; color: #a4adbb; background: #252a33; }
+.review-filter-row.is-off .review-filter-meta { color: #949eae; }
 .review-filter-main { display: grid; gap: 3px; min-width: 0; overflow-wrap: break-word; }
 .review-filter-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .review-filter-time { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
@@ -106,6 +108,8 @@
 
 /* The phone layout starts below 900px: the app sidebar leaves the Filters card too narrow for three columns. */
 @media (max-width: 900px) {
+  /* Stacked rows are tall, so the page scrolls them rather than a nested list. */
+  .saved-review-filter-results { max-height: none; overflow-y: visible; }
   .review-sources { position: static; }
   .review-sources-popover { right: 0; width: auto; }
   .review-filter-table, .review-filter-table tbody { display: block; }
@@ -125,6 +129,13 @@
 @media (max-width: 640px) {
   .saved-review-table :is(th, td) { padding-inline: 8px; }
   .saved-review-table :is(th, td):nth-child(2) { width: 6.5em; white-space: normal; }
+}
+@media (max-width: 360px) {
+  .saved-review-table :is(th, td) { padding-inline: 6px; font-size: 12px; }
+  .saved-review-table th { font-size: 10px; letter-spacing: 0; }
+  .saved-review-table :is(th, td):nth-child(2) { width: 5.5em; }
+  .saved-review-table :is(th, td):nth-child(3) { width: auto; }
+  .saved-review-table td:nth-child(3) :is(span, strong) { white-space: normal; }
 }
 
 /* Narrower than the phone layout's design width: actions use the row's full width, wrapping only if still too tight. */

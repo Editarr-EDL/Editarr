@@ -101,13 +101,13 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
           : <video aria-label={`Video preview for ${rowName} at ${time}`} controls src={preview.url}>Your browser does not support video previews.</video>)}
       </td>
       <td className="review-filter-actions-cell">{result.filters.map((filter) => <div className="review-filter-row-actions" key={filter.id}>
-        <button type="button" className="btn-secondary compact-button" aria-label={`Preview filter ${filter.id}`}
+        <button type="button" className="btn-secondary compact-button" aria-label={`Preview ${filterName(filter)}`}
           onClick={() => onPreviewFilter(filter)} disabled={busy || previewDisabled}><span aria-hidden="true">▶ </span>Preview</button>
         {renderFilterVote && isCommunityFilter(filter) && renderFilterVote(filter, filterName(filter))}
         <MoreMenu label={`More actions for ${filterName(filter)}`} items={[
-          { key: "edit", label: "Edit", accessibleName: `Edit filter ${filter.id}`,
+          { key: "edit", label: "Edit", accessibleName: `Edit ${filterName(filter)}`,
             disabled: busy, onSelect: () => setEditingFilterId(() => filter.id) },
-          { key: "delete", label: "Delete", accessibleName: `Delete filter ${filter.id}`, danger: true,
+          { key: "delete", label: "Delete", accessibleName: `Delete ${filterName(filter)}`, danger: true,
             disabled: busy || !cuesEditable || requiredIds.has(filter.id),
             onSelect: () => { setEditingFilterId((current) => current === filter.id ? null : current); onDeleteFilter(filter.id); } },
         ]} />

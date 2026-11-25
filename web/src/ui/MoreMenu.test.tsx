@@ -72,3 +72,17 @@ it("closes on Tab and on a press outside, letting another control keep focus", (
   expect(screen.queryByRole("menu")).toBeNull();
   expect(trigger()).toHaveFocus();
 });
+
+it("closes with Escape when every action is unavailable", () => {
+  render(<MoreMenu label={label} items={[{ key: "delete", label: "Delete", disabled: true, onSelect: vi.fn() }]} />);
+  fireEvent.click(trigger());
+  const menu = screen.getByRole("menu", { name: label });
+  expect(menu).toHaveFocus();
+  fireEvent.keyDown(menu, { key: "Escape" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(trigger()).toHaveFocus();
+  fireEvent.click(trigger());
+  trigger().focus();
+  fireEvent.keyDown(trigger(), { key: "Escape" });
+  expect(screen.queryByRole("menu")).toBeNull();
+});

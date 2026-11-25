@@ -41,8 +41,9 @@ export function MoreMenu({ label, items, disabled = false }: { label: string; it
       if (!target.closest?.("button, a, input, select, textarea, [tabindex]")) trigger.current?.focus();
     },
   });
+  // With every item unavailable the menu itself takes focus, so Escape and Tab still close it.
   useLayoutEffect(() => {
-    if (open) enabledItems()[0]?.focus({ preventScroll: true });
+    if (open) (enabledItems()[0] ?? menu.current)?.focus({ preventScroll: true });
   }, [open]);
 
   const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -61,10 +62,11 @@ export function MoreMenu({ label, items, disabled = false }: { label: string; it
       onClick={() => setOpen(!open)}
       onKeyDown={(event) => {
         if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !open) { event.preventDefault(); setOpen(true); }
+        else if (event.key === "Escape" && open) { event.preventDefault(); close(); }
       }}>
       <span aria-hidden="true">⋯</span>
     </button>
-    {open && createPortal(<div ref={menu} id={menuId} className="more-menu" role="menu" aria-label={label} onKeyDown={onMenuKeyDown}>
+    {open && createPortal(<div ref={menu} id={menuId} className="more-menu" role="menu" aria-label={label} tabIndex={-1} onKeyDown={onMenuKeyDown}>
       {items.map((item) => <button key={item.key} type="button" role="menuitem" tabIndex={-1}
         className={item.danger ? "more-menu-danger" : undefined} disabled={item.disabled}
         aria-label={item.accessibleName} onClick={() => { close(); item.onSelect(); }}>{item.label}</button>)}

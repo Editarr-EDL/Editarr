@@ -30,7 +30,7 @@ export async function openReviewSources() {
 }
 
 /**
- * Open the "⋯" menu of the filter row holding a menu item (e.g. "Edit filter audio-filter") and return the
+ * Open the "⋯" menu of the filter row holding a menu item (e.g. "Edit Fight at 0:20") and return the
  * item, leaving its menu open; null when no row in `scope` has it.
  */
 export function queryFilterAction(name: string | RegExp, scope: HTMLElement = document.body): HTMLElement | null {
