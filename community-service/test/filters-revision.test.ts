@@ -49,5 +49,7 @@ describe('MASTER_POLICY parsing (§8.1)', () => {
     expect(() => parseMasterPolicy({ ...DEFAULT_MASTER_POLICY, severityWeights: { low: 1, medium: 1 } })).toThrow();
     expect(() => parseMasterPolicy({ ...DEFAULT_MASTER_POLICY, alignmentMaxScaleDeviation: 0.2 })).toThrow();
     expect(() => parseMasterPolicy({ ...DEFAULT_MASTER_POLICY, maxServedFilters: '4000' })).toThrow();
+    expect(parseMasterPolicy({ ...DEFAULT_MASTER_POLICY, maxServedFilters: 4000 }).maxServedFilters).toBe(4000);
+    expect(() => parseMasterPolicy({ ...DEFAULT_MASTER_POLICY, maxServedFilters: 4001 })).toThrow();
   });
 });

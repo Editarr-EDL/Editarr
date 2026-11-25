@@ -74,7 +74,8 @@ export const masterPolicySchema = z.strictObject({
   alignmentMinAnchors: count(2, 2000),
   alignmentMinDriftSpanMs: count(0, 86_400_000),
   alignmentMaxScaleDeviation: z.number().finite().min(0).max(0.1),
-  maxServedFilters: count(1, 100_000),
+  // Clients reject snapshots with more than 4,000 filters (§8).
+  maxServedFilters: count(1, 4000),
   syncRunsPerDay: count(1, 1_000_000),
   syncMaxBatchesPerRun: count(1, 1_000_000),
   syncRunWindowSeconds: count(1, 86_400),

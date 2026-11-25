@@ -88,6 +88,34 @@ describe('POST /v1/filters/{filterId}/votes', () => {
       body: { error: { code: 'vote_ineligible', reason: 'self_vote' } } });
   });
 
+  it('replaces a vote left on a filter ID that was merged into the voted filter', async () => {
+    const frank = await contributor();
+    const { receiptId: frankReceipt } = await download(frank, versionId);
+    const merged = 'f_merged_voted';
+    const counts = async () => (await db.prepare(`SELECT upvotes, downvotes FROM master_filters WHERE filter_id = ?`)
+      .bind(filterId).first<{ upvotes: number; downvotes: number }>())!;
+    // Frank voted on `merged` before the service merged it into `filterId`.
+    await db.batch([
+      db.prepare(`INSERT INTO filter_registry (filter_id, version_id, created_seq, state, merged_into, quarantined)
+        VALUES (?, ?, 92, 'retired', ?, 0)`).bind(merged, versionId, filterId),
+      db.prepare(`INSERT INTO filter_votes (filter_id, contributor_id, vote, receipt_id, excluded, updated_at)
+        VALUES (?, ?, 'up', ?, 0, ?)`).bind(merged, frank.contributorId, frankReceipt, now),
+    ]);
+    const before = await counts();
+    await recomputeVersion(db, versionId, { service: serviceOrigin, policy, now });
+    expect((await counts()).upvotes).toBe(before.upvotes + 1);
+    expect((await vote(frank, filterId, { version: 1, vote: 'none', receiptId: frankReceipt })).status).toBe(200);
+    expect(await counts()).toEqual(before);
+    const rows = () => db.prepare('SELECT filter_id AS filterId, vote FROM filter_votes WHERE contributor_id = ?')
+      .bind(frank.contributorId).all();
+    expect((await rows()).results).toEqual([]);
+    await db.prepare(`INSERT INTO filter_votes (filter_id, contributor_id, vote, receipt_id, excluded, updated_at)
+      VALUES (?, ?, 'up', ?, 0, ?)`).bind(merged, frank.contributorId, frankReceipt, now).run();
+    expect((await vote(frank, filterId, { version: 1, vote: 'down', receiptId: frankReceipt })).status).toBe(200);
+    expect(await counts()).toEqual({ upvotes: before.upvotes, downvotes: before.downvotes + 1 });
+    expect((await rows()).results).toEqual([{ filterId, vote: 'down' }]);
+  });
+
   it('limits votes per contributor per hour and requires a vote- operation key', async () => {
     const hal = await contributor();
     const { receiptId: halReceipt } = await download(hal, versionId);

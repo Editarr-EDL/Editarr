@@ -502,9 +502,17 @@ The web app calls this on page load. The request is `{}`.
   links in batches of 500 under one `runId`. A link whose local version the
   account can no longer reach (media access, §1) is skipped: it isn't sent to
   the service and gets no notification.
-  1. For each changed version, it downloads the new snapshot.
-  2. It builds the update rows (§9).
-  3. It records a notification.
+  1. It records each changed version's newer revision on its link as a
+     pending download, after all revision batches.
+  2. It downloads the pending snapshots, builds the update rows (§9) and
+     records a `changed` notification for each link once its snapshot is
+     stored.
+  3. `GET …/master` is limited per contributor and hour
+     (`versionChecksPerHour`). When a download fails (for example
+     `429 rate_limited`), the run still succeeds and the remaining downloads
+     stay pending. Later calls to this route (page loads) download them once
+     the service's `Retry-After`, or one hour, has passed. This doesn't start
+     a new run or use the daily sync allowance.
 
 A merged or unavailable version also gets a notification. Its link is
 marked `merged` (with `mergedInto`) or `unavailable`.
@@ -517,12 +525,14 @@ failed run returns its error and is due again after the service's
 
 ```json
 { "version": 1, "ran": false, "state": "idle"|"running"|"failed", "lastRunAt": 1795553648,
-  "nextDueAt": 1795640048, "lastError": null, "unreadCount": 2,
+  "nextDueAt": 1795640048, "lastError": null, "unreadCount": 2, "pendingDownloads": 0,
   "notifications": [ { "notificationId": "…", "linkId": "…", "libraryId": "movies", "itemId": "abc", "mediaSourceId": null,
     "title": "The Matrix", "kind": "changed"|"merged"|"unavailable", "fromRevision": 12, "toRevision": 13,
     "createdAt": 1795553648, "read": false } ] }
 ```
 
+- `pendingDownloads` counts active links whose newer revision the sync found
+  but hasn't downloaded yet.
 - At most 100 notifications are returned, newest first. `GET` works before
   enrollment once the service is configured.
 - Times are Unix seconds. `fromRevision` and `toRevision` are null when not
@@ -684,13 +694,13 @@ the upgrade.
 
 | Table | Columns (PK **bold**) | Keys and constraints |
 | --- | --- | --- |
-| `community_master_links` | **id** (uuid), owner_id → users, media_version_id → media_versions, service_url, contributor_id, community_version_id, community_work_id, label, alias_id, version_status, tier, match_percent, applied_revision, latest_revision, alignment_state (`not_required`\|`required`\|`approved`), alignment_json, alignment_revision, link_state (`active`\|`merged`\|`unavailable`\|`replaced`), merged_into, created_at, updated_at | Unique on `(owner_id, media_version_id, service_url)` where `link_state != 'replaced'`. Index on `(owner_id, community_version_id)` |
+| `community_master_links` | **id** (uuid), owner_id → users, media_version_id → media_versions, service_url, contributor_id, community_version_id, community_work_id, label, alias_id, version_status, tier, match_percent, applied_revision, latest_revision, alignment_state (`not_required`\|`required`\|`approved`), alignment_json, alignment_revision, link_state (`active`\|`merged`\|`unavailable`\|`replaced`), merged_into, pending_revision (newer revision awaiting download, §8), created_at, updated_at | Unique on `(owner_id, media_version_id, service_url)` where `link_state != 'replaced'`. Index on `(owner_id, community_version_id)` |
 | `community_master_snapshots` | **id**, link_id → links (CASCADE), revision, snapshot_digest, snapshot_bytes (exact BLOB), signature_json, service_key_id, receipt_json, receipt_id, downloaded_at | Unique on `(link_id, revision)`. Only the baseline revisions still in use and the latest revision are retained |
 | `community_master_filters` | **link_id**, **filter_id**, category, baseline_json (master values at baseline), baseline_revision, info_json (confidence, counts, spread, as of the latest revision), local_start_ms, local_end_ms, local_subcategory, local_severity, local_action, state (`pending`\|`verified`\|`adjusted`\|`rejected`\|`low_confidence`), locally_verified, local_touched, my_vote (`up`\|`down`\|NULL), present (bool), updated_at | Checks: valid state, `local_start_ms < local_end_ms` |
 | `community_master_updates` | **link_id**, **filter_id**, to_revision, change (`new`\|`changed`\|`removed`\|`low_confidence`), changed_fields_json, new_master_json, merged_into, values_digest | Rebuilt for each newly stored latest snapshot. A row is deleted when it is decided |
 | `community_master_dismissals` | **link_id**, **filter_id**, values_digest, dismissed_at | — |
 | `community_master_preferences` | **owner_id**, confidence_threshold (0–1), show_low_confidence | — |
-| `community_sync_state` | **owner_id**, **service_url**, contributor_id, state, run_id, last_started_at, last_success_at, next_due_at, last_error_code | — |
+| `community_sync_state` | **owner_id**, **service_url**, contributor_id, state, run_id, last_started_at, last_success_at, next_due_at, last_error_code, downloads_retry_at (pending downloads wait until then, §8) | — |
 | `community_sync_notifications` | **id**, owner_id, link_id → links (CASCADE), kind, from_revision, to_revision, created_at, read_at | Unique on `(owner_id, link_id, kind, to_revision)`. Index on `(owner_id, read_at)` |
 
 `community_operations` is rebuilt with SQLite batch mode:

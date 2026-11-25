@@ -82,6 +82,7 @@ def _create_links():
         sa.Column("alignment_revision", sa.Integer(), nullable=True),
         sa.Column("link_state", sa.String(16), nullable=False),
         sa.Column("merged_into", sa.String(128), nullable=True),
+        sa.Column("pending_revision", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
@@ -217,6 +218,7 @@ def _create_account_state():
         sa.Column("last_success_at", sa.DateTime(), nullable=True),
         sa.Column("next_due_at", sa.DateTime(), nullable=True),
         sa.Column("last_error_code", sa.String(64), nullable=True),
+        sa.Column("downloads_retry_at", sa.DateTime(), nullable=True),
         sa.CheckConstraint(
             "state IN ('idle', 'running', 'failed')", name="ck_community_sync_state_state"
         ),

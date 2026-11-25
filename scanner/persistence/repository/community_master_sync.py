@@ -17,6 +17,7 @@ from scanner.db import (
 )
 
 from .community_master_links import utcnow
+from .community_master_pending import pending_download_count
 
 SYNC_INTERVAL = timedelta(hours=24)
 # A run not finished after this long is treated as abandoned so a new one may start.
@@ -38,6 +39,8 @@ class SyncStatus:
     due: bool
     unread_count: int
     notifications: tuple[CommunitySyncNotificationRow, ...]
+    # Changed links whose newer snapshot is not downloaded yet.
+    pending_downloads: int = 0
 
 
 def _row(db: Session, owner_id: int, service_url: str) -> CommunitySyncStateRow | None:
@@ -78,6 +81,7 @@ def sync_status(
         due=sync_due(row, now),
         unread_count=unread_count(db, owner_id),
         notifications=tuple(list_notifications(db, owner_id)),
+        pending_downloads=pending_download_count(db, owner_id, service_url),
     )
 
 

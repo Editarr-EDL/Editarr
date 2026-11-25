@@ -1,6 +1,6 @@
 import type { SqlDatabase } from '../runtime/contracts';
 import { z } from 'zod';
-import type { MergePolicy } from '../filters';
+import type { MergePolicy, RegistryEntry, VoteInput } from '../filters';
 import type { AuthenticatedContributor } from '../security/contributor-auth';
 import { admitRate, RouteError } from '../http/contributor-route';
 import { completionStatements, replayOperation } from '../operations/completed';
@@ -43,6 +43,18 @@ async function filterVersion(db: SqlDatabase, filterId: string) {
   return row.version_id;
 }
 
+/** Follow a filter ID's `mergedInto` chain through the loaded registry to the filter it belongs to now. */
+function currentFilterId(registry: readonly RegistryEntry[], filterId: string) {
+  const byId = new Map(registry.map(row => [row.filterId, row]));
+  let id = filterId;
+  for (let depth = 0; depth < 64; depth++) {
+    const row = byId.get(id);
+    if (row?.state !== 'retired' || row.mergedInto === null) break;
+    id = row.mergedInto;
+  }
+  return id;
+}
+
 /** Set or remove (`none`) the caller's receipt-bound vote on a filter and recompute its version (§7.4). */
 export async function castVote(db: SqlDatabase, identity: AuthenticatedContributor, filterId: string, value: unknown,
   options: VoteOptions): Promise<VoteResult> {
@@ -54,24 +66,30 @@ export async function castVote(db: SqlDatabase, identity: AuthenticatedContribut
   await admitRate(db, `vote:${identity.contributorId}`, options.votesPerHour, 3600, options.now);
   await eligibleFilter(db, identity, filterId, input.receiptId);
   let result: VoteResult | undefined;
+  let replaced: string[] = [], current = filterId;
   await recomputeVersion(db, () => filterVersion(db, filterId), options, {
     change: state => {
-      // A moderator exclusion stays with the vote; removing an excluded vote keeps its excluded row.
-      const mine = (vote: { filterId: string; contributorId: string }) => vote.filterId === filterId && vote.contributorId === identity.contributorId;
-      const existing = state.votes.find(mine);
-      state.votes = state.votes.filter(vote => !mine(vote));
-      if (input.vote !== 'none') state.votes.push({ filterId, contributorId: identity.contributorId, vote: input.vote,
-        excluded: existing?.excluded ?? false });
-      else if (existing?.excluded) state.votes.push(existing);
+      // The caller's votes on IDs merged into the same current filter are one vote: replace them all
+      // under the current ID. A moderator exclusion stays with the vote; removing it keeps the excluded row.
+      current = currentFilterId(state.registry, filterId);
+      const contributorId = identity.contributorId, mine = (vote: VoteInput) => vote.contributorId === contributorId;
+      const excludedRow = state.votes.find(vote => mine(vote) && vote.filterId === current && vote.excluded);
+      replaced = state.votes.filter(vote => mine(vote) && !vote.excluded && currentFilterId(state.registry, vote.filterId) === current)
+        .map(vote => vote.filterId);
+      state.votes = state.votes.filter(vote => !(mine(vote) && (vote.filterId === current || (!vote.excluded && replaced.includes(vote.filterId)))));
+      if (input.vote !== 'none') state.votes.push({ filterId: current, contributorId, vote: input.vote, excluded: excludedRow !== undefined });
+      else if (excludedRow) state.votes.push(excludedRow);
     },
     extra: plan => {
       result = { version: 1, operationId: identity.operationId!, filterId, versionId: plan.versionId, vote: input.vote, revision: plan.revision };
-      return [...completionStatements(db, identity, 'vote', digest, result, options.now),
-        input.vote === 'none'
-          ? db.prepare('DELETE FROM filter_votes WHERE filter_id = ? AND contributor_id = ? AND excluded = 0').bind(filterId, identity.contributorId)
-          : db.prepare(`INSERT INTO filter_votes (filter_id, contributor_id, vote, receipt_id, excluded, updated_at) VALUES (?, ?, ?, ?, 0, ?)
-              ON CONFLICT(filter_id, contributor_id) DO UPDATE SET vote = excluded.vote, receipt_id = excluded.receipt_id,
-                updated_at = excluded.updated_at`).bind(filterId, identity.contributorId, input.vote, input.receiptId, options.now)];
+      const statements = [...completionStatements(db, identity, 'vote', digest, result, options.now),
+        db.prepare(`DELETE FROM filter_votes WHERE contributor_id = ? AND excluded = 0 AND filter_id IN (SELECT value FROM json_each(?))`)
+          .bind(identity.contributorId, JSON.stringify(replaced))];
+      if (input.vote !== 'none') statements.push(db.prepare(`INSERT INTO filter_votes (filter_id, contributor_id, vote, receipt_id, excluded,
+          updated_at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(filter_id, contributor_id) DO UPDATE SET vote = excluded.vote,
+          receipt_id = excluded.receipt_id, updated_at = excluded.updated_at`)
+        .bind(current, identity.contributorId, input.vote, input.receiptId, options.now));
+      return statements;
     },
   }).catch(async error => {
     const raced = await replayOperation<VoteResult>(db, identity, 'vote', digest);

@@ -184,6 +184,8 @@ def store_latest_snapshot(
             )
         )
     link.latest_revision = snapshot.revision
+    if link.pending_revision is not None and link.pending_revision <= snapshot.revision:
+        link.pending_revision = None
     link.updated_at = now
     db.flush()
     _finish_if_decided(db, link)
