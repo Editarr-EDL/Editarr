@@ -49,8 +49,8 @@ export type MasterFilter = {
   filterId: string; category: string; master: MasterValues; locallyVerified: boolean; myVote: MyVote; active: boolean;
 };
 /** The threshold and Show Low Confidence decide which filters start enabled in reviews.
- * `hideRejectedDownvoted` only hides downvoted rows from the master list. */
-export type MasterPreferences = { confidenceThreshold: number; showLowConfidence: boolean; hideRejectedDownvoted?: boolean };
+ * `hideDownvoted` only hides downvoted rows from the master list. */
+export type MasterPreferences = { confidenceThreshold: number; showLowConfidence: boolean; hideDownvoted?: boolean };
 export type MasterPreferencesResult = { version: 1 } & MasterPreferences;
 export type MasterView = { version: 1; link: MasterLink; preferences: MasterPreferences; filters: MasterFilter[] };
 

@@ -22,8 +22,8 @@ export function MasterPreferenceControls({ preferences, disabled, onChange }: {
     <label className="master-toggle"><input type="checkbox" checked={preferences.showLowConfidence} disabled={disabled}
       onChange={(event) => onChange({ ...preferences, showLowConfidence: event.target.checked })} />
       Show Low Confidence filters</label>
-    <label className="master-toggle"><input type="checkbox" checked={!!preferences.hideRejectedDownvoted} disabled={disabled}
-      onChange={(event) => onChange({ ...preferences, hideRejectedDownvoted: event.target.checked })} />
+    <label className="master-toggle"><input type="checkbox" checked={!!preferences.hideDownvoted} disabled={disabled}
+      onChange={(event) => onChange({ ...preferences, hideDownvoted: event.target.checked })} />
       Hide downvoted filters</label>
     <p className="muted-copy master-preferences-note">Filters below the minimum confidence, and Low Confidence filters unless
       shown, start disabled when a review includes or refreshes them.</p>
@@ -44,14 +44,14 @@ export function MasterFilterList({ view, preferences, canVote, onFilter }: {
   const keep = (filterId: string) => setKept((current) => new Set(current).add(filterId));
   const scroller = useRef<HTMLDivElement>(null);
   const { link } = view;
-  const { confidenceThreshold, showLowConfidence, hideRejectedDownvoted } = preferences;
+  const { confidenceThreshold, showLowConfidence, hideDownvoted } = preferences;
   useEffect(() => {
     // A new set of rows starts at Time and Filter, even if a row's actions were scrolled into view.
     setKept(new Set());
     if (scroller.current) scroller.current.scrollLeft = 0;
-  }, [confidenceThreshold, showLowConfidence, hideRejectedDownvoted]);
+  }, [confidenceThreshold, showLowConfidence, hideDownvoted]);
   const visible = view.filters.filter((filter) => filterVisible(filter, preferences)
-    || (kept.has(filter.filterId) && filterVisible(filter, { ...preferences, hideRejectedDownvoted: false })))
+    || (kept.has(filter.filterId) && filterVisible(filter, { ...preferences, hideDownvoted: false })))
     .sort((a, b) => a.master.startMs - b.master.startMs);
   const hidden = view.filters.length - visible.length;
 

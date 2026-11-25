@@ -117,7 +117,7 @@ for (const width of [320, 1440]) {
     await threshold.fill("0.5");
     await expect(panel.getByText("1 filter shown · 2 hidden by your filter settings")).toBeVisible();
     await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
-      .toEqual({ confidence_threshold: 0.5, show_low_confidence: false, hide_rejected_downvoted: false });
+      .toEqual({ confidence_threshold: 0.5, show_low_confidence: false, hide_downvoted: false });
     await threshold.fill("0");
     const lowConfidence = panel.getByRole("checkbox", { name: "Show Low Confidence filters" });
     await expect(lowConfidence).not.toBeChecked();
@@ -125,7 +125,7 @@ for (const width of [320, 1440]) {
     await expect(panel.getByText("Low Confidence · 20%")).toBeVisible();
     await expect(panel.getByText("3 filters shown")).toBeVisible();
     await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
-      .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_rejected_downvoted: false });
+      .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_downvoted: false });
     await checkLayout(page, "master-view", width);
     const hide = panel.getByRole("checkbox", { name: "Hide downvoted filters" });
     await expect(hide).not.toBeChecked();
@@ -133,7 +133,7 @@ for (const width of [320, 1440]) {
     await expect(panel.getByText("2 filters shown · 1 hidden by your filter settings")).toBeVisible();
     await expect(thumbsDown).toHaveCount(0);
     await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
-      .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_rejected_downvoted: true });
+      .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_downvoted: true });
     await checkLayout(page, "hide-toggle", width);
   });
 

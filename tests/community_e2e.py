@@ -361,7 +361,7 @@ def find_and_download(application):
     assert view["preferences"] == {
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": False,
+        "hideDownvoted": False,
     }, view
     assert view["filters"] and all(item["active"] for item in view["filters"]), view
     active = application.request("GET", f"{path}/active-filters")

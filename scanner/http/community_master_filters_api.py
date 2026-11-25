@@ -50,7 +50,7 @@ def save_preferences(
             access.principal.user_id,
             confidence_threshold=body.confidence_threshold,
             show_low_confidence=body.show_low_confidence,
-            hide_rejected_downvoted=body.hide_rejected_downvoted,
+            hide_downvoted=body.hide_downvoted,
         )
         db.commit()
     return respond(lambda: {"version": 1, **preferences_json(saved)})

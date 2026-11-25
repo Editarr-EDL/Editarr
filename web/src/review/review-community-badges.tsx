@@ -9,8 +9,7 @@ export const communityResultCount = (filters: Filter[]) => filters.filter(isComm
 
 /**
  * Source details of a result row's community filters: the community version, its confidence badge,
- * contributor count and Locally verified icon, plus "Edited" and "Removed from community" flags.
- * Renders nothing for scan filters.
+ * contributor count and Locally verified icon. Renders nothing for scan filters.
  */
 export function CommunityFilterSource({ filters }: { filters: Filter[] }) {
   const community = filters.filter((filter) => filter.community);
@@ -23,8 +22,20 @@ export function CommunityFilterSource({ filters }: { filters: Filter[] }) {
       {info.contributor_count !== null && <small className="muted-copy">
         {info.contributor_count} {info.contributor_count === 1 ? "contributor" : "contributors"}</small>}
       {info.locally_verified && <LocallyVerifiedIcon />}
-      {info.edited && <span className="master-badge review-community-edited">Edited</span>}
-      {info.removed && <span className="master-badge review-community-removed">Removed from community</span>}
     </span>;
   })}</span>;
+}
+
+/**
+ * The "Edited" and "Removed from community" flags of a result row's community filters, shown with
+ * its time so they stay visible on narrow screens where the table scrolls sideways.
+ */
+export function CommunityFilterFlags({ filters }: { filters: Filter[] }) {
+  const edited = filters.some((filter) => filter.community && filter.community_edited);
+  const removed = filters.some((filter) => filter.community?.removed);
+  if (!edited && !removed) return null;
+  return <span className="review-community-flags">
+    {edited && <span className="master-badge review-community-edited">Edited</span>}
+    {removed && <span className="master-badge review-community-removed">Removed from community</span>}
+  </span>;
 }

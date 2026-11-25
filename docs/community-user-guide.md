@@ -126,7 +126,8 @@ Confidence filters unless you show them, start disabled.
 
 From then on community filters are ordinary review filters. Enable or disable them,
 edit their times, category, severity or action, preview or delete them exactly like
-scan filters; an **Edited** label marks the ones you changed. Your instance's filter
+scan filters; an **Edited** label marks the ones you changed yourself. Changes made
+by **Apply Filter Defaults** don't count as your edits. Your instance's filter
 policy applies to them like any other filter, and EDL and MCF exports, published
 sidecars and filtered subtitles use them the same way.
 
@@ -138,12 +139,20 @@ earlier exports show as out of date:
 
 - filters you edited keep your changes, even when the community merged them into
   another filter;
-- filters you didn't edit take the new community values;
+- filters you didn't edit take the new community values (including ones only
+  Apply Filter Defaults changed);
 - new filters are added, enabled or disabled by your current minimum confidence and
   Low Confidence setting;
 - filters the community no longer serves stay in the review marked **Removed from
   community**, disabled unless you had edited them;
-- filters you deleted from the review stay deleted.
+- filters you deleted from the review stay deleted;
+- a filter that was left out because it lay outside your file is added once the
+  community moves it inside.
+
+Reviews made before this version keep their community filters. Decisions you made
+in the Community tab then (adjusting, confirming above your threshold, or rejecting
+a filter) become edits of those reviews' filters: a rejected filter appears disabled
+and marked Edited. Decisions on sets no review included no longer apply.
 
 Unchecking the entry and saving removes the set and its filters from the review. A
 set that still needs alignment can't be included or refreshed until you approve its
@@ -172,9 +181,12 @@ because the service makes the final match. Your cues and coverage are shared;
 coverage tells the service which channels (audio or video) and time ranges your
 scan analyzed, so community filters there that your scan did not find count
 against them. When you share a review, the community filters you edited are shared
-as your verdicts on them: one you left enabled confirms it with your times,
+as your verdicts on them: one that is enabled confirms it with your times,
 category, severity and action (an adjustment when you changed them), and one you
-disabled disputes it. Community filters you didn't touch are not re-shared. Private file paths, credentials and alternate-track
+disabled after it started enabled disputes it. A filter that started disabled and
+is still disabled isn't shared, and neither are community filters you didn't touch,
+filters from another community version than the set you share against, or ones the
+community no longer serves. Private file paths, credentials and alternate-track
 inventories are excluded. Confirm rights and standing reuse permission before
 approving.
 

@@ -18,9 +18,17 @@ from .model_core import (
 )
 from .model_review_community import ReviewFilterCommunity
 
-# Fields naming where a review filter came from rather than what it does.
+# Fields naming where a review filter came from, or how the user treated it, rather
+# than what it does; scan findings don't have them.
 PROVENANCE_FIELDS = frozenset(
-    {"id", "source_scan_id", "source_finding_id", "community_source_id", "community_filter_id"}
+    {
+        "id",
+        "source_scan_id",
+        "source_finding_id",
+        "community_source_id",
+        "community_filter_id",
+        "community_edited",
+    }
 )
 
 
@@ -33,6 +41,10 @@ class ReviewFilter(BaseModel):
     source_finding_id: int | None = Field(default=None, gt=0, le=MAX_PERSISTED_INTEGER, strict=True)
     community_source_id: str | None = Field(default=None, max_length=36)
     community_filter_id: str | None = Field(default=None, max_length=128)
+    # A community filter the user edited directly; bulk defaults leave it unset. Clients
+    # set it when the user changes a community filter's enabled state, times,
+    # classification, severity or action. It never resets.
+    community_edited: bool | None = None
     source: Literal["audio", "visual"]
     category: McfCategoryFamily | None
     subcategory: McfCategory | None
@@ -63,6 +75,8 @@ class ReviewFilter(BaseModel):
             or (community and self.source_finding_id is not None)
         ):
             raise ValueError("A review filter needs either a source scan or a community source")
+        if not community:
+            self.community_edited = None
         return self
 
 

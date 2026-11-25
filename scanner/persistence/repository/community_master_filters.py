@@ -75,7 +75,7 @@ def get_preferences(db: Session, owner_id: int) -> Preferences:
     return Preferences(
         row.confidence_threshold,
         bool(row.show_low_confidence),
-        bool(row.hide_rejected_downvoted),
+        bool(row.hide_downvoted),
     )
 
 
@@ -85,7 +85,7 @@ def set_preferences(
     *,
     confidence_threshold: float | None = None,
     show_low_confidence: bool | None = None,
-    hide_rejected_downvoted: bool | None = None,
+    hide_downvoted: bool | None = None,
 ) -> Preferences:
     """Update any preference left non-None; the threshold must be within 0..1.
 
@@ -100,15 +100,15 @@ def set_preferences(
             owner_id=owner_id,
             confidence_threshold=0.0,
             show_low_confidence=False,
-            hide_rejected_downvoted=False,
+            hide_downvoted=False,
         )
         db.add(row)
     if confidence_threshold is not None:
         row.confidence_threshold = float(confidence_threshold)
     if show_low_confidence is not None:
         row.show_low_confidence = bool(show_low_confidence)
-    if hide_rejected_downvoted is not None:
-        row.hide_rejected_downvoted = bool(hide_rejected_downvoted)
+    if hide_downvoted is not None:
+        row.hide_downvoted = bool(hide_downvoted)
     db.flush()
     return get_preferences(db, owner_id)
 

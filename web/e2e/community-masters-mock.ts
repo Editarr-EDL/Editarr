@@ -40,7 +40,7 @@ export type CommunityMastersMock = {
  * updates" applies revision 13: Language moves, Nudity is no longer served and a new filter arrives.
  */
 export async function mockCommunityMasters(page: Page, options: { linked?: boolean } = {}): Promise<CommunityMastersMock> {
-  let preferences: MasterPreferences = { confidenceThreshold: 0, showLowConfidence: false, hideRejectedDownvoted: false };
+  let preferences: MasterPreferences = { confidenceThreshold: 0, showLowConfidence: false, hideDownvoted: false };
   let notificationsRead = false;
   const linkFor = (result: FindResult): MasterLink => ({ linkId: `link-${result.communityVersionId}`, localVersionId: "mv_1",
     communityVersionId: result.communityVersionId, label: result.label, aliasId: result.aliasId, status: result.status,
@@ -92,7 +92,7 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     if (path === "masters" && method === "GET") return json(route, { version: 1, links: mock.state.link ? [link()] : [] });
     if (path === "preferences") {
       if (method === "PATCH") preferences = { confidenceThreshold: body.confidence_threshold, showLowConfidence: body.show_low_confidence,
-        hideRejectedDownvoted: body.hide_rejected_downvoted };
+        hideDownvoted: body.hide_downvoted };
       return json(route, { version: 1, ...preferences });
     }
     const linkPath = path.match(/^masters\/([^/]+)(?:\/(.*))?$/);

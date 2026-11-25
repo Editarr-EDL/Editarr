@@ -13,7 +13,7 @@ describe("preference filtering", () => {
   });
 
   it("hides downvoted rows when asked without changing which filters start enabled", () => {
-    const hide = { ...defaults, hideRejectedDownvoted: true };
+    const hide = { ...defaults, hideDownvoted: true };
     const down = masterFilter({ myVote: "down" });
     expect(filterVisible(down, hide)).toBe(false);
     expect(filterVisible(down, defaults)).toBe(true);

@@ -3,14 +3,17 @@
 A saved review stores each included master set as a snapshot: one *entry* per filter
 with the master values on the local timeline (milliseconds), and one ordinary review
 filter per entry that the user may enable, disable or adjust. These helpers decide
-which filters start enabled, turn an entry into review filter values, tell whether the
-user edited a filter, and map snapshot IDs across a refresh.
+which filters start enabled, turn an entry into review filter values, compare a filter
+with its defaults, and map snapshot IDs across a refresh. Whether the *user* edited a
+filter is recorded on the review filter itself (`community_edited`), so bulk changes
+such as Apply Filter Defaults don't count.
 
 Entry keys: `filter_id`, `category`, `subcategory`, `severity`, `edit_action`,
 `start_ms`, `end_ms`, `low_confidence`, `confidence`, `contributor_count`,
 `default_selected`, optional `initial` (`{start_ms, end_ms}` when the review filter was
-clipped to the runtime) and `served` (false for a filter the master no longer serves
-that the review keeps flagged "Removed from community"). Older snapshots lack the
+clipped to the runtime), `outside` (true when no review filter was added because the
+filter lay wholly outside the runtime) and `served` (false for a filter the master no
+longer serves that the review keeps flagged "Removed from community"). Older snapshots lack the
 newer keys; their filters started enabled.
 """
 
@@ -106,18 +109,18 @@ def filter_values(entry: Mapping) -> dict:
     }
 
 
-def is_edited(values, entry: Mapping | None) -> bool:
-    """Whether the user changed a community review filter from its entry's defaults:
-    its enabled state, bounds (to the millisecond), classification, severity or action.
-    `values` is any object with review filter attributes. Without an entry the filter
-    can't be compared and counts as edited."""
+def values_changed(values, entry: Mapping | None, *, selection: bool = True) -> bool:
+    """Whether a review filter's values differ from its entry's defaults: its bounds (to
+    the millisecond), classification, severity, action and, with `selection`, its enabled
+    state. `values` is any object with review filter attributes. Without an entry the
+    filter can't be compared and counts as changed."""
     if entry is None:
         return True
     expected = filter_values(entry)
     start_ms, end_ms = initial_bounds(entry)
     end = getattr(values, "end_seconds", None)
     return (
-        bool(values.selected) != expected["selected"]
+        (selection and bool(values.selected) != expected["selected"])
         or round(values.start_seconds * 1000) != start_ms
         or end is None
         or round(end * 1000) != end_ms

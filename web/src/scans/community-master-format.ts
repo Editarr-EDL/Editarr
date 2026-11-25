@@ -37,7 +37,7 @@ export function filterActive(filter: MasterFilter, preferences: MasterPreference
 
 /** Whether a row is listed: filters that start enabled, unless downvoted while "Hide downvoted filters" is on. */
 export function filterVisible(filter: MasterFilter, preferences: MasterPreferences) {
-  if (preferences.hideRejectedDownvoted && filter.myVote === "down") return false;
+  if (preferences.hideDownvoted && filter.myVote === "down") return false;
   return filterActive(filter, preferences, false);
 }
 

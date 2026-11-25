@@ -924,9 +924,10 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
 - Community filters: `SavedReview.community_sources` lists the community master-set
   snapshots a review includes; create and save requests take `community_memberships`
   (omitted on save keeps them). Including a set adds each served filter to `filters`
-  as a normal review filter with `source_scan_id: null`, `community_source_id` and
-  `community_filter_id` and read-only `community` provenance (version label,
-  confidence, contributor count, `edited`, `removed`). Below-threshold and Low
+  as a normal review filter with `source_scan_id: null`, `community_source_id`,
+  `community_filter_id`, `community_edited` (set by direct user edits, never by Apply
+  Filter Defaults) and read-only `community` provenance (version label, confidence,
+  contributor count, `removed`, `locally_verified`). Below-threshold and Low
   Confidence filters start disabled. Community filters are enabled, disabled and
   adjusted like scan filters and go through the same policy, EDL/MCF export, sidecar,
   subtitle and sharing paths. Refreshing a snapshot keeps the user's edits by filter

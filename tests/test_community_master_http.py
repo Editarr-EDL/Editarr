@@ -59,7 +59,7 @@ def test_find_download_list_and_view_for_a_file_tier(masters):
     assert view["preferences"] == {
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": False,
+        "hideDownvoted": False,
     }
     (row,) = view["filters"]
     assert row["active"] and row["myVote"] is None
@@ -136,7 +136,7 @@ def test_preferences_are_per_account_and_decide_which_filters_start_enabled(mast
         "version": 1,
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": False,
+        "hideDownvoted": False,
     }
     saved = masters.ok("PATCH", "/preferences", USER, {"confidence_threshold": 0.3})
     assert saved["confidenceThreshold"] == 0.3

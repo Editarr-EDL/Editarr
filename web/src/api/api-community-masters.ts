@@ -100,7 +100,7 @@ export const fetchMasterPreferences = (signal?: AbortSignal) => communityJson<Ma
 export const saveMasterPreferences = (preferences: MasterPreferences, signal?: AbortSignal) =>
   communityJson<MasterPreferencesResult>("preferences", { ...postJson({
     confidence_threshold: preferences.confidenceThreshold, show_low_confidence: preferences.showLowConfidence,
-    hide_rejected_downvoted: !!preferences.hideRejectedDownvoted,
+    hide_downvoted: !!preferences.hideDownvoted,
   }, "PATCH"), signal });
 
 /** Send a per-filter vote. Use `retry` with the same operation ID after a retryable failure. */

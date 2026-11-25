@@ -240,7 +240,7 @@ it("lists community filters as normal results with their community source", asyn
     subcategory: "punching" as const, severity: "high" as const, mcf_channel: null, mcf_comment: null, label: null,
     details: null, group_key: null, start_seconds: start, end_seconds: start + 10, confidence: 0.5, edit_action, selected,
     community: { source_id: "src", filter_id: id, label: "Theatrical", master_revision: 1, confidence: 0.5,
-      contributor_count: 2, low_confidence: false, removed: id === "c2", edited: false, locally_verified: false },
+      contributor_count: 2, low_confidence: false, removed: id === "c2", locally_verified: false },
   });
   const onToggleFilters = vi.fn();
   render(<SavedReviewOverview filters={[community("c1", 10, "skip"), community("c2", 30, "skip", false), community("c3", 60, "mute")]}

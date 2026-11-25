@@ -31,12 +31,9 @@ from scanner.modeling.community_master_diff import master_filters
 from scanner.modeling.community_review_filters import (
     clip,
     filter_values,
-    is_edited,
     merge_targets,
-    served,
     starts_enabled,
 )
-from scanner.models import ReviewFilterCommunity
 
 from .community_master_filters import get_preferences, master_values
 from .community_master_links import alignment_of, latest_snapshot
@@ -116,7 +113,13 @@ def link_merges(db: Session, link: CommunityMasterLinkRow | None) -> dict[str, t
     return {item.filter_id: item.merged_ids for item in filters if item.merged_ids}
 
 
-def _row(review_id: str, source_id: str, entry: Mapping, values: Mapping | None = None):
+def _row(
+    review_id: str,
+    source_id: str,
+    entry: Mapping,
+    values: Mapping | None = None,
+    edited: bool = False,
+):
     values = dict(values or filter_values(entry))
     return ReviewFilterRow(
         review_id=review_id,
@@ -125,8 +128,15 @@ def _row(review_id: str, source_id: str, entry: Mapping, values: Mapping | None 
         source_finding_id=None,
         community_source_id=source_id,
         community_filter_id=entry["filter_id"],
+        community_edited=edited,
         **values,
     )
+
+
+def _edited(value, previous: Mapping) -> bool:
+    """A submitted community filter's user-edited flag; once set it stays set."""
+    prior = previous.get(value.id)
+    return bool(value.community_edited) or bool(prior is not None and prior.community_edited)
 
 
 _VALUE_FIELDS = (
@@ -205,7 +215,7 @@ def _refreshed_rows(
     new_entries = _with_initial(entries_of(plan.row), runtime_ms)
     new = {entry["filter_id"]: entry for entry in new_entries}
     by_filter = {value.community_filter_id: value for value in current}
-    edited = {fid for fid, value in by_filter.items() if is_edited(value, old.get(fid))}
+    edited = {fid for fid, value in by_filter.items() if _edited(value, previous)}
     # A merged filter continues an edited review filter first, then any other one,
     # and a filter the user deleted from the review last.
     targets = merge_targets(
@@ -215,13 +225,13 @@ def _refreshed_rows(
         {fid: 0 if fid in edited else 1 for fid in by_filter},
     )
     rows, kept = [], []
-    claimed = set(targets.values())
+    claimed = {targets[fid] for fid in by_filter if fid in targets}
     for fid, value in by_filter.items():
         target = targets.get(fid)
         if target is not None:
             entry = new[target]
             if fid in edited:
-                rows.append(_row(review_id, plan.row.id, entry, _values(value)))
+                rows.append(_row(review_id, plan.row.id, entry, _values(value), edited=True))
             elif not entry.get("outside"):
                 values = {"id": value.id, **filter_values(entry)}
                 rows.append(_row(review_id, plan.row.id, entry, values))
@@ -232,9 +242,14 @@ def _refreshed_rows(
             # Disabled for the user, so it still counts as untouched.
             values["selected"] = gone["default_selected"] = False
         kept.append(gone)
-        rows.append(_row(review_id, plan.row.id, gone, values))
-    # Filters the user deleted from the review stay deleted, whatever they became.
-    deleted = {targets[fid] for fid in old if fid not in by_filter and fid in targets}
+        rows.append(_row(review_id, plan.row.id, gone, values, edited=fid in edited))
+    # Filters the user deleted from the review stay deleted, whatever they became. A
+    # filter that had no review filter because it lay outside the file wasn't deleted.
+    deleted = {
+        targets[fid]
+        for fid, entry in old.items()
+        if fid not in by_filter and fid in targets and not entry.get("outside")
+    }
     for entry in new_entries:
         fid = entry["filter_id"]
         if fid in claimed or fid in deleted or entry.get("outside"):
@@ -249,7 +264,13 @@ def _kept_rows(review_id: str, plan: SourcePlan, current: list, previous: Mappin
     entries = {entry["filter_id"]: entry for entry in entries_of(plan.row)}
     _check_provenance(current, entries, previous)
     return [
-        _row(review_id, plan.row.id, entries[value.community_filter_id], _values(value))
+        _row(
+            review_id,
+            plan.row.id,
+            entries[value.community_filter_id],
+            _values(value),
+            edited=_edited(value, previous),
+        )
         for value in current
     ]
 
@@ -289,49 +310,6 @@ def community_rows(
         else:
             rows.extend(_kept_rows(review.id, plan, current, previous))
     return rows
-
-
-def annotations(db: Session, review: SavedReviewRow) -> dict[str, ReviewFilterCommunity]:
-    """Read-only community provenance for each community filter of the review, by ID."""
-    sources = {
-        row.id: (row, {e["filter_id"]: e for e in entries_of(row)})
-        for row in review.community_sources
-    }
-    verified = _locally_verified(db, review.community_sources)
-    found = {}
-    for row in review.filters:
-        if row.community_source_id is None or row.community_source_id not in sources:
-            continue
-        source, entries = sources[row.community_source_id]
-        entry = entries.get(row.community_filter_id)
-        found[row.id] = ReviewFilterCommunity(
-            source_id=source.id,
-            filter_id=row.community_filter_id,
-            label=source.label,
-            master_revision=source.master_revision,
-            confidence=(entry or {}).get("confidence"),
-            contributor_count=(entry or {}).get("contributor_count"),
-            low_confidence=bool((entry or {}).get("low_confidence")),
-            removed=entry is not None and not served(entry),
-            edited=is_edited(row, entry),
-            locally_verified=(source.link_id, row.community_filter_id) in verified,
-        )
-    return found
-
-
-def _locally_verified(db: Session, sources) -> set[tuple[str, str]]:
-    """`(link_id, filter_id)` pairs the review's links mark Locally verified (U7)."""
-    link_ids = [row.link_id for row in sources if row.link_id is not None]
-    if not link_ids:
-        return set()
-    return set(
-        db.execute(
-            select(CommunityMasterFilterRow.link_id, CommunityMasterFilterRow.filter_id).where(
-                CommunityMasterFilterRow.link_id.in_(link_ids),
-                CommunityMasterFilterRow.locally_verified,
-            )
-        ).all()
-    )
 
 
 def review_filter_rows(

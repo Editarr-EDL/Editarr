@@ -133,7 +133,7 @@ def test_included_filters_are_normal_review_filters_with_community_provenance(ma
     assert skip.source_scan_id is None and skip.community_source_id == source.source_id
     assert skip.label is None and skip.confidence == 0.5
     assert skip.community.label == "Theatrical" and skip.community.contributor_count == 2
-    assert not skip.community.edited and not skip.community.removed
+    assert not skip.community_edited and not skip.community.removed
     assert (saved.revision, saved.edl_content_revision) == (1, 1)
 
     masters.service.publish("v_1", 2, served_filter("f_a", 11_000, 20_000))
@@ -175,9 +175,11 @@ def test_enabling_disabling_and_adjusting_work_like_scan_filters(masters, review
     def edit(filters):
         for value in filters:
             if value["community_filter_id"] == "f_a":
-                value.update(start_seconds=11.0, severity="low", subcategory="kicking")
+                value.update(
+                    start_seconds=11.0, severity="low", subcategory="kicking", community_edited=True
+                )
             if value["community_filter_id"] == "f_b":
-                value["selected"] = False
+                value.update(selected=False, community_edited=True)
 
     edited = save(masters, review, keep(saved), edit=edit)
     assert edited.revision == saved.revision + 1
@@ -188,7 +190,7 @@ def test_enabling_disabling_and_adjusting_work_like_scan_filters(masters, review
         "low",
         "kicking",
     )
-    assert adjusted.community.edited and disabled.community.edited and not disabled.selected
+    assert adjusted.community_edited and disabled.community_edited and not disabled.selected
     with session(masters) as db:
         row = db.get(SavedReviewRow, review)
         policy = prepare_review_policy(db, row)
@@ -268,7 +270,12 @@ def test_duplicates_copy_the_snapshot_and_its_filters(masters, review):
         review,
         None,
         edit=lambda filters: [
-            {**v, "selected": v["community_filter_id"] != "f_b"} for v in filters
+            {
+                **v,
+                "selected": v["community_filter_id"] != "f_b",
+                "community_edited": v["community_filter_id"] == "f_b",
+            }
+            for v in filters
         ],
     )
     for actor, link_id in ((USER, link["linkId"]), (ADMIN, None)):
@@ -289,7 +296,7 @@ def test_duplicates_copy_the_snapshot_and_its_filters(masters, review):
         assert {value.community_source_id for value in community(copy).values()} == {
             source.source_id
         }
-        assert community(copy)["f_b"].community.edited
+        assert community(copy)["f_b"].community_edited
         assert source.state == ("current" if link_id else "link_unavailable")
 
 
@@ -321,18 +328,18 @@ def test_account_deletion_keeps_snapshots_and_transfer_and_replace_repoint(maste
 
 def test_hide_downvoted_is_a_saved_per_account_preference(masters):
     link = masters.link(USER, "v_1", "2", *FILTERS)
-    saved = masters.ok("PATCH", "/preferences", USER, {"hide_rejected_downvoted": True})
+    saved = masters.ok("PATCH", "/preferences", USER, {"hide_downvoted": True})
     assert saved == {
         "version": 1,
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": True,
+        "hideDownvoted": True,
     }
-    assert masters.ok("GET", "/preferences", PEER_USER)["hideRejectedDownvoted"] is False
+    assert masters.ok("GET", "/preferences", PEER_USER)["hideDownvoted"] is False
     view = masters.ok("GET", f"/masters/{link['linkId']}", USER)
-    assert view["preferences"]["hideRejectedDownvoted"] is True
+    assert view["preferences"]["hideDownvoted"] is True
     assert all(row["active"] for row in view["filters"])
-    refused = masters.send("PATCH", "/preferences", USER, {"hide_rejected_downvoted": "yes"})
+    refused = masters.send("PATCH", "/preferences", USER, {"hide_downvoted": "yes"})
     assert refused.status_code == 422
 
 
@@ -381,5 +388,5 @@ def test_filters_are_clipped_to_the_runtime_without_counting_as_a_change(masters
     )
     saved = save(masters, review, include(link["linkId"]))
     assert spans(saved) == [("f_tail", 95.0, 100.0, True)]
-    assert not community(saved)["f_tail"].community.edited
+    assert not community(saved)["f_tail"].community_edited
     assert saved.community_sources[0].state == "current"

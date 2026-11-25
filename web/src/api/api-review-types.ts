@@ -76,8 +76,7 @@ export interface ReviewFilterCommunity {
   low_confidence: boolean;
   /** The master no longer served it at the last refresh. */
   removed: boolean;
-  /** The user changed it from the snapshot's defaults. */
-  edited: boolean;
+  /** Its own bounds overlap a finding of the same category from a local model scan. */
   locally_verified: boolean;
 }
 
@@ -99,6 +98,8 @@ export interface ReviewFilter {
   /** The included community snapshot and master filter a community filter came from. */
   community_source_id?: string | null;
   community_filter_id?: string | null;
+  /** A community filter the user edited directly; bulk changes such as Apply Filter Defaults leave it unset. */
+  community_edited?: boolean | null;
   /** Read-only community provenance; the server ignores it on save. */
   community?: ReviewFilterCommunity | null;
   source: ReviewFilterSource;

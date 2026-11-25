@@ -94,10 +94,12 @@ for (const width of [320, 1440]) {
     await expect(row(page, "20:00").getByRole("checkbox")).not.toBeChecked();
     await expect(row(page, "30:00").getByRole("checkbox")).toBeChecked();
     await check(page, "review-refreshed-removed", width);
-    // The source column with its flags, scrolled into view on narrow screens.
-    await row(page, "20:00").getByText("Removed from community").scrollIntoViewIfNeeded();
-    await page.getByRole("region", { name: "Filter results" }).screenshot({
-      path: `test-results/cm-review-uniform/review-removed-flag-${width}.png` });
+    // The flags show with the time, visible without scrolling the table sideways.
+    const flag = row(page, "20:00").getByText("Removed from community");
+    await flag.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
+    await expect(flag).toBeInViewport({ ratio: 1 });
+    await expect(row(page, "15:05").getByText("Edited")).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: `test-results/cm-review-uniform/review-removed-flag-${width}.png` });
   });
 }
 

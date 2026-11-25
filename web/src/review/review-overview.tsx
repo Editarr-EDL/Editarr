@@ -5,7 +5,7 @@ import type { Scan } from "../api/api-scan-types";
 import type { SavedReview } from "../api/api-review-types";
 import { formatTime } from "../shared/display";
 import { McfClassificationFields, McfRegistryStatus } from "./review-mcf";
-import { CommunityFilterSource, communityResultCount } from "./review-community-badges";
+import { CommunityFilterFlags, CommunityFilterSource, communityResultCount } from "./review-community-badges";
 import { isCommunityFilter } from "./review-community";
 import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, filterSourceOrigin, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
 
@@ -176,7 +176,7 @@ export function SavedReviewOverview({
     const linkedIndicator = item.linked && <span className="linked-result-indicator" role="img" aria-label="Linked result repeated in another category"> 🔗</span>;
     return <Fragment key={`${key}:${result.key}`}>
       <tr><td><input type="checkbox" aria-label={`Include ${rowName} at ${formatTime(result.startSeconds)}`} aria-checked={rowMixed ? "mixed" : rowSelected} ref={node => { if (node) node.indeterminate = rowMixed; }} checked={rowSelected} disabled={busy || !filtersEditable || result.filters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(result.filters.filter(filter => !requiredIds.has(filter.id)).map(filter => filter.id), !rowSelected)} /></td>
-        <td>{formatTime(result.startSeconds)}–{formatTime(result.endSeconds)}</td>
+        <td>{formatTime(result.startSeconds)}–{formatTime(result.endSeconds)}<CommunityFilterFlags filters={result.filters} /></td>
         <td>{result.descriptions.length ? <span className="merged-descriptions">{result.descriptions.map(description => <span className="merged-description-item" key={description}>
           {source === "audio" ? <CensoredAudioWord word={description} context={descriptionFilters.get(description)?.details} /> : description}
           {linkedIndicator}</span>)}</span> : <>{sort === "time" && categoryName}{linkedIndicator}</>}</td>

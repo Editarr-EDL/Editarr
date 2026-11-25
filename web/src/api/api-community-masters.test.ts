@@ -32,7 +32,7 @@ it("sends snake_case bodies with CSRF to the documented routes", async () => {
     ["POST", "/api/community/find", { target, label: { alias_id: "theatrical" }, refresh: false }],
     ["POST", "/api/community/masters", { target, find_key: "fk", community_version_id: "v_12ab", confirmed: true }],
     ["GET", "/api/community/masters?item_id=abc&media_source_id=src+1", null],
-    ["PATCH", "/api/community/preferences", { confidence_threshold: 0.25, show_low_confidence: true, hide_rejected_downvoted: false }],
+    ["PATCH", "/api/community/preferences", { confidence_threshold: 0.25, show_low_confidence: true, hide_downvoted: false }],
     ["POST", "/api/community/masters/l%2F1/filters/f1/vote", { vote: "up", operation_id: "vote-1", confirmed: true }],
     ["POST", "/api/community/masters/l%2F1/filters/f1/vote/retry", { operation_id: "vote-1", confirmed: true }],
     ["POST", "/api/community/sync/run", {}],

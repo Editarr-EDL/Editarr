@@ -18,13 +18,13 @@ class Preferences:
     """An account's master-set preferences; the defaults are 0.0, False and False.
 
     The threshold and Show Low Confidence decide which community filters start
-    enabled when a review includes or refreshes them. `hide_rejected_downvoted` only
+    enabled when a review includes or refreshes them. `hide_downvoted` only
     hides downvoted rows from the master list.
     """
 
     confidence_threshold: float = 0.0
     show_low_confidence: bool = False
-    hide_rejected_downvoted: bool = False
+    hide_downvoted: bool = False
 
 
 def untouched_state(values: MasterValues) -> str:

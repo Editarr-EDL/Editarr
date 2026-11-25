@@ -55,6 +55,8 @@
 .review-community-attribution { display: grid; gap: 4px; min-width: 0; }
 .review-community-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .review-community-label { font-weight: 600; }
+.review-community-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 4px; }
+.review-community-flags .master-badge { white-space: normal; border-radius: 6px; }
 .review-community-edited { border-color: #58709a; color: #b9d6ff; }
 .review-community-removed { border-color: #8a5a40; color: #ffc19e; background: #2b211b; }
 .review-workflow .saved-review-panel { overflow: visible; }

@@ -22,15 +22,10 @@ function defaults(sourceId: string, entry: ServedFilter, id = `row-${sourceId}-$
     subcategory: entry.subcategory as ReviewFilter["subcategory"], severity: entry.severity as ReviewFilter["severity"],
     mcf_channel: mute ? "audio" : "both", mcf_comment: null, label: null, details: null, group_key: null,
     start_seconds: entry.startMs / 1000, end_seconds: entry.endMs / 1000, confidence: entry.confidence,
-    edit_action: mute ? "mute" : "skip", selected: entry.startsEnabled };
+    edit_action: mute ? "mute" : "skip", selected: entry.startsEnabled, community_edited: false };
 }
 
-const edited = (row: ReviewFilter, entry: ServedFilter | undefined) => {
-  if (!entry) return true;
-  const base = defaults(row.community_source_id!, entry);
-  return (["selected", "start_seconds", "end_seconds", "category", "subcategory", "severity", "edit_action"] as const)
-    .some((field) => row[field] !== base[field]);
-};
+const edited = (row: ReviewFilter) => !!row.community_edited;
 
 /** Serve `review-c` with community snapshots; returns the PUT bodies. */
 export async function mockCommunityReview(page: Page, community: CommunityMastersMock, name = "Community review") {
@@ -55,7 +50,7 @@ export async function mockCommunityReview(page: Page, community: CommunityMaster
         const entry = source.entries.find((item) => item.filterId === row.community_filter_id);
         return { ...row, community: { source_id: source.id, filter_id: row.community_filter_id, label: community.state.link!.label,
           master_revision: source.revision, confidence: entry?.confidence ?? null, contributor_count: entry?.contributorCount ?? null,
-          low_confidence: !!entry?.lowConfidence, removed: source.removed.has(row.community_filter_id!), edited: edited(row, entry),
+          low_confidence: !!entry?.lowConfidence, removed: source.removed.has(row.community_filter_id!),
           locally_verified: false } };
       }),
     };
@@ -65,10 +60,9 @@ export async function mockCommunityReview(page: Page, community: CommunityMaster
     const rows: ReviewFilter[] = [];
     for (const row of current) {
       const entry = served.find((item) => item.filterId === row.community_filter_id);
-      const old = source.entries.find((item) => item.filterId === row.community_filter_id);
-      if (entry) { rows.push(edited(row, old) ? row : defaults(source.id, entry, row.id)); source.removed.delete(entry.filterId); continue; }
+      if (entry) { rows.push(edited(row) ? row : defaults(source.id, entry, row.id)); source.removed.delete(entry.filterId); continue; }
       source.removed.add(row.community_filter_id!);
-      rows.push(edited(row, old) ? row : { ...row, selected: false });
+      rows.push(edited(row) ? row : { ...row, selected: false });
     }
     for (const entry of served) if (!rows.some((row) => row.community_filter_id === entry.filterId)) rows.push(defaults(source.id, entry));
     const kept = [...source.removed].flatMap((id) => source.entries.filter((item) => item.filterId === id)

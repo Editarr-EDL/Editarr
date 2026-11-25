@@ -236,6 +236,7 @@ def project_submission(
             intervals_overlap(start, end, first, last) for first, last in model[category]
         ),
         warnings,
+        link.version_id if link else None,
     )
     rows: Iterable[LinkedFilter] = link.filters if link else ()
     proposals = propose_filters([cue for cue, _values in cues], rows, attested.filter_ids)
@@ -271,8 +272,6 @@ def project_submission(
     artifact = ArtifactV3.model_validate(document, strict=True, by_alias=True, by_name=False)
     return Projection(
         artifact,
-        estimate(
-            proposals, len(cues), attested.supports, attested.adjustments, attested.disputes
-        ),
+        estimate(proposals, len(cues), attested.supports, attested.adjustments, attested.disputes),
         tuple(sorted(set(warnings))),
     )

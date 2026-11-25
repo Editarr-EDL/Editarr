@@ -20168,7 +20168,7 @@
             ],
             "title": "Show Low Confidence"
           },
-          "hide_rejected_downvoted": {
+          "hide_downvoted": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -20177,7 +20177,7 @@
                 "type": "null"
               }
             ],
-            "title": "Hide Rejected Downvoted"
+            "title": "Hide Downvoted"
           }
         },
         "additionalProperties": false,
@@ -21652,6 +21652,17 @@
             ],
             "title": "Community Filter Id"
           },
+          "community_edited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Edited"
+          },
           "source": {
             "type": "string",
             "enum": [
@@ -21846,11 +21857,6 @@
             "title": "Removed",
             "default": false
           },
-          "edited": {
-            "type": "boolean",
-            "title": "Edited",
-            "default": false
-          },
           "locally_verified": {
             "type": "boolean",
             "title": "Locally Verified",
@@ -21865,7 +21871,7 @@
           "master_revision"
         ],
         "title": "ReviewFilterCommunity",
-        "description": "Read-only provenance of a review filter that came from a community snapshot.\n\nThe filter itself is a normal review filter. `label` names the community version,\n`edited` is whether the user changed its enabled state, bounds, classification,\nseverity or action from the snapshot's defaults, and `removed` that the master no\nlonger served it at the last refresh (\"Removed from community\").\n`locally_verified` is the link's Locally verified badge for the filter."
+        "description": "Read-only provenance of a review filter that came from a community snapshot.\n\nThe filter itself is a normal review filter; whether the user edited it is its\n`community_edited`. `label` names the community version, `removed` means the master\nno longer served it at the last refresh (\"Removed from community\"), and\n`locally_verified` that the filter's own bounds overlap a finding of the same\ncategory from a completed local model scan of the review's version."
       },
       "ReviewFilterDefaultsApplyResult": {
         "properties": {
@@ -21979,6 +21985,17 @@
               }
             ],
             "title": "Community Filter Id"
+          },
+          "community_edited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Edited"
           },
           "source": {
             "type": "string",
@@ -23179,6 +23196,17 @@
               }
             ],
             "title": "Community Filter Id"
+          },
+          "community_edited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Edited"
           },
           "source": {
             "type": "string",

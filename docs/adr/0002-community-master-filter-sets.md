@@ -165,10 +165,25 @@ request; they are numbered U1–U7 here to keep D1–D22 unambiguous).
   filter. The community-specific subtitle alignment, notices and counters are
   removed.
 - **U6 Sharing.** Sharing a review turns the user's review edits into attestations:
-  an edited, enabled community filter is a `support` with the user's bounds,
-  subcategory, severity, action and its `proposedFilterId`; one the user disabled is
-  a `dispute`; untouched community filters aren't sent. Scan filters behave as
+  an edited community filter that is enabled is a `support` with the user's bounds,
+  subcategory, severity, action and its `proposedFilterId` (also when it started
+  disabled); one the user disabled after it started enabled is a `dispute`; one that
+  started disabled and stays disabled isn't sent, even with adjusted values.
+  Untouched filters, filters of a snapshot of another community version than the
+  submission's link, and filters no longer served aren't sent. Scan filters behave as
   before, and the Community tab's old local decisions are never shared.
+- **Only direct edits count.** A community filter is the user's edit once the user
+  directly changes its enabled state, times, classification, severity or action
+  (`community_edited`). Bulk changes such as Apply Filter Defaults don't count, so
+  they are neither shared nor kept over new master values on Refresh.
+- **Policy.** The owner's instance filter policy applies to community filters like
+  any other source.
+- **Earlier decisions.** Migration 0040 measures each stored snapshot against its
+  link's master values, so filters the owner adjusted count as edited and rejected
+  ones become disabled, edited review filters. Decisions on links no review included
+  no longer apply; their rows, and update and dismissal rows, are kept unused.
+- The master-list toggle and its preference are named "Hide downvoted filters"
+  (`hide_downvoted`).
 - **U7 Locally verified.** A community filter is locally verified when it overlaps a
   local scan finding of the same top-level category on the same media version,
   after alignment. Confirming or adjusting no longer counts.

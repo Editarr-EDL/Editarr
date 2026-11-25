@@ -6,7 +6,7 @@ import type { ReviewCommunitySource, ReviewFilter, SavedReview } from "../api/ap
 import { masterLink } from "../scans/community-master-test-fixtures";
 import { communityEntries, hasExportEvidence, setCommunityIncluded, stageCommunityRefresh } from "./review-community";
 import { ReviewCommunityEntries } from "./review-community-sources";
-import { CommunityFilterSource } from "./review-community-badges";
+import { CommunityFilterFlags, CommunityFilterSource } from "./review-community-badges";
 import { createReviewDraft, isReviewDraftDirty, type ReviewDraft } from "./review-draft";
 
 afterEach(cleanup);
@@ -22,7 +22,7 @@ const communityFilter = (id: string, overrides: Partial<ReviewFilter> = {}): Rev
   label: null, details: null, group_key: null, start_seconds: 10, end_seconds: 15, confidence: 0.5, edit_action: "skip",
   selected: true,
   community: { source_id: "src-1", filter_id: id, label: "Theatrical", master_revision: 12, confidence: 0.5,
-    contributor_count: 3, low_confidence: false, removed: false, edited: false, locally_verified: false },
+    contributor_count: 3, low_confidence: false, removed: false, locally_verified: false },
   ...overrides,
 });
 const review = (sources: ReviewCommunitySource[], filters: ReviewFilter[] = []) => ({
@@ -83,8 +83,9 @@ it("blocks including a link that awaits alignment and explains a new inclusion",
 });
 
 it("labels a community filter's source with its version, confidence, contributors and flags", () => {
-  render(<CommunityFilterSource filters={[communityFilter("f1", { community: { ...communityFilter("f1").community!,
-    edited: true, removed: true, locally_verified: true } })]} />);
+  const filters = [communityFilter("f1", { community_edited: true, community: { ...communityFilter("f1").community!,
+    removed: true, locally_verified: true } })];
+  render(<><CommunityFilterSource filters={filters} /><CommunityFilterFlags filters={filters} /></>);
   expect(screen.getByText("Community · Theatrical")).toBeInTheDocument();
   expect(screen.getByText("50% confidence")).toBeInTheDocument();
   expect(screen.getByText("3 contributors")).toBeInTheDocument();

@@ -269,12 +269,21 @@ export function snapshotReviewFilters(draft: ReviewDraft, filters: ReviewFilter[
   };
 }
 
+/** Changes to these fields mark a community filter as edited by the user (shared as their verdict). */
+const COMMUNITY_EDIT_FIELDS = ["selected", "start_seconds", "end_seconds", "category", "subcategory", "severity", "edit_action"] as const;
+
 /**
- * Apply a local filter edit. A label change marks `label_edited` immediately so the display
- * follows the relabel; restoring the loaded label restores its loaded flag (keeping the draft clean).
+ * Apply a local filter edit. A direct change to a community filter's enabled state, times,
+ * classification, severity or action marks it `community_edited`. A label change marks
+ * `label_edited` immediately so the display follows the relabel; restoring the loaded label
+ * restores its loaded flag (keeping the draft clean).
  */
 export function updateReviewFilter(draft: ReviewDraft, filterId: string, patch: Partial<ReviewFilter>): ReviewDraft {
   const pair = draft.filterBases[filterId];
+  const target = draft.filters.find((filter) => filter.id === filterId);
+  if (target?.community_source_id && COMMUNITY_EDIT_FIELDS.some((field) => field in patch && patch[field] !== target[field])) {
+    patch = { ...patch, community_edited: true };
+  }
   if ("label" in patch && !("label_edited" in patch)) {
     const current = draft.filters.find((filter) => filter.id === filterId);
     const loaded = pair?.effective;

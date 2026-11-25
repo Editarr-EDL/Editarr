@@ -244,6 +244,8 @@ class ReviewFilterRow(Base):
     manually_edited = Column(Boolean, nullable=True)
     community_source_id = Column(String(36), nullable=True)
     community_filter_id = Column(String(128), nullable=True)
+    # A community filter the user edited directly (not through bulk defaults).
+    community_edited = Column(Boolean, nullable=True)
 
     review = relationship("SavedReviewRow", back_populates="filters")
     source_scan = relationship("ScanRow", foreign_keys=[source_scan_id])

@@ -51,11 +51,11 @@ def test_refresh_keeps_edits_by_filter_id_and_brings_in_master_changes(masters, 
     def edit(filters):
         for value in filters:
             if value["community_filter_id"] == "f_edit":
-                value.update(start_seconds=11.0, severity="low")
+                value.update(start_seconds=11.0, severity="low", community_edited=True)
             if value["community_filter_id"] == "f_old":
-                value["selected"] = False
+                value.update(selected=False, community_edited=True)
             if value["community_filter_id"] == "f_kept":
-                value["end_seconds"] = 82.0
+                value.update(end_seconds=82.0, community_edited=True)
         return [value for value in filters if value["community_filter_id"] != "f_deleted"]
 
     edited = save(masters, review, keep(saved), edit=edit)
@@ -82,12 +82,12 @@ def test_refresh_keeps_edits_by_filter_id_and_brings_in_master_changes(masters, 
     assert sorted(rows) == ["f_edit", "f_gone", "f_kept", "f_merged", "f_new", "f_plain", "f_weak"]
     # Edited: the user's values stay, under the merged ID where the filter merged.
     assert (rows["f_edit"].start_seconds, rows["f_edit"].end_seconds) == (11.0, 20.0)
-    assert rows["f_edit"].severity == "low" and rows["f_edit"].community.edited
+    assert rows["f_edit"].severity == "low" and rows["f_edit"].community_edited
     assert rows["f_merged"].id == community(edited)["f_old"].id
     assert not rows["f_merged"].selected and rows["f_merged"].start_seconds == 50.0
     # Unedited: the new master values.
     assert (rows["f_plain"].start_seconds, rows["f_plain"].severity) == (32.0, "low")
-    assert not rows["f_plain"].community.edited
+    assert not rows["f_plain"].community_edited
     # New filters start enabled or disabled by the threshold.
     assert rows["f_new"].selected and not rows["f_weak"].selected
     # No longer served: flagged, disabled unless edited.
@@ -276,7 +276,7 @@ def test_subtitles_redact_enabled_audio_language_mutes_with_words_whatever_their
             if value["community_filter_id"] == "f_named":
                 value["label"] = "darn"
             if value["community_filter_id"] == "f_off":
-                value.update(label="heck", selected=False)
+                value.update(label="heck", selected=False, community_edited=True)
 
     save(masters, review, keep(saved), edit=edit)
     with session(masters) as db:

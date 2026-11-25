@@ -192,7 +192,7 @@ Returns the master view:
     "status": "confirmed", "unconfirmed": false, "tier": "2", "matchPercent": 80,
     "aliasId": "theatrical", "appliedRevision": 13, "latestRevision": 13, "alignmentState": "not_required",
     "alignment": null, "alignmentRevision": null, "linkState": "active", "mergedInto": null },
-  "preferences": { "confidenceThreshold": 0.0, "showLowConfidence": false, "hideRejectedDownvoted": false },
+  "preferences": { "confidenceThreshold": 0.0, "showLowConfidence": false, "hideDownvoted": false },
   "filters": [ {
     "filterId": "f_9c1d…", "category": "violence",
     "master": { "startMs": 600000, "endMs": 605050, "subcategory": "punching", "severity": "high", "action": "skip",
@@ -273,13 +273,18 @@ lists the snapshots:
 
 and each community filter in `filters` and `base_filters` is a `ReviewFilter` with
 `source_scan_id: null`, `source_finding_id: null`, `community_source_id` (the
-snapshot) and `community_filter_id` (the master filter), plus read-only provenance:
+snapshot) and `community_filter_id` (the master filter), `community_edited` (§ below)
+and read-only provenance:
 
 ```json
 "community": { "source_id": "…", "filter_id": "f_9c1d…", "label": "Theatrical", "master_revision": 12,
   "confidence": 0.39, "contributor_count": 4, "low_confidence": false,
-  "removed": false, "edited": true, "locally_verified": true }
+  "removed": false, "locally_verified": true }
 ```
+
+`locally_verified` is true when the review filter's own bounds overlap a finding of
+the same top-level category from a completed local model scan of the review's local
+versions or among its scans (U7); it works for snapshots whose link is gone.
 
 - **Values.** A master mute becomes an `audio` filter with `mcf_channel: "audio"`;
   a skip becomes a `visual` filter with `mcf_channel: "both"`. `label`, `details`
@@ -293,8 +298,14 @@ snapshot) and `community_filter_id` (the master filter), plus read-only provenan
   on Refresh: a filter below the threshold, or Low Confidence while Show Low
   Confidence is off, arrives disabled. Changing the preferences later changes no
   review.
-- **Edited** is true when the filter's enabled state, bounds (to the millisecond),
-  classification, severity or action differ from the values it was added with.
+- **`community_edited`** is true once the user directly changed the filter's enabled
+  state, times, classification, severity or action. The web app sets it on those
+  edits; bulk changes such as Apply Filter Defaults leave it unset, so they never
+  count as the user's verdict. Clients send it back on save; once set it never
+  resets, and the server ignores it on scan filters. Refresh and sharing use it.
+- **Policy.** The review owner's filter policy applies to community filters like
+  any other: an enforced rule can require and enable one, and enforced severities
+  replace its severity, as for hand-added filters.
 - **Saving.** `PUT /api/reviews/{review_id}` sends community filters back in
   `filters` like any other filter (the read-only `community` object may be echoed
   and is ignored). Each must name an included snapshot and one of its filters, at
@@ -312,12 +323,15 @@ snapshot) and `community_filter_id` (the master filter), plus read-only provenan
   submitted filters by master filter ID, following `mergedIds` (a merged filter
   continues an edited review filter first, then any other, then one the user
   deleted):
-  - an edited filter keeps the user's values;
-  - an unedited filter takes the new master values and starting state;
+  - an edited filter (`community_edited`) keeps the user's values;
+  - an unedited filter takes the new master values and starting state, even when
+    bulk defaults had changed it;
   - a new served filter is added, enabled or disabled as above;
   - a filter the master no longer serves stays in the review with
     `community.removed: true`, disabled unless the user had edited it;
-  - a filter the user deleted from the review stays deleted.
+  - a filter the user deleted from the review stays deleted;
+  - a filter that was left out because it lay outside the file is added once the
+    master moves it inside.
 - **`state`** compares the snapshot with the link now: `changed` when the link's
   served master values differ (confidence, counts and preferences don't count;
   the review then shows "Refresh community filters"), `alignment_required` when
@@ -426,18 +440,17 @@ reviews nor sharing.
 Request (every field optional):
 
 ```json
-{ "confidence_threshold": 0.0, "show_low_confidence": false, "hide_rejected_downvoted": false }
+{ "confidence_threshold": 0.0, "show_low_confidence": false, "hide_downvoted": false }
 ```
 
 - `confidence_threshold` ranges from 0 to 1.
 - `confidence_threshold` and `show_low_confidence` decide which community filters
   start enabled when a review includes or refreshes a master set (§3); they also
   decide which rows the Community tab lists.
-- `hide_rejected_downvoted` ("Hide downvoted filters") hides downvoted rows from
-  the web app's master filter list only. It never changes `active`. The field keeps
-  its name for compatibility.
+- `hide_downvoted` ("Hide downvoted filters") hides downvoted rows from
+  the web app's master filter list only. It never changes `active`.
 - The response is the saved preferences object
-  (`{ "version": 1, "confidenceThreshold": …, "showLowConfidence": …, "hideRejectedDownvoted": … }`),
+  (`{ "version": 1, "confidenceThreshold": …, "showLowConfidence": …, "hideDownvoted": … }`),
   which the master view also returns as `preferences`.
 - These preferences belong to the account. `GET` returns the same object.
 - The defaults are `0.0`, `false` and `false`.
@@ -530,12 +543,14 @@ The projection builds the entries as follows:
 | Source | Entry |
 | --- | --- |
 | Scan cue, or a review's scan filter | A `support` entry. When the local alignment places it on a served master filter (one the review doesn't already attest to), `proposedFilterId` is set |
-| Review community filter the user edited and left enabled | A `support` entry for its master filter (`proposedFilterId`), with the user's bounds, subcategory, severity and action, `origin: "downloaded"`, `manualReview: true`, and `locallyVerified` when a local model finding of the same category overlaps it |
-| Review community filter the user disabled (it started enabled) | A `dispute` entry for its master filter, with the master bounds |
-| Untouched review community filter | Not shared |
+| Review community filter the user edited, now enabled | A `support` entry for its master filter (`proposedFilterId`), with the user's bounds, subcategory, severity and action, `origin: "downloaded"`, `manualReview: true`, and `locallyVerified` when a local model finding of the same category overlaps it. A filter that started disabled and the user enabled is a support too |
+| Review community filter the user disabled, that started enabled | A `dispute` entry for its master filter, with the master bounds |
+| Review community filter that started disabled and is still disabled | Not shared, even when the user adjusted its values |
+| Untouched review community filter (`community_edited` unset) | Not shared |
+| Community filter of a snapshot of another community version than the submission's link, or no longer served by the master | Not shared |
 | Local scan coverage | `coverage`: each completed audio stage covers every audio category, and each completed visual stage every video category except `commercial_content` and `dispensable_scenes`, for its analyzed ranges, whichever model ran. Saved reviews send none |
 
-"Edited" is the review filter's `community.edited` (§3). The Community tab's
+"Edited" is the review filter's `community_edited` (§3). The Community tab's
 retired local decisions are never shared. In the estimates, confirmations count
 proposed cues and supported community filters, adjustments the supported ones
 whose values the user changed, and disputes the disabled ones.
@@ -710,7 +725,7 @@ the upgrade.
 | `community_master_filters` | **link_id**, **filter_id**, category, baseline_json (master values of the revision last applied), baseline_revision, info_json (confidence, counts, spread), local_start_ms, local_end_ms, local_subcategory, local_severity, local_action, state (`pending`\|`verified`\|`adjusted`\|`rejected`\|`low_confidence`), locally_verified, local_touched, my_vote (`up`\|`down`\|NULL), present (bool), updated_at | Checks: valid state, `local_start_ms < local_end_ms`. The `local_*`, `state` and `local_touched` decision columns are retired and unused (§5) |
 | `community_master_updates` | **link_id**, **filter_id**, to_revision, change (`new`\|`changed`\|`removed`\|`low_confidence`), changed_fields_json, new_master_json, merged_into, values_digest | Retired (§9): no longer written or read; earlier rows are kept |
 | `community_master_dismissals` | **link_id**, **filter_id**, values_digest, dismissed_at | Retired (§9): no longer written or read; earlier rows are kept |
-| `community_master_preferences` | **owner_id**, confidence_threshold (0–1), show_low_confidence, hide_rejected_downvoted (0039) | — |
+| `community_master_preferences` | **owner_id**, confidence_threshold (0–1), show_low_confidence, hide_downvoted (0039) | — |
 | `community_sync_state` | **owner_id**, **service_url**, contributor_id, state, run_id, last_started_at, last_success_at, next_due_at, last_error_code, downloads_retry_at (pending downloads wait until then, §8) | — |
 | `community_sync_notifications` | **id**, owner_id, link_id → links (CASCADE), kind, from_revision, to_revision, created_at, read_at | Unique on `(owner_id, link_id, kind, to_revision)`. Index on `(owner_id, read_at)` |
 
@@ -747,7 +762,7 @@ rows, and the upgrade test recovers them from it.
 | --- | --- | --- |
 | `review_community_sources` | **review_id** → saved_reviews (CASCADE), **id**, link_id → community_master_links (nullable), position, community_version_id, label, tier, match_percent, master_revision, alignment_json, filters_json, filters_digest, captured_at | Index on `link_id`. Checks: `position >= 0`, `master_revision >= 1` |
 
-The migration also adds `community_master_preferences.hide_rejected_downvoted`
+The migration also adds `community_master_preferences.hide_downvoted`
 (default false). It changes no existing row, runs only after the verified,
 recoverable backup, and its downgrade refuses while any snapshot or hide preference
 exists. The upgrade test starts from `0038_retire_receipt_capabilities` with stored
@@ -763,22 +778,44 @@ or from an included community snapshot:
 | --- | --- |
 | `source_scan_id` | Becomes nullable |
 | `community_source_id`, `community_filter_id` | New nullable columns. `(review_id, community_source_id)` → `review_community_sources(review_id, id)` with `ON DELETE CASCADE`; unique on `(review_id, community_source_id, community_filter_id)` |
+| `community_edited` | New nullable boolean: the user edited the community filter directly |
 | `ck_review_filters_provenance` | Exactly one of `source_scan_id` or `community_source_id`; `community_filter_id` with `community_source_id`; no `source_finding_id` on a community filter |
 
 Every filter stored in an existing snapshot's `filters_json` becomes a review
-filter after the review's existing filters, enabled as exports used it, so exports
-keep their content: a mute becomes an audio mute (`mcf_channel` `audio`), a skip a
-skip of both channels. A filter whose subcategory doesn't belong to its category,
-which exports already left out, becomes an unclassified, disabled filter. A
-negative start is clipped to 0; a filter with no remaining range stays only in the
-snapshot. Each snapshot entry records the enabled state its filter started with
-(`default_selected`) and any clipped bounds (`initial`). No other row changes.
+filter after the review's existing filters (whose positions and values don't
+change), enabled as exports used it, so exports keep their content: a mute becomes
+an audio mute (`mcf_channel` `audio`), a skip a skip of both channels. A filter
+whose subcategory doesn't belong to its category, which exports already left out,
+becomes an unclassified, disabled filter. A negative start is clipped to 0; a filter
+with no remaining range stays only in the snapshot.
+
+**Earlier Community-tab decisions.** A 0039 snapshot held the link's active filters
+with the owner's decisions applied. For a snapshot of a link, the migration rewrites
+its entries to the link's **master** values of the snapshot's revision (the kept
+verified snapshot of that revision, else the link's rows), aligned as the snapshot
+was, with the owner's threshold and Low Confidence preference deciding each
+`default_selected`. Against those defaults:
+
+- a stored filter the owner had adjusted, or enabled despite the threshold, becomes
+  an enabled review filter with the adjusted values and `community_edited` set;
+- a filter the owner had rejected (left out of the snapshot) becomes a disabled
+  review filter with `community_edited` set, so sharing disputes it;
+- the master's other filters the snapshot left out are added disabled and unedited;
+- untouched stored filters are unedited.
+
+A snapshot without a link keeps its stored filters as their own defaults. The
+digest is recomputed in the new form, so a snapshot whose link hasn't changed reads
+`current`. Decisions on links that no review includes no longer apply anywhere; the
+`community_master_filters` decision columns, update rows and dismissals are kept
+unused. No other row changes.
 
 The migration runs only after the verified, recoverable backup, and its downgrade
-refuses while any community review filter exists. The upgrade test starts from
-`0039_review_community_sources` with a stored snapshot, checks the new review
-filters and recovers the pre-upgrade database from the backup; the upgrade matrix
-covers every earlier revision.
+refuses while any community review filter exists. The upgrade tests start from
+`0039_review_community_sources` with several reviews and snapshots (linked and
+detached, with adjusted, rejected, below-threshold and confirmed decisions, and a
+scan filter), check the new review filters, unchanged scan filters and the
+snapshots' `current` state, and recover the pre-upgrade database from the backup;
+the upgrade matrix covers every earlier revision.
 
 ## Open questions
 

@@ -127,6 +127,7 @@ _ARCHIVE_COLUMNS = {
         "manually_edited",
         "community_source_id",
         "community_filter_id",
+        "community_edited",
     },
     **MASTER_COLUMNS,
     "users": {

@@ -4,8 +4,8 @@
   snapshot of a master link's active filters, taken when the review included or last
   refreshed them. The snapshot outlives its link: `link_id` becomes null when the link
   is deleted, and the review keeps the filters.
-- `community_master_preferences.hide_rejected_downvoted` (default false) hides rejected
-  and downvoted rows from the account's master filter list.
+- `community_master_preferences.hide_downvoted` (default false) hides downvoted rows
+  from the account's master filter list.
 
 No existing row changes. The adoption path runs this only after its verified,
 recoverable backup.
@@ -52,7 +52,7 @@ def upgrade():
     with op.batch_alter_table("community_master_preferences") as batch:
         batch.add_column(
             sa.Column(
-                "hide_rejected_downvoted",
+                "hide_downvoted",
                 sa.Boolean(),
                 nullable=False,
                 server_default=sa.false(),
@@ -66,10 +66,10 @@ def downgrade():
     if bind.exec_driver_sql("SELECT 1 FROM review_community_sources LIMIT 1").first():
         raise RuntimeError("Restore a backup to downgrade without discarding review snapshots")
     if bind.exec_driver_sql(
-        "SELECT 1 FROM community_master_preferences WHERE hide_rejected_downvoted LIMIT 1"
+        "SELECT 1 FROM community_master_preferences WHERE hide_downvoted LIMIT 1"
     ).first():
         raise RuntimeError("Restore a backup to downgrade without discarding preferences")
     with op.batch_alter_table("community_master_preferences") as batch:
-        batch.drop_column("hide_rejected_downvoted")
+        batch.drop_column("hide_downvoted")
     op.drop_index("ix_review_community_sources_link", table_name="review_community_sources")
     op.drop_table("review_community_sources")

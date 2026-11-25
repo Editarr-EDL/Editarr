@@ -369,6 +369,7 @@ def duplicate_saved_review(
             manually_edited=review_filter.manually_edited,
             community_source_id=source_ids.get(review_filter.community_source_id),
             community_filter_id=review_filter.community_filter_id,
+            community_edited=review_filter.community_edited,
         )
         for review_filter in source.filters
     ]

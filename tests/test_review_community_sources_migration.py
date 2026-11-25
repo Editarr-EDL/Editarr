@@ -75,8 +75,7 @@ def test_downgrade_refuses_to_discard_a_hide_preference(tmp_path):
         with engine.begin() as db:
             upgrade_connection(db, adoption.HEAD_REVISION)
             db.exec_driver_sql(
-                "UPDATE community_master_preferences SET hide_rejected_downvoted = 1 "
-                "WHERE owner_id = 2"
+                "UPDATE community_master_preferences SET hide_downvoted = 1 WHERE owner_id = 2"
             )
         migration = import_module(
             "scanner.persistence.migrations.versions.0039_review_community_sources"
@@ -86,7 +85,7 @@ def test_downgrade_refuses_to_discard_a_hide_preference(tmp_path):
                 migration.downgrade()
     finally:
         engine.dispose()
-    assert _read(path, "SELECT hide_rejected_downvoted FROM community_master_preferences") == [
+    assert _read(path, "SELECT hide_downvoted FROM community_master_preferences") == [
         (0,),
         (1,),
     ]

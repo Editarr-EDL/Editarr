@@ -1,16 +1,18 @@
 """Community review filters as submission attestations (ADR 0002 U6, local API §7).
 
 A saved review's community filters are normal review filters; sharing the review turns
-only the ones the user edited into attestations of the master filter they came from:
+only the ones the user edited directly (`community_edited`; bulk defaults don't count)
+into attestations of the master filter they came from:
 
-| Review filter | Entry |
+| Review filter the user edited | Entry |
 | --- | --- |
-| Edited and enabled | `support` with the user's bounds, subcategory, severity and action |
-| Edited and disabled | `dispute` of the master filter |
-| Untouched | not shared |
+| Enabled | `support` with the user's bounds, subcategory, severity and action |
+| Disabled, though it started enabled | `dispute` of the master filter |
+| Disabled, and it started disabled | not shared, even with adjusted values |
 
-"Edited" compares the saved filter with the snapshot defaults it started from
-(`community_review_filters.is_edited`). All times are milliseconds on the local file.
+Untouched filters, filters of a snapshot of another community version than the
+submission's link, and filters the master no longer serves are not shared. All times
+are milliseconds on the local file.
 """
 
 import json
@@ -18,7 +20,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from scanner.modeling.community_review_filters import classification, initial_bounds, is_edited
+from scanner.modeling.community_review_filters import (
+    classification,
+    initial_bounds,
+    served,
+    values_changed,
+)
 
 
 @dataclass(frozen=True)
@@ -43,11 +50,12 @@ def _evidence(verified: bool) -> dict:
     }
 
 
-def _entries(data: dict) -> dict:
-    """Snapshot entries by `(source_id, filter_id)`."""
+def _entries(data: dict, version_id: str | None) -> dict:
+    """Snapshot entries by `(source_id, filter_id)`, of snapshots of `version_id` only."""
     return {
         (source["id"], entry["filter_id"]): entry
         for source in data.get("community_sources", ())
+        if version_id is not None and source["community_version_id"] == version_id
         for entry in json.loads(source["filters_json"])
     }
 
@@ -57,13 +65,15 @@ def review_attestations(
     duration_ms: int,
     verified: Callable[[str, int, int], bool],
     warnings: list[str],
+    version_id: str | None,
 ) -> Attestations:
     """Supports and disputes for the edited community filters of a captured review.
 
-    `verified(category, start_ms, end_ms)` tells whether a local model finding of the
-    category overlaps the bounds (Locally verified, D7).
+    Only snapshots of `version_id`, the community version of the submission's link, are
+    attested. `verified(category, start_ms, end_ms)` tells whether a local model finding
+    of the category overlaps the bounds (Locally verified, U7).
     """
-    snapshot = _entries(data)
+    snapshot = _entries(data, version_id)
     entries, ids = [], set()
     supports = adjustments = disputes = 0
     for row in data.get("base_findings", ()):
@@ -71,11 +81,12 @@ def review_attestations(
         if not source_id:
             continue
         entry = snapshot.get((source_id, row["community_filter_id"]))
-        values = SimpleNamespace(**row)
-        if entry is None or not is_edited(values, entry):
+        if entry is None or not served(entry) or not row.get("community_edited"):
             continue
         filter_id = row["community_filter_id"]
         if not row["selected"]:
+            if not entry.get("default_selected", True):
+                continue
             start, end = initial_bounds(entry)
             category = classification(entry)[0] or entry.get("category")
             item = _entry("dispute", filter_id, start, end, duration_ms, category)
@@ -106,8 +117,7 @@ def review_attestations(
         entries.append(item)
         ids.add(filter_id)
         supports += 1
-        changed = SimpleNamespace(**{**row, "selected": entry.get("default_selected", True)})
-        adjustments += is_edited(changed, entry)
+        adjustments += values_changed(SimpleNamespace(**row), entry, selection=False)
     return Attestations(tuple(entries), frozenset(ids), supports, adjustments, disputes)
 
 

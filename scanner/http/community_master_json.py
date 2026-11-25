@@ -49,7 +49,7 @@ def preferences_json(preferences: Preferences) -> dict:
     return {
         "confidenceThreshold": preferences.confidence_threshold,
         "showLowConfidence": preferences.show_low_confidence,
-        "hideRejectedDownvoted": preferences.hide_rejected_downvoted,
+        "hideDownvoted": preferences.hide_downvoted,
     }
 
 

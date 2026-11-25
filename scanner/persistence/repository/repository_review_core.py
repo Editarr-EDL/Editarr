@@ -46,7 +46,7 @@ from .repository_rows import (
     _scan_from_row,
     _utc,
 )
-from .review_community_filters import annotations as community_annotations
+from .review_community_annotations import annotations as community_annotations
 from .review_community_sources import review_sources
 from .review_filter_tracking import label_edits, load_source_findings, with_label_provenance
 from .review_policy import prepare_review_policy

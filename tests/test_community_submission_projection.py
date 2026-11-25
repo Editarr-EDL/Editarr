@@ -144,7 +144,7 @@ def _entry(filter_id, start_ms, end_ms, *, default=True, **values):
     }
 
 
-def _community(filter_id, start, end, selected=True, **values):
+def _community(filter_id, start, end, selected=True, edited=True, source="src", **values):
     return {
         **finding(start, end, **{"severity": "high", **values}),
         "id": f"r-{filter_id}",
@@ -152,45 +152,57 @@ def _community(filter_id, start, end, selected=True, **values):
         "source_scan_id": None,
         "source_finding_id": None,
         "mcf_channel": "both",
-        "community_source_id": "src",
+        "community_source_id": source,
         "community_filter_id": filter_id,
+        "community_edited": edited,
     }
 
 
-def test_review_community_filters_share_only_the_users_edits():
+def _review(sources, rows):
     data = scan_data()
     data["root"] = {"id": "review"}
     data["community_sources"] = [
-        {
-            "id": "src",
-            "filters_json": json.dumps(
-                [
-                    _entry("f_same", 100_000, 101_000),
-                    _entry("f_moved", 200_000, 201_000),
-                    _entry("f_off", 300_000, 301_000),
-                    _entry("f_low", 400_000, 401_000, default=False),
-                    _entry("f_on", 500_000, 501_000, default=False),
-                ]
-            ),
-        }
-    ]
-    rows = [
-        _community("f_same", 100.0, 101.0),
-        _community("f_moved", 200.5, 201.0, severity="low"),
-        _community("f_off", 300.0, 301.0, selected=False),
-        _community("f_low", 400.0, 401.0, selected=False),
-        _community("f_on", 500.0, 501.0),
-        {**finding(300.0, 301.0), "source_scan_id": "scan", "source_finding_id": 3},
+        {"id": source_id, "community_version_id": version, "filters_json": json.dumps(entries)}
+        for source_id, version, entries in sources
     ]
     data["findings"] = data["base_findings"] = rows
     data["policy_evidence"] = [finding(200.0, 201.5)]
-    link = LinkProjection("v_1", 1, None, (row("f_off", 300_000, 301_000),))
-    projection = project_submission(data, "review", options(), link)
-    shared = [
+    return data
+
+
+def _shared(projection):
+    return [
         (entry.kind, entry.proposed_filter_id, entry.start_ms, entry.severity)
         for entry in projection.artifact.entries
     ]
-    assert shared == [
+
+
+def test_review_community_filters_share_only_the_users_edits():
+    entries = [
+        _entry("f_same", 100_000, 101_000),
+        _entry("f_moved", 200_000, 201_000),
+        _entry("f_off", 300_000, 301_000),
+        _entry("f_low", 400_000, 401_000, default=False),
+        _entry("f_on", 500_000, 501_000, default=False),
+        _entry("f_bulk", 600_000, 601_000),
+        _entry("f_gone", 700_000, 701_000, served=False),
+    ]
+    rows = [
+        _community("f_same", 100.0, 101.0, edited=False),
+        _community("f_moved", 200.5, 201.0, severity="low"),
+        _community("f_off", 300.0, 301.0, selected=False),
+        # Started disabled, stayed disabled: not sent, even with adjusted bounds.
+        _community("f_low", 400.5, 401.0, selected=False),
+        _community("f_on", 500.0, 501.0),
+        # Changed only by bulk defaults: not the user's edit.
+        _community("f_bulk", 600.0, 601.0, selected=False, edited=False),
+        _community("f_gone", 700.0, 701.0, selected=False),
+        {**finding(300.0, 301.0), "source_scan_id": "scan", "source_finding_id": 3},
+    ]
+    data = _review([("src", "v_1", entries)], rows)
+    link = LinkProjection("v_1", 1, None, (row("f_off", 300_000, 301_000),))
+    projection = project_submission(data, "review", options(), link)
+    assert _shared(projection) == [
         ("support", None, 300_000, "medium"),
         ("support", "f_moved", 200_500, "low"),
         ("dispute", "f_off", 300_000, None),
@@ -210,6 +222,18 @@ def test_review_community_filters_share_only_the_users_edits():
         "disputes": 1,
     }
     encode_artifact_v3(projection.artifact)
+
+
+def test_only_snapshots_of_the_submissions_version_are_attested():
+    rows = [_community("f_a", 100.0, 101.0, severity="low", source="old")]
+    data = _review([("old", "v_old", [_entry("f_a", 100_000, 101_000)])], rows)
+    link = LinkProjection("v_1", 1, None, ())
+    assert _shared(project_submission(data, "review", options(), link)) == []
+    assert _shared(project_submission(data, "review", options(), None)) == []
+    same = LinkProjection("v_old", 1, None, ())
+    assert _shared(project_submission(data, "review", options(), same)) == [
+        ("support", "f_a", 100_000, "low")
+    ]
 
 
 def _stage(stage, status="complete", **settings):
