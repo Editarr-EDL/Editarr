@@ -13,7 +13,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   await page.getByRole("button", { name: "Open Example Movie" }).click();
   const panel = page.locator(".saved-review-panel");
   const expandReviewFilterGroups = async () => {
-    await panel.getByLabel("Sort", { exact: true }).selectOption("category");
+    await panel.getByLabel("Group by", { exact: true }).selectOption("category");
     const subcategories = panel.locator(".hierarchy-subcategory button");
     await expect(subcategories.first()).toBeVisible();
     for (let index = 0; index < await subcategories.count(); index += 1) {

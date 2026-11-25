@@ -30,7 +30,7 @@ for (const width of [320, 390, 1100]) {
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect(page.getByText("Community · Extended Edition").first()).toBeVisible();
 
-    await page.getByRole("combobox", { name: "Sort" }).selectOption("time");
+    await page.getByRole("combobox", { name: "Group by" }).selectOption("time");
     await expectFits(page);
     // Stacked rows scroll with the page; wide screens keep the list's own capped scroll area.
     const results = page.getByRole("region", { name: "Filter results" });
@@ -45,7 +45,7 @@ for (const width of [320, 390, 1100]) {
       if (width > 380) expect(actions!.x).toBeGreaterThanOrEqual(content!.x - 1);
     } else expect(actions!.x).toBeGreaterThanOrEqual(content!.x + content!.width - 1);
 
-    await page.getByRole("combobox", { name: "Sort" }).selectOption("category");
+    await page.getByRole("combobox", { name: "Group by" }).selectOption("category");
     const video = page.getByRole("region", { name: "Video review filters" });
     for (const level of ["subcategory", "finding group"]) {
       const toggles = video.getByRole("button", { name: new RegExp(` ${level}, `) });
@@ -96,7 +96,7 @@ test("a filter row's menus close once the row scrolls out of the filter list", a
   await chooseWorkflowStep(page, "Review");
   await setReviewSource(page, "Community · Extended Edition");
   await page.getByRole("button", { name: "Save Changes" }).click();
-  await page.getByRole("combobox", { name: "Sort" }).selectOption("time");
+  await page.getByRole("combobox", { name: "Group by" }).selectOption("time");
   // A short list so its first row can scroll out of view.
   await page.addStyleTag({ content: ".saved-review-filter-results { max-height: 90px !important; }" });
   const results = page.getByRole("region", { name: "Filter results" });

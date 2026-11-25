@@ -319,7 +319,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await expect(choice).toBeChecked();
     await membership.getByRole("button", { name: "Done" }).click();
 
-    await page.getByLabel("Sort", { exact: true }).selectOption("category");
+    await page.getByLabel("Group by", { exact: true }).selectOption("category");
     const video = page.getByRole("region", { name: "Video review filters" });
     const audio = page.getByRole("region", { name: "Audio review filters" });
     await expect(video.getByRole("button", { name: /Violence family/ })).toHaveAttribute("aria-expanded", "true");
@@ -350,7 +350,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await expect(linkedRows.first()).toBeChecked();
     await expect(linkedRows.last()).toBeChecked();
 
-    const sort = (section: typeof video, label: string) => section.getByRole("group", { name: /^Sort / }).getByRole("button", { name: new RegExp(`^${label}`) });
+    const sort = (section: typeof video, label: string) => section.getByRole("group", { name: /^Order / }).getByRole("button", { name: new RegExp(`^${label}`) });
     await expect(sort(video, "Time")).toHaveAccessibleName("Time, ascending");
     await expect(sort(video, "Time")).toHaveAttribute("aria-pressed", "true");
     await expect(sort(audio, "Time")).toHaveAccessibleName("Time, ascending");

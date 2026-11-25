@@ -17,7 +17,7 @@ test("capture Editarr for the website with example media", async ({ page }) => {
   await dialog.getByLabel("New review name").fill("Movie night");
   await dialog.getByRole("button", { name: "Start new review" }).click();
   await setReviewSource(page, "Unnamed scan");
-  await panel.getByLabel("Sort", { exact: true }).selectOption("category");
+  await panel.getByLabel("Group by", { exact: true }).selectOption("category");
   await expect(panel.getByRole("heading", { name: "Movie night", exact: true })).toBeVisible();
   await expect(panel.locator(".hierarchy-subcategory button").first()).toBeVisible();
   await expect(panel.getByRole("button", { name: "Save Review", exact: true })).toBeEnabled();

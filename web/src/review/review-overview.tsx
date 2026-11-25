@@ -163,7 +163,7 @@ export function SavedReviewOverview({
       return <tr className={`combined-result-hierarchy-header hierarchy-${level}`} key={key}><th className="combined-result-group-use"><input type="checkbox" aria-label={`Use all ${title.toLowerCase()} filters in ${name} ${levelLabel}`} aria-checked={mixed ? "mixed" : selected} ref={(node) => { if (node) node.indeterminate = mixed; }} checked={selected} disabled={busy || !filtersEditable || nodeFilters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(nodeFilters.filter(filter => !requiredIds.has(filter.id)).map((filter) => filter.id), !selected)} /></th><th colSpan={2}><button type="button" onClick={onToggle} aria-expanded={open} aria-label={`${name} ${levelLabel}, ${items.length} ${items.length === 1 ? "result" : "results"}, ${selectedCount} selected`}><span>{displayName}</span><small>{items.length} {items.length === 1 ? "result" : "results"} · {selectedCount} selected</small></button></th></tr>;
     };
     return <section className={`finding-group combined-${source}-findings`} aria-label={`${title} review filters`}><div className="section-heading"><div><h3>{title}</h3><p>{results.length} {results.length === 1 ? "result" : "results"} in {hierarchy.length} {hierarchy.length === 1 ? "family" : "families"}</p></div>
-      <div className="review-table-sort" role="group" aria-label={`Sort ${title.toLowerCase()} filters`}><span aria-hidden="true">Sort</span>{sortButton("time", "Time")}{sortButton("description", "Description")}{sortButton("severity", "Severity")}</div></div>
+      <div className="review-table-sort" role="group" aria-label={`Order ${title.toLowerCase()} filters`}><span aria-hidden="true">Order</span>{sortButton("time", "Time")}{sortButton("description", "Description")}{sortButton("severity", "Severity")}</div></div>
       <div className="review-filter-table-wrap"><table className="review-filter-table" aria-label={`${title} review filters table`}>{tableHead}{hierarchy.map((family) => {
       const familyItems = family.subcategories.flatMap((subcategory) => subcategory.groups.flatMap((group) => group.results));
       const familyKey = `${source}:family:${family.id}`;
@@ -220,7 +220,7 @@ export function SavedReviewOverview({
             <option value="audio">Audio</option>
             <option value="visual">Video</option>
           </select></label>
-          <label>Sort <select aria-label="Sort" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); scrollToResultsStart(); }}>
+          <label>Group by <select aria-label="Group by" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); scrollToResultsStart(); }}>
             <option value="time">Time</option>
             <option value="category">Category</option>
           </select></label>

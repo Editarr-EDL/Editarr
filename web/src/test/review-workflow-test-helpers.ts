@@ -18,7 +18,7 @@ export function revealMediaFiles() {
 }
 
 export async function useCategorySort() {
-  fireEvent.change(await screen.findByRole("combobox", { name: "Sort" }), { target: { value: "category" } });
+  fireEvent.change(await screen.findByRole("combobox", { name: "Group by" }), { target: { value: "category" } });
 }
 
 /** Open the Filters toolbar's Sources popover (unless it's open) and return it. */

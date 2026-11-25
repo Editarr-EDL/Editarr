@@ -230,7 +230,7 @@ it("sorts mixed review filters by time and restores the collapsible categories",
   expect(timeline).toHaveTextContent("2/2 results");
 
   fireEvent.change(show, { target: { value: "visual" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), { target: { value: "category" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Group by" }), { target: { value: "category" } });
   const category = await within(list).findByRole("button", { name: /Violence \(General\) subcategory/ });
   expect(category).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(category);

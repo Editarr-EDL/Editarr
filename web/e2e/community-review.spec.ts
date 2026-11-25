@@ -59,7 +59,7 @@ for (const width of [320, 1440]) {
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect.poll(() => saves[0]?.community_memberships).toEqual([{ link_id: "link-v_extended" }]);
 
-    await page.getByRole("combobox", { name: "Sort" }).selectOption("time");
+    await page.getByRole("combobox", { name: "Group by" }).selectOption("time");
     await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(3);
     await expect(row(page, "10:00").getByRole("checkbox")).toBeChecked();
     await expect(row(page, "15:00").getByRole("checkbox")).toBeChecked();

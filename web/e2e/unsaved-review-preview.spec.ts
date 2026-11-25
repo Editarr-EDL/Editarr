@@ -23,7 +23,7 @@ async function openDraftFilter(page: Page) {
   await dialog.getByRole("button", { name: "Start new review" }).click();
   await setReviewSource(page, "Unnamed scan");
   await workflowStep(page, "Review").click();
-  await panel.getByLabel("Sort", { exact: true }).selectOption("category");
+  await panel.getByLabel("Group by", { exact: true }).selectOption("category");
   const video = panel.getByRole("region", { name: "Video review filters", exact: true });
   await video.locator(".hierarchy-subcategory button").click();
   await video.locator(".hierarchy-group button").click();
