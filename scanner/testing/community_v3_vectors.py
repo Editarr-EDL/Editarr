@@ -231,7 +231,7 @@ def snapshot_object() -> dict:
                 "startMs": 600000,
                 "endMs": 605050,
                 "spread": {"startMs": 300, "endMs": 350},
-                "confidence": 0.393857102,
+                "confidence": 0.354197347,
                 "contributorCount": 4,
                 "support": {"attestations": 4, "upvotes": 1},
                 "negative": {"downvotes": 1, "disputes": 0, "coverageNegatives": 1},

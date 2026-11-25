@@ -284,6 +284,14 @@ def channel_for_source(source: str) -> McfChannel:
     return McfChannel.AUDIO if source == "audio" else McfChannel.VIDEO
 
 
+# The channel each MCF family is analyzed on: audio analysis yields only spoken
+# language; every other family is judged from the picture.
+MCF_FAMILY_CHANNELS: dict[McfCategoryFamily, McfChannel] = {
+    family: McfChannel.AUDIO if family == McfCategoryFamily.LANGUAGE else McfChannel.VIDEO
+    for family in MCF_CATEGORY_REGISTRY
+}
+
+
 class McfSourceVersion(str, Enum):
     V1_0_0 = "1.0.0"
     V1_1_0 = "1.1.0"

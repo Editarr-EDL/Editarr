@@ -463,7 +463,7 @@ submitter's file playback timeline.
 | `media.durationMs` | Integer from 1 to 86,400,000 |
 | `media.matchKeys` | 0–5 key objects (§3.2) for the tier 1–3 types only. Each type appears at most once. All `sizeBytes` values must be equal. |
 | `alignmentHint` | Null, or `{versionId, revision (int ≥ 1), offsetMs (int, ±86,400,000), scale (number 0.9–1.1), anchors (int 0–2000)}`. The service stores it for diagnostics only. It is never used in the fit (§6.3). |
-| `coverage` | 0–9 objects, each with a unique `category`. Each has 1–512 `intervals`, sorted, non-overlapping, with `0 ≤ startMs < endMs ≤ durationMs` |
+| `coverage` | 0–9 objects, each with a unique `category`. Each has 1–512 `intervals`, sorted, non-overlapping, with `0 ≤ startMs < endMs ≤ durationMs`. Coverage is per channel, not per model: Editarr sends it only for its own completed scan stages, and a stage that analyzed the audio channel covers every audio category (`language`) while a stage that analyzed the picture covers every video category (all other families), whichever model ran. Saved reviews send none |
 | `entries` | 0–2,000 entries, each with a unique `entryId` (token, at most 32 bytes) |
 | `entries[].kind` | `support`, `dispute`, or `coverage_negative` |
 | `entries[].proposedFilterId` | Token or null. Must be non-null for `dispute` and `coverage_negative`. A non-null value appears at most once per artifact. |
@@ -504,6 +504,10 @@ The master set of a version is a pure function of the following inputs:
 Arrival order and processing order must not affect the result. The service
 recomputes the whole version on every input change. It may cache, but only
 if the result is byte-identical to a full recompute.
+
+Only shared submissions and votes are inputs. A local scan, review or decision
+that the user never shares counts toward nothing: it adds no support, no
+dispute and no coverage negative to any filter.
 
 ### 6.1 Counted inputs
 
@@ -706,7 +710,10 @@ precedence:
 **Implicit coverage negative:** for each final filter `F` of category `k`, if
 the contributor has no other signal on `F`, and `[F.startMs, F.endMs]` is
 inside one aligned `coverage[k]` interval of the contributor's counted
-submission, it counts as a coverage negative.
+submission, it counts as a coverage negative. In other words, another
+contributor's shared submission that scanned that channel over that range
+without finding the filter counts against it, by default as much as a
+downvote.
 
 **Votes:** an `up` or `down` vote counts only when the contributor has no
 attestation signal on the filter. Votes follow merges through
@@ -720,12 +727,16 @@ attestation signal on the filter. Votes follow merges through
 | `negative.disputes` | Count of dispute signals |
 | `negative.coverageNegatives` | Count of explicit plus implicit coverage negatives |
 | `S` | `attestations + upvotes` |
-| `Neg` | `downvotes + disputes + coverageNegativeWeight × coverageNegatives` (default weight 0.25) |
+| `Neg` | `downvotes + disputes + coverageNegativeWeight × coverageNegatives` (default weight 1.0, so a coverage negative counts as a full downvote) |
 | `confidence` | `wilson(S, Neg)`. With `n = S + Neg + 2`, `p = (S + 1) / n` and `z = 1.96`, the lower bound is `(p + z²/2n − z·sqrt(p(1−p)/n + z²/4n²)) / (1 + z²/n)`, clamped to 0..1 and rounded as `floor(x × 1e9 + 0.5) / 1e9`. This is the same as `community-ranking-wilson-1`. |
 | `lowConfidence` | `Neg > S` |
 | served | `confidence ≥ confidenceFloor` (default 0.05). The filter must also not be quarantined, and its version must not be quarantined. |
 
 Low Confidence filters are still served. Clients hide them by default.
+
+Low Confidence needs negatives to exceed support: one contrary signal (a
+downvote, dispute or coverage negative) against one attestation gives
+`wilson(1, 1)` = 0.150035709 and is not Low Confidence; a second one is.
 
 A filter below the floor stays in the registry and returns if its signals
 improve. With the defaults:
@@ -746,7 +757,7 @@ improve. With the defaults:
 ### 6.10 Worked example
 
 This example uses the defaults: `N = 500` ms and coverage-negative weight
-0.25.
+1.0.
 
 - Submissions A, B and C are identity-aligned.
 - Submission D comes from a merged candidate, with fit `offset +1,200 ms`.
@@ -770,8 +781,8 @@ The result:
 | Subcategory | punching 3, kicking 1 → `punching` |
 | Severity | medium 1+1 = 2, high 3, low 1 → `high` |
 | Action | skip 3, mute 1 → `skip` |
-| Counts | `attestations` 4, `upvotes` 1, `downvotes` 1, `coverageNegatives` 1. `S` = 5 and `Neg` = 1.25 |
-| Confidence | `wilson(5, 1.25)` = **0.393857102**. `lowConfidence` is false, and the filter is served |
+| Counts | `attestations` 4, `upvotes` 1, `downvotes` 1, `coverageNegatives` 1. `S` = 5 and `Neg` = 1 + 0 + 1.0 × 1 = 2 |
+| Confidence | `wilson(5, 2)` = **0.354197347**. `lowConfidence` is false (2 is not more than 5), and the filter is served |
 
 A second filter, `language/swearing` from A only, is disputed by B and C:
 `S` = 1 and `Neg` = 2, so the confidence is 0.117618231. It is served and
@@ -787,6 +798,7 @@ Reference values (`S`, `Neg` → confidence):
 | 1, 8 | 0.051366601 |
 | 1, 9 | 0.046964148 (dropped) |
 | 3, 0 | 0.375528264 |
+| 5, 2 | 0.354197347 |
 
 ### 6.11 Clarifications
 
@@ -976,7 +988,7 @@ Snapshot JSON (UTF-8, compact, key order as shown):
   "versionInfo": { "status": "confirmed", "aliasId": "theatrical", "label": "Theatrical", "labelText": null, "runtimeMs": 8160500, "trust": 0.41 },
   "filters": [ { "filterId": "f_9c1d…", "mergedIds": [], "category": "violence", "subcategory": "punching",
     "severity": "high", "action": "skip", "startMs": 600000, "endMs": 605050,
-    "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.393857102, "contributorCount": 4,
+    "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.354197347, "contributorCount": 4,
     "support": { "attestations": 4, "upvotes": 1 },
     "negative": { "downvotes": 1, "disputes": 0, "coverageNegatives": 1 }, "lowConfidence": false } ] }
 ```
@@ -1364,7 +1376,7 @@ conservatively; none changes a wire format:
 | `matchToleranceMs` | 500 | N in §6.5. Never sent to clients |
 | `severityWeights` | `{"low":1,"medium":1,"high":3}` | §6.7 |
 | `confidenceFloor` | 0.05 | Serving floor (§6.8) |
-| `coverageNegativeWeight` | 0.25 | Weight of a coverage negative. Proposed default; see Open questions |
+| `coverageNegativeWeight` | 1.0 | Weight of a coverage negative; 1.0 counts it as a full downvote (owner decision). Lower it to weaken coverage negatives |
 | `candidatePromotionContributors` | 3 | §3.5 |
 | `alignmentSearchMs` | 30000 | §6.3 |
 | `alignmentMinAnchors` | 3 | §6.3 |
@@ -1411,7 +1423,10 @@ suggested default for each, which the owner should confirm.
 
 1. **Action merge rule.** The suggested default is a plurality vote, where
    ties keep the incumbent, then the first member's action (§6.7).
-2. **Coverage-negative weight.** The suggested default is 0.25 (§6.8).
+2. **Coverage-negative weight.** Resolved: the owner set the default to 1.0, so a
+   shared submission that scanned the channel over a filter's range without
+   finding it counts as a full downvote. Coverage is per channel, not per model
+   (§5.2, §6.8). The weight stays operator-configurable (§8.1).
 3. **Tier 1–3 match to a version with a different label.** The suggested
    default is that the label wins: the submission doesn't attach, and it is
    handled by rule 1, 2 or 4. The key collision is visible to moderators

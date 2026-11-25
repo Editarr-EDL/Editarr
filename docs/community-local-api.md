@@ -197,7 +197,7 @@ Returns the master view:
   "filters": [ {
     "filterId": "f_9c1d…", "category": "violence",
     "master": { "startMs": 600000, "endMs": 605050, "subcategory": "punching", "severity": "high", "action": "skip",
-                "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.393857102, "contributorCount": 4,
+                "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.354197347, "contributorCount": 4,
                 "support": { "attestations": 4, "upvotes": 1 }, "negative": { "downvotes": 1, "disputes": 0, "coverageNegatives": 1 },
                 "lowConfidence": false, "present": true },
     "local": { "startMs": 600100, "endMs": 605050, "subcategory": "punching", "severity": "medium", "action": "skip" },
@@ -459,7 +459,7 @@ The projection builds the entries as follows:
 | `rejected` row | A `dispute` entry |
 | `verified` or `adjusted` row not covered by a cue | A `support` entry with `origin: "downloaded"` and `locallyVerified: true`, carrying the effective values |
 | Untouched downloaded row | Not shared |
-| Local scan coverage | `coverage` |
+| Local scan coverage | `coverage`: each completed audio stage covers every audio category, and each completed visual stage every video category, for its analyzed ranges, whichever model ran. Saved reviews send none |
 
 The response:
 
