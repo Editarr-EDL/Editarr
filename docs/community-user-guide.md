@@ -89,7 +89,7 @@ their time, category, severity, action, confidence and contributor count.
 - A filter is **Low Confidence** when its negative signals outweigh its support
   (attestations plus upvotes). Negatives come from downvotes, disputes, and other
   contributors' shared submissions that scanned that channel (audio or video) over
-  that range without finding the filter; each counts as one downvote. Your local
+  that range without finding the filter; by default each counts as one downvote. Your local
   scans never count toward anything unless you share them. Untouched
   Low Confidence filters are not active unless you turn on **Show Low Confidence
   filters**. **Minimum confidence** hides other untouched filters below your
