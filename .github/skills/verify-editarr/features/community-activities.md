@@ -2,16 +2,16 @@
 
 ## Sub-features
 
-- Authorized media search and imported shared evidence.
-- Contributor-private receipts and votes, including explicit admin receipt recovery.
+- Authorized Find against the service's `/v1/match` and master filter set links.
+- Contributor-private, receipt-bound filter votes.
 - Session-bound exact previews and current-policy review publications.
 - Original-contributor management, live revocation, and scoped publication audits.
 
 ## How to get to it (user POV)
 
 Community results are in Find Filters. Sharing is available on completed scans
-and saved reviews. My Profile contains the account's own community identity and
-receipts, independently of provider-settings permission. Connections retains its
+and saved reviews. My Profile contains the account's own community identity,
+independently of provider-settings permission. Connections retains its
 existing personal panel. Authorized administrators open Users, View, Community
 connection for a named ordinary account. Protected accounts and each own/other
 grant are checked before rendering. Endpoint authorization is independent of
@@ -43,8 +43,8 @@ from the real HOME before isolating HOME and XDG_CACHE_HOME, and set
 `COREPACK_ENABLE_NETWORK=0`. This journey launches an API-only
 controller plus Vite, creates the owner through the UI, admits member/admin
 accounts as Jellyfin users with one Jellyfin sign-in each (`admitJellyfinUser`),
-then syncs so they read the synthetic catalog's libraries, and checks own enrollment and receipts, named
-connection actions, concealed/protected account refusals, original-contributor
+then syncs so they read the synthetic catalog's libraries, and checks own
+enrollment, named connection actions, concealed/protected account refusals, original-contributor
 saved jobs, acting-admin previews, and stale-source refresh. It captures axe,
 overflow, screenshots and ARIA snapshots at 1440 and 320 pixels. The API entry
 point refuses an existing database and requires the run's verification marker.
@@ -54,16 +54,19 @@ The journey then proves each community write against the real app
 owner withholds each capability in turn and restores it afterwards. From the
 member it withholds `community.search` and the own `identity.view`,
 `identity.profile`, `identity.keys`, and `publications.check`, `retry`, and
-`retract` capabilities. The member's matching lookup, status read, rename, rename
-cancel, key rotation, check, retry, and retract each get 403. From the admin it
+`retract` capabilities. The member's Find (`POST /api/community/find`), status
+read, rename, rename cancel, key rotation, check, retry, and retract each get 403. From the admin it
 withholds the `.other` profile, key, and publication capabilities. The admin's
 named rename and rotation status get 403, and its check, retry, and retract of the
 member's publication get a concealing 404. Fresh reads and the double's request
 log show that no refused request changed state or reached the service.
 
-With the grants restored, the member's lookup gets 200. The admin's check and then
-the member's check each add one service request. The member's retry publishes the
-first publication, and the admin's retraction sets its `cancelRequested`. The member
+With the grants restored, the member's Find gets 200 with no community versions,
+and the double's request log shows one `POST /v1/match`. The admin's and the
+member's checks each answer 200 from local state: the publication stays queued and
+the service double receives no request. The member's retry posts the saved
+submission once to `POST /v1/submissions` and a fresh read shows it `published`;
+the admin's retraction sets its `cancelRequested`. The member
 queues a second publication. The admin's retry publishes it, and the member's
 retraction sets its `cancelRequested`. A fresh read follows each write. Repeating a
 retry or retraction on the first publication changes nothing. The member renames
@@ -74,12 +77,13 @@ rotation status.
 
 The service double is labelled. `lib/community_double.py` judges every request
 with `lib/community-contract.mjs`, which bundles the community service's own route
-methods and body validators. Contributors
-start with distinct names. A rename to a name another contributor holds, in any
-case, gets 409 `display_name_taken`, and reusing an operation ID with a different
+methods and body validators, including `parseMatchRequest` for `/v1/match` and
+`parseSubmissionRequest` with `DEFAULT_SUBMISSION_LIMITS` for `/v1/submissions`.
+It answers Find with no versions. Contributors start with distinct names. A
+rename to a name another contributor holds, in any case, gets 409 `display_name_taken`, and reusing an operation ID with a different
 body gets 409 `operation_conflict`. `tests/test_verify_community_double.py` pins
-these rules. Votes stay unproven, because they need imported revisions from a live
-service.
+these rules. Filter votes stay unproven here, because they need a linked master
+set with a snapshot receipt from a live service.
 
 The printed evidence directory contains `doctor.json`,
 `community-result.json`, `community-steps.json`, `community-http-statuses.json`,
@@ -112,18 +116,17 @@ Keep `doctor.json`, the community result, HTTP statuses, screenshots and
 `cleanup.json`. Confirm process shutdown, scratch removal and retained evidence.
 After cleanup, `verify.mjs doctor EVIDENCE` must fail for the stopped instance.
 
-For signed publication, receipt and vote checks, run the existing transport-boundary
+For signed submission, master-set and filter-vote checks, run the existing transport-boundary
 tests with isolated data/log/cache roots and an OS-temp TMPDIR.
 
 ```sh
-.venv/bin/python -B -m pytest -q -p no:randomly -p no:cacheprovider tests/test_community_activity_access.py tests/test_community_activity_http.py tests/test_community_activity_feedback.py tests/test_community_import_receipts.py tests/test_community_votes.py
+.venv/bin/python -B -m pytest -q -p no:randomly -p no:cacheprovider tests/test_community_activity_access.py tests/test_community_activity_http.py tests/test_community_submission_sharing.py tests/test_community_master_find.py tests/test_community_master_votes.py
 ```
 
 These tests use the existing signature-verifying community service double. They
-record contributor IDs, not credentials. They cover two-contributor shared import,
-receipt and vote isolation, admin management, hidden and absent IDs, stale preview,
-capability changes at the write lock, disconnect-before-send, and revoked download
-after artifact verification with no import writes.
+record contributor IDs, not credentials. They cover Find queries and local Match %
+cross-checks, receipt-bound vote isolation, admin management, hidden and absent IDs,
+stale preview, capability changes at the write lock, and disconnect-before-send.
 
 ## Gotchas
 

@@ -141,3 +141,27 @@ def test_rename_refuses_another_contributors_current_name_in_any_case(double, fo
     rename(transport, member, "Probe Member Name", "own-rename")
     restored = rename(transport, member, original, "restore-own-name")
     assert restored["displayName"] == original
+
+
+def test_match_body_must_match_the_service_schema_and_finds_no_versions(double):
+    _, transport, (member, _), answers = double
+    send(transport, member, "POST", "/v1/match", {"version": 1, "keys": []}, "match-empty")
+    assert answers[-1] == (400, {"error": {"code": "invalid_match"}})
+    query = {
+        "version": 1,
+        "keys": [{"type": "tmdb", "kind": "movie", "id": "603"}],
+        "label": None,
+        "runtimeMs": None,
+        "limit": 20,
+    }
+    assert send(transport, member, "POST", "/v1/match", query, "match-valid") == {
+        "version": 1,
+        "results": [],
+    }
+
+
+def test_submission_body_must_match_the_service_parser(double):
+    service, transport, (member, _), answers = double
+    send(transport, member, "POST", "/v1/submissions", {"version": 1}, "submit-bad")
+    assert answers[-1] == (400, {"error": {"code": "invalid_submission"}})
+    assert service.posts == []

@@ -12,6 +12,7 @@ from scanner.db import get_db
 from scanner.integrations.community.activity_access import CHECK, RETRACT, RETRY
 from scanner.integrations.community.publications import PublicationOutbox
 from scanner.integrations.community.transport import CommunityFailure
+from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.grants import PrincipalAccess
 from scanner.security.access.request_access import request_access
 from scanner.security.private_identity_files import IdentityUnavailable
@@ -116,13 +117,13 @@ async def publication_cancel(
 
 
 @router.post("/import-receipts/recover")
-async def recover_receipts(_access: PrincipalAccess = Depends(request_access)):
-    return protocol_retired()
+async def recover_receipts(access: PrincipalAccess = Depends(request_access)):
+    return protocol_retired(access, C.COMMUNITY_DOWNLOAD)
 
 
 @router.post("/import-receipts/{import_id}/retry")
-async def retry_receipt(import_id: str, _access: PrincipalAccess = Depends(request_access)):
-    return protocol_retired()
+async def retry_receipt(import_id: str, access: PrincipalAccess = Depends(request_access)):
+    return protocol_retired(access, C.COMMUNITY_DOWNLOAD)
 
 
 connection_router = router

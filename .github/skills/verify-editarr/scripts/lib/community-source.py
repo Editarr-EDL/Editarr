@@ -10,7 +10,7 @@ import httpx
 import uvicorn
 
 from scanner.settings.config import settings
-from tests.test_community_donations import BOUNDS
+from tests.test_community_activity_http import BOUNDS
 
 data = Path(os.environ["EDITARR_DATA_DIR"]).resolve()
 scratch = data.parent

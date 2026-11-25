@@ -3,8 +3,9 @@
 `ProbeService` extends the signature-verifying `ActivityService` test double. Every
 request is first judged by `community-contract.mjs`, which runs the community
 service's own route methods and body validators, so the double refuses what the
-real service refuses. It applies signed renames under the real uniqueness and operation-replay rules. Nothing here
-contacts a real service.
+real service refuses. It answers Find's `/v1/match` with no versions, accepts
+signed submissions, and applies signed renames under the real uniqueness and
+operation-replay rules. Nothing here contacts a real service.
 """
 
 import hashlib
@@ -84,7 +85,7 @@ def _failure(status: int, code: str) -> httpx.Response:
 
 
 class ProbeService(ActivityService):
-    """The labelled double with contract-checked requests and renames.
+    """The labelled double with contract-checked requests, matches, and renames.
 
     Contributors start with distinct generated names. A rename keeps the real
     service's rules: a name another contributor holds, in any case, is taken; the
@@ -116,6 +117,9 @@ class ProbeService(ActivityService):
         verdict = self.judge(request)
         if verdict["status"] != 200:
             return _failure(verdict["status"], verdict["code"])
+        if request.url.path == "/v1/match":
+            self._signer(request)
+            return httpx.Response(200, json={"version": 1, "results": []})
         if request.url.path == "/v1/identity" and request.method == "PATCH":
             return self._rename(request, verdict["facts"])
         return await super().__call__(request)

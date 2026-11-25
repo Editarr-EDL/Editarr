@@ -218,8 +218,11 @@ No CLI, scheduler, startup, restore or ordinary Discord login rotates keys.
 
 Migration 0037 and [ADR 0002](adr/0002-community-master-filter-sets.md) retire the
 revision-based lookup, download, import-receipt, vote and review-repair flows. These
-local routes still require authentication, same-origin and CSRF, and now answer
-`410 {"error":"protocol_retired"}` with `Cache-Control: no-store`:
+local routes still require authentication, same-origin and CSRF, and their
+registered capability (`community.search` for lookup, `community.feedback.submit`
+for votes, `community.download` for the others; a caller without it gets `403
+capability_denied`). They now answer `410 {"error":"protocol_retired"}` with
+`Cache-Control: no-store`:
 
 | Retired route | Replacement |
 | --- | --- |

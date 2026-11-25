@@ -19,11 +19,15 @@ async function serviceValidators() {
       contents: `${fs.readFileSync(args.path, "utf8")}\nexport { payloadSchema };\n`, loader: "ts" }));
   } };
   const entry = `
+    export { parseMatchRequest } from "./src/matching/input.ts";
+    export { parseSubmissionRequest, DEFAULT_SUBMISSION_LIMITS } from "./src/submissions/input.ts";
     export { validatedName, nameKey } from "./src/identity/profile.ts";
     export { rotationIntent } from "./src/identity/rotation-proof.ts";
     export { payloadSchema as enrollmentSchema } from "./src/identity/enrollment-proof.ts";`;
   const built = await esbuild.build({ stdin: { contents: entry, resolveDir: service, loader: "ts" }, bundle: true,
-    write: false, format: "esm", platform: "node", logLevel: "silent", plugins: [exposeEnrollment] });
+    write: false, format: "esm", platform: "node", logLevel: "silent", plugins: [exposeEnrollment],
+    // Prefer ES module builds: jsonc-parser's UMD main cannot be bundled as ESM.
+    mainFields: ["module", "main"] });
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "editarr-community-contract-"));
   try {
     fs.writeFileSync(path.join(scratch, "validators.mjs"), built.outputFiles[0].text);
@@ -49,6 +53,9 @@ function routes(v) {
   };
   return [
     { path: /^\/v1\/identity$/, json: { PATCH: true }, methods: { GET: unread, PATCH: rename }, invalid: "invalid_display_name", wrongType: "invalid_rename" },
+    { path: /^\/v1\/aliases$/, methods: { GET: unread }, invalid: "invalid_request", bodyless: [400, "invalid_request"] },
+    { path: /^\/v1\/match$/, json: { POST: true }, methods: { POST: body => { v.parseMatchRequest(new TextEncoder().encode(body)); } }, invalid: "invalid_match" },
+    { path: /^\/v1\/submissions$/, json: { POST: true }, methods: { POST: body => { v.parseSubmissionRequest(json(body), v.DEFAULT_SUBMISSION_LIMITS); } }, invalid: "invalid_submission" },
     { path: /^\/v1\/keys\/(rotate|rotation-status)$/, json: { POST: true }, methods: { POST: body => { v.rotationIntent(json(body)); } }, invalid: "invalid_key_operation" },
     { path: /^\/v1\/enrollments\/complete$/, methods: { POST: body => { v.enrollmentSchema.parse(json(body)); } }, invalid: "invalid_enrollment_proof", wrongMethod: [400, "invalid_enrollment_proof"] },
   ];
