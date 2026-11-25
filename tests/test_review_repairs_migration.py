@@ -34,7 +34,7 @@ def test_export_snapshot_upgrade_preserves_0020_rows_and_recoverable_backup(tmp_
     restored = adoption.export_upgrade_recovery(path, path.parent, tmp_path / "restored.db")
     assert _snapshot(restored)[0] == original
     assert adoption._inspect_database(restored) == "0020_review_scan_repairs"
-    assert adoption._inspect_database(path) == "0039_review_community_sources"
+    assert adoption._inspect_database(path) == "0040_review_community_filters"
 
 
 def orphan_database(tmp_path, revision=PREVIOUS):

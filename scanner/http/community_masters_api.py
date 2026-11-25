@@ -194,12 +194,8 @@ def active_filters(
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
 ):
-    """The link's in-effect filters on the local timeline now, and their merged Simple EDL.
-
-    Saved reviews store these values as a snapshot when they include or refresh the
-    link; `clipped=false` returns them unclipped, as the snapshot stores them, so the
-    web app can tell whether a stored snapshot changed.
-    """
+    """The link's filters that start enabled in a review, on the local timeline now,
+    and their merged Simple EDL; `clipped=false` returns them unclipped."""
 
     def action():
         link = authorize_link(db, access, link_id, C.COMMUNITY_SEARCH)

@@ -21,7 +21,7 @@ export function MatchPercent({ value }: { value: number }) {
 }
 
 export const LOW_CONFIDENCE_TOOLTIP = "More people disputed, voted down or didn't find this filter than confirmed or voted it up. "
-  + "Low Confidence filters stay hidden unless you show them.";
+  + "Low Confidence filters stay hidden here, and start disabled in reviews, unless you show them.";
 
 /** Confidence badge; Low Confidence rows are labelled explicitly and explained in a tooltip. */
 export function ConfidenceBadge({ confidence, low }: { confidence: number; low: boolean }) {

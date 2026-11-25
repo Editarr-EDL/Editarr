@@ -2,9 +2,11 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useMcfRegistry } from "../shared/mcf-registry";
 import { ReviewScanInfo, reviewScanSourceLabel } from "./review-scan-source";
 import type { Scan } from "../api/api-scan-types";
-import type { ReviewCommunityFilter, SavedReview } from "../api/api-review-types";
+import type { SavedReview } from "../api/api-review-types";
 import { formatTime } from "../shared/display";
 import { McfClassificationFields, McfRegistryStatus } from "./review-mcf";
+import { CommunityFilterSource, communityResultCount } from "./review-community-badges";
+import { isCommunityFilter } from "./review-community";
 import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, filterSourceOrigin, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
 
 /** Edit one review filter's classification and timing.
@@ -76,11 +78,8 @@ export function SavedReviewOverview({
   cuesEditable = true,
   metadataEditable = true,
   defaultSort = "category",
-  communityFilters = [],
 }: {
   filters: SavedReview["filters"];
-  /** Included community filters; they count toward the timeline summary and always apply. */
-  communityFilters?: ReviewCommunityFilter[];
   memberships: SavedReview["memberships"];
   scans: Scan[];
   busy: boolean;
@@ -151,10 +150,10 @@ export function SavedReviewOverview({
       onFocusFilterComplete?.();
     });
   }, [filters, focusFilterId, onFocusFilterComplete, registry]);
-  const community = communityFilters.map((filter) => ({ ...filter, selected: true }));
-  const timelineFilters = [...filters, ...community];
-  const selectedResultCount = visibleResults.filter((result) => result.filters.every((filter) => filter.selected)).length + community.length;
-  const resultCount = visibleResults.length + community.length;
+  const timelineFilters = filters;
+  const selectedResultCount = visibleResults.filter((result) => result.filters.every((filter) => filter.selected)).length;
+  const resultCount = visibleResults.length;
+  const communityCount = communityResultCount(filters);
   const skipped = mergeReviewRanges(timelineFilters
     .filter((filter) => filter.selected && filter.edit_action === "skip")
     .map((filter) => [filter.start_seconds, Math.max(filter.start_seconds, filter.end_seconds ?? filter.start_seconds + 1)]))
@@ -182,7 +181,8 @@ export function SavedReviewOverview({
           {source === "audio" ? <CensoredAudioWord word={description} context={descriptionFilters.get(description)?.details} /> : description}
           {linkedIndicator}</span>)}</span> : <>{sort === "time" && categoryName}{linkedIndicator}</>}</td>
         <td>{severityText(item.pathFilters)}{item.pathFilters.some(filter => lockedSeverities[filter.id]) && <small>Locked by instance policy</small>}</td>
-        <td className="finding-scan-attribution"><span className="review-scan-source">{reviewScanSourceLabel(sourceScans)}<ReviewScanInfo scans={sourceScans} /></span></td>
+        <td className="finding-scan-attribution">{(sourceScans.length > 0 || !result.filters.some(isCommunityFilter)) && <span className="review-scan-source">{reviewScanSourceLabel(sourceScans)}<ReviewScanInfo scans={sourceScans} /></span>}
+          <CommunityFilterSource filters={result.filters} /></td>
         <td><span className="finding-preview"><span className="saved-review-filter-actions">{result.filters.map(filter => <span className="saved-review-filter-action" key={filter.id}>
           {requiredIds.has(filter.id) && <small>Required by instance policy</small>}
           <button type="button" className="btn-secondary compact-button" aria-label={`Preview filter ${filter.id}`} onClick={() => onPreviewFilter(filter)} disabled={busy || previewDisabled}>Preview</button>
@@ -221,7 +221,7 @@ export function SavedReviewOverview({
       const levelLabel = level === "group" ? "finding group" : level;
       return <tr className={`combined-result-hierarchy-header hierarchy-${level}`} key={key}><th className="combined-result-group-use"><input type="checkbox" aria-label={`Use all ${title.toLowerCase()} filters in ${name} ${levelLabel}`} aria-checked={mixed ? "mixed" : selected} ref={(node) => { if (node) node.indeterminate = mixed; }} checked={selected} disabled={busy || !filtersEditable || nodeFilters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(nodeFilters.filter(filter => !requiredIds.has(filter.id)).map((filter) => filter.id), !selected)} /></th><th colSpan={5}><button type="button" onClick={onToggle} aria-expanded={open} aria-label={`${name} ${levelLabel}, ${items.length} ${items.length === 1 ? "result" : "results"}, ${selectedCount} selected`}><span>{displayName}</span><small>{items.length} {items.length === 1 ? "result" : "results"} · {selectedCount} selected</small></button></th></tr>;
     };
-    return <section className={`finding-group combined-${source}-findings`} aria-label={`${title} review filters`}><div className="section-heading"><div><h3>{title}</h3><p>{results.length} {results.length === 1 ? "result" : "results"} in {hierarchy.length} {hierarchy.length === 1 ? "family" : "families"}</p></div></div><div className="library-table-wrap tiered-review-table-wrap" role="region" tabIndex={0} aria-label={`${title} review filters table`}><table className={`scan-filter-table combined-scan-filter-table tiered-review-table${hasVideoPreview ? " has-video-preview" : ""}`}><thead><tr><th>Use</th>{sortHeader("time", "Time")}{sortHeader("description", "Description")}{sortHeader("severity", "Severity")}<th>Scan</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>{hierarchy.map((family) => {
+    return <section className={`finding-group combined-${source}-findings`} aria-label={`${title} review filters`}><div className="section-heading"><div><h3>{title}</h3><p>{results.length} {results.length === 1 ? "result" : "results"} in {hierarchy.length} {hierarchy.length === 1 ? "family" : "families"}</p></div></div><div className="library-table-wrap tiered-review-table-wrap" role="region" tabIndex={0} aria-label={`${title} review filters table`}><table className={`scan-filter-table combined-scan-filter-table tiered-review-table${hasVideoPreview ? " has-video-preview" : ""}`}><thead><tr><th>Use</th>{sortHeader("time", "Time")}{sortHeader("description", "Description")}{sortHeader("severity", "Severity")}<th>Source</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>{hierarchy.map((family) => {
       const familyItems = family.subcategories.flatMap((subcategory) => subcategory.groups.flatMap((group) => group.results));
       const familyKey = `${source}:family:${family.id}`;
       const familyOpen = !collapsedFamilies.has(familyKey);
@@ -249,7 +249,7 @@ export function SavedReviewOverview({
       <div className="scan-review-heading">
         <div>
           <h3>Timeline summary</h3>
-          <p>Combined results from {memberships.length} selected {memberships.length === 1 ? "scan" : "scans"}{community.length > 0 && ` and ${community.length} community ${community.length === 1 ? "filter" : "filters"}`}.</p>
+          <p>Combined results from {memberships.length} selected {memberships.length === 1 ? "scan" : "scans"}{communityCount > 0 && ` and ${communityCount} community ${communityCount === 1 ? "filter" : "filters"}`}.</p>
         </div>
         <div className="scan-review-summary">
           <strong>{selectedResultCount}/{resultCount} results</strong>
@@ -288,7 +288,7 @@ export function SavedReviewOverview({
           {showAudio && renderTieredSection("Audio", audioResults, "audio")}
         </> : chronological.length ? <div className="library-table-wrap tiered-review-table-wrap">
           <table className="scan-filter-table tiered-review-table" aria-label="Review filters by time">
-            <thead><tr><th>Use</th><th>Time</th><th>Description</th><th>Severity</th><th>Scan</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>
+            <thead><tr><th>Use</th><th>Time</th><th>Description</th><th>Severity</th><th>Source</th><th><span className="visually-hidden">Filter controls</span></th></tr></thead>
             <tbody>{chronological.map((result) => {
               const filter = result.filters[0];
               const category = filter.source === "visual" ? reviewVideoCategories(filter, true).join(", ") : "Audio";

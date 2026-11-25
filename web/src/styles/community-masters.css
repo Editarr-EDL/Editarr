@@ -1,13 +1,13 @@
-/* Community master filter sets: find cards, master view, alignment, update review and sync entry. */
+/* Community master filter sets: find cards, the read-only master view, alignment and the sync entry. */
 .community-masters { display: grid; gap: 12px; margin-block: 12px 20px; min-width: 0; }
 .community-masters > h2 { margin: 0; font-size: 1.15rem; }
 .master-link { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid #3b4351; border-radius: 8px; background: #1c2027; min-width: 0; }
-.master-link-header, .master-link-title, .master-version-card-title, .master-update-heading, .master-update-group-heading {
+.master-link-header, .master-link-title, .master-version-card-title {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0;
 }
 .master-link-header { justify-content: space-between; }
 .master-link-header .button-row { margin: 0; gap: 6px; flex-wrap: wrap; }
-.master-link-title h3, .master-version-card-title h4, .master-update-group-heading h4 { margin: 0; font-size: 1rem; }
+.master-link-title h3, .master-version-card-title h4 { margin: 0; font-size: 1rem; }
 
 .master-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #4a5568; border-radius: 999px;
   color: #c8d2e2; background: #232a35; font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
@@ -15,7 +15,6 @@
 .master-unconfirmed { border-color: #8a7440; color: #ffd28e; background: #2b261b; cursor: help; }
 .master-unconfirmed:hover, .master-unconfirmed[aria-expanded="true"], .master-unconfirmed:focus-visible { background: #3a3220; }
 .master-low-confidence { border-color: #8a5a40; color: #ffc19e; }
-.master-touched { border-color: #58709a; color: #b9d6ff; }
 .master-link-state { border-color: #8a5a40; color: #ffc19e; background: #2b211b; }
 .master-link-state-notice { display: grid; gap: 8px; min-width: 0; }
 .master-link-state-notice p { margin: 0; }
@@ -25,15 +24,13 @@
 .master-verified-icon svg { width: 16px; height: 16px; }
 .master-verified-icon:hover, .master-verified-icon:focus-visible, .master-verified-icon[aria-expanded="true"] { background: #243a30; }
 
-.master-update-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
-  padding: 9px 12px; border-left: 3px solid #6b8fd6; border-radius: 4px; background: #1f2a3d; }
-
 .master-preferences { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-bottom: 8px; }
 .master-threshold { display: inline-flex; align-items: center; gap: 8px; }
 .master-threshold input { width: min(220px, 50vw); }
 .master-threshold output { min-width: 3.5em; color: #c8d2e2; font-variant-numeric: tabular-nums; }
 .master-toggle { display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; }
 .master-toggle input { flex: none; width: auto; margin: 0; }
+.master-preferences-note { flex: 1 0 100%; margin: 0; }
 
 .master-filter-list { display: grid; gap: 8px; min-width: 0; }
 .master-filter-list > p { margin: 0; }
@@ -42,17 +39,15 @@
 .master-filter-table thead th:nth-child(2) { width: auto; }
 .master-filter-table thead th:nth-child(3) { width: 11.5rem; }
 .master-filter-table thead th:nth-child(4) { width: 8.5rem; }
-.master-filter-table thead th:nth-child(5) { width: 9.5rem; }
+.master-filter-table thead th:nth-child(5) { width: 6rem; }
 .master-filter-table thead th { white-space: nowrap; }
 .master-filter-table :is(th, td) { overflow-wrap: normal; }
-.master-filter-table thead th:nth-child(6) { width: 15.5rem; }
+.master-filter-table thead th:nth-child(6) { width: 9rem; }
 .master-filter-table .community-row-actions { flex-wrap: wrap; gap: 4px; }
 .master-filter-table .community-row-actions .btn-secondary { overflow-wrap: normal; white-space: nowrap; }
 .master-filter-table .master-votes { flex-wrap: nowrap; }
-.master-filter-table th[scope="row"] small, .master-status small { display: block; font-weight: 400; }
+.master-filter-table th[scope="row"] small { display: block; font-weight: 400; }
 .master-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.master-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.master-row-inactive td, .master-row-inactive th { opacity: .65; }
 .master-votes { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .master-inline-error { color: #ffc2bd; font-size: 12px; }
 
@@ -64,7 +59,7 @@
 .master-version-card { display: grid; align-content: start; gap: 6px; padding: 12px; border: 1px solid #3b4351; border-radius: 8px; background: #1c2027; }
 .master-version-card > button { justify-self: start; }
 
-.master-alignment, .master-update-review { display: grid; gap: 10px; padding: 12px; border: 1px solid #3b4351; border-radius: 8px; background: #181c22; min-width: 0; }
+.master-alignment { display: grid; gap: 10px; padding: 12px; border: 1px solid #3b4351; border-radius: 8px; background: #181c22; min-width: 0; }
 .master-alignment h4 { margin: 0; }
 .master-alignment p { margin: 0; }
 .master-alignment-mode { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; border: 0; }
@@ -79,24 +74,6 @@
 .master-aligned-rows li:first-child { border-top: 0; }
 .master-aligned-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.master-update-group { display: grid; gap: 6px; }
-.master-update-group-heading { justify-content: space-between; }
-.master-update-group > p { margin: 0; }
-.master-update-rows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.master-update-row { display: grid; gap: 6px; padding: 10px; border: 1px solid #333b48; border-radius: 6px; }
-.master-update-touched { border-color: #58709a; }
-.master-update-actions { margin: 0; gap: 6px; flex-wrap: wrap; }
-
-.master-timeline { display: grid; gap: 3px; }
-.master-timeline-track { display: grid; grid-template-columns: 3.5em minmax(80px, 1fr) auto; align-items: center; gap: 8px; font-size: 12px; }
-.master-timeline-label { color: #a4adbb; }
-.master-timeline-lane { position: relative; height: 8px; border-radius: 4px; background: #2a303b; }
-.master-timeline-bar { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
-.master-timeline-old { background: #7d8798; }
-.master-timeline-new { background: #6b9bff; }
-.master-timeline-mine { background: #a0dfbe; }
-.master-timeline-range { font-variant-numeric: tabular-nums; white-space: nowrap; }
-
 .master-share-preview { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid #3b4351; border-radius: 8px; }
 .master-share-preview p { margin: 0; }
 
@@ -109,32 +86,20 @@
 
 @media (max-width: 600px) {
   .master-link { padding: 10px; }
-  .master-timeline-track { grid-template-columns: 3em minmax(60px, 1fr); }
-  .master-timeline-range { grid-column: 2; }
   .master-preferences { align-items: stretch; flex-direction: column; }
   .master-threshold { display: flex; flex-wrap: wrap; }
   .master-threshold label { flex: 1 0 100%; }
   .master-threshold input { flex: 1 1 auto; width: auto; min-width: 0; }
   /* The filter table keeps its columns and scrolls inside its labelled region instead of squeezing them. */
-  .master-filter-table { min-width: 1000px; }
+  .master-filter-table { min-width: 760px; }
   .master-aligned-rows li { grid-template-columns: minmax(0, 1fr) auto; }
   .master-aligned-rows li > span:first-child { grid-column: 1 / -1; }
 
-  .master-update-actions > button, .master-version-card > button { min-height: 44px; }
+  .master-version-card > button { min-height: 44px; }
 }
 
-.master-field-changes { width: auto; border-collapse: collapse; font-size: 12px; }
-.master-field-changes th, .master-field-changes td { padding: 2px 10px 2px 0; text-align: left; font-variant-numeric: tabular-nums; }
-.master-field-changes thead th { color: #a4adbb; font-weight: 600; }
-.master-field-changes tbody th { color: #c8d2e2; font-weight: 600; }
 /* Keep focused controls clear of the floating scans button when they scroll into view. */
 .master-link :is(input, select, button, [tabindex]) { scroll-margin-top: 88px; }
 /* Single-column grids shrink to the card instead of growing to their widest row. */
-.master-link, .master-alignment, .master-update-review, .master-update-group, .master-update-rows, .master-update-row,
-.master-link-state-notice { grid-template-columns: minmax(0, 1fr); }
-.master-field-changes-scroll { max-width: 100%; overflow-x: auto; }
-.master-field-changes th, .master-field-changes td { white-space: nowrap; }
-@media (max-width: 600px) {
-  .master-field-changes th, .master-field-changes td { padding-right: 6px; }
-}
+.master-link, .master-alignment, .master-link-state-notice { grid-template-columns: minmax(0, 1fr); }
 .master-confidence-cell { display: inline-flex; align-items: center; gap: 4px; }

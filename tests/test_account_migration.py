@@ -121,7 +121,13 @@ _ARCHIVE_COLUMNS = {
     "user_profiles": {"display_name", "updated_at"},
     "scans": {"worker_elapsed_seconds", "worker_attempt_started_at"},
     "scan_findings": {"manually_added", "manually_edited"},
-    "review_filters": {"manually_added", "manually_edited"},
+    # 0040 adds community provenance, null for every earlier filter.
+    "review_filters": {
+        "manually_added",
+        "manually_edited",
+        "community_source_id",
+        "community_filter_id",
+    },
     **MASTER_COLUMNS,
     "users": {
         "password_hash",

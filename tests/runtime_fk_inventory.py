@@ -62,6 +62,7 @@ review_accepted_credits|review_id|saved_reviews|id|CASCADE
 review_accepted_credits|source_finding_id,scan_id|scan_findings|id,scan_id|NO ACTION
 review_community_sources|link_id|community_master_links|id|NO ACTION
 review_community_sources|review_id|saved_reviews|id|CASCADE
+review_filters|review_id,community_source_id|review_community_sources|review_id,id|CASCADE
 review_filters|review_id|saved_reviews|id|CASCADE
 review_filters|source_finding_id,source_scan_id|scan_findings|id,scan_id|NO ACTION
 review_filters|source_scan_id|scans|id|NO ACTION

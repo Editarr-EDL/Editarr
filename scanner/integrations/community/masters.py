@@ -18,7 +18,7 @@ from scanner.persistence.repository.community_master_links import (
     require_link,
 )
 from scanner.persistence.repository.community_master_updates import (
-    pending_counts,
+    catch_up_link,
     store_latest_snapshot,
 )
 from scanner.persistence.write_lock import write_lock
@@ -186,9 +186,10 @@ class MasterSets:
         return link
 
     async def check(self, link_id: str) -> dict:
-        """The item page's on-demand check: store a newer revision for review, never apply.
+        """The item page's on-demand check: download and apply a newer revision.
 
-        It does not use the daily sync allowance.
+        Reviews that include the link keep their snapshot until refreshed. It does not
+        use the daily sync allowance.
         """
         self._clean()
         link = require_link(self.db, self.owner_id, link_id)
@@ -209,6 +210,8 @@ class MasterSets:
                     changed = store_latest_snapshot(
                         self.db, self.owner_id, link_id, verified_snapshot(master)
                     )
+                else:
+                    catch_up_link(self.db, require_link(self.db, self.owner_id, link_id))
                 if require_link(self.db, self.owner_id, link_id).link_state == "unavailable":
                     # A restored version is served again, so the link follows it again.
                     mark_link_state(self.db, self.owner_id, link_id, "active")
@@ -221,7 +224,6 @@ class MasterSets:
             "version": 1,
             "changed": changed,
             "latestRevision": link.latest_revision,
-            "pendingUpdate": pending_counts(self.db, link.id),
         }
         self.db.rollback()
         return result

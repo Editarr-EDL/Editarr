@@ -2,8 +2,8 @@ import { CommunityApiError } from "./api-community";
 import { apiRequest } from "./api-transport";
 import { runtimeApiBasePath } from "../shared/runtime-urls";
 import type {
-  ActiveMasterFilters, AliasResponse, AlignmentPreview, AlignmentPreviewRequest, FeedbackResult, FilterDecision, FindLabel,
-  FindResponse, MasterFilterResult, MasterLink, MasterLinkSummary, MasterPreferences, MasterPreferencesResult, MasterTarget,
+  ActiveMasterFilters, AliasResponse, AlignmentPreview, AlignmentPreviewRequest, FeedbackResult, FindLabel,
+  FindResponse, MasterLink, MasterLinkSummary, MasterPreferences, MasterPreferencesResult, MasterTarget,
   MasterView, ReportRequest, VoteValue,
 } from "./api-community-master-types";
 
@@ -94,9 +94,6 @@ export const previewMasterAlignment = (linkId: string, request: AlignmentPreview
 export const approveMasterAlignment = (linkId: string, token: string, forRevision: number, signal?: AbortSignal) =>
   communityJson<{ version: 1; link: MasterLink }>(`${link(linkId)}/alignment/approve`,
     { ...postJson({ token, for_revision: forRevision, confirmed: true }), signal });
-
-export const decideMasterFilter = (linkId: string, filterId: string, decision: FilterDecision, signal?: AbortSignal) =>
-  communityJson<MasterFilterResult>(filter(linkId, filterId), { ...postJson(decision, "PATCH"), signal });
 
 export const fetchMasterPreferences = (signal?: AbortSignal) => communityJson<MasterPreferencesResult>("preferences", { signal });
 

@@ -46,8 +46,8 @@ from .repository_rows import (
     _scan_from_row,
     _utc,
 )
-from .review_community_sources import export_runtime, review_sources
-from .review_community_subtitles import community_subtitle_mutes
+from .review_community_filters import annotations as community_annotations
+from .review_community_sources import review_sources
 from .review_filter_tracking import label_edits, load_source_findings, with_label_provenance
 from .review_policy import prepare_review_policy
 from .review_policy_display import locked_severities
@@ -91,6 +91,7 @@ def _review_detail(
     sources = load_source_findings(db, row)
     prepared = prepare_review_policy(db, row)
     edits = label_edits(row, sources)
+    community = community_annotations(db, row)
     detail = SavedReview(
         **summary.model_dump(),
         memberships=[
@@ -101,8 +102,8 @@ def _review_detail(
             ReviewScanReference(scan=_scan_from_row(membership.scan), role=membership.role)
             for membership in row.memberships
         ],
-        filters=with_label_provenance(prepared.filters, edits),
-        base_filters=with_label_provenance(prepared.base_filters, edits),
+        filters=with_label_provenance(prepared.filters, edits, community),
+        base_filters=with_label_provenance(prepared.base_filters, edits, community),
         policy_owner_id=prepared.owner_id,
         policy_revision=prepared.policy_revision,
         policy_missing_evidence=list(prepared.missing_evidence),
@@ -118,9 +119,6 @@ def _review_detail(
         synchronization=_review_synchronization(row.synchronization),
         accepted_credits=_accepted_credits_provenance(row.accepted_credits),
         community_sources=review_sources(db, row),
-        community_subtitles=community_subtitle_mutes(
-            db, row, export_runtime(db, row, [value.scan for value in row.memberships])
-        ).summary,
     )
     del sources  # held until here so the identity map keeps the batched findings
     return detail

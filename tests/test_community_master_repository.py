@@ -1,4 +1,4 @@
-"""Community master links, the master view and local filter decisions, per account."""
+"""Community master links, the read-only master view, votes and preferences, per account."""
 
 import pytest
 from sqlalchemy import select
@@ -7,7 +7,6 @@ from scanner.db import CommunityMasterLinkRow, CommunityMasterSnapshotRow
 from scanner.persistence.repository.community_master_filters import (
     get_preferences,
     master_view,
-    set_filter_decision,
     set_filter_vote,
     set_preferences,
 )
@@ -53,12 +52,8 @@ def test_apply_stores_exact_snapshot_and_untouched_rows(db):
     assert stored.snapshot_bytes == snapshot(1, served("f_a"), low).snapshot_bytes
     assert (stored.revision, stored.receipt_id) == (1, f"{1:064d}")
     rows = _filters(db, created.id)
-    assert {name: (row.state, row.active, row.touched) for name, row in rows.items()} == {
-        "f_a": ("pending", True, False),
-        "f_low": ("low_confidence", False, False),
-    }
+    assert {name: row.active for name, row in rows.items()} == {"f_a": True, "f_low": False}
     assert rows["f_a"].master == {**INFO, **values().as_json()}
-    assert rows["f_a"].local is None and rows["f_a"].effective["startMs"] == 10_000
 
 
 def test_links_are_scoped_to_their_account(db):
@@ -107,60 +102,24 @@ def test_same_version_again_is_idempotent(db):
     assert len(count) == 1
 
 
-def test_decisions_mark_touched_and_reset_restores(db):
+def test_votes_are_recorded_per_account(db):
     created = link(db, served("f_a"))
-    verified = set_filter_decision(db, OWNER, created.id, "f_a", "verify")
-    assert (verified.state, verified.touched, verified.locally_verified) == ("verified", True, True)
-    with pytest.raises(CommunityMasterError, match="filter_state_changed"):
-        set_filter_decision(db, OWNER, created.id, "f_a", "reject", expected_state="pending")
-    adjusted = set_filter_decision(
-        db,
-        OWNER,
-        created.id,
-        "f_a",
-        "adjust",
-        {"startMs": 10_100, "severity": "medium"},
-        expected_state="verified",
-    )
-    assert adjusted.state == "adjusted" and adjusted.active
-    assert adjusted.local == {**adjusted.effective}
-    assert (adjusted.effective["startMs"], adjusted.effective["severity"]) == (10_100, "medium")
-    rejected = set_filter_decision(db, OWNER, created.id, "f_a", "reject")
-    assert (rejected.state, rejected.active) == ("rejected", False)
-    reset = set_filter_decision(db, OWNER, created.id, "f_a", "reset")
-    assert (reset.state, reset.touched, reset.local) == ("pending", False, None)
-
-
-@pytest.mark.parametrize(
-    "change",
-    [{}, {"startMs": 30_000}, {"endMs": 10_000}, {"startMs": -1}, {"category": "drugs"}],
-)
-def test_adjust_requires_valid_values(db, change):
-    created = link(db, served("f_a"))
-    with pytest.raises(ValueError):
-        set_filter_decision(db, OWNER, created.id, "f_a", "adjust", change)
-
-
-def test_votes_touch_rows_and_keep_reset_touched(db):
-    created = link(db, served("f_a"))
-    assert set_filter_vote(db, OWNER, created.id, "f_a", "up").touched
-    reset = set_filter_decision(db, OWNER, created.id, "f_a", "reset")
-    assert (reset.my_vote, reset.touched) == ("up", True)
-    cleared = set_filter_vote(db, OWNER, created.id, "f_a", "none")
-    assert (cleared.my_vote, cleared.touched) == (None, True)
+    assert set_filter_vote(db, OWNER, created.id, "f_a", "up").my_vote == "up"
+    assert set_filter_vote(db, OWNER, created.id, "f_a", "none").my_vote is None
     with pytest.raises(CommunityMasterError):
         set_filter_vote(db, MEMBER, created.id, "f_a", "down")
+    with pytest.raises(ValueError):
+        set_filter_vote(db, OWNER, created.id, "f_a", "maybe")
 
 
-def test_preferences_gate_untouched_rows_only(db):
+def test_preferences_decide_which_filters_start_enabled(db):
     weak = served("f_weak", info={**INFO, "confidence": 0.2})
     low = served("f_low", values(30_000, 31_000, low_confidence=True))
     created = link(db, weak, low)
     assert get_preferences(db, OWNER) == get_preferences(db, MEMBER)
+    assert _filters(db, created.id)["f_weak"].active
     set_preferences(db, OWNER, confidence_threshold=0.3)
     assert not _filters(db, created.id)["f_weak"].active
-    set_filter_decision(db, OWNER, created.id, "f_weak", "verify")
-    assert _filters(db, created.id)["f_weak"].active
     assert not _filters(db, created.id)["f_low"].active
     set_preferences(db, OWNER, confidence_threshold=0.0, show_low_confidence=True)
     assert _filters(db, created.id)["f_low"].active
@@ -196,14 +155,10 @@ def test_deleting_a_link_cascades_to_its_master_state(db):
         CommunitySyncNotificationRow,
     )
     from scanner.persistence.repository.community_master_sync import record_notification
-    from scanner.persistence.repository.community_master_updates import (
-        decide_updates,
-        store_latest_snapshot,
-    )
+    from scanner.persistence.repository.community_master_updates import store_latest_snapshot
 
     created = link(db, served("f_a"), served("f_b"))
     store_latest_snapshot(db, OWNER, created.id, snapshot(2, served("f_a", values(1, 2))))
-    decide_updates(db, OWNER, created.id, 2, [("f_b", "dismiss")])
     record_notification(db, OWNER, created.id, "changed", from_revision=1, to_revision=2)
     db.commit()
     db.delete(db.get(CommunityMasterLinkRow, created.id))

@@ -1,4 +1,8 @@
-"""Master view and per-filter local decisions for one account (local API §3, §5)."""
+"""Master view, votes and display preferences for one account (local API §3, §5).
+
+The master view is read-only for filter decisions (ADR 0002 U1): filters are changed in
+the reviews that include them. Older local decision columns stay in the database unused.
+"""
 
 from __future__ import annotations
 
@@ -18,20 +22,9 @@ from scanner.db import (
     ScanMediaVersionRow,
     ScanRow,
 )
-from scanner.modeling.community_master_diff import VALUE_FIELDS, MasterValues
-from scanner.modeling.community_master_state import (
-    ADJUSTED,
-    LOCAL_COLUMNS,
-    REJECTED,
-    VERIFIED,
-    Preferences,
-    aligned,
-    effective,
-    intervals_overlap,
-    is_active,
-    overrides,
-    untouched_state,
-)
+from scanner.modeling.community_master_diff import MasterValues
+from scanner.modeling.community_master_state import Preferences, aligned, intervals_overlap
+from scanner.modeling.community_review_filters import starts_enabled
 
 from .community_master_links import (
     CommunityMasterError,
@@ -40,21 +33,19 @@ from .community_master_links import (
     utcnow,
 )
 
-DECISIONS = ("verify", "reject", "adjust", "reset")
 VOTES = ("up", "down", "none")
 
 
 @dataclass(frozen=True)
 class MasterFilterView:
-    """One row of the master view; value dicts use the API's camelCase field names."""
+    """One row of the master view; `master` uses the API's camelCase field names.
+
+    `active` is whether the filter starts enabled when a review includes it.
+    """
 
     filter_id: str
     category: str
     master: dict
-    local: dict | None
-    effective: dict
-    state: str
-    touched: bool
     locally_verified: bool
     my_vote: str | None
     active: bool
@@ -65,29 +56,15 @@ class MasterView:
     link: CommunityMasterLinkRow
     preferences: Preferences
     filters: tuple[MasterFilterView, ...]
-    pending_update: dict
 
 
 def baseline_of(row: CommunityMasterFilterRow) -> MasterValues:
     return MasterValues.from_json(json.loads(row.baseline_json))
 
 
-def local_values(row: CommunityMasterFilterRow) -> dict:
-    return {name: getattr(row, column) for name, column in LOCAL_COLUMNS.items()}
-
-
-def set_local_values(row: CommunityMasterFilterRow, values: Mapping) -> None:
-    for name, column in LOCAL_COLUMNS.items():
-        setattr(row, column, values.get(name))
-
-
 def master_values(row: CommunityMasterFilterRow, alignment: Mapping | None) -> dict:
-    """The baseline master values on the local timeline."""
+    """The row's master values (from the link's latest snapshot) on the local timeline."""
     return aligned(baseline_of(row).as_json(), alignment)
-
-
-def effective_values(row: CommunityMasterFilterRow, alignment: Mapping | None) -> dict:
-    return effective(master_values(row, alignment), local_values(row))
 
 
 def get_preferences(db: Session, owner_id: int) -> Preferences:
@@ -110,7 +87,11 @@ def set_preferences(
     show_low_confidence: bool | None = None,
     hide_rejected_downvoted: bool | None = None,
 ) -> Preferences:
-    """Update any preference left non-None; the threshold must be within 0..1."""
+    """Update any preference left non-None; the threshold must be within 0..1.
+
+    The threshold and Show Low Confidence apply to reviews when they next include or
+    refresh community filters; reviews already holding filters are unchanged.
+    """
     if confidence_threshold is not None and not 0.0 <= confidence_threshold <= 1.0:
         raise ValueError("confidence_threshold must be between 0 and 1")
     row = db.get(CommunityMasterPreferenceRow, owner_id)
@@ -136,38 +117,27 @@ def filter_view(
     row: CommunityMasterFilterRow, link: CommunityMasterLinkRow, preferences: Preferences
 ) -> MasterFilterView:
     """Project one stored row into the master view."""
-    alignment = alignment_of(link)
     baseline = baseline_of(row)
     info = json.loads(row.info_json)
-    master = {**info, **master_values(row, alignment)}
-    local = local_values(row)
-    current = effective(master, local)
     return MasterFilterView(
         filter_id=row.filter_id,
         category=row.category,
-        master=master,
-        local=current if any(value is not None for value in local.values()) else None,
-        effective=current,
-        state=row.state,
-        touched=bool(row.local_touched),
+        master={**info, **master_values(row, alignment_of(link))},
         locally_verified=bool(row.locally_verified),
         my_vote=row.my_vote,
-        active=is_active(
-            state=row.state,
-            touched=bool(row.local_touched),
-            present=bool(row.present),
+        active=link.alignment_state != "required"
+        and bool(row.present)
+        and starts_enabled(
             low_confidence=baseline.low_confidence,
             confidence=info.get("confidence"),
-            alignment_state=link.alignment_state,
-            preferences=preferences,
+            threshold=preferences.confidence_threshold,
+            show_low_confidence=preferences.show_low_confidence,
         ),
     )
 
 
 def master_view(db: Session, owner_id: int, link_id: str) -> MasterView:
-    """The link with every row in the local set, in master start order."""
-    from .community_master_updates import pending_counts
-
+    """The link with every served row, in master start order."""
     link = require_link(db, owner_id, link_id)
     preferences = get_preferences(db, owner_id)
     rows = db.scalars(
@@ -179,7 +149,7 @@ def master_view(db: Session, owner_id: int, link_id: str) -> MasterView:
         (filter_view(row, link, preferences) for row in rows),
         key=lambda view: (view.master["startMs"], view.master["endMs"], view.filter_id),
     )
-    return MasterView(link, preferences, tuple(views), pending_counts(db, link.id))
+    return MasterView(link, preferences, tuple(views))
 
 
 def _require_row(db: Session, owner_id: int, link_id: str, filter_id: str):
@@ -190,51 +160,6 @@ def _require_row(db: Session, owner_id: int, link_id: str, filter_id: str):
     return link, row
 
 
-def set_filter_decision(
-    db: Session,
-    owner_id: int,
-    link_id: str,
-    filter_id: str,
-    decision: str,
-    values: Mapping | None = None,
-    *,
-    expected_state: str | None = None,
-    now: datetime | None = None,
-) -> MasterFilterView:
-    """Verify, reject, adjust or reset one row (§5).
-
-    `values` holds camelCase value fields for `adjust`, validated by the caller against
-    the taxonomy; here the effective bounds must satisfy `0 <= startMs < endMs`.
-    Verify, reject and adjust mark the row touched; reset clears the local values and
-    touched, unless the user voted. A stale `expected_state` is `filter_state_changed`.
-    """
-    if decision not in DECISIONS:
-        raise ValueError(f"Unknown decision {decision!r}")
-    link, row = _require_row(db, owner_id, link_id, filter_id)
-    if expected_state is not None and row.state != expected_state:
-        raise CommunityMasterError("filter_state_changed")
-    alignment = alignment_of(link)
-    if decision == "adjust":
-        changes = {name: value for name, value in (values or {}).items() if value is not None}
-        if not changes or set(changes) - set(VALUE_FIELDS):
-            raise ValueError("adjust requires at least one value field")
-        target = {**effective_values(row, alignment), **changes}
-        if not 0 <= target["startMs"] < target["endMs"]:
-            raise ValueError("Bounds must satisfy 0 <= start_ms < end_ms")
-        set_local_values(row, overrides(target, master_values(row, alignment)))
-        row.state, row.local_touched = ADJUSTED, True
-    elif decision == "reset":
-        set_local_values(row, {})
-        row.state = untouched_state(baseline_of(row))
-        row.local_touched = row.my_vote is not None
-    else:
-        row.state, row.local_touched = (VERIFIED if decision == "verify" else REJECTED), True
-    row.updated_at = now or utcnow()
-    db.flush()
-    refresh_local_verification(db, link)
-    return filter_view(row, link, get_preferences(db, owner_id))
-
-
 def set_filter_vote(
     db: Session,
     owner_id: int,
@@ -243,24 +168,22 @@ def set_filter_vote(
     vote: str,
     now: datetime | None = None,
 ) -> MasterFilterView:
-    """Record the account's acknowledged vote; any vote but `none` marks the row touched."""
+    """Record the account's acknowledged vote."""
     if vote not in VOTES:
         raise ValueError(f"Unknown vote {vote!r}")
     link, row = _require_row(db, owner_id, link_id, filter_id)
     row.my_vote = None if vote == "none" else vote
-    if vote != "none":
-        row.local_touched = True
     row.updated_at = now or utcnow()
     db.flush()
     return filter_view(row, link, get_preferences(db, owner_id))
 
 
 def refresh_local_verification(db: Session, link: CommunityMasterLinkRow) -> None:
-    """Set `locally_verified` for verified and adjusted rows, and for rows that overlap
-    a local model finding of the same category on the link's local version.
+    """Set `locally_verified` for rows whose master bounds overlap a local model finding
+    of the same top-level category on the link's local version (ADR 0002 U7).
 
-    Overlap counts only once master bounds are on the local timeline, so a fuzzy link
-    still awaiting alignment is verified only by the user's own decisions (D21).
+    Overlap counts only once master bounds are on the local timeline, so no row of a
+    fuzzy link still awaiting alignment is verified.
     """
     findings = db.execute(
         select(ScanFindingRow.category, ScanFindingRow.start_seconds, ScanFindingRow.end_seconds)
@@ -282,12 +205,11 @@ def refresh_local_verification(db: Session, link: CommunityMasterLinkRow) -> Non
         select(CommunityMasterFilterRow).where(CommunityMasterFilterRow.link_id == link.id)
     )
     for row in rows:
-        current = effective_values(row, alignment)
-        overlap = any(
+        current = master_values(row, alignment)
+        verified = any(
             intervals_overlap(current["startMs"], current["endMs"], start, end)
             for start, end in by_category.get(row.category, ())
         )
-        verified = row.state in (VERIFIED, ADJUSTED) or overlap
         if bool(row.locally_verified) != verified:
             row.locally_verified = verified
     db.flush()

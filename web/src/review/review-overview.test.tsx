@@ -232,19 +232,29 @@ it("sorts mixed review filters by time and restores the collapsible categories",
   expect(within(list).queryByRole("region", { name: "Audio review filters" })).not.toBeInTheDocument();
 });
 
-it("counts included community filters in the timeline summary and skipped time", async () => {
+it("lists community filters as normal results with their community source", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
-  const community = (id: string, start: number, edit_action: "skip" | "mute") => ({
-    filter_id: id, category: "violence", subcategory: "punching", severity: "high", edit_action,
-    start_seconds: start, end_seconds: start + 10, confidence: 0.5,
+  const community = (id: string, start: number, edit_action: "skip" | "mute", selected = true) => ({
+    id: `row-${id}`, source_scan_id: null, source_finding_id: null, community_source_id: "src", community_filter_id: id,
+    source: edit_action === "mute" ? "audio" as const : "visual" as const, category: "violence" as const,
+    subcategory: "punching" as const, severity: "high" as const, mcf_channel: null, mcf_comment: null, label: null,
+    details: null, group_key: null, start_seconds: start, end_seconds: start + 10, confidence: 0.5, edit_action, selected,
+    community: { source_id: "src", filter_id: id, label: "Theatrical", master_revision: 1, confidence: 0.5,
+      contributor_count: 2, low_confidence: false, removed: id === "c2", edited: false, locally_verified: false },
   });
-  render(<SavedReviewOverview filters={[]} memberships={[]} scans={[]} busy={false}
-    communityFilters={[community("c1", 10, "skip"), community("c2", 15, "skip"), community("c3", 60, "mute")]}
-    onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+  const onToggleFilters = vi.fn();
+  render(<SavedReviewOverview filters={[community("c1", 10, "skip"), community("c2", 30, "skip", false), community("c3", 60, "mute")]}
+    memberships={[]} scans={[]} busy={false} defaultSort="time"
+    onToggleFilters={onToggleFilters} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
     onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
   const summary = screen.getByRole("region", { name: "Timeline summary" });
   expect(summary).toHaveTextContent("Combined results from 0 selected scans and 3 community filters.");
-  expect(summary).toHaveTextContent("3/3 results");
-  expect(summary).toHaveTextContent("Skipped Time 0:15");
-  expect(within(summary).getAllByRole("img", { name: /^selected (skip|mute) from/ })).toHaveLength(2);
+  expect(summary).toHaveTextContent("2/3 results");
+  expect(summary).toHaveTextContent("Skipped Time 0:10");
+  const table = screen.getByRole("table", { name: "Review filters by time" });
+  expect(within(table).getAllByText("Community · Theatrical")).toHaveLength(3);
+  expect(within(table).getByText("Removed from community")).toBeInTheDocument();
+  fireEvent.click(within(table).getByRole("checkbox", { name: /at 0:30/ }));
+  expect(onToggleFilters).toHaveBeenCalledWith(["row-c2"], true);
+  expect(within(table).getByRole("button", { name: "Edit filter row-c1" })).toBeEnabled();
 });

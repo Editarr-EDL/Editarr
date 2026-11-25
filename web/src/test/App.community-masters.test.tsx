@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import App from "../App";
 import { AuthenticationGate } from "../auth/auth-gate";
 import { MediaDetail } from "../catalog/media-detail";
-import { masterFilter, masterLink, masterUpdate, masterView, updateRow } from "../scans/community-master-test-fixtures";
+import { masterFilter, masterLink, masterView } from "../scans/community-master-test-fixtures";
 import { installProductionApi, json, mediaItem } from "./app-test-fixtures";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
@@ -41,24 +41,18 @@ it("requests the daily sync on load and links updated items to the notified vers
   expect(calls).toContainEqual({ path: "/api/community/sync/notifications/read", method: "POST", body: { notification_ids: ["n1"] } });
 });
 
-it("shows the item page banner, reviews the update and accepts all except edited rows", async () => {
+it("shows the read-only Community tab: filters, votes and the update check, with no decisions or update review", async () => {
   const baseApi = installProductionApi();
-  const touched = updateRow("c2", { touched: true, allowed: ["accept", "keep_mine", "dismiss"],
-    mine: { startMs: 600_100, endMs: 605_000, subcategory: null, severity: "medium", action: "skip" } });
-  let update = masterUpdate({ new: [updateRow("n1", { oldMaster: null })], changed: [updateRow("c1"), touched] });
-  const accepted: unknown[] = [];
+  const checks: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), "http://editarr.test");
     if (url.pathname === "/api/community/masters" && url.searchParams.get("item_id") === "movie-1") {
-      return json({ version: 1, links: [masterLink({ pendingUpdate: { new: 1, changed: 2, removed: 0, nowLowConfidence: 0 } })] });
+      return json({ version: 1, links: [masterLink()] });
     }
-    if (url.pathname === "/api/community/masters/link-1") return json(masterView([masterFilter()],
-      { latestRevision: 13, pendingUpdate: { new: 1, changed: 2, removed: 0, nowLowConfidence: 0 } }));
-    if (url.pathname === "/api/community/masters/link-1/update") return json(update);
-    if (url.pathname === "/api/community/masters/link-1/update/accept-all") {
-      accepted.push(JSON.parse(String(init?.body)));
-      update = masterUpdate({ changed: [touched] });
-      return json(update);
+    if (url.pathname === "/api/community/masters/link-1") return json(masterView([masterFilter({ locallyVerified: true })]));
+    if (url.pathname === "/api/community/masters/link-1/check") {
+      checks.push(init?.method ?? "GET");
+      return json({ version: 1, changed: true, latestRevision: 13 });
     }
     return baseApi(input, init);
   }));
@@ -66,11 +60,12 @@ it("shows the item page banner, reviews the update and accepts all except edited
     initialStep="community" /></AuthenticationGate>);
   expect(await screen.findByRole("tab", { name: "Community" })).toHaveAttribute("aria-selected", "true");
   const panel = await screen.findByRole("region", { name: "Community filters" });
-  expect(await within(panel).findByText("Community filters updated: 1 new, 2 changed, 0 removed.")).toBeInTheDocument();
-  fireEvent.click(within(panel).getByRole("button", { name: "Review" }));
-  fireEvent.click(await within(panel).findByRole("button", { name: "Accept all Changed (1)" }));
-  await waitFor(() => expect(accepted).toEqual([{ to_revision: 13, group: "changed" }]));
-  const changed = await within(panel).findByRole("region", { name: "Changed" });
-  expect(within(changed).getByText("You edited this")).toBeInTheDocument();
-  expect(within(changed).getByRole("button", { name: /^Keep mine/ })).toBeEnabled();
+  fireEvent.click(await within(panel).findByRole("button", { name: "Show filters" }));
+  expect(await within(panel).findByRole("button", { name: /^Thumbs up/ })).toBeInTheDocument();
+  expect(within(panel).getByRole("checkbox", { name: "Hide downvoted filters" })).toBeInTheDocument();
+  for (const name of [/^Confirm/, /^Reject/, /^Reset/, "Review"]) expect(within(panel).queryByRole("button", { name })).toBeNull();
+  fireEvent.click(within(panel).getByRole("button", { name: "Check for filter updates" }));
+  expect(await within(panel).findByText(/Downloaded the latest community filters/)).toBeInTheDocument();
+  expect(checks).toEqual(["POST"]);
+  expect(within(panel).queryByText(/Community filters updated/)).toBeNull();
 });

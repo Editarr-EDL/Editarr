@@ -45,7 +45,7 @@ function clone<T>(value: T): T {
 }
 
 /** Drop derived, read-only provenance so it never marks a draft dirty. */
-function comparableFilter({ label_edited: _derived, ...filter }: ReviewFilter): Omit<ReviewFilter, "label_edited"> {
+function comparableFilter({ label_edited: _derived, community: _community, ...filter }: ReviewFilter): Omit<ReviewFilter, "label_edited" | "community"> {
   return filter;
 }
 
@@ -368,7 +368,8 @@ export function duplicateReviewDraft(draft: ReviewDraft, name: string): ReviewDr
   const duplicate = {
     ...createReviewDraft(null, name),
     memberships: clone(draft.memberships),
-    filters: draft.filters.map((filter) => ({ ...clone(filter), id: stableId() })),
+    // Community filters belong to the saved review's snapshots; a new review includes them again by link.
+    filters: draft.filters.filter((filter) => !filter.community_source_id).map((filter) => ({ ...clone(filter), id: stableId() })),
     mcfDocument: clone(draft.mcfDocument),
     synchronization: clone(draft.synchronization),
     acceptedCredits: clone(draft.acceptedCredits),

@@ -63,11 +63,9 @@ def _view(db, owner, link_id) -> dict:
         "linkState": link.link_state,
         "appliedRevision": link.applied_revision,
         "latestRevision": link.latest_revision,
-        "pendingUpdate": view.pending_update,
         "filters": [
             {
                 "filterId": item.filter_id,
-                "state": item.state,
                 "myVote": item.my_vote,
                 "active": item.active,
                 "locallyVerified": item.locally_verified,

@@ -8,7 +8,6 @@ from sqlalchemy import select
 from scanner.db import (
     CommunityMasterFilterRow,
     CommunityMasterLinkRow,
-    CommunityMasterUpdateRow,
     ScanFindingRow,
     ScanRow,
 )
@@ -16,7 +15,6 @@ from scanner.integrations.community.masters import MasterSets
 from scanner.integrations.community.transport import CommunityFailure
 from scanner.persistence.repository.community_master_filters import (
     refresh_scan_verification,
-    set_filter_decision,
 )
 from scanner.persistence.repository.community_master_links import approve_alignment
 from scanner.persistence.repository.repository_queue import update_scan_status
@@ -50,7 +48,7 @@ def download(masters, tier="2", replace=False, version="v_1"):
 def rows(factory, link_id):
     with factory() as db:
         return {
-            row.filter_id: (row.state, row.locally_verified)
+            row.filter_id: row.locally_verified
             for row in db.scalars(
                 select(CommunityMasterFilterRow).where(CommunityMasterFilterRow.link_id == link_id)
             )
@@ -69,7 +67,7 @@ def test_tier_two_applies_directly_and_marks_overlaps_locally_verified(setup):
             3,
         )
         assert stored.contributor_id == "c_7f3a" and stored.label == "Theatrical"
-    assert rows(factory, link.id) == {"f_hit": ("pending", True), "f_far": ("pending", False)}
+    assert rows(factory, link.id) == {"f_hit": True, "f_far": False}
 
 
 def test_fuzzy_tiers_require_alignment_before_local_verification(setup):
@@ -78,12 +76,12 @@ def test_fuzzy_tiers_require_alignment_before_local_verification(setup):
     link = download(masters, tier="4")
     with factory() as db:
         assert db.get(CommunityMasterLinkRow, link.id).alignment_state == "required"
-    assert rows(factory, link.id) == {"f_hit": ("pending", False)}
+    assert rows(factory, link.id) == {"f_hit": False}
     with factory() as db:
         approve_alignment(db, OWNER, link.id, {"offsetMs": 0, "scale": 1.0, "anchors": 3}, 3)
         refresh_scan_verification(db, "scan")
         db.commit()
-    assert rows(factory, link.id) == {"f_hit": ("pending", True)}
+    assert rows(factory, link.id) == {"f_hit": True}
 
 
 def test_another_version_needs_replace_and_merged_versions_report_their_target(setup):
@@ -102,7 +100,7 @@ def test_another_version_needs_replace_and_merged_versions_report_their_target(s
     assert raised.value.details["mergedInto"] == "v_2"
 
 
-def test_check_stores_a_newer_revision_for_review_without_applying_it(setup):
+def test_check_downloads_and_applies_a_newer_revision(setup):
     service, factory, masters = setup
     unchanged = {"version": 1, "changed": False, "versionId": "v_1", "revision": 1}
     master_route(
@@ -116,11 +114,10 @@ def test_check_stores_a_newer_revision_for_review_without_applying_it(setup):
     )
     link = download(masters)
     result = asyncio.run(masters.check(link.id))
-    assert result["changed"] is True and result["latestRevision"] == 2
-    assert result["pendingUpdate"]["new"] == 1
+    assert result == {"version": 1, "changed": True, "latestRevision": 2}
     with factory() as db:
-        assert db.get(CommunityMasterLinkRow, link.id).applied_revision == 1
-        assert db.scalars(select(CommunityMasterUpdateRow.filter_id)).all() == ["f_new"]
+        assert db.get(CommunityMasterLinkRow, link.id).applied_revision == 2
+    assert set(rows(factory, link.id)) == {"f_far", "f_new"}
     assert asyncio.run(masters.check(link.id))["changed"] is False
 
 
@@ -153,7 +150,7 @@ def test_completed_scans_and_user_confirmation_refresh_local_verification(setup)
     service, factory, masters = setup
     master_route(service, "v_1", {None: master_response("v_1", 1, ELSEWHERE)})
     link = download(masters)
-    assert rows(factory, link.id) == {"f_far": ("pending", False)}
+    assert rows(factory, link.id) == {"f_far": False}
     with factory() as db:
         db.add(
             ScanFindingRow(
@@ -168,9 +165,4 @@ def test_completed_scans_and_user_confirmation_refresh_local_verification(setup)
         db.get(ScanRow, "scan").status = "scanning"
         db.commit()
         update_scan_status(db, "scan", "complete")
-    assert rows(factory, link.id) == {"f_far": ("pending", True)}
-
-    with factory() as db:
-        set_filter_decision(db, OWNER, link.id, "f_far", "verify")
-        db.commit()
-    assert rows(factory, link.id)["f_far"] == ("verified", True)
+    assert rows(factory, link.id) == {"f_far": True}

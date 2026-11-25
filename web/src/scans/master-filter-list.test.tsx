@@ -1,13 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { decideMasterFilter, MasterApiError, voteMasterFilter } from "../api/api-community-masters";
+import { MasterApiError, voteMasterFilter } from "../api/api-community-masters";
 import type { MasterFilter, MasterPreferences } from "../api/api-community-master-types";
 import { masterFilter, masterView } from "./community-master-test-fixtures";
 import { MasterFilterList, MasterPreferenceControls } from "./master-filter-list";
 
 vi.mock("../api/api-community-masters", async (original) => ({
-  ...await original<typeof import("../api/api-community-masters")>(), voteMasterFilter: vi.fn(), decideMasterFilter: vi.fn(),
+  ...await original<typeof import("../api/api-community-masters")>(), voteMasterFilter: vi.fn(),
 }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
@@ -16,53 +16,47 @@ function Harness({ filters, canVote = true }: { filters: MasterFilter[]; canVote
   const [rows, setRows] = useState(filters);
   return <>
     <MasterPreferenceControls preferences={preferences} onChange={setPreferences} />
-    <MasterFilterList view={masterView(rows)} preferences={preferences} canVote={canVote} canDecide
+    <MasterFilterList view={masterView(rows)} preferences={preferences} canVote={canVote}
       onFilter={(next) => setRows((current) => current.map((row) => row.filterId === next.filterId ? next : row))} />
   </>;
 }
 const rowNames = () => within(screen.getByRole("table")).queryAllByRole("row").slice(1).map((row) => row.querySelector("td")?.textContent);
+const at = (startMs: number) => ({ ...masterFilter().master, startMs, endMs: startMs + 1000 });
 
 it("filters by the confidence threshold and keeps Low Confidence hidden until toggled", () => {
   render(<Harness filters={[
-    masterFilter({ filterId: "strong", confidence: 0.6, effective: { ...masterFilter().effective, startMs: 1000, endMs: 2000 } }),
-    masterFilter({ filterId: "weak", confidence: 0.2, effective: { ...masterFilter().effective, startMs: 3000, endMs: 4000 } }),
-    masterFilter({ filterId: "low", confidence: 0.12, lowConfidence: true, effective: { ...masterFilter().effective, startMs: 5000, endMs: 6000 } }),
-    masterFilter({ filterId: "mine", confidence: 0.1, touched: true, state: "verified", locallyVerified: true,
-      effective: { ...masterFilter().effective, startMs: 7000, endMs: 8000 } }),
+    masterFilter({ filterId: "strong", confidence: 0.6, master: { ...at(1000), confidence: 0.6 } }),
+    masterFilter({ filterId: "weak", master: { ...at(3000), confidence: 0.2 } }),
+    masterFilter({ filterId: "low", master: { ...at(5000), confidence: 0.12, lowConfidence: true }, locallyVerified: true }),
   ]} />);
   const toggle = screen.getByRole("checkbox", { name: "Show Low Confidence filters" });
   expect(toggle).not.toBeChecked();
-  expect(rowNames()).toEqual(["00:01.000–00:02.000", "00:03.000–00:04.000", "00:07.000–00:08.000"]);
+  expect(rowNames()).toEqual(["00:01.000–00:02.000", "00:03.000–00:04.000"]);
   expect(screen.getByText(/1 hidden by your filter settings/)).toBeInTheDocument();
   fireEvent.change(screen.getByRole("slider", { name: "Minimum confidence" }), { target: { value: "0.5" } });
-  expect(rowNames()).toEqual(["00:01.000–00:02.000", "00:07.000–00:08.000"]);
+  expect(rowNames()).toEqual(["00:01.000–00:02.000"]);
   fireEvent.click(toggle);
   fireEvent.change(screen.getByRole("slider", { name: "Minimum confidence" }), { target: { value: "0.1" } });
-  expect(rowNames()).toHaveLength(4);
+  expect(rowNames()).toHaveLength(3);
   expect(screen.getByText(/Low Confidence · 12%/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Locally verified" })).toBeInTheDocument();
+});
+
+it("is read-only: no Confirm, Reject or Reset, and explains what the preferences decide", () => {
+  render(<Harness filters={[masterFilter()]} />);
+  for (const name of [/^Confirm/, /^Reject/, /^Reset/]) expect(screen.queryByRole("button", { name })).toBeNull();
+  expect(screen.getByText(/start disabled when a review includes or refreshes them/)).toBeInTheDocument();
 });
 
 it("shows contributor counts without names and explains Low Confidence in a tooltip", () => {
   vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(800);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(20, 20, 120, 24));
-  render(<Harness filters={[masterFilter({ lowConfidence: true, touched: true, state: "verified" })]} />);
+  render(<Harness filters={[masterFilter({ confidence: 0.5 })]} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Show Low Confidence filters" }));
   const header = screen.getByRole("columnheader", { name: "Contributors" });
   const column = Array.from(header.parentElement!.children).indexOf(header);
   expect(screen.getAllByRole("row")[1].children[column]).toHaveTextContent(/^4$/);
-  const about = screen.getByRole("button", { name: "About Low Confidence" });
-  fireEvent.focus(about);
-  expect(screen.getByRole("tooltip")).toHaveTextContent("More people disputed, voted down or didn't find this filter");
   vi.restoreAllMocks();
-});
-
-it("uses the server's active flag when preferences are saved and recomputes it for unsaved ones", () => {
-  const view = masterView([masterFilter({ active: false, confidence: 0.6 })]);
-  const preferences = { confidenceThreshold: 0, showLowConfidence: false };
-  const { rerender } = render(<MasterFilterList view={view} preferences={preferences} serverActive canVote={false} canDecide={false} onFilter={vi.fn()} />);
-  expect(screen.getByText("Not applied")).toBeInTheDocument();
-  rerender(<MasterFilterList view={view} preferences={preferences} canVote={false} canDecide={false} onFilter={vi.fn()} />);
-  expect(screen.queryByText("Not applied")).toBeNull();
 });
 
 it("votes, clears the vote on a second press and retries a retryable failure with the same operation", async () => {
@@ -95,30 +89,21 @@ it("explains an ineligible vote", async () => {
   expect(screen.queryByRole("button", { name: "Retry vote" })).toBeNull();
 });
 
-it("hides rejected and downvoted rows only from the list when the toggle is on", () => {
-  const at = (startMs: number) => ({ ...masterFilter().effective, startMs, endMs: startMs + 1000 });
+it("hides downvoted rows only from the list, keeping one downvoted here until the setting changes", async () => {
+  vi.mocked(voteMasterFilter).mockResolvedValue({ version: 1, state: "completed", result: {} });
   render(<Harness filters={[
-    masterFilter({ filterId: "kept", effective: at(1000) }),
-    masterFilter({ filterId: "rejected", touched: true, state: "rejected", active: false, effective: at(3000) }),
-    masterFilter({ filterId: "down", touched: true, myVote: "down", effective: at(5000) }),
+    masterFilter({ filterId: "kept", master: at(1000) }),
+    masterFilter({ filterId: "down", myVote: "down", master: at(5000) }),
   ]} />);
-  const toggle = screen.getByRole("checkbox", { name: "Hide rejected and downvoted filters" });
-  expect(toggle).not.toBeChecked();
-  expect(rowNames()).toHaveLength(3);
+  const toggle = screen.getByRole("checkbox", { name: "Hide downvoted filters" });
+  expect(rowNames()).toHaveLength(2);
   fireEvent.click(toggle);
   expect(rowNames()).toEqual(["00:01.000–00:02.000"]);
-  expect(screen.getByText(/2 hidden by your filter settings/)).toBeInTheDocument();
-});
-
-it("keeps a row rejected while hiding is on until the hide setting changes", async () => {
-  vi.mocked(decideMasterFilter).mockImplementation(async (_link, filterId) =>
-    ({ ...masterFilter({ filterId, touched: true, state: "rejected", active: false }), version: 1 }) as never);
-  render(<Harness filters={[masterFilter({ filterId: "kept" })]} />);
-  const hide = screen.getByRole("checkbox", { name: "Hide rejected and downvoted filters" });
-  fireEvent.click(hide);
-  fireEvent.click(screen.getByRole("button", { name: /^Reject / }));
-  await waitFor(() => expect(within(screen.getByRole("table")).getByText("Rejected")).toBeInTheDocument());
-  fireEvent.click(hide);
-  fireEvent.click(hide);
+  expect(screen.getByText(/1 hidden by your filter settings/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^Thumbs down/ }));
+  await waitFor(() => expect(screen.getByRole("button", { name: /^Thumbs down/ })).toHaveAttribute("aria-pressed", "true"));
+  expect(rowNames()).toHaveLength(1);
+  fireEvent.click(toggle);
+  fireEvent.click(toggle);
   expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });

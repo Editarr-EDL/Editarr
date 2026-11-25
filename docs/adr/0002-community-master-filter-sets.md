@@ -111,15 +111,67 @@ users and must keep their data.
   set in the operator configuration.
 - Each version has a monotonic `revision`. Clients bulk-check revisions at
   most once a day and can check one item on demand.
-- Updates never silently overwrite anything the user has touched. Changes
-  are shown in a review diff (D20).
+- Updates never silently overwrite anything the user has touched (D20). Since
+  U3 the user's edits live in reviews, so a link follows its latest revision
+  and a review keeps its edits when it refreshes.
 - Fuzzy matches (tier 4 and below) must be aligned locally before they apply.
-  A "Locally verified" badge marks filters the user confirmed or that overlap
-  a local finding (D21).
-- Local adjustments become attestations on the next share (D22).
-- A saved review includes a master set as a snapshot of the link's active
+  A "Locally verified" badge marks filters that overlap a local finding (D21,
+  narrowed by U7).
+- Local adjustments become attestations on the next share (D22, made precise
+  by U6).
+- A saved review includes a master set as a snapshot of the link's served
   filters, taken when it is included or refreshed. Later master-set changes only
   flag the review as changed until the user refreshes and saves it.
+
+**Community filters in reviews (owner-delegated decisions U1–U7)**
+
+The owner set the rule: "A Review can include a source from Scan or Community but
+filters can be adjusted or enabled or disabled. The Subtitles redaction should only
+be applied to audio filters enabled in the Review, regardless of source. Subtitles
+shouldn't have special behavior for Community or Scan", with "one uniform subtitle
+rule and community filters as normal editable review filters". The owner delegated
+the details below, recorded here as taken on their behalf (they were D1–D7 in that
+request; they are numbered U1–U7 here to keep D1–D22 unambiguous).
+
+- **U1 Read-only Community tab.** The Community tab browses the linked master
+  set: votes, Check for filter updates, alignment for fuzzy links, Find Filters,
+  a "Hide downvoted filters" toggle, the threshold slider and Show Low Confidence.
+  Confirm, Reject, Reset and per-filter edits, and their route
+  (`PATCH …/masters/{link_id}/filters/{filter_id}`), are removed. Decisions stored
+  by earlier builds stay in the database and no longer affect anything.
+- **U2 Starting state.** Including a set adds every served filter to the review.
+  The threshold and Show Low Confidence decide which start enabled: below-threshold
+  and Low Confidence filters arrive disabled, both on inclusion and for new filters
+  on Refresh.
+- **U3 No update review.** The Community tab's update review (New, Changed, Removed,
+  Accept, Keep mine, Dismiss) and its banner are removed. Check for filter updates
+  and the daily sync only download and apply the latest verified snapshot to the
+  link. A review brings changes in with Refresh: filters are matched by stable
+  filter ID following merges; edited filters keep the user's values, unedited ones
+  take the new master values, new ones start per U2, and filters no longer served
+  stay flagged "Removed from community", disabled unless the user edited them.
+  Refresh is a new review revision. Notifications still link to the item, and the
+  review shows the Refresh indicator. Update and dismissal tables are kept but
+  unused.
+- **U4 Normal review filters.** Community filters appear in the same results and
+  timeline as scan filters (with a Community source label, confidence, contributor
+  count and version), are enabled, disabled and adjusted like them, and go through
+  the same policy, export, EDL, MCF, publication, sidecar and subtitle paths with no
+  community-specific branch except provenance. They are stored as `review_filters`
+  rows (migration 0040).
+- **U5 One subtitle rule.** Subtitle redaction uses enabled review filters that are
+  audio-channel language mutes with a word or phrase, whatever their source.
+  Community filters carry no expression, so they don't redact, like any wordless
+  filter. The community-specific subtitle alignment, notices and counters are
+  removed.
+- **U6 Sharing.** Sharing a review turns the user's review edits into attestations:
+  an edited, enabled community filter is a `support` with the user's bounds,
+  subcategory, severity, action and its `proposedFilterId`; one the user disabled is
+  a `dispute`; untouched community filters aren't sent. Scan filters behave as
+  before, and the Community tab's old local decisions are never shared.
+- **U7 Locally verified.** A community filter is locally verified when it overlaps a
+  local scan finding of the same top-level category on the same media version,
+  after alignment. Confirming or adjusting no longer counts.
 
 ## Consequences
 
@@ -136,8 +188,11 @@ users and must keep their data.
 - Count-based confidence rewards Sybil accounts. This is mitigated by
   Discord-bound identity, receipt-bound votes, per-contributor dedupe, the Low
   Confidence rule and moderation recompute.
-- The local client gains master-set, update-review and sync state, and a
-  migration that archives old revision links without deleting them.
+- The local client gains master-set and sync state, and a migration that
+  archives old revision links without deleting them. Community filters in
+  reviews are ordinary review filters with community provenance; their snapshot
+  records each filter's master values and starting state so Refresh and sharing
+  can tell what the user edited.
 - The precise protocol is in
   [community scan service contracts](../community-scan-service-contracts.md),
   and the local routes are in the [local community API](../community-local-api.md).

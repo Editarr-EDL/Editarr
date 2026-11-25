@@ -28,7 +28,6 @@ from scanner.integrations.community.transport import CommunityFailure
 from scanner.modeling.community_match_keys import HashKey
 from scanner.modeling.media_identity import MediaIdentity, ProviderIdentifier
 from scanner.persistence.archive import archived_reads
-from scanner.persistence.repository.community_master_filters import set_filter_decision
 from scanner.persistence.repository.repository_community import identity_connection
 from tests.community_master_service_support import (
     FakeService,
@@ -185,35 +184,26 @@ def test_preview_is_local_and_reports_estimates_without_enabling_sharing(sharing
 
 
 def test_preview_projects_against_the_accounts_linked_master_set(sharing):
-    fake, factory, service = sharing
-    master_route(
-        fake,
+    fake, _factory, service = sharing
+    first = master_response(
         "v_1",
-        {
-            None: master_response(
-                "v_1",
-                1,
-                served_filter("f_hit", 100_100, 101_200),
-                served_filter("f_no", 400_000, 401_000),
-            )
-        },
+        1,
+        served_filter("f_hit", 100_100, 101_200),
+        served_filter("f_no", 400_000, 401_000),
     )
-    link = found_download(MasterSets(service.client, OWNER), "v_1")
-    with factory() as db:
-        set_filter_decision(db, OWNER, link.id, "f_no", "reject")
-        db.commit()
+    second = master_response("v_1", 2, served_filter("f_hit", 100_000, 101_200))
+    master_route(fake, "v_1", {None: first, 1: second})
+    masters = MasterSets(service.client, OWNER)
+    link = found_download(masters, "v_1")
     preview = prepare(service)
     entries = preview["preview"]["artifact"]["entries"]
     assert {(entry["kind"], entry["proposedFilterId"]) for entry in entries} == {
         ("support", "f_hit"),
         ("support", None),
-        ("dispute", "f_no"),
     }
     assert preview["preview"]["artifact"]["alignmentHint"]["versionId"] == "v_1"
-    assert preview["estimates"]["confirmations"] == 1 and preview["estimates"]["disputes"] == 1
-    with factory() as db:
-        set_filter_decision(db, OWNER, link.id, "f_no", "reset")
-        db.commit()
+    assert preview["estimates"]["confirmations"] == 1 and preview["estimates"]["disputes"] == 0
+    asyncio.run(masters.check(link.id))
     with pytest.raises(CommunityFailure, match="preview_stale"):
         approve(service, preview)
 

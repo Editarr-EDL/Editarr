@@ -81,7 +81,7 @@ def test_upgrade_from_0033_adds_scan_read_indexes_and_preserves_rows(tmp_path):
                 "0033_scan_worker_timing",
             )
             assert _rows(backup) == source
-        assert adoption._inspect_database(path) == "0039_review_community_sources"
+        assert adoption._inspect_database(path) == "0040_review_community_filters"
         with sqlite3.connect(path) as database:
             assert _indexes(database) == _INDEXES
             assert _rows(database) == source

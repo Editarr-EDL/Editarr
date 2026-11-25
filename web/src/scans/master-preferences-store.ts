@@ -3,7 +3,6 @@ import { saveMasterPreferences } from "../api/api-community-masters";
 import type { MasterPreferences } from "../api/api-community-master-types";
 import { usePrincipal } from "../auth/auth-gate";
 import { masterErrorText } from "./community-master-format";
-import { notifyCommunityFiltersChanged } from "./community-master-events";
 
 export const PREFERENCE_SAVE_DELAY_MS = 400;
 
@@ -46,7 +45,6 @@ export function createPreferenceStore(
         ? { confidenceThreshold: response.confidenceThreshold, showLowConfidence: response.showLowConfidence,
           hideRejectedDownvoted: !!response.hideRejectedDownvoted } : value;
       set({ saved, pending: queued !== null, error: null });
-      notifyCommunityFiltersChanged();
     }).catch((reason) => {
       if (request === sequence) set({ pending: queued !== null, error: masterErrorText(reason) });
     });

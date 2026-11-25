@@ -10,9 +10,13 @@ from tests.community_schema_fixture import SYNTHETIC_PASSWORD_HASH
 
 
 def undo_community_master_migration(connection) -> None:
-    """Reverse 0039 and 0037 on a fixture without master-set data or retired publications."""
+    """Reverse 0040, 0039 and 0037 on a fixture without master-set or retired data."""
     with Operations.context(MigrationContext.configure(connection)):
-        for name in ("0039_review_community_sources", "0037_community_master_sets"):
+        for name in (
+            "0040_review_community_filters",
+            "0039_review_community_sources",
+            "0037_community_master_sets",
+        ):
             import_module(f"scanner.persistence.migrations.versions.{name}").downgrade()
 
 

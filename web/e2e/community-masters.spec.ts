@@ -104,9 +104,9 @@ for (const width of [320, 1440]) {
     await panel.getByRole("button", { name: "Show filters" }).click();
     await expect(panel.getByText("2 filters shown · 1 hidden by your filter settings")).toBeVisible();
     await expectTooltip(page, panel.getByRole("button", { name: "Locally verified" }), /Locally verified/);
-    const thumbsUp = panel.getByRole("button", { name: /^Thumbs up for Violence · Punching/ });
+    const thumbsUp = panel.getByRole("button", { name: /^Thumbs up for Violence at/ });
     await expect(thumbsUp).toHaveAttribute("aria-pressed", "true");
-    const thumbsDown = panel.getByRole("button", { name: /^Thumbs down for Violence · Punching/ });
+    const thumbsDown = panel.getByRole("button", { name: /^Thumbs down for Violence at/ });
     await thumbsDown.click();
     await expect(thumbsDown).toHaveAttribute("aria-pressed", "true");
     await expect(thumbsUp).toHaveAttribute("aria-pressed", "false");
@@ -126,9 +126,8 @@ for (const width of [320, 1440]) {
     await expect(panel.getByText("3 filters shown")).toBeVisible();
     await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
       .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_rejected_downvoted: false });
-    await expect(panel.getByText("Not applied")).toHaveCount(0);
     await checkLayout(page, "master-view", width);
-    const hide = panel.getByRole("checkbox", { name: "Hide rejected and downvoted filters" });
+    const hide = panel.getByRole("checkbox", { name: "Hide downvoted filters" });
     await expect(hide).not.toBeChecked();
     await hide.check();
     await expect(panel.getByText("2 filters shown · 1 hidden by your filter settings")).toBeVisible();
@@ -138,38 +137,25 @@ for (const width of [320, 1440]) {
     await checkLayout(page, "hide-toggle", width);
   });
 
-  test(`${width}px update check and review decisions`, async ({ page }) => {
+  test(`${width}px the Community tab is read-only and the update check downloads newer filters`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockItemPage(page);
     const community = await mockCommunityMasters(page, { linked: true });
     await page.goto("/#/library/movies/item/movie-1");
     await chooseWorkflowStep(page, "Community");
     const panel = page.getByRole("region", { name: "Community filters", exact: true });
+    await panel.getByRole("button", { name: "Show filters" }).click();
+    await expect(panel.getByText("Revision 12")).toBeVisible();
+    for (const name of [/^Confirm/, /^Reject/, /^Reset/]) await expect(panel.getByRole("button", { name })).toHaveCount(0);
     await panel.getByRole("button", { name: "Check for filter updates" }).click();
-    const banner = panel.getByText("Community filters updated: 1 new, 2 changed, 1 removed.");
-    await expect(banner).toBeVisible();
-    await panel.getByRole("button", { name: "Review" }).click();
-    await expect(panel.getByRole("heading", { name: /Review filter updates · revision 12 → 13/ })).toBeVisible();
-    const changed = panel.getByRole("region", { name: "Changed", exact: true });
-    const tables = changed.getByRole("table", { name: "Changed fields" });
-    await expect(tables.first().getByRole("row").nth(1)).toHaveText(/Severity\s*Medium\s*→\s*High/);
-    await expect(tables.nth(1).getByRole("row").first()).toHaveText(/Field\s*Mine\s*Old/);
-    await expect(changed.getByText("You edited this")).toBeVisible();
-    await expect(changed.getByText(/Accept all skips the filter you edited/)).toBeVisible();
-    await checkLayout(page, "update-review", width);
-    await changed.getByRole("button", { name: "Accept all Changed (1)" }).click();
-    await expect(changed.getByRole("listitem")).toHaveCount(1);
-    expect(community.requests.find((request) => request.path.endsWith("update/accept-all"))?.body).toEqual({ to_revision: 13, group: "changed" });
-    await changed.getByRole("button", { name: /^Keep mine Violence · Punching/ }).click();
-    await expect(changed).toHaveCount(0);
-    await panel.getByRole("region", { name: "New", exact: true }).getByRole("button", { name: /^Dismiss/ }).click();
-    await panel.getByRole("region", { name: "Removed", exact: true }).getByRole("button", { name: /^Accept Nudity/ }).click();
-    await expect(panel.getByText("All updates are reviewed.")).toBeVisible();
-    expect(community.requests.filter((request) => request.path.endsWith("update/decisions")).map((request) => request.body)).toEqual([
-      { to_revision: 13, decisions: [{ row_id: "f_fight", decision: "keep_mine" }] },
-      { to_revision: 13, decisions: [{ row_id: "f_new", decision: "dismiss" }] },
-      { to_revision: 13, decisions: [{ row_id: "f_gone", decision: "accept" }] },
-    ]);
+    await expect(panel.getByText(/Downloaded the latest community filters/)).toBeVisible();
+    await expect(panel.getByText("Revision 13")).toBeVisible();
+    await expect(panel.getByText(/Community filters updated/)).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "Review" })).toHaveCount(0);
+    expect(community.requests.some((request) => request.path.includes("/update"))).toBe(false);
+    await panel.getByRole("button", { name: "Check for filter updates" }).click();
+    await expect(panel.getByText("These community filters are up to date.")).toBeVisible();
+    await checkLayout(page, "update-check", width);
   });
 
   test(`${width}px notification entry links to the updated version`, async ({ page }) => {

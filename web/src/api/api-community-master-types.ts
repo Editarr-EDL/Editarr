@@ -22,7 +22,6 @@ export type AliasResponse = { version: 1; choices: AliasChoice[] };
 
 export type AlignmentState = "not_required" | "required" | "approved";
 export type Alignment = { offsetMs: number; scale: number; anchors: number };
-export type UpdateCounts = { new: number; changed: number; removed: number; nowLowConfidence: number };
 
 /** `merged` and `unavailable` links keep their rows; the item page offers Find again. `replaced` is history. */
 export type LinkState = "active" | "merged" | "unavailable" | "replaced";
@@ -30,7 +29,7 @@ export type MasterLinkSummary = {
   linkId: string; localVersionId: string; communityVersionId: string; label: string; aliasId: string | null;
   status: VersionStatus; unconfirmed: boolean; tier: MatchTier; matchPercent: number;
   appliedRevision: number; latestRevision: number; alignmentState: AlignmentState;
-  alignment: Alignment | null; alignmentRevision: number | null; pendingUpdate: UpdateCounts;
+  alignment: Alignment | null; alignmentRevision: number | null;
   linkState: LinkState; mergedInto: string | null;
 };
 export type MasterLink = MasterLinkSummary;
@@ -44,14 +43,13 @@ export type MasterValues = FilterValues & {
   negative: { downvotes: number; disputes: number; coverageNegatives: number };
   lowConfidence: boolean; present: boolean;
 };
-export type FilterState = "pending" | "verified" | "adjusted" | "rejected" | "low_confidence";
 export type MyVote = "up" | "down" | null;
+/** A served master filter, read-only. `active`: it starts enabled when a review includes it. */
 export type MasterFilter = {
-  filterId: string; category: string; master: MasterValues; local: FilterValues | null; effective: FilterValues;
-  state: FilterState; touched: boolean; locallyVerified: boolean; myVote: MyVote; active: boolean;
+  filterId: string; category: string; master: MasterValues; locallyVerified: boolean; myVote: MyVote; active: boolean;
 };
-export type MasterFilterResult = { version: 1 } & MasterFilter;
-/** `hideRejectedDownvoted` only hides rows from the master list; it never changes `active`. */
+/** The threshold and Show Low Confidence decide which filters start enabled in reviews.
+ * `hideRejectedDownvoted` only hides downvoted rows from the master list. */
 export type MasterPreferences = { confidenceThreshold: number; showLowConfidence: boolean; hideRejectedDownvoted?: boolean };
 export type MasterPreferencesResult = { version: 1 } & MasterPreferences;
 export type MasterView = { version: 1; link: MasterLink; preferences: MasterPreferences; filters: MasterFilter[] };
@@ -65,18 +63,13 @@ export type AlignmentPreview = {
   rows: { filterId: string; alignedStartMs: number; alignedEndMs: number }[];
 };
 
-export type FilterDecision =
-  | { decision: "verify" | "reject" | "reset"; expected_state: FilterState }
-  | { decision: "adjust"; expected_state: FilterState; start_ms?: number; end_ms?: number;
-      subcategory?: string; severity?: string; action?: string };
-
 export type VoteValue = "up" | "down" | "none";
 export type ReportReason = "spam" | "inaccurate" | "privacy" | "rights" | "other";
 export type ReportRequest = { target: { type: "filter" | "version"; id: string }; reason: ReportReason; note?: string | null };
 /** Vote and report envelope around the hosted service result. */
 export type FeedbackResult = { version: 1; state: "completed"; result: unknown };
 
-/** One in-effect filter of a link on the local timeline (`GET …/active-filters`). */
+/** One filter of a link that starts enabled, on the local timeline (`GET …/active-filters`). */
 export type ActiveMasterFilter = { linkId: string; filterId: string; category: string; confidence?: number | null } & FilterValues;
 export type ActiveMasterFilters = { version: 1; linkId: string; localVersionId: string; filters: ActiveMasterFilter[]; edl: string };
 
@@ -89,21 +82,8 @@ export type SyncStatus = {
   version: 1; ran: boolean; state: "idle" | "running" | "failed"; lastRunAt: number | null;
   nextDueAt: number | null; lastError: string | null; unreadCount: number; notifications: SyncNotification[];
 };
-export type CheckResult = { version: 1; changed: boolean; latestRevision: number; pendingUpdate: UpdateCounts };
-
-/** A row's accepted master values: the value fields plus `lowConfidence` and presence. */
-export type BaselineValues = FilterValues & { lowConfidence: boolean; present: boolean };
-export type UpdateGroup = "new" | "changed" | "removed" | "nowLowConfidence";
-export type UpdateDecision = "accept" | "keep_mine" | "dismiss";
-export type UpdateRow = {
-  rowId: string; filterId: string; category: string; touched: boolean; changedFields: string[];
-  mine: FilterValues | null; oldMaster: BaselineValues | null; newMaster: MasterValues | null;
-  mergedInto: string | null; allowed: UpdateDecision[]; canAccept: boolean;
-};
-export type MasterUpdate = {
-  version: 1; fromRevision: number; toRevision: number; alignmentRequired: boolean; alignmentApproved: boolean;
-  groups: Record<UpdateGroup, UpdateRow[]>;
-};
+/** `changed`: a newer revision was downloaded and applied to the link (reviews refresh separately). */
+export type CheckResult = { version: 1; changed: boolean; latestRevision: number };
 
 export type VersionChoice = { choice: "alias"; alias_id: string } | { choice: "other"; text: string | null };
 /** Master-set fields that the community-artifact-3 sharing preview adds to the manual sharing preview. */

@@ -1,110 +1,117 @@
-"""Store newer master revisions and review their changes (local API §8 check, §9).
+"""Follow newer master revisions (local API §8 check and daily sync, ADR 0002 U3).
 
-A newer snapshot never changes what is in effect: it refreshes informational values,
-re-keys merged rows, and rebuilds the undecided update rows. Decisions apply them.
+A link always shows its latest verified snapshot: storing a newer revision applies it
+at once. Rows keep their filter IDs (a merged filter re-keys the row it continues),
+take the new master values, and rows the master no longer serves leave the set.
+Reviews that include the link keep their own snapshot until the user refreshes it.
+
+Earlier builds kept local decisions (`state`, `local_*`), undecided update rows and
+dismissals; they stay stored but unused, and a link left behind its latest revision
+catches up on its next check or sync.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from scanner.db import (
-    CommunityMasterDismissalRow,
-    CommunityMasterFilterRow,
-    CommunityMasterLinkRow,
-    CommunityMasterUpdateRow,
-)
-from scanner.modeling.community_master_diff import (
-    ACCEPT,
-    CHANGES,
-    DISMISS,
-    GROUPS,
-    BaselineRow,
-    MasterValues,
-    allowed_decisions,
-    can_accept,
-    diff_master,
-)
-from scanner.modeling.community_master_state import aligned
+from scanner.db import CommunityMasterFilterRow, CommunityMasterLinkRow
+from scanner.modeling.community_master_diff import MasterFilter, master_filters, rekeys
 
-from .community_master_decisions import apply_decision
-from .community_master_filters import baseline_of, effective_values
 from .community_master_links import (
-    CommunityMasterError,
     VerifiedSnapshot,
-    alignment_of,
+    add_filter_row,
     compact,
-    is_fuzzy,
+    latest_snapshot,
     prune_snapshots,
     require_link,
     store_snapshot,
     utcnow,
 )
 
-MAX_DECISIONS = 500
 
-
-@dataclass(frozen=True)
-class UpdateRowView:
-    """One reviewable row; master dicts are on the local timeline."""
-
-    row_id: str
-    filter_id: str
-    category: str
-    group: str
-    touched: bool
-    changed_fields: tuple[str, ...]
-    mine: dict | None
-    old_master: dict | None
-    new_master: dict | None
-    merged_into: str | None
-    allowed: tuple[str, ...]
-    can_accept: bool
-
-
-@dataclass(frozen=True)
-class UpdateView:
-    from_revision: int
-    to_revision: int
-    alignment_required: bool
-    alignment_approved: bool
-    groups: dict[str, list[UpdateRowView]]
-
-
-def pending_counts(db: Session, link_id: str) -> dict:
-    """Undecided rows per API group: `new`, `changed`, `removed`, `nowLowConfidence`."""
-    counts = dict(
+def _rekey(db: Session, link_id: str, moves: dict[str, str]) -> None:
+    """Move re-keyed rows to the merged filter's ID."""
+    for old, new in moves.items():
         db.execute(
-            select(CommunityMasterUpdateRow.change, func.count())
-            .where(CommunityMasterUpdateRow.link_id == link_id)
-            .group_by(CommunityMasterUpdateRow.change)
-        ).all()
-    )
-    return {GROUPS[change]: counts.get(change, 0) for change in CHANGES}
+            update(CommunityMasterFilterRow)
+            .where(
+                CommunityMasterFilterRow.link_id == link_id,
+                CommunityMasterFilterRow.filter_id == old,
+            )
+            .values(filter_id=new)
+        )
+    db.expire_all()
 
 
-def _rekey(db: Session, link_id: str, rekeys: dict) -> None:
-    """Move re-keyed rows and their dismissals to the merged filter's ID."""
-    db.execute(
-        delete(CommunityMasterDismissalRow).where(
-            CommunityMasterDismissalRow.link_id == link_id,
-            CommunityMasterDismissalRow.filter_id.in_(list(rekeys.values())),
+def apply_filters(
+    db: Session,
+    link: CommunityMasterLinkRow,
+    filters: Iterable[MasterFilter],
+    revision: int,
+    now: datetime,
+) -> None:
+    """Make the link's rows equal a verified snapshot's served filters."""
+    filters = tuple(filters)
+    rows = db.scalars(
+        select(CommunityMasterFilterRow.filter_id).where(
+            CommunityMasterFilterRow.link_id == link.id
         )
     )
-    for table in (CommunityMasterFilterRow, CommunityMasterDismissalRow):
-        for old, new in rekeys.items():
-            db.execute(
-                update(table)
-                .where(table.link_id == link_id, table.filter_id == old)
-                .values(filter_id=new)
-            )
-    db.expire_all()
+    _rekey(db, link.id, rekeys(rows, filters))
+    existing = {
+        row.filter_id: row
+        for row in db.scalars(
+            select(CommunityMasterFilterRow).where(CommunityMasterFilterRow.link_id == link.id)
+        )
+    }
+    served = set()
+    for item in filters:
+        served.add(item.filter_id)
+        row = existing.get(item.filter_id)
+        if row is None:
+            add_filter_row(db, link.id, item, revision, now)
+            continue
+        row.category = item.category
+        row.baseline_json = compact(item.values.as_json())
+        row.baseline_revision = revision
+        row.info_json = compact(dict(item.info))
+        row.present = True
+        row.updated_at = now
+    for filter_id, row in existing.items():
+        if filter_id not in served and row.present:
+            values = json.loads(row.baseline_json)
+            row.baseline_json = compact({**values, "present": False})
+            row.baseline_revision = revision
+            row.present = False
+            row.updated_at = now
+    link.latest_revision = max(link.latest_revision, revision)
+    link.applied_revision = revision
+    db.flush()
+
+
+def _finish(db: Session, link: CommunityMasterLinkRow) -> None:
+    from .community_master_filters import refresh_local_verification
+
+    prune_snapshots(db, link)
+    refresh_local_verification(db, link)
+
+
+def catch_up_link(db: Session, link: CommunityMasterLinkRow, now: datetime | None = None) -> bool:
+    """Apply the stored latest snapshot to a link an earlier build left behind it."""
+    if link.applied_revision == link.latest_revision:
+        return False
+    snapshot = latest_snapshot(db, link)
+    if snapshot is None:
+        return False
+    filters = master_filters(json.loads(snapshot.snapshot_bytes))
+    apply_filters(db, link, filters, link.latest_revision, now or utcnow())
+    _finish(db, link)
+    return True
 
 
 def store_latest_snapshot(
@@ -115,236 +122,23 @@ def store_latest_snapshot(
     *,
     now: datetime | None = None,
 ) -> bool:
-    """Store a newer verified revision and rebuild its update rows; never apply them.
-
-    Returns whether the revision was newer. Informational values refresh at once;
-    when no material change remains, `appliedRevision` advances silently.
-    """
+    """Store a newer verified revision and apply it; returns whether it was newer."""
     now = now or utcnow()
     link = require_link(db, owner_id, link_id)
     if snapshot.revision <= link.latest_revision:
         if snapshot.revision == link.latest_revision:
             store_snapshot(db, link, snapshot, now)
+        catch_up_link(db, link, now)
         return False
     store_snapshot(db, link, snapshot, now)
-    rows = list(
-        db.scalars(
-            select(CommunityMasterFilterRow).where(CommunityMasterFilterRow.link_id == link.id)
-        )
-    )
-    dismissed = dict(
-        db.execute(
-            select(
-                CommunityMasterDismissalRow.filter_id, CommunityMasterDismissalRow.values_digest
-            ).where(CommunityMasterDismissalRow.link_id == link.id)
-        ).all()
-    )
-    diff = diff_master(
-        (
-            BaselineRow(row.filter_id, row.category, baseline_of(row), bool(row.local_touched))
-            for row in rows
-        ),
-        snapshot.filters,
-        dismissed,
-    )
-    _rekey(db, link.id, dict(diff.rekeys))
-    pending = {row.filter_id for row in diff.rows} | set(diff.kept_dismissals)
-    for row in db.scalars(
-        select(CommunityMasterFilterRow).where(CommunityMasterFilterRow.link_id == link.id)
-    ):
-        if row.filter_id in diff.info:
-            row.info_json = compact(dict(diff.info[row.filter_id]))
-            if row.filter_id not in pending:
-                row.baseline_revision = snapshot.revision
-            row.updated_at = now
-    db.execute(delete(CommunityMasterUpdateRow).where(CommunityMasterUpdateRow.link_id == link.id))
-    db.execute(
-        delete(CommunityMasterDismissalRow).where(
-            CommunityMasterDismissalRow.link_id == link.id,
-            CommunityMasterDismissalRow.filter_id.not_in(diff.kept_dismissals),
-        )
-    )
-    for item in diff.rows:
-        db.add(
-            CommunityMasterUpdateRow(
-                link_id=link.id,
-                filter_id=item.filter_id,
-                to_revision=snapshot.revision,
-                change=item.change,
-                changed_fields_json=json.dumps(list(item.changed_fields)),
-                new_master_json=compact(
-                    {
-                        "category": item.category,
-                        "info": dict(item.info),
-                        **item.new_values.as_json(),
-                    }
-                ),
-                merged_into=item.merged_into,
-                values_digest=item.digest,
-            )
-        )
+    apply_filters(db, link, snapshot.filters, snapshot.revision, now)
     link.latest_revision = snapshot.revision
     if link.pending_revision is not None and link.pending_revision <= snapshot.revision:
         link.pending_revision = None
     link.updated_at = now
     db.flush()
-    _finish_if_decided(db, link)
+    _finish(db, link)
     return True
 
 
-def _finish_if_decided(db: Session, link: CommunityMasterLinkRow) -> None:
-    """Advance `appliedRevision` once no undecided row remains, then drop unused snapshots."""
-    remaining = db.scalar(select(func.count()).where(CommunityMasterUpdateRow.link_id == link.id))
-    if not remaining and link.applied_revision != link.latest_revision:
-        link.applied_revision = link.latest_revision
-    db.flush()
-    prune_snapshots(db, link)
-
-
-def _aligned_for(link: CommunityMasterLinkRow, revision: int) -> bool:
-    return link.alignment_state == "approved" and link.alignment_revision == revision
-
-
-def _row_view(
-    db: Session, link: CommunityMasterLinkRow, item: CommunityMasterUpdateRow
-) -> UpdateRowView:
-    alignment = alignment_of(link)
-    row = db.get(CommunityMasterFilterRow, (link.id, item.filter_id))
-    touched = bool(row is not None and row.local_touched)
-    stored = json.loads(item.new_master_json)
-    new_master = None
-    if item.change != "removed":
-        new_master = {
-            **stored["info"],
-            **aligned(MasterValues.from_json(stored).as_json(), alignment),
-        }
-    return UpdateRowView(
-        row_id=item.filter_id,
-        filter_id=item.filter_id,
-        category=stored["category"],
-        group=GROUPS[item.change],
-        touched=touched,
-        changed_fields=tuple(json.loads(item.changed_fields_json)),
-        mine=effective_values(row, alignment) if touched else None,
-        old_master=None if row is None else aligned(baseline_of(row).as_json(), alignment),
-        new_master=new_master,
-        merged_into=item.merged_into,
-        allowed=allowed_decisions(item.change, touched),
-        can_accept=can_accept(
-            item.change,
-            fuzzy=is_fuzzy(link),
-            aligned_for_revision=_aligned_for(link, item.to_revision),
-        ),
-    )
-
-
-def master_update(db: Session, owner_id: int, link_id: str) -> UpdateView:
-    """The undecided rows of the latest revision, grouped as the API returns them."""
-    link = require_link(db, owner_id, link_id)
-    groups: dict[str, list[UpdateRowView]] = {GROUPS[change]: [] for change in CHANGES}
-    items = db.scalars(
-        select(CommunityMasterUpdateRow)
-        .where(CommunityMasterUpdateRow.link_id == link.id)
-        .order_by(CommunityMasterUpdateRow.filter_id)
-    )
-    for item in items:
-        view = _row_view(db, link, item)
-        groups[view.group].append(view)
-    return UpdateView(
-        from_revision=link.applied_revision,
-        to_revision=link.latest_revision,
-        alignment_required=is_fuzzy(link),
-        alignment_approved=_aligned_for(link, link.latest_revision),
-        groups=groups,
-    )
-
-
-def decide_updates(
-    db: Session,
-    owner_id: int,
-    link_id: str,
-    to_revision: int,
-    decisions: Iterable[tuple[str, str]],
-    *,
-    now: datetime | None = None,
-) -> UpdateView:
-    """Apply `(row_id, decision)` pairs atomically: all are checked before any applies.
-
-    A stale `to_revision` or an already decided row is `update_changed`; a decision
-    outside the row's `allowed` list, or Accept while it is disabled, is
-    `decision_not_allowed`.
-    """
-    decisions = list(decisions)
-    if len(decisions) > MAX_DECISIONS:
-        raise ValueError(f"At most {MAX_DECISIONS} decisions per request")
-    return _decide(db, owner_id, link_id, to_revision, decisions, now or utcnow())
-
-
-def _decide(
-    db: Session,
-    owner_id: int,
-    link_id: str,
-    to_revision: int,
-    decisions: list[tuple[str, str]],
-    now: datetime,
-) -> UpdateView:
-    """Check every decision, then apply them all in the caller's transaction."""
-    link = require_link(db, owner_id, link_id)
-    if to_revision != link.latest_revision:
-        raise CommunityMasterError("update_changed")
-    planned = []
-    for row_id, decision in decisions:
-        item = db.get(CommunityMasterUpdateRow, (link.id, row_id))
-        if item is None or item.to_revision != to_revision:
-            raise CommunityMasterError("update_changed")
-        view = _row_view(db, link, item)
-        if decision not in view.allowed or (decision == ACCEPT and not view.can_accept):
-            raise CommunityMasterError("decision_not_allowed")
-        planned.append((item, decision))
-    if len({item.filter_id for item, _decision in planned}) != len(planned):
-        raise CommunityMasterError("decision_not_allowed")
-    for item, decision in planned:
-        apply_decision(db, link, item, decision, now)
-    _finish_if_decided(db, link)
-    from .community_master_filters import refresh_local_verification
-
-    refresh_local_verification(db, link)
-    return master_update(db, owner_id, link_id)
-
-
-def accept_all(
-    db: Session,
-    owner_id: int,
-    link_id: str,
-    to_revision: int,
-    group: str,
-    *,
-    now: datetime | None = None,
-) -> UpdateView:
-    """Accept every untouched row of an API group whose Accept is enabled.
-
-    The per-request decision limit does not apply; all rows apply in one transaction.
-    """
-    if group not in GROUPS.values():
-        raise ValueError(f"Unknown group {group!r}")
-    view = master_update(db, owner_id, link_id)
-    if to_revision != view.to_revision:
-        raise CommunityMasterError("update_changed")
-    chosen = [
-        (row.row_id, ACCEPT) for row in view.groups[group] if not row.touched and row.can_accept
-    ]
-    return _decide(db, owner_id, link_id, to_revision, chosen, now or utcnow())
-
-
-__all__ = [
-    "ACCEPT",
-    "DISMISS",
-    "MAX_DECISIONS",
-    "UpdateRowView",
-    "UpdateView",
-    "accept_all",
-    "decide_updates",
-    "master_update",
-    "pending_counts",
-    "store_latest_snapshot",
-]
+__all__ = ["apply_filters", "catch_up_link", "store_latest_snapshot"]

@@ -1,5 +1,5 @@
-import type { ActiveMasterFilters, MasterLinkSummary } from "../api/api-community-master-types";
-import type { ReviewCommunityFilter, ReviewCommunityMembership, ReviewCommunitySource, SavedReview } from "../api/api-review-types";
+import type { MasterLinkSummary } from "../api/api-community-master-types";
+import type { ReviewCommunityMembership, ReviewCommunitySource, ReviewFilter, SavedReview } from "../api/api-review-types";
 import type { ReviewDraft } from "./review-draft";
 
 /** One "Community filters" entry under Included scans: a stored snapshot, a linkable master set, or both. */
@@ -12,39 +12,22 @@ export interface CommunityEntry {
   source: ReviewCommunitySource | null;
   included: boolean;
   refreshStaged: boolean;
-  /** The link's active filters now, or null when unknown. */
-  live: ReviewCommunityFilter[] | null;
-  /** Whether the link's active filters differ from the stored snapshot. */
+  /** Whether the link's served filters differ from the stored snapshot, so Refresh would bring changes in. */
   changed: boolean;
 }
-
-/** Convert the active-filters read path (milliseconds) to snapshot filters (seconds). */
-export function liveFilters(active: ActiveMasterFilters): ReviewCommunityFilter[] {
-  return active.filters.map((item) => ({
-    filter_id: item.filterId, category: item.category, subcategory: item.subcategory ?? "",
-    severity: item.severity ?? "", edit_action: item.action === "mute" ? "mute" : "skip",
-    start_seconds: item.startMs / 1000, end_seconds: item.endMs / 1000, confidence: item.confidence ?? null,
-  }));
-}
-
-const signature = (filters: ReviewCommunityFilter[]) => JSON.stringify(filters.map((item) => [
-  item.filter_id, item.category, Math.round(item.start_seconds * 1000), Math.round(item.end_seconds * 1000),
-  item.subcategory, item.severity, item.edit_action,
-]));
-
-/** Whether two unclipped filter lists differ in anything but confidence, as the server compares them. */
-export const filtersDiffer = (a: ReviewCommunityFilter[], b: ReviewCommunityFilter[]) => signature(a) !== signature(b);
 
 const membershipFor = (draft: ReviewDraft, entry: Pick<CommunityEntry, "link" | "source">) =>
   draft.communityMemberships.find((value) => (entry.source && value.source_id === entry.source.source_id)
     || (entry.link && value.link_id === entry.link.linkId));
 
+/** Whether a review filter came from a community snapshot. */
+export const isCommunityFilter = (filter: Pick<ReviewFilter, "community_source_id">) => !!filter.community_source_id;
+
 /**
  * Build the Included scans entries from stored snapshots and the account's links for this version.
  * A link the saved review already has a snapshot of is folded into that snapshot's entry.
  */
-export function communityEntries(draft: ReviewDraft, sources: ReviewCommunitySource[], links: MasterLinkSummary[],
-  live: Record<string, ReviewCommunityFilter[]>): CommunityEntry[] {
+export function communityEntries(draft: ReviewDraft, sources: ReviewCommunitySource[], links: MasterLinkSummary[]): CommunityEntry[] {
   const entries: Array<Pick<CommunityEntry, "source" | "link">> = sources.map((source) => ({
     source, link: links.find((link) => link.linkId === source.link_id) ?? null }));
   for (const link of links) {
@@ -52,25 +35,39 @@ export function communityEntries(draft: ReviewDraft, sources: ReviewCommunitySou
   }
   return entries.map(({ source, link }) => {
     const membership = membershipFor(draft, { source, link });
-    const current = link ? live[link.linkId] ?? null : null;
-    const changed = source ? (current && link?.alignmentState !== "required" ? filtersDiffer(source.filters, current) : source.state === "changed") : false;
     return {
       key: source?.source_id ?? link!.linkId, label: source?.label ?? link!.label, link, source,
       included: !!membership, refreshStaged: !!membership && "refresh" in membership && !!membership.refresh,
-      live: current, changed,
+      changed: source?.state === "changed",
     };
   });
 }
 
-/** Include or remove one entry. Re-including a stored snapshot keeps it unchanged. */
+const removedKey = (sourceId: string) => `community:${sourceId}`;
+
+/**
+ * Include or remove one entry. Removing a stored snapshot also takes its filters out of the draft
+ * (kept for this editing session); re-including it restores them unchanged.
+ */
 export function setCommunityIncluded(draft: ReviewDraft, entry: CommunityEntry, included: boolean): ReviewDraft {
   const rest = draft.communityMemberships.filter((value) => value !== membershipFor(draft, entry));
-  if (!included) return { ...draft, communityMemberships: rest };
-  const next: ReviewCommunityMembership = entry.source ? { source_id: entry.source.source_id } : { link_id: entry.link!.linkId };
-  return { ...draft, communityMemberships: [...rest, next] };
+  const sourceId = entry.source?.source_id;
+  if (!included) {
+    if (!sourceId) return { ...draft, communityMemberships: rest };
+    const removed = draft.filters.filter((filter) => filter.community_source_id === sourceId);
+    return {
+      ...draft, communityMemberships: rest,
+      filters: draft.filters.filter((filter) => filter.community_source_id !== sourceId),
+      removedSnapshots: removed.length ? { ...draft.removedSnapshots, [removedKey(sourceId)]: removed } : draft.removedSnapshots,
+    };
+  }
+  const next: ReviewCommunityMembership = sourceId ? { source_id: sourceId } : { link_id: entry.link!.linkId };
+  if (!sourceId) return { ...draft, communityMemberships: [...rest, next] };
+  const { [removedKey(sourceId)]: restored = [], ...removedSnapshots } = draft.removedSnapshots;
+  return { ...draft, communityMemberships: [...rest, next], filters: [...draft.filters, ...restored], removedSnapshots };
 }
 
-/** Stage taking a new snapshot of an included stored entry when the review is saved. */
+/** Stage refreshing an included stored entry: saving takes a new snapshot and merges it into the review's filters. */
 export function stageCommunityRefresh(draft: ReviewDraft, entry: CommunityEntry): ReviewDraft {
   if (!entry.source) return draft;
   const sourceId = entry.source.source_id;
@@ -78,41 +75,7 @@ export function stageCommunityRefresh(draft: ReviewDraft, entry: CommunityEntry)
     ? { source_id: sourceId, refresh: true } : value) };
 }
 
-/** The filters an entry contributes to the draft's results: the stored snapshot, or a preview of
- * the snapshot that saving will take. */
-export function entryFilters(entry: CommunityEntry): { filters: ReviewCommunityFilter[]; preview: boolean } {
-  if (!entry.included) return { filters: [], preview: false };
-  if (entry.source && !entry.refreshStaged) return { filters: entry.source.filters, preview: false };
-  return { filters: entry.live ?? [], preview: true };
-}
-
-/** A stored snapshot's filters that exports use: those with a valid classification. */
-export function usableFilters(source: ReviewCommunitySource): ReviewCommunityFilter[] {
-  const unusable = new Set(source.unusable_filter_ids ?? []);
-  return source.filters.filter((filter) => !unusable.has(filter.filter_id));
-}
-
-/** Whether a saved review has evidence to export: a scan, or a community snapshot with a usable filter. */
-export function hasExportEvidence(review: Pick<SavedReview, "memberships" | "community_sources">): boolean {
-  return review.memberships.length > 0 || !!review.community_sources?.some((source) => usableFilters(source).length > 0);
-}
-
-/** A community filter as exports render it: clipped to the known runtime (null when wholly
- * outside it) and with the review owner's enforced severity for its subcategory. */
-export function asExported(filter: ReviewCommunityFilter, durationSeconds: number | null,
-  enforced: Partial<Record<string, string>> = {}): ReviewCommunityFilter | null {
-  const start = Math.max(0, filter.start_seconds);
-  const end = durationSeconds ? Math.min(filter.end_seconds, durationSeconds) : filter.end_seconds;
-  if (start >= end) return null;
-  return { ...filter, start_seconds: start, end_seconds: end, severity: enforced[filter.subcategory] ?? filter.severity };
-}
-
-/** The included community filters the review's exports would contain, for the timeline summary. */
-export function exportedCommunityFilters(entries: CommunityEntry[], durationSeconds: number | null,
-  enforced: Partial<Record<string, string>> = {}): ReviewCommunityFilter[] {
-  return entries.flatMap((entry) => {
-    const unusable = new Set(entry.source && !entry.refreshStaged ? entry.source.unusable_filter_ids ?? [] : []);
-    return entryFilters(entry).filters.filter((filter) => !unusable.has(filter.filter_id))
-      .flatMap((filter) => asExported(filter, durationSeconds, enforced) ?? []);
-  });
+/** Whether a saved review has evidence to export: a scan, or a community filter. */
+export function hasExportEvidence(review: Pick<SavedReview, "memberships" | "filters">): boolean {
+  return review.memberships.length > 0 || review.filters.some(isCommunityFilter);
 }

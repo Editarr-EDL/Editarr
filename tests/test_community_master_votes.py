@@ -88,7 +88,7 @@ def test_vote_sends_the_snapshot_receipt_and_records_my_vote(voting):
         }
         assert sent.headers["idempotency-key"] == "vote-1"
         row = db.get(CommunityMasterFilterRow, (link_id, "f_1"))
-        assert (row.my_vote, row.local_touched) == ("up", True)
+        assert row.my_vote == "up"
 
 
 def test_retryable_failures_keep_the_intent_and_retry_resends_saved_bytes(voting):

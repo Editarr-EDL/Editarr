@@ -75,29 +75,6 @@ class AlignmentApproval(_Body):
     confirmed: StrictBool
 
 
-class FilterDecisionRequest(_Body):
-    decision: Literal["verify", "reject", "adjust", "reset"]
-    start_ms: Milliseconds | None = None
-    end_ms: Milliseconds | None = None
-    subcategory: str | None = Field(default=None, max_length=128)
-    severity: Literal["low", "medium", "high"] | None = None
-    action: Literal["skip", "mute"] | None = None
-    expected_state: (
-        Literal["pending", "verified", "adjusted", "rejected", "low_confidence"] | None
-    ) = None
-
-    def values(self) -> dict:
-        """The camelCase value fields that were sent."""
-        named = {
-            "startMs": self.start_ms,
-            "endMs": self.end_ms,
-            "subcategory": self.subcategory,
-            "severity": self.severity,
-            "action": self.action,
-        }
-        return {name: value for name, value in named.items() if value is not None}
-
-
 Unit = Annotated[float, Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)]
 
 
@@ -145,18 +122,3 @@ class NotificationsRead(_Body):
         if (self.notification_ids is None) == (self.all is None):
             raise ValueError("Send either notification_ids or all")
         return self
-
-
-class UpdateDecision(_Body):
-    row_id: Token
-    decision: Literal["accept", "keep_mine", "dismiss"]
-
-
-class UpdateDecisions(_Body):
-    to_revision: Annotated[StrictInt, Field(ge=1)]
-    decisions: list[UpdateDecision] = Field(min_length=1, max_length=500)
-
-
-class AcceptAll(_Body):
-    to_revision: Annotated[StrictInt, Field(ge=1)]
-    group: Literal["new", "changed", "removed", "nowLowConfidence"]

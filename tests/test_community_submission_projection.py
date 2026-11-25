@@ -1,4 +1,5 @@
-"""Sharing projection: local cues and master decisions as a v3 submission (D21–D22)."""
+"""Sharing projection: local cues and community review filter edits as a v3 submission
+(D21–D22, ADR 0002 U6)."""
 
 import json
 
@@ -60,13 +61,12 @@ def scan_data(*findings, stages=()):
     }
 
 
-def row(filter_id, start, end, state="pending", category="violence", **values):
+def row(filter_id, start, end, category="violence", **values):
     defaults = {"subcategory": "punching", "severity": "high", "action": "skip"}
     defaults.update(values)
     return LinkedFilter(
         filter_id,
         category,
-        state,
         start,
         end,
         defaults["subcategory"],
@@ -93,18 +93,12 @@ def entries(projection):
     return {entry.entry_id: entry for entry in projection.artifact.entries}
 
 
-def test_cues_support_proposed_filters_and_decisions_become_disputes_and_adjustments():
+def test_cues_support_the_master_filters_they_overlap():
     link = LinkProjection(
         "v_1",
         4,
         {"offsetMs": 1000, "scale": 1.0, "anchors": 3},
-        (
-            row("f_kept", 100_200, 101_100),
-            row("f_rejected", 200_000, 205_000, state="rejected"),
-            row("f_adjusted", 300_000, 302_000, state="adjusted", severity="low"),
-            row("f_verified", 400_000, 401_000, state="verified"),
-            row("f_untouched", 500_000, 501_000),
-        ),
+        (row("f_kept", 100_200, 101_100), row("f_untouched", 500_000, 501_000)),
     )
     data = scan_data(
         finding(100.0, 101.0),
@@ -115,30 +109,14 @@ def test_cues_support_proposed_filters_and_decisions_become_disputes_and_adjustm
     )
     projection = project_submission(data, "scan", options(), link)
     by_id = entries(projection)
-    assert by_id["e1"].proposed_filter_id == "f_kept"
-    assert by_id["e2"].proposed_filter_id is None
+    assert [entry.proposed_filter_id for entry in by_id.values()] == ["f_kept", None, None]
     assert by_id["e1"].evidence.origin == "model" and by_id["e1"].evidence.model_version == "1.4.0"
-    shared = {entry.proposed_filter_id: entry for entry in projection.artifact.entries}
-    assert set(shared) == {"f_kept", None, "f_adjusted", "f_verified", "f_rejected"}
-    dispute = shared["f_rejected"]
-    assert (dispute.kind, dispute.subcategory, dispute.evidence.locally_verified) == (
-        "dispute",
-        None,
-        False,
-    )
-    adjusted = shared["f_adjusted"]
-    assert (adjusted.kind, adjusted.severity, adjusted.evidence.origin) == (
-        "support",
-        "low",
-        "downloaded",
-    )
-    assert adjusted.evidence.locally_verified and adjusted.evidence.manual_review
     assert projection.estimates.as_json() == {
         "approximate": True,
         "newFilters": 2,
-        "confirmations": 3,
-        "adjustments": 1,
-        "disputes": 1,
+        "confirmations": 1,
+        "adjustments": 0,
+        "disputes": 0,
     }
     assert projection.artifact.alignment_hint.model_dump(by_alias=True) == {
         "versionId": "v_1",
@@ -148,6 +126,89 @@ def test_cues_support_proposed_filters_and_decisions_become_disputes_and_adjustm
         "anchors": 3,
     }
     assert "unclassified_cue_skipped" in projection.warnings
+    encode_artifact_v3(projection.artifact)
+
+
+def _entry(filter_id, start_ms, end_ms, *, default=True, **values):
+    return {
+        "filter_id": filter_id,
+        "category": "violence",
+        "subcategory": "punching",
+        "severity": "high",
+        "edit_action": "skip",
+        "start_ms": start_ms,
+        "end_ms": end_ms,
+        "confidence": 0.5,
+        "default_selected": default,
+        **values,
+    }
+
+
+def _community(filter_id, start, end, selected=True, **values):
+    return {
+        **finding(start, end, **{"severity": "high", **values}),
+        "id": f"r-{filter_id}",
+        "selected": selected,
+        "source_scan_id": None,
+        "source_finding_id": None,
+        "mcf_channel": "both",
+        "community_source_id": "src",
+        "community_filter_id": filter_id,
+    }
+
+
+def test_review_community_filters_share_only_the_users_edits():
+    data = scan_data()
+    data["root"] = {"id": "review"}
+    data["community_sources"] = [
+        {
+            "id": "src",
+            "filters_json": json.dumps(
+                [
+                    _entry("f_same", 100_000, 101_000),
+                    _entry("f_moved", 200_000, 201_000),
+                    _entry("f_off", 300_000, 301_000),
+                    _entry("f_low", 400_000, 401_000, default=False),
+                    _entry("f_on", 500_000, 501_000, default=False),
+                ]
+            ),
+        }
+    ]
+    rows = [
+        _community("f_same", 100.0, 101.0),
+        _community("f_moved", 200.5, 201.0, severity="low"),
+        _community("f_off", 300.0, 301.0, selected=False),
+        _community("f_low", 400.0, 401.0, selected=False),
+        _community("f_on", 500.0, 501.0),
+        {**finding(300.0, 301.0), "source_scan_id": "scan", "source_finding_id": 3},
+    ]
+    data["findings"] = data["base_findings"] = rows
+    data["policy_evidence"] = [finding(200.0, 201.5)]
+    link = LinkProjection("v_1", 1, None, (row("f_off", 300_000, 301_000),))
+    projection = project_submission(data, "review", options(), link)
+    shared = [
+        (entry.kind, entry.proposed_filter_id, entry.start_ms, entry.severity)
+        for entry in projection.artifact.entries
+    ]
+    assert shared == [
+        ("support", None, 300_000, "medium"),
+        ("support", "f_moved", 200_500, "low"),
+        ("dispute", "f_off", 300_000, None),
+        ("support", "f_on", 500_000, "high"),
+    ]
+    moved = projection.artifact.entries[1].evidence
+    assert (moved.origin, moved.manual_review, moved.locally_verified) == (
+        "downloaded",
+        True,
+        True,
+    )
+    assert projection.estimates.as_json() == {
+        "approximate": True,
+        "newFilters": 1,
+        "confirmations": 2,
+        "adjustments": 1,
+        "disputes": 1,
+    }
     encode_artifact_v3(projection.artifact)
 
 

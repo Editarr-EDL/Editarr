@@ -8,8 +8,10 @@ import { useReviewLifetime } from "./review-access";
 export type PreviewFilter = Pick<ReviewFilter, "id" | "source" | "edit_action" | "start_seconds" | "end_seconds">
   & Partial<Pick<ReviewFilter, "source_scan_id" | "source_finding_id">>;
 
+/** Whether a saved filter's clip can be rendered from its saved values. Community filters have
+ * no source scan, so they always preview from the review's own media file. */
 function sameClip(saved: ReviewFilter, draft: PreviewFilter): boolean {
-  return saved.source_scan_id === draft.source_scan_id && saved.source_finding_id === draft.source_finding_id
+  return !!saved.source_scan_id && saved.source_scan_id === draft.source_scan_id && saved.source_finding_id === draft.source_finding_id
     && saved.source === draft.source && saved.edit_action === draft.edit_action
     && saved.start_seconds === draft.start_seconds && saved.end_seconds === draft.end_seconds;
 }
@@ -69,7 +71,7 @@ export function useReviewPreview({ target, selected, draft, setBusy, setError, d
           : fetchSavedReviewVideoPreview(selected.id, filter.id))
         : await fetchDraftFilterPreview(target, {
           review_id: selected?.id,
-          source_scan_id: filter.source_scan_id,
+          source_scan_id: filter.source_scan_id ?? undefined,
           source_finding_id: filter.source_finding_id,
           start_seconds: filter.start_seconds,
           end_seconds: filter.end_seconds,

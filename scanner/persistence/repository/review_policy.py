@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 
 from scanner.db import SavedReviewRow, ScanFindingRow, ScanRow
 from scanner.mcf import TimingInterval, map_affine_range
-from scanner.models import ReviewFilter, ReviewFilterInput, ReviewSynchronization
+from scanner.models import (
+    PROVENANCE_FIELDS,
+    ReviewFilter,
+    ReviewFilterInput,
+    ReviewSynchronization,
+)
 from scanner.settings.filter_defaults import EnforcedFilterPolicy, enforce_filter_policy
 
 from ..write_lock import write_lock
@@ -139,7 +144,7 @@ def _source_filter(finding: ScanFindingRow, filter_id: str) -> ReviewFilter:
         **{
             key: getattr(finding, key)
             for key in ReviewFilter.model_fields
-            if key not in {"id", "source_scan_id", "source_finding_id"}
+            if key not in PROVENANCE_FIELDS
         },
     )
 
@@ -160,8 +165,10 @@ def prepare_review_policy(
     missing = []
     for saved in base:
         if saved.source_finding_id is None:
-            scan = db.get(ScanRow, saved.source_scan_id)
-            manual = (
+            scan = db.get(ScanRow, saved.source_scan_id) if saved.source_scan_id else None
+            # Manual and community filters have no immutable source finding: the policy
+            # applies to their saved values.
+            manual = saved.community_source_id is not None or (
                 scan is not None
                 and scan.origin == "manual"
                 and any(
@@ -290,12 +297,17 @@ def validate_policy_draft(
         proposed = incoming.get(current.id)
         interval = (base[current.id].start_seconds, base[current.id].end_seconds)
         membership = next(
-            value for value in review.memberships if value.scan_id == current.source_scan_id
+            (value for value in review.memberships if value.scan_id == current.source_scan_id),
+            None,
         )
         evidence = source_intervals.get(current.source_finding_id)
         if evidence is not None:
             interval = (evidence.start_seconds, evidence.end_seconds)
-        elif _has_unknown_cue_provenance(membership) and synchronization != stored_sync:
+        elif (
+            membership is not None
+            and _has_unknown_cue_provenance(membership)
+            and synchronization != stored_sync
+        ):
             interval = _map_policy_floor(
                 interval[0],
                 interval[1],
@@ -306,6 +318,7 @@ def validate_policy_draft(
         if (
             proposed is not None
             and evidence is None
+            and membership is not None
             and _has_unknown_cue_provenance(membership)
             and (synchronization != stored_sync or retime_result)
         ):
@@ -330,8 +343,11 @@ def validate_policy_draft(
             proposed = incoming[current.id] = proposed.model_copy(update=snapped)
         if (
             proposed is None
-            or roles.get(current.source_scan_id)
-            not in {"audio" if current.source == "audio" else "video", "both"}
+            or (
+                membership is not None
+                and roles.get(current.source_scan_id)
+                not in {"audio" if current.source == "audio" else "video", "both"}
+            )
             or not covers_evidence(
                 proposed,
                 evidence

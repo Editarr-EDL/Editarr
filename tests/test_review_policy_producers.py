@@ -163,6 +163,7 @@ def test_binding_writers_are_enumerated():
         ("repository_review_core.py", "_snapshot_findings"),
         ("repository_review_core.py", "_filter_rows_from_inputs"),
         ("review_repairs.py", "recover_review"),
+        ("review_community_filters.py", "_row"),
     }
     assert producers["_map_policy_floor"] == {
         ("import_mcf.py", "_import_mcf_as_saved_review"),

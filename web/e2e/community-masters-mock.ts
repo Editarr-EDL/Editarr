@@ -1,16 +1,12 @@
 import { expect, type Page } from "@playwright/test";
 import { json } from "./app-fixtures";
-import type {
-  FindResult, MasterFilter, MasterLink, MasterPreferences, MasterUpdate, UpdateCounts, UpdateRow,
-} from "../src/api/api-community-master-types";
-import type { ReviewCommunityFilter } from "../src/api/api-review-types";
+import type { FindResult, MasterFilter, MasterLink, MasterPreferences } from "../src/api/api-community-master-types";
 import { sharingContextFixture, sharingPreviewFixture } from "../src/scans/sharing-test-fixtures";
 
 const values = (startMs: number, subcategory: string, severity = "high", action = "skip") =>
   ({ startMs, endMs: startMs + 5_050, subcategory, severity, action });
 const info = (confidence: number, lowConfidence = false) => ({ spread: { startMs: 300, endMs: 350 }, confidence, contributorCount: 4,
   support: { attestations: 4, upvotes: 1 }, negative: { downvotes: 1, disputes: 0, coverageNegatives: 1 }, lowConfidence, present: true });
-const noUpdate: UpdateCounts = { new: 0, changed: 0, removed: 0, nowLowConfidence: 0 };
 
 export const findResults: FindResult[] = [
   { communityVersionId: "v_theatrical", label: "Theatrical", aliasId: "theatrical", status: "confirmed", unconfirmed: false,
@@ -22,84 +18,51 @@ export const findResults: FindResult[] = [
 ];
 
 function filter(filterId: string, category: string, startMs: number, subcategory: string, confidence: number,
-  overrides: Partial<MasterFilter> = {}, lowConfidence = false): MasterFilter {
-  const master = { ...values(startMs, subcategory), ...info(confidence, lowConfidence) };
-  return { filterId, category, master, local: null, effective: values(startMs, subcategory),
-    state: lowConfidence ? "low_confidence" : "pending", touched: false, locallyVerified: false, myVote: null, active: true, ...overrides };
+  overrides: Partial<MasterFilter> = {}, lowConfidence = false, severity = "high"): MasterFilter {
+  const master = { ...values(startMs, subcategory, severity), ...info(confidence, lowConfidence) };
+  return { filterId, category, master, locallyVerified: false, myVote: null, active: true, ...overrides };
 }
 
-function updateRow(rowId: string, category: string, overrides: Partial<UpdateRow>): UpdateRow {
-  return { rowId, filterId: rowId, category, touched: false, changedFields: [], mine: null, oldMaster: null, newMaster: null,
-    mergedInto: null, allowed: ["accept", "dismiss"], canAccept: true, ...overrides };
-}
-const baseline = (startMs: number, subcategory: string, severity = "high") =>
-  ({ ...values(startMs, subcategory, severity), lowConfidence: false, present: true });
-const newMaster = (startMs: number, subcategory: string, severity = "high") =>
-  ({ ...values(startMs, subcategory, severity), ...info(0.7) });
-
-/** The pending update a check finds: one new row, two changed rows (one the user edited) and one removed row. */
-export function pendingUpdate(): MasterUpdate {
-  return { version: 1, fromRevision: 12, toRevision: 13, alignmentRequired: true, alignmentApproved: true, groups: {
-    new: [updateRow("f_new", "violence", { changedFields: ["startMs", "endMs", "subcategory", "severity", "action"],
-      newMaster: newMaster(1_800_000, "punching") })],
-    changed: [
-      updateRow("f_lang", "language", { changedFields: ["severity"], oldMaster: baseline(900_000, "profanity", "medium"),
-        newMaster: newMaster(900_000, "profanity", "high") }),
-      updateRow("f_fight", "violence", { touched: true, changedFields: ["startMs"], allowed: ["accept", "keep_mine", "dismiss"],
-        mine: values(600_100, "punching", "medium"), oldMaster: baseline(600_000, "punching"), newMaster: newMaster(601_000, "punching") }),
-    ],
-    removed: [updateRow("f_gone", "nudity", { changedFields: ["present"], oldMaster: baseline(1_200_000, "nudity") })],
-    nowLowConfidence: [],
-  } };
-}
+/** A served master filter as a saved review includes it: its values and whether it starts enabled. */
+export type ServedFilter = { filterId: string; category: string; subcategory: string; severity: string; action: string;
+  startMs: number; endMs: number; confidence: number; contributorCount: number; lowConfidence: boolean; startsEnabled: boolean };
 
 export type CommunityMastersMock = {
   requests: { method: string; path: string; body: unknown }[];
   state: { link: MasterLink | null };
-  /** The linked set's active filters now, in a saved review's snapshot form. */
-  snapshotFilters: () => ReviewCommunityFilter[];
+  /** The linked set's served filters now, as a saved review includes them. */
+  servedFilters: () => ServedFilter[];
 };
 
 /**
  * Serve every `/api/community/*` route used by master sets, the daily sync and sharing with a small
- * in-memory account state. Register after `mockApi` so these routes take priority.
+ * in-memory account state. Register after `mockApi` so these routes take priority. "Check for filter
+ * updates" applies revision 13: Language moves, Nudity is no longer served and a new filter arrives.
  */
 export async function mockCommunityMasters(page: Page, options: { linked?: boolean } = {}): Promise<CommunityMastersMock> {
   let preferences: MasterPreferences = { confidenceThreshold: 0, showLowConfidence: false, hideRejectedDownvoted: false };
-  let counts = noUpdate;
-  let update = pendingUpdate();
   let notificationsRead = false;
   const linkFor = (result: FindResult): MasterLink => ({ linkId: `link-${result.communityVersionId}`, localVersionId: "mv_1",
     communityVersionId: result.communityVersionId, label: result.label, aliasId: result.aliasId, status: result.status,
     unconfirmed: result.unconfirmed, tier: result.tier, matchPercent: result.matchPercent, appliedRevision: 12, latestRevision: 12,
     alignmentState: result.alignmentRequired ? "required" : "not_required", alignment: null, alignmentRevision: null,
-    pendingUpdate: noUpdate, linkState: "active", mergedInto: null });
-  const mock: CommunityMastersMock = { requests: [], state: { link: options.linked ? { ...linkFor(findResults[1]), alignmentState: "approved",
-    alignment: { offsetMs: 0, scale: 1, anchors: 0 }, alignmentRevision: 12 } : null },
-  snapshotFilters: () => filters.filter(active).map((item) => ({ filter_id: item.filterId, category: item.category,
-    subcategory: item.effective.subcategory ?? "", severity: item.effective.severity ?? "", edit_action: item.effective.action as "skip",
-    start_seconds: item.effective.startMs / 1000, end_seconds: item.effective.endMs / 1000, confidence: item.master.confidence })) };
-  const filters = [
-    filter("f_fight", "violence", 600_000, "punching", 0.8, { state: "verified", touched: true, locallyVerified: true, myVote: "up" }),
-    filter("f_lang", "language", 900_000, "profanity", 0.3),
+    linkState: "active", mergedInto: null });
+  let filters = [
+    filter("f_fight", "violence", 600_000, "violence", 0.8, { locallyVerified: true, myVote: "up" }),
+    filter("f_lang", "language", 900_000, "swearing", 0.3, {}, false, "medium"),
     filter("f_gone", "nudity", 1_200_000, "nudity", 0.2, {}, true),
   ];
-  // The backend `is_active` rule (scanner/modeling/community_master_state.py).
-  const inEffect = ["pending", "verified", "adjusted"];
-  const active = (item: MasterFilter) => {
-    if (mock.state.link?.alignmentState === "required" || !item.master.present) return false;
-    if (item.touched) return inEffect.includes(item.state);
-    if (item.master.lowConfidence) {
-      if (!preferences.showLowConfidence || ![...inEffect, "low_confidence"].includes(item.state)) return false;
-    } else if (!inEffect.includes(item.state)) return false;
-    return item.master.confidence >= preferences.confidenceThreshold;
-  };
-  const link = () => ({ ...mock.state.link!, pendingUpdate: counts });
-  const remaining = () => ({ ...update, groups: { ...update.groups } });
-  const decide = (rowId: string) => {
-    update = { ...update, groups: Object.fromEntries(Object.entries(update.groups).map(([group, rows]) =>
-      [group, rows.filter((row) => row.rowId !== rowId)])) as MasterUpdate["groups"] };
-  };
+  // The backend rule for which filters start enabled (scanner/modeling/community_review_filters.py).
+  const startsEnabled = (item: MasterFilter) => (!item.master.lowConfidence || !!preferences.showLowConfidence)
+    && item.master.confidence >= preferences.confidenceThreshold;
+  const active = (item: MasterFilter) => mock.state.link?.alignmentState !== "required" && item.master.present && startsEnabled(item);
+  const mock: CommunityMastersMock = { requests: [], state: { link: options.linked ? { ...linkFor(findResults[1]), alignmentState: "approved",
+    alignment: { offsetMs: 0, scale: 1, anchors: 0 }, alignmentRevision: 12 } : null },
+  servedFilters: () => filters.map((item) => ({ filterId: item.filterId, category: item.category,
+    subcategory: item.master.subcategory ?? "", severity: item.master.severity ?? "", action: item.master.action,
+    startMs: item.master.startMs, endMs: item.master.endMs, confidence: item.master.confidence,
+    contributorCount: item.master.contributorCount, lowConfidence: item.master.lowConfidence, startsEnabled: startsEnabled(item) })) };
+  const link = () => mock.state.link!;
 
   await page.route(/\/api\/community\//, async (route) => {
     const request = route.request();
@@ -145,29 +108,14 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
         return json(route, { version: 1, link: link() });
       }
       if (action.endsWith("/vote")) return json(route, { version: 1, state: "completed", result: { accepted: true } });
-      if (action === "active-filters") return json(route, { version: 1, linkId: mock.state.link.linkId, localVersionId: "mv_1",
-        filters: filters.filter(active).map((item) => ({ linkId: mock.state.link!.linkId, filterId: item.filterId, category: item.category,
-          ...item.effective, confidence: item.master.confidence })), edl: "" });
-      const decided = action.match(/^filters\/([^/]+)$/)?.[1];
-      if (decided && method === "PATCH") {
-        const index = filters.findIndex((item) => item.filterId === decided);
-        const states = { verify: "verified", reject: "rejected", reset: "pending" } as const;
-        filters[index] = { ...filters[index], touched: body.decision !== "reset",
-          state: states[body.decision as keyof typeof states] ?? filters[index].state };
-        return json(route, { version: 1, ...filters[index], active: active(filters[index]) });
-      }
       if (action === "check") {
-        counts = { new: 1, changed: 2, removed: 1, nowLowConfidence: 0 };
-        return json(route, { version: 1, changed: true, latestRevision: 13, pendingUpdate: counts });
-      }
-      if (action === "update") return json(route, remaining());
-      if (action === "update/accept-all") {
-        for (const row of update.groups[body.group as keyof MasterUpdate["groups"]]) if (!row.touched && row.canAccept) decide(row.rowId);
-        return json(route, remaining());
-      }
-      if (action === "update/decisions") {
-        for (const decision of body.decisions) decide(decision.row_id);
-        return route.fulfill({ status: 204 });
+        const changed = mock.state.link.latestRevision < 13;
+        if (changed) {
+          filters = [filters[0], filter("f_lang", "language", 901_000, "swearing", 0.4, {}, false, "high"),
+            filter("f_new", "violence", 1_800_000, "violence", 0.7)];
+          mock.state.link = { ...mock.state.link, appliedRevision: 13, latestRevision: 13 };
+        }
+        return json(route, { version: 1, changed, latestRevision: 13 });
       }
     }
     if (path.startsWith("sharing/")) {

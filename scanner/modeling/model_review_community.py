@@ -32,41 +32,37 @@ class ReviewCommunityMembership(ReviewWriteModel):
         return self
 
 
-class ReviewCommunityFilter(BaseModel):
-    """One snapshot filter on the local timeline, in seconds."""
+class ReviewFilterCommunity(BaseModel):
+    """Read-only provenance of a review filter that came from a community snapshot.
 
-    filter_id: str
-    category: str
-    subcategory: str
-    severity: str
-    edit_action: Literal["mute", "skip"]
-    start_seconds: float
-    end_seconds: float
-    confidence: float | None = None
-
-
-class CommunitySubtitleSummary(BaseModel):
-    """How the review's community language mutes reach filtered subtitles.
-
-    `applied` mutes align with a word-level language finding of a local audio scan and
-    redact its words; `needs_audio_scan` mutes wait for a completed local audio scan of
-    the version; `unaligned` mutes overlap no local language finding. Only applied
-    mutes change subtitles.
+    The filter itself is a normal review filter. `label` names the community version,
+    `edited` is whether the user changed its enabled state, bounds, classification,
+    severity or action from the snapshot's defaults, and `removed` that the master no
+    longer served it at the last refresh ("Removed from community").
+    `locally_verified` is the link's Locally verified badge for the filter.
     """
 
-    applied: int = 0
-    needs_audio_scan: int = 0
-    unaligned: int = 0
+    source_id: str
+    filter_id: str
+    label: str
+    master_revision: int
+    confidence: float | None = None
+    contributor_count: int | None = None
+    low_confidence: bool = False
+    removed: bool = False
+    edited: bool = False
+    locally_verified: bool = False
 
 
 class ReviewCommunitySource(BaseModel):
     """A stored community filter snapshot and how it compares with its link now.
 
     `state` is `current` (the link's active filters still equal the snapshot),
-    `changed` (they differ; a refresh would update the snapshot), `alignment_required`
+    `changed` (they differ; a refresh would bring the changes in), `alignment_required`
     (the link awaits alignment, so it can't be refreshed) or `link_unavailable` (the
-    link was deleted, replaced or belongs to another account). The review always uses
-    `filters`, whatever the state.
+    link was deleted, replaced or belongs to another account). The snapshot's filters
+    are normal review filters, whatever the state; `filter_count` counts the ones the
+    master served when it was taken.
     """
 
     source_id: str
@@ -80,7 +76,4 @@ class ReviewCommunitySource(BaseModel):
     captured_at: str
     state: CommunitySourceState
     link_state: str | None = None
-    filters: list[ReviewCommunityFilter] = Field(default_factory=list)
-    # Snapshot filters left out of exports because their subcategory doesn't belong to
-    # their category.
-    unusable_filter_ids: list[str] = Field(default_factory=list)
+    filter_count: int = 0

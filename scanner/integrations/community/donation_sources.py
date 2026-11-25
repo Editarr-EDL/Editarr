@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from scanner.db import (
     CommunityImportRow,
     MediaItemRow,
+    ReviewCommunitySourceRow,
     ReviewFilterRow,
     ReviewScanMembershipRow,
     ReviewSynchronizationRow,
@@ -129,6 +130,7 @@ def capture_source(
         if reference.kind == "scan":
             memberships = []
             scan_ids = [root["id"]]
+            community = []
             findings = rows(
                 ScanFindingRow,
                 ScanFindingRow.scan_id == root["id"],
@@ -151,7 +153,13 @@ def capture_source(
             )
             scan_ids = sorted(
                 {item["scan_id"] for item in memberships}
-                | {item["source_scan_id"] for item in findings}
+                | {item["source_scan_id"] for item in findings if item["source_scan_id"]}
+            )
+            community = rows(
+                ReviewCommunitySourceRow,
+                ReviewCommunitySourceRow.review_id == root["id"],
+                source_limit,
+                ReviewCommunitySourceRow.position,
             )
             synchronization = rows(
                 ReviewSynchronizationRow, ReviewSynchronizationRow.review_id == root["id"], 1
@@ -192,6 +200,7 @@ def capture_source(
             "policy_required": required_ids,
             "policy_evidence": evidence,
             "memberships": memberships,
+            "community_sources": community,
             "synchronization": synchronization,
             "media": rows(MediaItemRow, MediaItemRow.id == root["media_item_id"], 1),
             "stages": rows(

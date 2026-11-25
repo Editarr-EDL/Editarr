@@ -102,7 +102,16 @@ def snapshot(revision, *filters, version="v_1") -> VerifiedSnapshot:
     document = {
         "versionId": version,
         "revision": revision,
-        "filters": [{"filterId": item.filter_id, **item.values.as_json()} for item in filters],
+        "filters": [
+            {
+                "filterId": item.filter_id,
+                "mergedIds": list(item.merged_ids),
+                "category": item.category,
+                **item.values.as_json(),
+                **dict(item.info),
+            }
+            for item in filters
+        ],
     }
     raw = json.dumps(document, separators=(",", ":")).encode()
     digest = hashlib.sha256(raw).hexdigest()

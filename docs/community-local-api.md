@@ -1,7 +1,9 @@
 # Local community API: master filter sets
 
 The Editarr web app uses these routes to find, apply, vote on, share and update
-community master filter sets. The hosted protocol behind them is the
+community master filter sets. The Community tab only browses a linked set: filters
+are enabled, disabled and adjusted in the saved reviews that include them, as normal
+review filters. The hosted protocol behind them is the
 [community service contract](community-scan-service-contracts.md). The design
 decisions are in [ADR 0002](adr/0002-community-master-filter-sets.md).
 Connection, enrollment, profile and key routes are unchanged; see
@@ -18,8 +20,7 @@ These follow the existing `/api/community/*` routes:
 - **Field names:** request bodies are strict snake_case, and extra fields
   return a 422 validation list. Responses are camelCase and carry
   `"version": 1`.
-- **Empty responses:** `POST /api/community/sync/notifications/read` and
-  `POST /api/community/masters/{link_id}/update/decisions` return
+- **Empty responses:** `POST /api/community/sync/notifications/read` returns
   `204 No Content`. Every other successful route returns a JSON body.
 - **Errors:**
 
@@ -37,8 +38,8 @@ These follow the existing `/api/community/*` routes:
   `mergedInto` (for `version_merged`) next to `code` and `retryable`.
   Requests without `confirmed: true` where one is required return
   `409 confirmation_required`.
-- **Ownership:** master links, local filter state, votes, preferences and
-  sync notifications all belong to the **current account** (`owner_id`).
+- **Ownership:** master links, votes, preferences and sync notifications all
+  belong to the **current account** (`owner_id`).
   They are signed with that account's contributor identity. Media access
   rules apply to every item.
 - **Capabilities** (existing IDs):
@@ -46,7 +47,7 @@ These follow the existing `/api/community/*` routes:
   | Capability | Routes |
   | --- | --- |
   | `community.search` | find, aliases, master view and lists, active filters, `GET` preferences, including or refreshing review snapshots (§3) |
-  | `community.download` | download and apply, alignment, filter decisions, `PATCH` preferences, check, update review, sync and notifications |
+  | `community.download` | download and apply, alignment, `PATCH` preferences, check, sync and notifications |
   | `community.feedback.submit` | votes, reports |
   | `community.publish.own_review`, `community.publish.scan_evidence`, `community.publish.other_review` | share |
 
@@ -142,10 +143,10 @@ The backend runs these steps:
 4. Create the link or replace its version. Each account has one link per
    local version and service.
 5. Create a filter row for each snapshot filter.
-   - **Tiers 1–3:** set `alignmentState: "not_required"`. Untouched rows
-     become `pending` and active, unless they are Low Confidence.
-   - **Other tiers:** set `alignmentState: "required"`. No row is active
-     until alignment is approved (§4).
+   - **Tiers 1–3:** set `alignmentState: "not_required"`. The filters can be
+     included in reviews at once.
+   - **Other tiers:** set `alignmentState: "required"`. The filters can't be
+     included in a review until alignment is approved (§4).
 
 Response:
 
@@ -165,8 +166,8 @@ Downloading another community version for a linked local version without
 `replace: true` returns `409 {"code":"replace_required","retryable":false}`
 and changes nothing. To confirm the switch, send `confirmed: true` with
 `replace: true`: the old link becomes `linkState: "replaced"` and keeps its
-rows as history. Downloading the version already linked stores a newer
-revision for update review instead.
+rows as history. Downloading the version already linked stores and applies a
+newer revision instead (§8).
 
 ### `GET /api/community/masters?item_id=…&media_source_id=…`
 
@@ -189,10 +190,8 @@ Returns the master view:
 { "version": 1, "link": {
     "linkId": "…", "localVersionId": "mv_…", "communityVersionId": "v_12ab", "label": "Theatrical",
     "status": "confirmed", "unconfirmed": false, "tier": "2", "matchPercent": 80,
-    "aliasId": "theatrical", "appliedRevision": 12, "latestRevision": 13, "alignmentState": "not_required",
-    "alignment": null, "alignmentRevision": null,
-    "pendingUpdate": { "new": 3, "changed": 2, "removed": 1, "nowLowConfidence": 0 },
-    "linkState": "active", "mergedInto": null },
+    "aliasId": "theatrical", "appliedRevision": 13, "latestRevision": 13, "alignmentState": "not_required",
+    "alignment": null, "alignmentRevision": null, "linkState": "active", "mergedInto": null },
   "preferences": { "confidenceThreshold": 0.0, "showLowConfidence": false, "hideRejectedDownvoted": false },
   "filters": [ {
     "filterId": "f_9c1d…", "category": "violence",
@@ -200,9 +199,7 @@ Returns the master view:
                 "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.354197347, "contributorCount": 4,
                 "support": { "attestations": 4, "upvotes": 1 }, "negative": { "downvotes": 1, "disputes": 0, "coverageNegatives": 1 },
                 "lowConfidence": false, "present": true },
-    "local": { "startMs": 600100, "endMs": 605050, "subcategory": "punching", "severity": "medium", "action": "skip" },
-    "effective": { "startMs": 600100, "endMs": 605050, "subcategory": "punching", "severity": "medium", "action": "skip" },
-    "state": "adjusted", "touched": true, "locallyVerified": true, "myVote": "up", "active": true } ] }
+    "locallyVerified": true, "myVote": "up", "active": true } ] }
 ```
 
 Field rules:
@@ -213,52 +210,34 @@ Field rules:
 - `link.linkState` is `active`, `merged` (with `mergedInto`, the surviving
   community version), `unavailable` (the service no longer serves the
   version), or `replaced` (history after a confirmed replace). A merged or
-  unavailable link keeps its local rows and decisions; the web app shows the
-  state and offers Find again. `pendingUpdate` is always present, with zero
-  counts when nothing is pending.
-- `master` holds the row's baseline master values, mapped to the local
-  timeline through `alignment` when one is present.
-- `local` holds the user's overrides, or null.
-- `effective` is `local`, or else `master`.
-- `state` is one of these:
-
-  | State | Meaning |
-  | --- | --- |
-  | `pending` | Untouched and active |
-  | `verified` | The user confirmed it |
-  | `adjusted` | The user edited its timing or classification |
-  | `rejected` | The user rejected it, so it is shared as a dispute |
-  | `low_confidence` | Untouched, and the master is Low Confidence |
-
-- `locallyVerified` drives the "Locally verified" badge. It is true for
-  `verified` and `adjusted` rows, and for rows that overlap a local model
-  finding of the same category on this local version.
-- A row is `active` when **all** of these hold:
-  - the alignment state isn't `required`;
-  - the state is `pending`, `verified`, or `adjusted` (or
-    `low_confidence` when `showLowConfidence` is set);
-  - **untouched rows only:** the row isn't Low Confidence, unless
-    `showLowConfidence` is set, and its confidence is at least
-    `confidenceThreshold`.
-- With `showLowConfidence` set, untouched `low_confidence` rows that meet the
-  threshold are active.
-- Touched rows ignore the threshold.
+  unavailable link keeps its local rows; the web app shows the state and offers
+  Find again. `appliedRevision` is the revision the rows show, which is always
+  `latestRevision` once a revision is stored (§8).
+- `filters` lists the filters the latest snapshot serves. The view is read-only:
+  there are no local filter decisions (ADR 0002 U1).
+- `master` holds the filter's master values, mapped to the local timeline
+  through `alignment` when one is present.
+- `locallyVerified` drives the "Locally verified" badge. It is true when the
+  filter overlaps a finding of the same top-level category from a completed
+  local model scan of this local version (after alignment; never while the
+  link awaits alignment).
+- `active` tells whether the filter **starts enabled** when a review includes
+  or refreshes the link: the alignment state isn't `required`, the filter
+  isn't Low Confidence unless `showLowConfidence` is set, and its confidence is
+  at least `confidenceThreshold`. Filters that don't start enabled are still
+  added to the review, disabled (§3 review community filters).
 - `active` is computed with the account's **saved** preferences. While the
   user changes the threshold or the Low Confidence toggle and the change
-  hasn't been saved yet, the client recomputes `active` with the same rules
-  for display. Once the displayed preferences equal the saved ones, the client
-  uses the server's `active` flag.
-- Rows with `present: false` are only included when the user kept them
-  (§5).
+  hasn't been saved yet, the client recomputes it with the same rule for
+  display.
+- Rows the master no longer serves are left out.
 
 ### `GET /api/community/masters/{link_id}/active-filters`
 
-The link's in-effect filters now: the values a saved review stores when it
-includes or refreshes the link (no imported scan is generated). `?clipped=false`
-returns them unclipped, exactly as a snapshot stores them, and the web app uses that
-to show whether a stored snapshot changed. By default it returns the
-link's `active` rows with their `effective` values on the local timeline, and
-the same filters merged by the existing Simple EDL range merging. Bounds are
+The link's filters that start enabled now (`active` in the master view), with
+their master values on the local timeline, and the same filters merged by the
+existing Simple EDL range merging (no imported scan is generated).
+`?clipped=false` returns them unclipped. Bounds are
 clipped to `[0, duration]` (the duration comes from a completed scan of the
 local version, when one exists), and a filter wholly outside the file is left
 out, so no range is empty or negative:
@@ -271,75 +250,106 @@ out, so no range is empty or negative:
   "edl": "## Editarr Simple EDL\n## punching: Community filter\n600.100 605.050 3" }
 ```
 
-### Saved-review community filter snapshots
+### Saved-review community filters
 
-A saved review uses a master set through a **snapshot** of the link's active
-filters, taken when the review includes or refreshes the link. Review results, EDL
-and MCF export, published sidecars and retained export snapshots read only the
-stored snapshot; later decisions, preferences, alignment or accepted updates never
-change a saved review.
+A saved review includes a master set by storing a **snapshot** of the link's served
+filters (master values on the local timeline, after approved alignment) and adding
+**every** served filter to the review as a normal review filter (ADR 0002 U2, U4).
+From then on a community filter is enabled, disabled and adjusted exactly like a scan
+filter, and goes through the same policy, EDL and MCF export, published sidecar,
+retained export snapshot, filtered-subtitle and sharing paths. Only its provenance
+differs. Later link changes never change a saved review until the user refreshes.
 
 `GET /api/reviews/{review_id}` (and every response that returns a `SavedReview`)
-adds:
+lists the snapshots:
 
 ```json
 "community_sources": [ {
   "source_id": "…", "link_id": "…"|null, "community_version_id": "v_12ab", "label": "Theatrical",
   "tier": "2", "match_percent": 80, "master_revision": 12, "alignment": null|{…},
   "captured_at": "2026-11-24T21:00:00", "state": "current"|"changed"|"alignment_required"|"link_unavailable",
-  "link_state": "active"|"merged"|"unavailable"|"replaced"|null,
-  "filters": [ { "filter_id": "f_…", "category": "violence", "subcategory": "punching", "severity": "high",
-                 "edit_action": "skip", "start_seconds": 600.1, "end_seconds": 605.05, "confidence": 0.39 } ],
-  "unusable_filter_ids": [] } ]
+  "link_state": "active"|"merged"|"unavailable"|"replaced"|null, "filter_count": 34 } ]
 ```
 
-- Snapshots store the link's filters **unclipped** on the local timeline. Exports clip
-  them to the runtime (the shortest completed scan of the review, or of its local
-  versions for a community-only review; retained publications keep the runtime they
-  used), apply the review owner's enforced severities, and leave out a filter whose
-  subcategory doesn't belong to its category in both EDL and MCF; such filters are
-  listed in `unusable_filter_ids`. A community-only review's runtime comes from the
-  shortest completed scan of its local versions, or else from probing its media file.
-- Community filters carry no words, so a snapshot `language` mute changes filtered
-  subtitles only through a word-level language finding of a completed local audio
-  scan of the review's version (a generated scan bound to one of the review's local
-  versions, or unbound and of the review's item and source, as export accepts them)
-  that it aligns with (same top-level category,
-  overlapping on the local timeline, as for "Locally verified"); that finding's words
-  are then redacted exactly like a scan mute. Other community mutes leave subtitles
-  untouched; a mute a scan mute already covers redacts once. Both the subtitle step and
-  the summary clip community filters to the same runtime exports use.
-  `SavedReview.community_subtitles` reports
-  `{ "applied": n, "needs_audio_scan": n, "unaligned": n }`.
-- `state` compares the snapshot with the link now: `changed` when the link's active
-  filters differ (confidence alone doesn't count), `alignment_required` when the
-  link awaits alignment, and `link_unavailable` when the link was deleted, is
+and each community filter in `filters` and `base_filters` is a `ReviewFilter` with
+`source_scan_id: null`, `source_finding_id: null`, `community_source_id` (the
+snapshot) and `community_filter_id` (the master filter), plus read-only provenance:
+
+```json
+"community": { "source_id": "…", "filter_id": "f_9c1d…", "label": "Theatrical", "master_revision": 12,
+  "confidence": 0.39, "contributor_count": 4, "low_confidence": false,
+  "removed": false, "edited": true, "locally_verified": true }
+```
+
+- **Values.** A master mute becomes an `audio` filter with `mcf_channel: "audio"`;
+  a skip becomes a `visual` filter with `mcf_channel: "both"`. `label`, `details`
+  and `group_key` start empty; `confidence` is the master confidence. A filter whose
+  subcategory doesn't belong to its category arrives unclassified (needs
+  classification, like any review filter). Bounds are clipped to the runtime known
+  when the filter is added (the shortest completed scan of the review, else of its
+  local versions); a filter wholly outside the file isn't added.
+- **Starts enabled** (U2). The owner's confidence threshold and Show Low Confidence
+  decide which filters start enabled when a set is included or new filters arrive
+  on Refresh: a filter below the threshold, or Low Confidence while Show Low
+  Confidence is off, arrives disabled. Changing the preferences later changes no
+  review.
+- **Edited** is true when the filter's enabled state, bounds (to the millisecond),
+  classification, severity or action differ from the values it was added with.
+- **Saving.** `PUT /api/reviews/{review_id}` sends community filters back in
+  `filters` like any other filter (the read-only `community` object may be echoed
+  and is ignored). Each must name an included snapshot and one of its filters, at
+  most once; its provenance can't change. A filter left out is deleted from the
+  review, like a scan filter. Filters of a snapshot removed from
+  `community_memberships` are removed with it.
+- **`community_memberships`** (at most 32): `{"source_id"}` keeps a snapshot,
+  `{"source_id", "refresh": true}` refreshes it, and `{"link_id"}` includes a link
+  (adding its filters). Omitted or null keeps the stored snapshots; snapshots left
+  out are removed. Adding, refreshing or removing one is a content change: it
+  advances `revision`, `content_revision`, `edl_content_revision` and
+  `mcf_content_revision`, so published exports report themselves outdated.
+  `POST /api/library-items/{item_id}/reviews` accepts `{"link_id"}` entries only.
+- **Refresh** (U3) takes a new snapshot of the link and merges it into the
+  submitted filters by master filter ID, following `mergedIds` (a merged filter
+  continues an edited review filter first, then any other, then one the user
+  deleted):
+  - an edited filter keeps the user's values;
+  - an unedited filter takes the new master values and starting state;
+  - a new served filter is added, enabled or disabled as above;
+  - a filter the master no longer serves stays in the review with
+    `community.removed: true`, disabled unless the user had edited it;
+  - a filter the user deleted from the review stays deleted.
+- **`state`** compares the snapshot with the link now: `changed` when the link's
+  served master values differ (confidence, counts and preferences don't count;
+  the review then shows "Refresh community filters"), `alignment_required` when
+  the link awaits alignment, and `link_unavailable` when the link was deleted, is
   `replaced` or belongs to another account than the review owner. The review keeps
-  using `filters` in every state.
-- `PUT /api/reviews/{review_id}` takes `community_memberships`: a list (at most 32)
-  of `{"source_id"}` to keep a snapshot, `{"source_id", "refresh": true}` to take a
-  new one from the same link, or `{"link_id"}` to include a link. Omitted or null
-  keeps the stored snapshots; snapshots left out are removed. Adding, refreshing or
-  removing one is a content change: it advances `revision`, `content_revision`,
-  `edl_content_revision` and `mcf_content_revision`, so published exports report
-  themselves outdated. `POST /api/library-items/{item_id}/reviews` accepts
-  `{"link_id"}` entries only.
-- A new or refreshed snapshot needs `community.search`, the review evidence-edit
-  permission, and the caller to be the review owner taking a snapshot of their own
-  unreplaced link to a local version of the review's target; a link awaiting
-  alignment is refused. These are `422 invalid_membership` errors (or
-  `403 capability_denied`).
-- A review needs at least one scan **or** one community snapshot with a usable
-  (correctly classified) filter to export. A community-only review (no scans) exports, downloads and publishes EDL and
-  MCF sidecars from its snapshots beside the review target's own file, which must
-  still match the review's bound Editarr version; its publications list no
-  `exported_scans`, and their retained export snapshot carries the community filters
-  for policy regeneration. A review with neither is refused with
-  `invalid_membership`.
-- Duplicating a review copies every snapshot; the link reference is kept only when
-  the duplicate's owner owns the link. Deleting an account's master state keeps
-  snapshots and clears their link; transferring it, or replacing a link with another
-  version, points snapshots at the destination's live link without changing them.
+  its filters in every state.
+- **Permissions.** Community filter edits need the same filter and cue edit
+  permissions as scan filters. A new or refreshed snapshot needs `community.search`,
+  the review evidence-edit permission, and the caller to be the review owner taking
+  a snapshot of their own unreplaced link to a local version of the review's
+  target; a link awaiting alignment is refused. These are `422 invalid_membership`
+  errors (or `403 capability_denied`).
+- **Subtitles** (U5) use one rule for every filter: an enabled audio-channel
+  language mute with a word or phrase (its label) redacts that expression. A
+  community filter starts without one, so it redacts nothing unless the user gives
+  it a label, exactly like any wordless filter. There is no community-specific
+  subtitle alignment or summary.
+- **Exports.** A review needs at least one scan **or** one community filter to
+  export. A community-only review (no scans) exports, downloads and publishes EDL
+  and MCF sidecars beside the review target's own file, which must still match the
+  review's bound Editarr version; its publications list no `exported_scans`, and
+  their retained export snapshot carries the community filters in `base_filters`
+  for policy regeneration. Its runtime comes from the shortest completed scan of
+  its local versions, or else from probing its media file. Retained snapshots from
+  before 0040 keep regenerating with their stored community filters.
+- **Previews** of a community filter render the review target's file directly,
+  as for an unsaved draft filter.
+- Duplicating a review copies every snapshot with its filters; the link reference
+  is kept only when the duplicate's owner owns the link. Deleting an account's
+  master state keeps snapshots and filters and clears their link; transferring it,
+  or replacing a link with another version, points snapshots at the destination's
+  live link without changing them.
 
 ## 4. Alignment for fuzzy tiers
 
@@ -357,8 +367,8 @@ Request:
 - Send exactly one of `anchors` (1–50) or `offset_ms`; the other is null
   or omitted. Both, neither, an empty list, more than 50 anchors or an
   unknown `filter_id` is a 422 validation list.
-- An anchor places a filter's master start (`startMs` of the row's baseline,
-  or of a new filter in a pending update) at `local_start_ms`.
+- An anchor places a served filter's master start (`startMs`) at
+  `local_start_ms`.
 - With at least 3 anchors spanning 300 s or more, the preview fits an
   offset and drift (the median of pairwise slopes, then the median offset).
   Otherwise it fits only the median offset. A drift beyond ±10% returns
@@ -382,8 +392,7 @@ Response:
   "rows": [ { "filterId": "…", "alignedStartMs": …, "alignedEndMs": … } ] }
 ```
 
-`rows` lists every row in the local set, and new filters of a pending update,
-in aligned start order. There is no clip token: clips play through the existing
+`rows` lists every served filter in aligned start order. There is no clip token: clips play through the existing
 review draft-filter preview of the target file at `alignedStartMs` to
 `alignedEndMs`.
 
@@ -393,8 +402,9 @@ Request: `{ "token": "…", "for_revision": 13, "confirmed": true }`.
 
 - Approval stores the transform on the link and sets
   `alignmentState: "approved"`.
-- For the first import, it activates the rows.
-- For an update (§9), it enables **Accept** for that revision's rows.
+- The link's filters can then be included in reviews; later revisions keep
+  using the stored transform. `for_revision` must be the link's latest
+  revision (`409 update_changed` otherwise).
 - The token is single-use and expires after 30 minutes. Each account keeps
   at most 32 live previews; a newer preview evicts that account's oldest. An unknown, used,
   expired or another account's token, a `for_revision` other than the
@@ -402,30 +412,14 @@ Request: `{ "token": "…", "for_revision": 13, "confirmed": true }`.
   returns `409 alignment_preview_changed`.
 - The response is `{ "version": 1, "link": <MasterLink> }`.
 
-## 5. Local filter decisions
+## 5. Preferences
 
-### `PATCH /api/community/masters/{link_id}/filters/{filter_id}`
-
-Request:
-
-```json
-{ "decision": "verify" | "reject" | "adjust" | "reset",
-  "start_ms": 600100, "end_ms": 605050, "subcategory": "punching", "severity": "medium", "action": "skip",
-  "expected_state": "pending" }
-```
-
-- `adjust` requires at least one value field; other decisions take none.
-  Values are validated against the taxonomy: `subcategory` must belong to the
-  row's top-level `category`, `severity` is `low`, `medium` or `high`, and
-  `action` is `skip` or `mute`. The resulting effective bounds must satisfy
-  `0 ≤ start_ms < end_ms`. Violations are a 422 validation list.
-- `expected_state` is optional.
-- `verify`, `reject` and `adjust` set `touched = true`.
-- `reset` clears the local values, sets `state` back to
-  `pending`/`low_confidence`, and clears `touched` unless the user has voted.
-- A stale `expected_state` returns `409 filter_state_changed`.
-- The response is the updated filter object with `"version": 1`. An unknown
-  filter is `404`.
+Local filter decisions are retired (ADR 0002 U1): the Community tab has no
+Confirm, Reject, Reset or per-filter edits, and
+`PATCH /api/community/masters/{link_id}/filters/{filter_id}` no longer exists.
+Decisions stored by earlier builds (`community_master_filters.state` and
+`local_*`) stay in the database unused; they affect neither the master view,
+reviews nor sharing.
 
 ### `PATCH /api/community/preferences`
 
@@ -436,9 +430,12 @@ Request (every field optional):
 ```
 
 - `confidence_threshold` ranges from 0 to 1.
-- `hide_rejected_downvoted` hides rejected and downvoted rows from the web app's
-  master filter list only. It never changes `active`: rejected rows are already
-  inactive, and downvoted rows keep their state.
+- `confidence_threshold` and `show_low_confidence` decide which community filters
+  start enabled when a review includes or refreshes a master set (§3); they also
+  decide which rows the Community tab lists.
+- `hide_rejected_downvoted` ("Hide downvoted filters") hides downvoted rows from
+  the web app's master filter list only. It never changes `active`. The field keeps
+  its name for compatibility.
 - The response is the saved preferences object
   (`{ "version": 1, "confidenceThreshold": …, "showLowConfidence": …, "hideRejectedDownvoted": … }`),
   which the master view also returns as `preferences`.
@@ -460,7 +457,7 @@ The backend runs these steps:
 1. Persist the intent in the operation outbox.
 2. Send `POST /v1/filters/{id}/votes` with the receipt for the link's
    current snapshot.
-3. Set `myVote`, and `touched = true` unless the vote is `none`.
+3. Set `myVote`.
 
 Response:
 
@@ -532,11 +529,16 @@ The projection builds the entries as follows:
 
 | Source | Entry |
 | --- | --- |
-| Review or scan cue | A `support` entry. When the local alignment places it on a master filter, `proposedFilterId` is set |
-| `rejected` row | A `dispute` entry |
-| `verified` or `adjusted` row not covered by a cue | A `support` entry with `origin: "downloaded"` and `locallyVerified: true`, carrying the effective values |
-| Untouched downloaded row | Not shared |
+| Scan cue, or a review's scan filter | A `support` entry. When the local alignment places it on a served master filter (one the review doesn't already attest to), `proposedFilterId` is set |
+| Review community filter the user edited and left enabled | A `support` entry for its master filter (`proposedFilterId`), with the user's bounds, subcategory, severity and action, `origin: "downloaded"`, `manualReview: true`, and `locallyVerified` when a local model finding of the same category overlaps it |
+| Review community filter the user disabled (it started enabled) | A `dispute` entry for its master filter, with the master bounds |
+| Untouched review community filter | Not shared |
 | Local scan coverage | `coverage`: each completed audio stage covers every audio category, and each completed visual stage every video category except `commercial_content` and `dispensable_scenes`, for its analyzed ranges, whichever model ran. Saved reviews send none |
+
+"Edited" is the review filter's `community.edited` (§3). The Community tab's
+retired local decisions are never shared. In the estimates, confirmations count
+proposed cues and supported community filters, adjustments the supported ones
+whose values the user changed, and disputes the disabled ones.
 
 The response:
 
@@ -581,9 +583,10 @@ The web app calls this on page load. The request is `{}`.
   the service and gets no notification.
   1. It records each changed version's newer revision on its link as a
      pending download, after all revision batches.
-  2. It downloads the pending snapshots, builds the update rows (§9) and
+  2. It downloads the pending snapshots, applies each to its link (§9) and
      records a `changed` notification for each link once its snapshot is
-     stored.
+     stored. Reviews that include the link then show "Refresh community
+     filters".
   3. `GET …/master` is limited per contributor and hour
      (`versionChecksPerHour`). When a download fails (for example
      `429 rate_limited`), the run still succeeds and the remaining downloads
@@ -636,14 +639,13 @@ This is the item page's **Check for filter updates** button. The request is
 `{}`.
 
 - The backend calls `GET /v1/versions/{id}/master?knownRevision=<latest>`.
-- If a newer revision exists, it stores the snapshot and builds the update
-  rows. It never applies them.
+- If a newer revision exists, it stores the verified snapshot and applies it
+  to the link (§9). Reviews keep their own snapshots until refreshed (§3).
 
 Response:
 
 ```json
-{ "version": 1, "changed": true, "latestRevision": 13,
-  "pendingUpdate": { "new": 3, "changed": 2, "removed": 1, "nowLowConfidence": 0 } }
+{ "version": 1, "changed": true, "latestRevision": 13 }
 ```
 
 This check doesn't use the daily sync allowance. An account may check the
@@ -653,100 +655,31 @@ version marks the link and returns `409 version_merged` (with `mergedInto`)
 or `409 version_unavailable` (`version_not_found` when the service no longer
 knows it).
 
-## 9. Update review (D20)
+## 9. Following newer revisions (ADR 0002 U3)
 
-**Baselines:** each filter row keeps the master values it last accepted, which
-form its baseline. A new snapshot is compared row by row with those
-baselines, using `filterId`.
+A link always shows its latest verified snapshot; there is no update review.
+Storing a newer revision (Check for filter updates, daily sync, or downloading the
+linked version again) applies it at once:
 
-**Merged IDs:**
+- Each served filter updates the row with its `filterId`, or a new row is added.
+- A served filter whose `mergedIds` names rows the snapshot no longer serves
+  continues the lowest of them (the row is re-keyed to the merged ID, keeping its
+  vote); the others leave the set.
+- Rows the snapshot doesn't serve leave the set (`present: false`) and keep their
+  history.
+- A fuzzy link keeps its approved alignment for the new revision.
+- `appliedRevision` becomes `latestRevision`, and `locallyVerified` is
+  recomputed.
 
-- A new filter whose `mergedIds` contains a row's ID re-keys that row.
-- When several rows merge into one filter, the touched row, or else the
-  lowest ID, re-keys.
-- The other merged rows appear under Removed with `mergedInto`.
+Reviews bring the changes in with Refresh (§3), which keeps the user's review
+edits.
 
-**Material fields:** `startMs`, `endMs`, `subcategory`, `severity`, `action`,
-`lowConfidence` and presence. `confidence`, the counts and `spread` are
-informational and refresh immediately with no review.
-
-| Change | Group | Untouched row | Touched row |
-| --- | --- | --- | --- |
-| Filter not in baseline | `new` | Accept or Dismiss | — |
-| Material field differs | `changed` | Accept or Dismiss, shown as old → new | "You edited this": shows mine, old master and new master. Keep mine, Accept or Dismiss. Mine stays in effect until the user decides |
-| Filter absent | `removed` | Accept (deactivate) or Dismiss | "You kept this": Keep mine, Accept or Dismiss. Stays in effect unless the user accepts |
-| `lowConfidence` false → true | `nowLowConfidence` | Accept (row becomes `low_confidence`) or Dismiss | Same, and mine is kept |
-
-**Decisions:**
-
-| Decision | Effect |
-| --- | --- |
-| `accept` | Adopts the new master values as the row's baseline, and resets the local overrides for the changed fields |
-| `keep_mine` | Keeps the current effective values, updates the baseline to the new master values, and sets `touched` |
-| `dismiss` | Hides the row until the master values change again. Stored as a dismissal digest; the effective values don't change |
-
-The **dismissal digest** is the SHA-256 of the compact JSON
-`{"startMs","endMs","subcategory","severity","action","lowConfidence","present"}`
-taken from the new master values.
-
-### `GET /api/community/masters/{link_id}/update`
-
-```json
-{ "version": 1, "fromRevision": 12, "toRevision": 13, "alignmentRequired": true, "alignmentApproved": false,
-  "groups": { "new": [<Row>], "changed": [<Row>], "removed": [<Row>], "nowLowConfidence": [<Row>] } }
-```
-
-A `<Row>` looks like this:
-
-```json
-{ "rowId": "…", "filterId": "…", "category": "violence", "touched": false, "changedFields": ["startMs","severity"],
-  "mine": {…}|null, "oldMaster": {…}|null, "newMaster": {…}|null, "mergedInto": null,
-  "allowed": ["accept","dismiss"], "canAccept": false }
-```
-
-- `canAccept` is false for every row with bounds while the link is fuzzy
-  (tier 4 and below) until alignment is approved for `toRevision` (§4).
-  `removed` rows can always be accepted.
-- `mine`, `oldMaster` and `newMaster` are on the **local timeline**: the
-  master values are mapped through the link's stored alignment, the same
-  transform the master view uses. Until alignment is approved for
-  `toRevision`, that is the previously approved transform.
-  - `mine` is the row's current effective values (`startMs`, `endMs`,
-    `subcategory`, `severity`, `action`) for a touched row, or null.
-  - `oldMaster` is the baseline master values (those fields plus
-    `lowConfidence` and `present`), or null for a new filter.
-  - `newMaster` adds the informational fields (`confidence`,
-    `contributorCount`, `support`, `negative`, `spread`), and is null for a
-    removed filter.
-- `rowId` is the filter ID.
-- The client prefills the alignment step from the stored transform.
-
-### `POST /api/community/masters/{link_id}/update/decisions`
-
-Request:
-
-```json
-{ "to_revision": 13, "decisions": [ { "row_id": "…", "decision": "accept"|"keep_mine"|"dismiss" } ] }
-```
-
-- At most 500 decisions per request. The request is atomic.
-- A decision outside the row's `allowed` list, Accept while `canAccept` is
-  false, or two decisions for one row return `409 decision_not_allowed`.
-- A row that was already decided returns `409 update_changed`.
-- A stale `to_revision` returns `409 update_changed`.
-- The response is `204 No Content`; the client re-reads the update.
-
-### `POST /api/community/masters/{link_id}/update/accept-all`
-
-Request: `{ "to_revision": 13, "group": "new"|"changed"|"removed"|"nowLowConfidence" }`.
-
-- This accepts every **untouched** row in the group whose `canAccept` is
-  true.
-- Touched rows must be decided one at a time.
-- The response is the remaining update.
-
-When no undecided rows remain, the link's `appliedRevision` becomes
-`toRevision`.
+The retired routes `GET /api/community/masters/{link_id}/update`,
+`POST …/update/decisions` and `POST …/update/accept-all` are removed, and links
+no longer report `pendingUpdate`. Undecided update rows and dismissals stored by
+earlier builds stay in `community_master_updates` and `community_master_dismissals`
+unused; a link that an earlier build left behind its latest revision catches up
+from its stored latest snapshot on its next check or sync.
 
 ## 10. Local database (migration `0037_community_master_sets`)
 
@@ -774,9 +707,9 @@ the upgrade.
 | --- | --- | --- |
 | `community_master_links` | **id** (uuid), owner_id → users, media_version_id → media_versions, service_url, contributor_id, community_version_id, community_work_id, label, alias_id, version_status, tier, match_percent, applied_revision, latest_revision, alignment_state (`not_required`\|`required`\|`approved`), alignment_json, alignment_revision, link_state (`active`\|`merged`\|`unavailable`\|`replaced`), merged_into, pending_revision (newer revision awaiting download, §8), created_at, updated_at | Unique on `(owner_id, media_version_id, service_url)` where `link_state != 'replaced'`. Index on `(owner_id, community_version_id)` |
 | `community_master_snapshots` | **id**, link_id → links (CASCADE), revision, snapshot_digest, snapshot_bytes (exact BLOB), signature_json, service_key_id, receipt_json, receipt_id, downloaded_at | Unique on `(link_id, revision)`. Only the baseline revisions still in use and the latest revision are retained |
-| `community_master_filters` | **link_id**, **filter_id**, category, baseline_json (master values at baseline), baseline_revision, info_json (confidence, counts, spread, as of the latest revision), local_start_ms, local_end_ms, local_subcategory, local_severity, local_action, state (`pending`\|`verified`\|`adjusted`\|`rejected`\|`low_confidence`), locally_verified, local_touched, my_vote (`up`\|`down`\|NULL), present (bool), updated_at | Checks: valid state, `local_start_ms < local_end_ms` |
-| `community_master_updates` | **link_id**, **filter_id**, to_revision, change (`new`\|`changed`\|`removed`\|`low_confidence`), changed_fields_json, new_master_json, merged_into, values_digest | Rebuilt for each newly stored latest snapshot. A row is deleted when it is decided |
-| `community_master_dismissals` | **link_id**, **filter_id**, values_digest, dismissed_at | — |
+| `community_master_filters` | **link_id**, **filter_id**, category, baseline_json (master values of the revision last applied), baseline_revision, info_json (confidence, counts, spread), local_start_ms, local_end_ms, local_subcategory, local_severity, local_action, state (`pending`\|`verified`\|`adjusted`\|`rejected`\|`low_confidence`), locally_verified, local_touched, my_vote (`up`\|`down`\|NULL), present (bool), updated_at | Checks: valid state, `local_start_ms < local_end_ms`. The `local_*`, `state` and `local_touched` decision columns are retired and unused (§5) |
+| `community_master_updates` | **link_id**, **filter_id**, to_revision, change (`new`\|`changed`\|`removed`\|`low_confidence`), changed_fields_json, new_master_json, merged_into, values_digest | Retired (§9): no longer written or read; earlier rows are kept |
+| `community_master_dismissals` | **link_id**, **filter_id**, values_digest, dismissed_at | Retired (§9): no longer written or read; earlier rows are kept |
 | `community_master_preferences` | **owner_id**, confidence_threshold (0–1), show_low_confidence, hide_rejected_downvoted (0039) | — |
 | `community_sync_state` | **owner_id**, **service_url**, contributor_id, state, run_id, last_started_at, last_success_at, next_due_at, last_error_code, downloads_retry_at (pending downloads wait until then, §8) | — |
 | `community_sync_notifications` | **id**, owner_id, link_id → links (CASCADE), kind, from_revision, to_revision, created_at, read_at | Unique on `(owner_id, link_id, kind, to_revision)`. Index on `(owner_id, read_at)` |
@@ -820,6 +753,32 @@ recoverable backup, and its downgrade refuses while any snapshot or hide prefere
 exists. The upgrade test starts from `0038_retire_receipt_capabilities` with stored
 preferences and recovers the pre-upgrade database from the backup; the upgrade
 matrix covers every earlier revision.
+
+### 10.5 Community filters as review filters (migration `0040_review_community_filters`)
+
+`review_filters` is rebuilt (SQLite batch mode) so a review filter comes from a scan
+or from an included community snapshot:
+
+| Change | Detail |
+| --- | --- |
+| `source_scan_id` | Becomes nullable |
+| `community_source_id`, `community_filter_id` | New nullable columns. `(review_id, community_source_id)` → `review_community_sources(review_id, id)` with `ON DELETE CASCADE`; unique on `(review_id, community_source_id, community_filter_id)` |
+| `ck_review_filters_provenance` | Exactly one of `source_scan_id` or `community_source_id`; `community_filter_id` with `community_source_id`; no `source_finding_id` on a community filter |
+
+Every filter stored in an existing snapshot's `filters_json` becomes a review
+filter after the review's existing filters, enabled as exports used it, so exports
+keep their content: a mute becomes an audio mute (`mcf_channel` `audio`), a skip a
+skip of both channels. A filter whose subcategory doesn't belong to its category,
+which exports already left out, becomes an unclassified, disabled filter. A
+negative start is clipped to 0; a filter with no remaining range stays only in the
+snapshot. Each snapshot entry records the enabled state its filter started with
+(`default_selected`) and any clipped bounds (`initial`). No other row changes.
+
+The migration runs only after the verified, recoverable backup, and its downgrade
+refuses while any community review filter exists. The upgrade test starts from
+`0039_review_community_sources` with a stored snapshot, checks the new review
+filters and recovers the pre-upgrade database from the backup; the upgrade matrix
+covers every earlier revision.
 
 ## Open questions
 

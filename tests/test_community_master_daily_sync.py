@@ -88,7 +88,7 @@ def test_sync_runs_once_per_day_and_records_each_notification_kind(linked):
         states = {
             link.community_version_id: link for link in db.scalars(select(CommunityMasterLinkRow))
         }
-        assert states["v_1"].latest_revision == 2 and states["v_1"].applied_revision == 1
+        assert states["v_1"].latest_revision == 2 and states["v_1"].applied_revision == 2
         assert (states["v_2"].link_state, states["v_2"].merged_into) == ("merged", "v_1")
         assert states["v_3"].link_state == "unavailable"
     assert outcome.status.unread_count == 3

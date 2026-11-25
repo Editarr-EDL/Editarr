@@ -1,16 +1,15 @@
 """Community filter snapshots in saved reviews (local API §3, review membership).
 
-Including a master link in a review stores a snapshot of the link's active filters
-(after the owner's decisions, threshold, Low Confidence preference, approved alignment
-and accepted updates). Review results, exports and sidecars read only that snapshot.
-Later changes to the link never touch the review; the review reports them as
-`changed`, and the owner refreshes the snapshot by saving the review, which advances
-its revisions like any other content change.
+Including a master link in a review stores a snapshot of the link's served filters
+(master values on the local timeline, after approved alignment) and adds each one to
+the review as a normal review filter (`review_community_filters`). Later changes to the
+link never touch the review; the review reports them as `changed`, and the owner
+refreshes the snapshot by saving the review, which advances its revisions like any
+other content change.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import uuid
 from collections.abc import Iterable
@@ -25,11 +24,11 @@ from scanner.db import (
     ReviewMediaVersionRow,
     SavedReviewRow,
 )
-from scanner.models import ReviewCommunityFilter, ReviewCommunitySource
+from scanner.modeling.community_review_filters import served, snapshot_digest
+from scanner.models import ReviewCommunitySource
 
 from .community_master_links import alignment_of, utcnow
-from .community_master_sources import ActiveMasterFilter, link_active_filters
-from .review_community_export import unusable_filter_ids
+from .review_community_filters import SourcePlan, entries_of, link_entries
 
 MAX_SOURCES = 32
 
@@ -44,43 +43,16 @@ def _membership_error(message: str) -> ValueError:
 UNLABELED = "Other"
 
 
-def _filter_json(item: ActiveMasterFilter) -> dict:
-    return {
-        "filter_id": item.filter_id,
-        "category": item.category,
-        "subcategory": item.subcategory,
-        "severity": item.severity,
-        "edit_action": item.action,
-        "start_ms": item.start_ms,
-        "end_ms": item.end_ms,
-        "confidence": item.confidence,
-    }
-
-
-def filters_digest(filters: Iterable[dict]) -> str:
-    """Identify snapshot filter values; confidence is informational and left out."""
-    document = [
-        {key: value for key, value in item.items() if key != "confidence"} for item in filters
-    ]
-    encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()
-
-
 def link_usable(link: CommunityMasterLinkRow | None, owner_id: int | None) -> bool:
     """Whether a snapshot can be (re)taken from `link` for a review that `owner_id` owns."""
     return link is not None and link.owner_id == owner_id and link.link_state != "replaced"
 
 
-def live_filters(db: Session, link: CommunityMasterLinkRow) -> list[dict]:
-    """The link's active filters now, unclipped, in snapshot form; exports clip them."""
-    return [_filter_json(item) for item in link_active_filters(db, link.owner_id, link, clip=False)]
-
-
 def capture(
     db: Session, link: CommunityMasterLinkRow, row: ReviewCommunitySourceRow | None = None
 ) -> ReviewCommunitySourceRow:
-    """Take a snapshot of the link's active filters into `row`, or a new row."""
-    filters = live_filters(db, link)
+    """Take a snapshot of the link's served filters into `row`, or a new row."""
+    entries = link_entries(db, link)
     alignment = alignment_of(link)
     row = row or ReviewCommunitySourceRow(id=str(uuid.uuid4()))
     row.link_id = link.id
@@ -91,29 +63,25 @@ def capture(
     row.match_percent = link.match_percent
     row.master_revision = link.applied_revision
     row.alignment_json = json.dumps(alignment, sort_keys=True) if alignment else None
-    row.filters_json = json.dumps(filters, sort_keys=True, separators=(",", ":"))
-    row.filters_digest = filters_digest(filters)
+    row.filters_json = json.dumps(entries, sort_keys=True, separators=(",", ":"))
+    row.filters_digest = snapshot_digest(entries)
     row.captured_at = utcnow()
     return row
 
 
 def source_state(db: Session, review: SavedReviewRow, row: ReviewCommunitySourceRow) -> str:
-    """How a stored snapshot compares with its link's active filters now."""
+    """How a stored snapshot compares with its link's served filters now."""
     link = row.link
     if not link_usable(link, review.owner_id):
         return "link_unavailable"
     if link.alignment_state == "required":
         return "alignment_required"
-    current = filters_digest(live_filters(db, link)) == row.filters_digest
+    current = snapshot_digest(link_entries(db, link)) == row.filters_digest
     return "current" if current else "changed"
 
 
-def _snapshot_filters(row) -> list[dict]:
-    return json.loads(row.filters_json)
-
-
 def review_sources(db: Session, review: SavedReviewRow) -> list[ReviewCommunitySource]:
-    """Each stored snapshot with its filters and its state against the link now."""
+    """Each stored snapshot and its state against the link now."""
     return [
         ReviewCommunitySource(
             source_id=row.id,
@@ -127,61 +95,9 @@ def review_sources(db: Session, review: SavedReviewRow) -> list[ReviewCommunityS
             captured_at=row.captured_at.isoformat(),
             state=source_state(db, review, row),
             link_state=row.link.link_state if row.link is not None else None,
-            filters=[
-                ReviewCommunityFilter(
-                    **{key: value for key, value in item.items() if not key.endswith("_ms")},
-                    start_seconds=item["start_ms"] / 1000,
-                    end_seconds=item["end_ms"] / 1000,
-                )
-                for item in _snapshot_filters(row)
-            ],
-            unusable_filter_ids=unusable_filter_ids(
-                _as_active(item, row.id) for item in _snapshot_filters(row)
-            ),
+            filter_count=sum(1 for entry in entries_of(row) if served(entry)),
         )
         for row in review.community_sources
-    ]
-
-
-def _as_active(item: dict, link_id: str) -> ActiveMasterFilter:
-    return ActiveMasterFilter(
-        link_id,
-        item["filter_id"],
-        item["category"],
-        item["start_ms"],
-        item["end_ms"],
-        item["subcategory"],
-        item["severity"],
-        item["edit_action"],
-        item.get("confidence"),
-    )
-
-
-def review_filters(review: SavedReviewRow) -> list[ActiveMasterFilter]:
-    """Every stored snapshot filter of the review, in membership order."""
-    return [
-        _as_active(item, row.link_id or row.id)
-        for row in review.community_sources
-        for item in _snapshot_filters(row)
-    ]
-
-
-def snapshot_filters(review_data: dict) -> list[ActiveMasterFilter]:
-    """The snapshot filters recorded in a retained review export snapshot."""
-    return [
-        ActiveMasterFilter(
-            source.get("link_id") or source["source_id"],
-            value["filter_id"],
-            value["category"],
-            round(value["start_seconds"] * 1000),
-            round(value["end_seconds"] * 1000),
-            value["subcategory"],
-            value["severity"],
-            value["edit_action"],
-            value.get("confidence"),
-        )
-        for source in review_data.get("community_sources", ())
-        for value in source.get("filters", ())
     ]
 
 
@@ -221,11 +137,17 @@ def _require_capturable(db: Session, review: SavedReviewRow, link, versions: set
         raise _membership_error("Align these community filters before including them in a review")
 
 
-def prepare_sources(db: Session, review: SavedReviewRow, requested) -> list | None:
+def kept_plans(review: SavedReviewRow) -> list[SourcePlan]:
+    """The stored snapshots, unchanged."""
+    return [SourcePlan(row, "keep") for row in review.community_sources]
+
+
+def prepare_sources(db: Session, review: SavedReviewRow, requested) -> list[SourcePlan] | None:
     """Validate a requested snapshot list; None when it keeps the stored snapshots.
 
     `requested` holds `ReviewCommunityMembership` values. New links and refreshes take
-    their snapshots now; kept snapshots are unchanged.
+    their snapshots now (a refresh remembers the entries it replaces); kept snapshots
+    are unchanged.
     """
     if requested is None:
         return None
@@ -237,34 +159,39 @@ def prepare_sources(db: Session, review: SavedReviewRow, requested) -> list | No
     if len(requested) > MAX_SOURCES:
         raise _membership_error("A review can include at most 32 community filter sets")
     versions = review_version_ids(db, review)
-    rows, links = [], set()
+    plans: list[SourcePlan] = []
+    links = set()
     for position, (_key, value) in enumerate(plan):
         if value.source_id is not None:
             row = existing.get(value.source_id)
-            if row is None or row in rows:
+            if row is None or any(item.row is row for item in plans):
                 raise _membership_error("Unknown community filter snapshot")
+            item = SourcePlan(row, "keep")
             if value.refresh:
                 _require_capturable(db, review, row.link, versions)
+                item = SourcePlan(row, "refresh", entries_of(row))
                 capture(db, row.link, row)
         else:
             link = db.get(CommunityMasterLinkRow, value.link_id)
             _require_capturable(db, review, link, versions)
-            row = capture(db, link)
-        if row.link_id is not None:
-            if row.link_id in links:
+            item = SourcePlan(capture(db, link), "new")
+        if item.row.link_id is not None:
+            if item.row.link_id in links:
                 raise _membership_error("A review cannot include the same community filters twice")
-            links.add(row.link_id)
-        row.position = position
-        rows.append(row)
-    return rows
+            links.add(item.row.link_id)
+        item.row.position = position
+        plans.append(item)
+    return plans
 
 
-def copy_sources(source: SavedReviewRow, duplicate: SavedReviewRow) -> None:
-    """Copy every snapshot into a duplicate. The link reference stays only when the
-    duplicate's owner owns the link, since master links are personal."""
+def copy_sources(source: SavedReviewRow, duplicate: SavedReviewRow) -> dict[str, str]:
+    """Copy every snapshot into a duplicate and return the new ID of each. The link
+    reference stays only when the duplicate's owner owns the link, since master links
+    are personal."""
+    ids = {row.id: str(uuid.uuid4()) for row in source.community_sources}
     duplicate.community_sources = [
         ReviewCommunitySourceRow(
-            id=str(uuid.uuid4()),
+            id=ids[row.id],
             link_id=row.link_id if link_usable(row.link, duplicate.owner_id) else None,
             position=row.position,
             community_version_id=row.community_version_id,
@@ -279,6 +206,7 @@ def copy_sources(source: SavedReviewRow, duplicate: SavedReviewRow) -> None:
         )
         for row in source.community_sources
     ]
+    return ids
 
 
 def _sources_of(db: Session, link_ids: Iterable[str]) -> list[ReviewCommunitySourceRow]:
@@ -305,8 +233,9 @@ def detach_link_sources(db: Session, link_ids: Iterable[str]) -> int:
 def move_link_sources(db: Session, old_link_id: str, new_link_id: str) -> None:
     """Point snapshots of a link being replaced at the link that replaces it.
 
-    The snapshots themselves are unchanged; they report `changed` until refreshed. A
-    review that already has a snapshot of the new link keeps the old one detached.
+    The snapshots and their review filters are unchanged; they report `changed` until
+    refreshed. A review that already has a snapshot of the new link keeps the old one
+    detached.
     """
     taken = {row.review_id for row in _sources_of(db, [new_link_id])}
     new_link = db.get(CommunityMasterLinkRow, new_link_id)

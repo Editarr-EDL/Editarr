@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from scanner.db import CommunityMasterFilterRow, CommunityMasterUpdateRow, get_db
+from scanner.db import CommunityMasterFilterRow, get_db
 from scanner.integrations.community.transport import CommunityFailure
 from scanner.modeling.community_master_alignment import (
     AnchorPair,
@@ -28,7 +28,6 @@ from scanner.modeling.community_master_alignment import (
     offset_alignment,
     require_in_bounds,
 )
-from scanner.modeling.community_master_diff import MasterValues
 from scanner.modeling.community_master_state import aligned
 from scanner.persistence.repository.community_master_filters import refresh_local_verification
 from scanner.persistence.repository.community_master_links import (
@@ -108,24 +107,15 @@ previews = AlignmentPreviews()
 
 
 def _master_rows(db: Session, link) -> dict[str, dict]:
-    """Raw master values by filter ID: present rows' baselines, then new update rows."""
-    found = {}
-    for row in db.scalars(
-        select(CommunityMasterFilterRow)
-        .where(CommunityMasterFilterRow.link_id == link.id, CommunityMasterFilterRow.present)
-        .order_by(CommunityMasterFilterRow.filter_id)
-    ):
-        found[row.filter_id] = json.loads(row.baseline_json)
-    for item in db.scalars(
-        select(CommunityMasterUpdateRow)
-        .where(CommunityMasterUpdateRow.link_id == link.id)
-        .order_by(CommunityMasterUpdateRow.filter_id)
-    ):
-        if item.change != "removed" and item.filter_id not in found:
-            found[item.filter_id] = MasterValues.from_json(
-                json.loads(item.new_master_json)
-            ).as_json()
-    return found
+    """Raw master values of the link's served filters, by filter ID."""
+    return {
+        row.filter_id: json.loads(row.baseline_json)
+        for row in db.scalars(
+            select(CommunityMasterFilterRow)
+            .where(CommunityMasterFilterRow.link_id == link.id, CommunityMasterFilterRow.present)
+            .order_by(CommunityMasterFilterRow.filter_id)
+        )
+    }
 
 
 def _fingerprint(link, rows: dict[str, dict]) -> str:

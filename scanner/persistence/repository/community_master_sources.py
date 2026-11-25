@@ -1,8 +1,9 @@
-"""The account's in-effect master filters as a review and EDL source (local API §3).
+"""The account's master filters that start enabled, as an EDL preview (local API §3).
 
 Master sets are a filter source next to scans; nothing is materialized as an
-imported scan. A row is in effect when the master view marks it `active`: after
-local decisions, the saved threshold and Low Confidence preference, and alignment.
+imported scan. A served filter starts enabled when the master view marks it `active`:
+it meets the saved threshold and Low Confidence preference, and the link needs no
+alignment. Reviews hold their own copies (`review_community_filters`).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ SOURCE = "community"
 
 @dataclass(frozen=True)
 class ActiveMasterFilter:
-    """One in-effect filter on the local timeline, in milliseconds."""
+    """One filter that starts enabled, on the local timeline, in milliseconds."""
 
     link_id: str
     filter_id: str
@@ -74,11 +75,11 @@ def clamp_range(start_ms: int, end_ms: int, duration_ms: int | None) -> tuple[in
 def link_active_filters(
     db: Session, owner_id: int, link: CommunityMasterLinkRow, *, clip: bool = True
 ) -> list[ActiveMasterFilter]:
-    """The link's active effective filters in master view order.
+    """The link's active filters with their master values, in master view order.
 
     By default they are clipped to the local file, and a filter wholly outside it is
     left out, so no EDL range is empty or negative. `clip=False` returns the local
-    timeline values unchanged, as saved-review snapshots store them.
+    timeline values unchanged.
     """
     view = master_view(db, owner_id, link.id)
     duration = version_duration_ms(db, link.media_version_id) if clip else None
@@ -86,7 +87,7 @@ def link_active_filters(
     for row in view.filters:
         if not row.active:
             continue
-        values = row.effective
+        values = row.master
         bounds = clamp_range(values["startMs"], values["endMs"], duration)
         if bounds is None:
             continue

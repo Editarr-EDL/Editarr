@@ -156,7 +156,7 @@ def latest_snapshot(db: Session, link: CommunityMasterLinkRow) -> CommunityMaste
 
 
 def prune_snapshots(db: Session, link: CommunityMasterLinkRow) -> None:
-    """Keep only the latest revision and the baseline revisions rows still use."""
+    """Keep only the latest revision and the revisions rows were last applied from."""
     in_use = set(
         db.scalars(
             select(CommunityMasterFilterRow.baseline_revision)
@@ -209,9 +209,9 @@ def apply_master(
 ) -> CommunityMasterLinkRow:
     """Link a local version to a downloaded master set and create its filter rows.
 
-    Fuzzy links (`alignment_required`) keep every row inactive until alignment is
-    approved. The same community version again only stores a newer revision for
-    review. Another version needs `replace=True`; the old link is then `replaced`
+    Fuzzy links (`alignment_required`) can't be included in a review until alignment
+    is approved. The same community version again only stores and applies a newer
+    revision. Another version needs `replace=True`; the old link is then `replaced`
     and keeps its rows as history, and reviews that included it include the new one.
     """
     from .community_master_filters import refresh_local_verification
@@ -270,8 +270,8 @@ def approve_alignment(
     for_revision: int,
     now: datetime | None = None,
 ) -> CommunityMasterLinkRow:
-    """Store an approved transform for `for_revision`; it activates a first import's rows
-    and enables Accept for that revision's update rows."""
+    """Store an approved transform for `for_revision`; the link's filters can then be
+    included in reviews, and later revisions keep using it."""
     link = require_link(db, owner_id, link_id)
     if for_revision != link.latest_revision:
         raise CommunityMasterError("update_changed")

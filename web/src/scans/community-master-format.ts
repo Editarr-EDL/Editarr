@@ -1,15 +1,8 @@
-import type {
-  MasterFilter, MasterPreferences, MasterSharingSummary, UpdateCounts, UpdateGroup, UpdateRow, VersionChoice,
-} from "../api/api-community-master-types";
+import type { MasterFilter, MasterPreferences, MasterSharingSummary, VersionChoice } from "../api/api-community-master-types";
 
 export const UNCONFIRMED_TOOLTIP = "This version hasn't been verified yet. Its filters come from contributors whose files "
   + "could only be loosely matched (by ID, title, or runtime). It becomes confirmed once several contributors with "
   + "matching files submit for it, or after moderator review.";
-
-export const updateGroups: { id: UpdateGroup; label: string }[] = [
-  { id: "new", label: "New" }, { id: "changed", label: "Changed" },
-  { id: "removed", label: "Removed" }, { id: "nowLowConfidence", label: "Now Low Confidence" },
-];
 
 /** Turn a taxonomy token such as `strong_language` or `sexContent` into a sentence-case label. */
 export function categoryLabel(value: string): string {
@@ -32,31 +25,20 @@ export const filterName = (filter: { category: string; subcategory?: string | nu
     ? categoryLabel(filter.subcategory) : null].filter(Boolean).join(" · ");
 
 /**
- * Whether a row is shown under the user's preferences. Touched rows ignore the threshold and the Low
- * Confidence toggle; untouched rows need confidence ≥ threshold and, when Low Confidence, the toggle.
+ * Whether a served filter starts enabled when a review includes it, mirroring the backend rule so
+ * unsaved preference changes show at once: it needs confidence ≥ threshold and, when Low Confidence,
+ * the Show Low Confidence toggle. Nothing starts enabled while the link awaits alignment.
  */
-export function filterVisible(filter: MasterFilter, preferences: MasterPreferences) {
-  if (preferences.hideRejectedDownvoted && (filter.state === "rejected" || filter.myVote === "down")) return false;
-  if (filter.touched) return true;
+export function filterActive(filter: MasterFilter, preferences: MasterPreferences, alignmentRequired: boolean) {
+  if (alignmentRequired || !filter.master.present) return false;
   if (filter.master.lowConfidence && !preferences.showLowConfidence) return false;
   return filter.master.confidence >= preferences.confidenceThreshold;
 }
 
-const IN_EFFECT: MasterFilter["state"][] = ["pending", "verified", "adjusted"];
-
-/**
- * Mirror the backend `is_active` rule so preference changes apply before the server round trip. A
- * touched row is active only in an in-effect state, ignoring the threshold. An untouched Low Confidence
- * row also needs the toggle (which admits the `low_confidence` state); every untouched row needs
- * confidence ≥ threshold.
- */
-export function filterActive(filter: MasterFilter, preferences: MasterPreferences, alignmentRequired: boolean) {
-  if (alignmentRequired || !filter.master.present) return false;
-  if (filter.touched) return IN_EFFECT.includes(filter.state);
-  if (filter.master.lowConfidence) {
-    if (!preferences.showLowConfidence || ![...IN_EFFECT, "low_confidence"].includes(filter.state)) return false;
-  } else if (!IN_EFFECT.includes(filter.state)) return false;
-  return filter.master.confidence >= preferences.confidenceThreshold;
+/** Whether a row is listed: filters that start enabled, unless downvoted while "Hide downvoted filters" is on. */
+export function filterVisible(filter: MasterFilter, preferences: MasterPreferences) {
+  if (preferences.hideRejectedDownvoted && filter.myVote === "down") return false;
+  return filterActive(filter, preferences, false);
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -67,20 +49,6 @@ export function estimateText({ estimates }: Pick<MasterSharingSummary, "estimate
   return [`${approx}${estimates.newFilters} new`, `${approx}${plural(estimates.confirmations, "confirmation")}`,
     plural(estimates.adjustments, "adjustment"), plural(estimates.disputes, "dispute")].join(", ");
 }
-
-export const updateTotal = (counts: UpdateCounts | null | undefined) =>
-  counts ? counts.new + counts.changed + counts.removed + counts.nowLowConfidence : 0;
-
-/** Banner copy: "Community filters updated: X new, Y changed, Z removed." plus Low Confidence when present. */
-export function bannerText(counts: UpdateCounts) {
-  const parts = [`${counts.new} new`, `${counts.changed} changed`, `${counts.removed} removed`];
-  if (counts.nowLowConfidence) parts.push(`${counts.nowLowConfidence} now Low Confidence`);
-  return `Community filters updated: ${parts.join(", ")}.`;
-}
-
-/** Rows that group-level Accept all covers: untouched rows whose Accept is enabled. */
-export const acceptAllRows = (rows: UpdateRow[]) =>
-  rows.filter((row) => !row.touched && row.canAccept && row.allowed.includes("accept"));
 
 export type PickerValue = { selection: string; otherText: string };
 export const OTHER = "__other__";
@@ -113,14 +81,12 @@ const errorMessages: Record<string, string> = {
   alignment_not_required: "This version already matches your file, so it doesn’t need alignment.",
   alignment_out_of_range: "That alignment moves filters off your file or drifts too far. Check the anchor times.",
   alignment_preview_changed: "The alignment preview changed. Preview it again.",
-  filter_state_changed: "This filter changed elsewhere. Refresh and try again.",
+  update_changed: "Newer community filters arrived. Preview the alignment again.",
   vote_ineligible: "You can’t vote on this filter.",
   vote_pending: "Another vote on this filter is still being sent. Try again in a moment.",
   operation_conflict: "This vote conflicts with one already sent. Refresh and vote again.",
   receipt_owner_mismatch: "Download this filter set again with your account before voting or reporting.",
   report_ineligible: "You can only report the version this file uses.",
-  decision_not_allowed: "That choice isn’t available for this filter.",
-  update_changed: "A newer update arrived. Review the latest changes.",
   work_identity_required: "Add a TMDB or TVDB ID (with season and episode for TV) before sharing.",
   invalid_response: "Community response couldn’t be read.",
 };
