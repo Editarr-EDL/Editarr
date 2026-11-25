@@ -68,7 +68,8 @@ export function MasterFilterList({ view, preferences, canVote, onFilter }: {
           return <tr key={filter.filterId}>
             <td className="master-time">{formatRange(filter.master)}</td>
             <th scope="row">{label}
-              <small className="muted-copy">{[filter.master.severity, filter.master.action].filter(Boolean).join(" · ")}</small></th>
+              <small className="muted-copy">{[filter.master.expression && `“${filter.master.expression}”`, filter.master.severity,
+                filter.master.action].filter(Boolean).join(" · ")}</small></th>
             <td><ConfidenceBadge confidence={filter.master.confidence} low={filter.master.lowConfidence} /></td>
             <td>{filter.master.contributorCount}</td>
             <td>{filter.locallyVerified ? <LocallyVerifiedIcon /> : <span className="muted-copy">—</span>}</td>

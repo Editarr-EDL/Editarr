@@ -66,6 +66,7 @@ class MasterFilter(StrictCamelModel):
     subcategory: str
     severity: Literal["low", "medium", "high"]
     action: Literal["skip", "mute"]
+    expression: str | None = Field(default=None, min_length=1, max_length=64)
     start_ms: SafeInt
     end_ms: SafeInt
     spread: Spread
@@ -106,6 +107,8 @@ def _check_filters(filters: list[MasterFilter], max_filters: int) -> None:
             MCF_CATEGORY_TO_FAMILY.get(item.subcategory) != item.category
         ):
             raise MasterSnapshotError("Snapshot filter taxonomy is invalid")
+        if item.expression is not None and item.category != "language":
+            raise MasterSnapshotError("Only language filters carry an expression")
         if not item.start_ms < item.end_ms:
             raise MasterSnapshotError("Snapshot filter bounds are invalid")
         if item.contributor_count != item.support.attestations:

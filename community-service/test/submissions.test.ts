@@ -196,7 +196,11 @@ describe('POST /v1/submissions', () => {
     const reply = await response.json() as { result: Record<string, unknown> };
     expect(response.status).toBe(200);
     expect(reply.result).toMatchObject({ submissionDigest: fixture.artifactDigest, submissionId: fixture.artifact.submissionId,
-      outcome: { supports: 1, unassigned: 1 } });
+      outcome: { supports: 2, unassigned: 1 } });
+    const stored = await db.prepare(`SELECT e.expression AS entry, f.expression AS filter FROM submission_entries e
+      JOIN filter_attestations a USING (submission_id, entry_id) JOIN master_filters f ON f.filter_id = a.filter_id
+      WHERE e.submission_id = ? AND e.entry_id = 'e3'`).bind(fixture.artifact.submissionId).first();
+    expect(stored).toEqual({ entry: 'Crème brûlée', filter: 'Crème brûlée' });
   });
 
   it('is routed behind admission and fails closed without SUBMISSION_LIMITS', async () => {

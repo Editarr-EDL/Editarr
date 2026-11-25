@@ -1,5 +1,6 @@
 """Strict pydantic models for the `community-artifact-3` submission JSON (§5.2)."""
 
+import unicodedata
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,9 +17,24 @@ PROVIDER_ID = r"^[0-9]{1,12}$"
 ALIAS_ID = r"^[a-z0-9_]{1,64}$"
 HEX64 = r"^[0-9a-f]{64}$"
 MAX_DURATION_MS = 86_400_000
+EXPRESSION_MAX_CODE_POINTS = 64
 
 SafeInt = Annotated[int, Field(ge=0, le=MAX_SAFE_INTEGER)]
 Token = Annotated[str, Field(pattern=TOKEN)]
+
+
+def normalize_expression(value: str | None) -> str | None:
+    """A language filter's word or phrase as shared (§5.2), or None when it can't be.
+
+    Control (Cc), format (Cf) and lone surrogate (Cs) characters make it unusable;
+    otherwise it is NFC normalized and trimmed, and must then hold 1–64 code points.
+    """
+    if not isinstance(value, str) or any(
+        unicodedata.category(character) in ("Cc", "Cf", "Cs") for character in value
+    ):
+        return None
+    normalized = unicodedata.normalize("NFC", value).strip()
+    return normalized if 1 <= len(normalized) <= EXPRESSION_MAX_CODE_POINTS else None
 
 
 class StrictCamelModel(BaseModel):
@@ -160,6 +176,7 @@ class Entry(StrictCamelModel):
     subcategory: str | None
     severity: Literal["low", "medium", "high"] | None
     action: Literal["skip", "mute"] | None
+    expression: str | None = None
     evidence: Evidence
 
 

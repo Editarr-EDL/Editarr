@@ -79,7 +79,8 @@ users and must keep their data.
   their start and end are within ±N s after alignment. N defaults to 0.5 s and
   is set only in the operator configuration (D6).
 - The subcategory follows a plurality of attestations, and ties keep the
-  current value.
+  current value. A language filter's word or phrase (`expression`) follows a
+  case-insensitive plurality the same way (W1).
 - Bounds are the median start and end, and their spread is exposed (D7).
 - Severity is a weighted vote with low = 1, medium = 1 and high = 3. Ties go to
   the more severe value (D8).
@@ -92,10 +93,10 @@ users and must keep their data.
 - Coverage is per channel, not per model: a shared scan covers every audio
   category for the ranges it analyzed audio, and every video category for the
   ranges it analyzed the picture, except `commercial_content` and
-  `dispensable_scenes`, which no automated stage detects. A coverage negative counts as a full downvote
-  by default (`coverageNegativeWeight` 1.0, operator-configurable); the owner
-  replaced the earlier 0.25 proposal. Local scans count toward nothing unless
-  they are shared.
+  `dispensable_scenes`, which no automated stage detects. A coverage negative
+  counts as a quarter of a downvote by default (`coverageNegativeWeight` 0.25,
+  operator-configurable); the owner briefly set 1.0 and then restored 0.25 (W2).
+  Local scans count toward nothing unless they are shared.
 - A filter is flagged **Low Confidence** when negatives exceed
   attestations + upvotes.
 - One contributor counts once per filter. A re-shared downloaded filter counts
@@ -161,32 +162,67 @@ request; they are numbered U1–U7 here to keep D1–D22 unambiguous).
   rows (migration 0040).
 - **U5 One subtitle rule.** Subtitle redaction uses enabled review filters that are
   audio-channel language mutes with a word or phrase, whatever their source.
-  Community filters carry no expression, so they don't redact, like any wordless
-  filter. The community-specific subtitle alignment, notices and counters are
-  removed.
-- **U6 Sharing.** Sharing a review turns the user's review edits into attestations:
-  an edited community filter that is enabled is a `support` with the user's bounds,
-  subcategory, severity, action and its `proposedFilterId` (also when it started
-  disabled); one the user disabled after it started enabled is a `dispute`; one that
-  started disabled and stays disabled isn't sent, even with adjusted values.
-  Untouched filters, filters of a snapshot of another community version than the
-  submission's link, and filters no longer served aren't sent. Scan filters behave as
-  before, and the Community tab's old local decisions are never shared.
-- **Only direct edits count.** A community filter is the user's edit once the user
-  directly changes its enabled state, times, classification, severity or action
-  (`community_edited`). Bulk changes such as Apply Filter Defaults don't count, so
-  they are neither shared nor kept over new master values on Refresh.
+  Since W1 a community filter's label is its master expression, so a community
+  language mute with one redacts like a scan filter; one without an expression
+  doesn't, like any wordless filter. The community-specific subtitle alignment,
+  notices and counters are removed.
+- **U6 Sharing** (amended by W3, W4). Sharing a review turns the user's review edits
+  into attestations: an edited community filter that is enabled is a `support` with
+  the user's bounds, subcategory, severity, action, expression (its label, for a
+  language filter) and its `proposedFilterId`. Disabled filters, edited or not, are
+  not sent, and Editarr never sends a `dispute`. Untouched filters, filters of a
+  snapshot of another community version than the submission's link, and filters no
+  longer served aren't sent. Scan filters behave as before, and the Community tab's
+  old local decisions are never shared.
+- **Only direct edits count** (amended by W4). A community filter is the user's edit
+  once the user directly changes its times, classification, severity, action or
+  label (`community_edited`). Turning it on or off, alone or by group, and bulk
+  changes such as Apply Filter Defaults don't count, so they are neither shared nor
+  kept over new master values on Refresh; the enabled state itself is kept.
 - **Policy.** The owner's instance filter policy applies to community filters like
   any other source.
 - **Earlier decisions.** Migration 0040 measures each stored snapshot against its
-  link's master values, so filters the owner adjusted count as edited and rejected
-  ones become disabled, edited review filters. Decisions on links no review included
-  no longer apply; their rows, and update and dismissal rows, are kept unused.
+  link's master values, so filters the owner adjusted count as edited, and rejected
+  ones become disabled but unedited review filters (W4). Decisions on links no review
+  included no longer apply; their rows, and update and dismissal rows, are kept
+  unused.
 - The master-list toggle and its preference are named "Hide downvoted filters"
   (`hide_downvoted`).
 - **U7 Locally verified.** A community filter is locally verified when it overlaps a
   local scan finding of the same top-level category on the same media version,
   after alignment. Confirming or adjusting no longer counts.
+
+**Owner decisions on words and sharing (W1–W4)**
+
+The owner decided these on 2026-11-25; they amend U5, U6 and the edit rule above.
+
+- **W1 Community filters carry the word or phrase.** A v3 artifact entry may carry an
+  `expression`: 1–64 code points after NFC and trimming, without control or format
+  characters, and only on `language` supports (otherwise `invalid_submission`).
+  Editarr sends a language cue's label, or a community review filter's label, as
+  its expression. The service merges a filter's expression as the plurality of the
+  case-insensitive groups among its counted supports, displayed in the group's
+  most common spelling, with ties keeping the incumbent, then the smallest value;
+  with none it is null. The expression is part of the snapshot and its served
+  content, so a change advances the revision; it names no contributor. In a review
+  a community filter's label is its expression: unedited filters take a new master
+  expression on Refresh, and a label the user edited is kept. The uniform subtitle
+  rule (U5) then applies unchanged.
+- **W2 Coverage negatives weigh a quarter.** `coverageNegativeWeight` defaults to
+  0.25 again, so the worked example's violence filter is `wilson(5, 1.25)` =
+  0.393857102.
+- **W3 No disputes from reviews.** Disabling a community filter never sends a
+  dispute; disabled community filters are simply not shared. The protocol keeps
+  the `dispute` kind for compatibility, but Editarr doesn't send it, and a 👎 vote
+  is the only negative a user casts.
+- **W4 Turning filters on or off is not an edit.** `community_edited` is set only by
+  direct changes to times, subcategory, severity, action or the expression (the label of
+  a language filter; a label elsewhere is not an expression).
+  Sharing sends a `support` only for enabled, edited community filters. On Refresh
+  unedited filters take the new master values and keep the enabled state the
+  review gave them; new filters start per the threshold and Low Confidence.
+  Migration 0040, still unreleased, was updated in place: rejected decisions become
+  disabled but unedited filters, and adjusted ones become edited.
 
 ## Consequences
 

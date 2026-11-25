@@ -4,7 +4,7 @@ import type { MasterFilter, SnapshotHeader } from './types';
 export function snapshotFilter(filter: MasterFilter) {
   return {
     filterId: filter.filterId, mergedIds: [...filter.mergedIds], category: filter.category,
-    subcategory: filter.subcategory, severity: filter.severity, action: filter.action,
+    subcategory: filter.subcategory, severity: filter.severity, action: filter.action, expression: filter.expression,
     startMs: filter.startMs, endMs: filter.endMs, spread: { startMs: filter.spread.startMs, endMs: filter.spread.endMs },
     confidence: filter.confidence, contributorCount: filter.contributorCount,
     support: { attestations: filter.support.attestations, upvotes: filter.support.upvotes },

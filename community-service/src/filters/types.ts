@@ -27,6 +27,8 @@ export interface EntryInput {
   subcategory: string | null;
   severity: Severity | null;
   action: FilterAction | null;
+  /** Normalized word or phrase of a `language` support (§5.2); absent or null otherwise. */
+  expression?: string | null;
   origin: EvidenceOrigin;
   locallyVerified: boolean;
   /** The filter ID this attestation was last assigned to (§6.6), or null. */
@@ -99,6 +101,8 @@ export interface RegistryEntry {
   createdSeq: number;
   incumbentSubcategory: string | null;
   incumbentAction: FilterAction | null;
+  /** The filter's last merged expression (§6.7); absent or null when it had none. */
+  incumbentExpression?: string | null;
   state: RegistryState;
   mergedInto: string | null;
   quarantined: boolean;
@@ -159,6 +163,8 @@ export interface MasterFilter {
   subcategory: string;
   severity: Severity;
   action: FilterAction;
+  /** The merged word or phrase (§6.7), or null. */
+  expression: string | null;
   startMs: number;
   endMs: number;
   spread: { startMs: number; endMs: number };

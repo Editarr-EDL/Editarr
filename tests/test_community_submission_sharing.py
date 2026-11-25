@@ -171,7 +171,6 @@ def test_preview_is_local_and_reports_estimates_without_enabling_sharing(sharing
         "newFilters": 2,
         "confirmations": 0,
         "adjustments": 0,
-        "disputes": 0,
     }
     assert preview["versionChoice"]["label"] == "Theatrical" and preview["entryCount"] == 2
     assert "PRIVATE FULL TRANSCRIPT" not in json.dumps(preview)
@@ -202,7 +201,7 @@ def test_preview_projects_against_the_accounts_linked_master_set(sharing):
         ("support", None),
     }
     assert preview["preview"]["artifact"]["alignmentHint"]["versionId"] == "v_1"
-    assert preview["estimates"]["confirmations"] == 1 and preview["estimates"]["disputes"] == 0
+    assert preview["estimates"]["confirmations"] == 1 and "disputes" not in preview["estimates"]
     asyncio.run(masters.check(link.id))
     with pytest.raises(CommunityFailure, match="preview_stale"):
         approve(service, preview)

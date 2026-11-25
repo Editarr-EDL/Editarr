@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
-VALUE_FIELDS = ("startMs", "endMs", "subcategory", "severity", "action")
+VALUE_FIELDS = ("startMs", "endMs", "subcategory", "severity", "action", "expression")
 INFO_FIELDS = ("confidence", "contributorCount", "support", "negative", "spread")
 
 
@@ -25,6 +25,7 @@ class MasterValues:
     action: str
     low_confidence: bool = False
     present: bool = True
+    expression: str | None = None
 
     def as_json(self) -> dict:
         """The values in snapshot (camelCase) terms."""
@@ -34,6 +35,7 @@ class MasterValues:
             "subcategory": self.subcategory,
             "severity": self.severity,
             "action": self.action,
+            "expression": self.expression,
             "lowConfidence": self.low_confidence,
             "present": self.present,
         }
@@ -48,6 +50,7 @@ class MasterValues:
             action=str(document["action"]),
             low_confidence=bool(document.get("lowConfidence", False)),
             present=bool(document.get("present", True)),
+            expression=document.get("expression") or None,
         )
 
 

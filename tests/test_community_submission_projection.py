@@ -101,22 +101,23 @@ def test_cues_support_the_master_filters_they_overlap():
         (row("f_kept", 100_200, 101_100), row("f_untouched", 500_000, 501_000)),
     )
     data = scan_data(
-        finding(100.0, 101.0),
+        finding(100.0, 101.0, label="punch"),
         finding(200.5, 201.0),
-        finding(900.0, 901.0, category="language", subcategory="swearing"),
+        finding(900.0, 901.0, category="language", subcategory="swearing", label=" Damn "),
         finding(950.0, 951.0, selected=False),
         finding(960.0, None),
+        finding(970.0, 971.0, category="language", subcategory="swearing", label="x" * 65),
     )
     projection = project_submission(data, "scan", options(), link)
     by_id = entries(projection)
-    assert [entry.proposed_filter_id for entry in by_id.values()] == ["f_kept", None, None]
+    assert [entry.proposed_filter_id for entry in by_id.values()] == ["f_kept", None, None, None]
+    assert [entry.expression for entry in by_id.values()] == [None, None, "Damn", None]
     assert by_id["e1"].evidence.origin == "model" and by_id["e1"].evidence.model_version == "1.4.0"
     assert projection.estimates.as_json() == {
         "approximate": True,
-        "newFilters": 2,
+        "newFilters": 3,
         "confirmations": 1,
         "adjustments": 0,
-        "disputes": 0,
     }
     assert projection.artifact.alignment_hint.model_dump(by_alias=True) == {
         "versionId": "v_1",
@@ -177,7 +178,8 @@ def _shared(projection):
     ]
 
 
-def test_review_community_filters_share_only_the_users_edits():
+def test_review_community_filters_share_only_the_users_enabled_edits():
+    language = {"category": "language", "subcategory": "swearing", "expression": "damn"}
     entries = [
         _entry("f_same", 100_000, 101_000),
         _entry("f_moved", 200_000, 201_000),
@@ -186,27 +188,44 @@ def test_review_community_filters_share_only_the_users_edits():
         _entry("f_on", 500_000, 501_000, default=False),
         _entry("f_bulk", 600_000, 601_000),
         _entry("f_gone", 700_000, 701_000, served=False),
+        _entry("f_word", 800_000, 801_000, **language),
+        _entry("f_timed", 900_000, 901_000, **language),
+        _entry("f_toggled", 950_000, 951_000),
     ]
+    words = {"category": "language", "subcategory": "swearing"}
     rows = [
         _community("f_same", 100.0, 101.0, edited=False),
         _community("f_moved", 200.5, 201.0, severity="low"),
+        # Edited, then turned off: disabled filters are never shared, never disputed.
         _community("f_off", 300.0, 301.0, selected=False),
-        # Started disabled, stayed disabled: not sent, even with adjusted bounds.
         _community("f_low", 400.5, 401.0, selected=False),
         _community("f_on", 500.0, 501.0),
         # Changed only by bulk defaults: not the user's edit.
         _community("f_bulk", 600.0, 601.0, selected=False, edited=False),
         _community("f_gone", 700.0, 701.0, selected=False),
+        _community("f_word", 800.0, 801.0, label="Damn it", **words),
+        _community("f_timed", 900.5, 901.0, label="damn", **words),
+        # Turned on by the user: a personal choice, not an edit.
+        _community("f_toggled", 950.0, 951.0, edited=False),
         {**finding(300.0, 301.0), "source_scan_id": "scan", "source_finding_id": 3},
     ]
     data = _review([("src", "v_1", entries)], rows)
     link = LinkProjection("v_1", 1, None, (row("f_off", 300_000, 301_000),))
     projection = project_submission(data, "review", options(), link)
     assert _shared(projection) == [
-        ("support", None, 300_000, "medium"),
+        ("support", "f_off", 300_000, "medium"),
         ("support", "f_moved", 200_500, "low"),
-        ("dispute", "f_off", 300_000, None),
         ("support", "f_on", 500_000, "high"),
+        ("support", "f_word", 800_000, "high"),
+        ("support", "f_timed", 900_500, "high"),
+    ]
+    assert {entry.kind for entry in projection.artifact.entries} == {"support"}
+    assert [entry.expression for entry in projection.artifact.entries] == [
+        None,
+        None,
+        None,
+        "Damn it",
+        "damn",
     ]
     moved = projection.artifact.entries[1].evidence
     assert (moved.origin, moved.manual_review, moved.locally_verified) == (
@@ -216,10 +235,9 @@ def test_review_community_filters_share_only_the_users_edits():
     )
     assert projection.estimates.as_json() == {
         "approximate": True,
-        "newFilters": 1,
-        "confirmations": 2,
-        "adjustments": 1,
-        "disputes": 1,
+        "newFilters": 0,
+        "confirmations": 5,
+        "adjustments": 3,
     }
     encode_artifact_v3(projection.artifact)
 

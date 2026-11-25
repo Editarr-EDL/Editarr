@@ -434,14 +434,20 @@ submitter's file playback timeline.
     {
       "entryId": "e1", "kind": "support", "proposedFilterId": "f_9c1d…",
       "startMs": 600000, "endMs": 605000,
-      "category": "violence", "subcategory": "punching", "severity": "medium", "action": "skip",
+      "category": "violence", "subcategory": "punching", "severity": "medium", "action": "skip", "expression": null,
       "evidence": { "origin": "downloaded", "manualReview": true, "locallyVerified": true, "modelVersion": null }
     },
     {
       "entryId": "e2", "kind": "dispute", "proposedFilterId": "f_44aa…",
       "startMs": 1200000, "endMs": 1203000, "category": "language",
-      "subcategory": null, "severity": null, "action": null,
+      "subcategory": null, "severity": null, "action": null, "expression": null,
       "evidence": { "origin": "downloaded", "manualReview": true, "locallyVerified": false, "modelVersion": null }
+    },
+    {
+      "entryId": "e3", "kind": "support", "proposedFilterId": null,
+      "startMs": 2400000, "endMs": 2401200, "category": "language",
+      "subcategory": "swearing", "severity": "medium", "action": "mute", "expression": "Crème brûlée",
+      "evidence": { "origin": "manual", "manualReview": true, "locallyVerified": true, "modelVersion": null }
     }
   ]
 }
@@ -465,11 +471,12 @@ submitter's file playback timeline.
 | `alignmentHint` | Null, or `{versionId, revision (int ≥ 1), offsetMs (int, ±86,400,000), scale (number 0.9–1.1), anchors (int 0–2000)}`. The service stores it for diagnostics only. It is never used in the fit (§6.3). |
 | `coverage` | 0–9 objects, each with a unique `category`. Each has 1–512 `intervals`, sorted, non-overlapping, with `0 ≤ startMs < endMs ≤ durationMs`. Coverage is per channel, not per model: Editarr sends it only for its own completed scan stages, and a stage that analyzed the audio channel covers every audio category (`language`) while a stage that analyzed the picture covers every video category (all other families except `commercial_content` and `dispensable_scenes`, which no automated stage detects), whichever model ran. Saved reviews send none |
 | `entries` | 0–2,000 entries, each with a unique `entryId` (token, at most 32 bytes) |
-| `entries[].kind` | `support`, `dispute`, or `coverage_negative` |
+| `entries[].kind` | `support`, `dispute`, or `coverage_negative`. Editarr itself never sends `dispute`: turning a community filter off in a review is personal and isn't shared, and a 👎 vote (§7.4) is the only negative a user casts. The kind stays valid for compatibility |
 | `entries[].proposedFilterId` | Token or null. Must be non-null for `dispute` and `coverage_negative`. A non-null value appears at most once per artifact. |
 | `entries[].startMs`, `entries[].endMs` | Integers with `0 ≤ startMs < endMs ≤ durationMs` |
 | `entries[].category` | A top-level MCF family from `taxonomy.json` |
 | `entries[].subcategory`, `entries[].severity`, `entries[].action` | For `support`, all three are required: a token in the category's taxonomy family, `low`/`medium`/`high`, and `skip`/`mute`. For other kinds, all three must be null. |
+| `entries[].expression` | Optional; absent or null, or the flagged word or phrase of a `language` `support` entry. It must contain no control (Unicode Cc), format (Cf) or lone surrogate (Cs) characters and, after NFC normalization and trimming surrounding white space, hold 1–64 code points. The service stores the normalized value; Editarr sends it already normalized. A non-null expression on another category or kind is `400 invalid_submission`. It carries no contributor information and is merged per filter (§6.7) |
 | `entries[].evidence.origin` | `model` (local scan finding), `manual` (user-created), or `downloaded` (from a community master set) |
 | `entries[].evidence.manualReview` | Boolean. True when a person reviewed, edited or approved the cue |
 | `entries[].evidence.locallyVerified` | Boolean. True when a local scan cue is the user's own or was adjusted, or the cue overlaps a local model finding of the same category (D21). For an attestation of a downloaded community filter only the overlap counts ([ADR 0002](adr/0002-community-master-filter-sets.md) U7) |
@@ -498,7 +505,7 @@ The master set of a version is a pure function of the following inputs:
 3. the moderation state;
 4. operator config;
 5. the persistent **filter registry**, which provides stable IDs and
-   incumbent subcategory and action values;
+   incumbent subcategory, action and expression values;
 6. the version's **reference keys**.
 
 Arrival order and processing order must not affect the result. The service
@@ -641,7 +648,7 @@ The registry stores the following for every ID ever issued:
 
 - `filterId` and `versionId`;
 - `createdSeq`;
-- incumbent `subcategory` and `action`;
+- incumbent `subcategory`, `action` and `expression`;
 - `state`: `active`, `retired`, or `quarantined`;
 - `mergedInto`.
 
@@ -683,6 +690,14 @@ These votes count only weight-1 support members:
 - **Action:** uses the same rule as subcategory (plurality, incumbent on a
   tie, then the first member, then ASCII order). This is the suggested
   default; see Open questions.
+- **Expression:** members that carry an `expression` vote for its
+  case-insensitive group, keyed by `NFC(toLowerCase(toUpperCase(expression)))`
+  with the Unicode default (locale-independent) case mappings. The group with
+  the most members wins. On a tie, keep the group of the incumbent expression
+  if it is tied, otherwise the code-unit-smallest key. The master expression is
+  the winning group's most common spelling; ties keep the incumbent spelling,
+  then the code-unit-smallest spelling. With no member carrying one it is null.
+  The registry stores the result as the next incumbent (`incumbentExpression`).
 - **Bounds:** `startMs` and `endMs` are the medians (§6.4) of the member
   bounds.
 
@@ -712,7 +727,7 @@ the contributor has no other signal on `F`, and `[F.startMs, F.endMs]` is
 inside one aligned `coverage[k]` interval of the contributor's counted
 submission, it counts as a coverage negative. In other words, another
 contributor's shared submission that scanned that channel over that range
-without finding the filter counts against it, by default as much as a
+without finding the filter counts against it, by default as a quarter of a
 downvote.
 
 **Votes:** an `up` or `down` vote counts only when the contributor has no
@@ -727,16 +742,26 @@ attestation signal on the filter. Votes follow merges through
 | `negative.disputes` | Count of dispute signals |
 | `negative.coverageNegatives` | Count of explicit plus implicit coverage negatives |
 | `S` | `attestations + upvotes` |
-| `Neg` | `downvotes + disputes + coverageNegativeWeight × coverageNegatives` (default weight 1.0, so a coverage negative counts as a full downvote) |
+| `Neg` | `downvotes + disputes + coverageNegativeWeight × coverageNegatives` (default weight 0.25, so a coverage negative counts as a quarter of a downvote) |
 | `confidence` | `wilson(S, Neg)`. With `n = S + Neg + 2`, `p = (S + 1) / n` and `z = 1.96`, the lower bound is `(p + z²/2n − z·sqrt(p(1−p)/n + z²/4n²)) / (1 + z²/n)`, clamped to 0..1 and rounded as `floor(x × 1e9 + 0.5) / 1e9`. This is the same as `community-ranking-wilson-1`. |
 | `lowConfidence` | `Neg > S` |
-| served | `confidence ≥ confidenceFloor` (default 0.05). The filter must also not be quarantined, and its version must not be quarantined. |
+| served | `confidence ≥ confidenceFloor` (default 0.05). The filter must also not be quarantined, and its version must not be quarantined. At most `maxServedFilters` filters are served, and the snapshot must fit its byte limit (see **Serving caps** below) |
 
 Low Confidence filters are still served. Clients hide them by default.
 
-Low Confidence needs negatives to exceed support: one contrary signal (a
-downvote, dispute or coverage negative) against one attestation gives
-`wilson(1, 1)` = 0.150035709 and is not Low Confidence; a second one is.
+**Serving caps.** Serving priority is the highest `confidence` first, then
+snapshot order (§7.3). The service first keeps at most `maxServedFilters` filters
+in that priority. Then, if the snapshot bytes (§7.3) with the largest possible
+`revision` and `generatedAt` (9,007,199,254,740,991 each) would exceed
+2,000,000 bytes, it stops serving the lowest-priority remaining filter, one at a
+time, until they fit. A filter left out by a cap stays in the registry with
+`served = false`, like one below the floor. With 4,000 filters carrying 64-code
+point, 4-byte-per-character expressions, the size cap applies.
+
+Low Confidence needs negatives to exceed support: one downvote or dispute
+against one attestation gives `wilson(1, 1)` = 0.150035709 and is not Low
+Confidence; a second one is. With the default weight, five coverage negatives
+(1.25) are needed against one attestation.
 
 A filter below the floor stays in the registry and returns if its signals
 improve. With the defaults:
@@ -757,7 +782,7 @@ improve. With the defaults:
 ### 6.10 Worked example
 
 This example uses the defaults: `N = 500` ms and coverage-negative weight
-1.0.
+0.25.
 
 - Submissions A, B and C are identity-aligned.
 - Submission D comes from a merged candidate, with fit `offset +1,200 ms`.
@@ -781,12 +806,14 @@ The result:
 | Subcategory | punching 3, kicking 1 → `punching` |
 | Severity | medium 1+1 = 2, high 3, low 1 → `high` |
 | Action | skip 3, mute 1 → `skip` |
-| Counts | `attestations` 4, `upvotes` 1, `downvotes` 1, `coverageNegatives` 1. `S` = 5 and `Neg` = 1 + 0 + 1.0 × 1 = 2 |
-| Confidence | `wilson(5, 2)` = **0.354197347**. `lowConfidence` is false (2 is not more than 5), and the filter is served |
+| Expression | No member carries one → null |
+| Counts | `attestations` 4, `upvotes` 1, `downvotes` 1, `coverageNegatives` 1. `S` = 5 and `Neg` = 1 + 0 + 0.25 × 1 = 1.25 |
+| Confidence | `wilson(5, 1.25)` = **0.393857102**. `lowConfidence` is false (1.25 is not more than 5), and the filter is served |
 
-A second filter, `language/swearing` from A only, is disputed by B and C:
-`S` = 1 and `Neg` = 2, so the confidence is 0.117618231. It is served and
-flagged Low Confidence.
+A second filter, `language/swearing` from A only with the expression `Damn`,
+is disputed by B and C: `S` = 1 and `Neg` = 2, so the confidence is
+0.117618231. It is served with the expression `Damn` and flagged Low
+Confidence.
 
 Reference values (`S`, `Neg` → confidence):
 
@@ -798,7 +825,7 @@ Reference values (`S`, `Neg` → confidence):
 | 1, 8 | 0.051366601 |
 | 1, 9 | 0.046964148 (dropped) |
 | 3, 0 | 0.375528264 |
-| 5, 2 | 0.354197347 |
+| 5, 1.25 | 0.393857102 |
 
 ### 6.11 Clarifications
 
@@ -987,8 +1014,8 @@ Snapshot JSON (UTF-8, compact, key order as shown):
   "work": { "workId": "w_77", "kind": "movie", "tmdb": "603", "tvdb": null, "season": null, "episode": null, "lastEpisode": null, "title": "The Matrix", "year": 1999 },
   "versionInfo": { "status": "confirmed", "aliasId": "theatrical", "label": "Theatrical", "labelText": null, "runtimeMs": 8160500, "trust": 0.41 },
   "filters": [ { "filterId": "f_9c1d…", "mergedIds": [], "category": "violence", "subcategory": "punching",
-    "severity": "high", "action": "skip", "startMs": 600000, "endMs": 605050,
-    "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.354197347, "contributorCount": 4,
+    "severity": "high", "action": "skip", "expression": null, "startMs": 600000, "endMs": 605050,
+    "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.393857102, "contributorCount": 4,
     "support": { "attestations": 4, "upvotes": 1 },
     "negative": { "downvotes": 1, "disputes": 0, "coverageNegatives": 1 }, "lowConfidence": false } ] }
 ```
@@ -996,8 +1023,14 @@ Snapshot JSON (UTF-8, compact, key order as shown):
 Snapshot rules:
 
 - `filters` are sorted by `startMs`, `endMs`, `category`, then `filterId`.
+- `expression` is the merged word or phrase of a `language` filter (§6.7), or
+  null. It is part of the served content, so a change advances the revision
+  (§6.9). Like the rest of the snapshot it names no contributor. Clients accept
+  snapshots without the key and read it as null.
 - There are at most `maxServedFilters` filters (default 4,000), and the
-  snapshot is at most 2,000,000 bytes.
+  snapshot is at most 2,000,000 bytes. The service enforces both by leaving out
+  the lowest-priority filters (§6.8, Serving caps), so a valid version never
+  produces an oversized snapshot.
 - `generatedAt` is the time the revision was created. Bytes for a revision
   are immutable.
 
@@ -1287,7 +1320,9 @@ The service migrations are **rebased** to a new baseline,
   the old store, and initialize a fresh store with the offline runner.
 - The runner refuses an old-lineage store. It never stamps or upgrades
   one.
-- Later migrations return to verified-backup-first upgrades.
+- Later migrations return to verified-backup-first upgrades. The first,
+  `0002_filter_expressions.sql`, adds the nullable expression columns below;
+  existing rows keep their values.
 
 **Kept tables (adapted from 0001–0008 and 0014):**
 
@@ -1313,10 +1348,10 @@ The service migrations are **rebased** to a new baseline,
 | `versions` | **version_id**, work_id, alias_id, label_text, status, merged_into, runtime_ms, trust, revision, reference_submission_id, quarantined, created_seq, created_at | Index on `(work_id, status)` and `(work_id, alias_id, label_text)` |
 | `version_match_keys` | **version_id**, **type**, **algorithm**, **value**, **size_bytes**, is_reference, observations | Index on `(type, algorithm, value, size_bytes)` |
 | `submissions` | **submission_id**, digest (unique), contributor_id, installation_id, key_id, version_id, accepted_seq (unique, monotonic), tier, artifact_bytes, manifest_bytes, envelope_bytes, alignment_hint_json, fit_json, state (`counted`\|`superseded`\|`quarantined`), created_at | Index on `(version_id, contributor_id, accepted_seq)` and `(version_id, submission_id)` |
-| `submission_entries` | **submission_id**, **entry_id**, kind, proposed_filter_id, start_ms, end_ms, category, subcategory, severity, action, origin, manual_review, locally_verified, model_version, aligned_start_ms, aligned_end_ms, weight, ignored_reason, quarantined | — |
+| `submission_entries` | **submission_id**, **entry_id**, kind, proposed_filter_id, start_ms, end_ms, category, subcategory, severity, action, expression, origin, manual_review, locally_verified, model_version, aligned_start_ms, aligned_end_ms, weight, ignored_reason, quarantined | — |
 | `submission_coverage` | **submission_id**, **category**, **ordinal**, start_ms, end_ms | — |
-| `filter_registry` | **filter_id**, version_id, created_seq, incumbent_subcategory, incumbent_action, state, merged_into, quarantined | Index on `version_id` and `(version_id, filter_id)` |
-| `master_filters` | **filter_id**, version_id, category, subcategory, severity, action, start_ms, end_ms, spread_start_ms, spread_end_ms, confidence, contributor_count, attestations, upvotes, downvotes, disputes, coverage_negatives, low_confidence, served, subcategory_tally_json, severity_tally_json, action_tally_json | Index on `(version_id, served)` |
+| `filter_registry` | **filter_id**, version_id, created_seq, incumbent_subcategory, incumbent_action, incumbent_expression, state, merged_into, quarantined | Index on `version_id` and `(version_id, filter_id)` |
+| `master_filters` | **filter_id**, version_id, category, subcategory, severity, action, expression, start_ms, end_ms, spread_start_ms, spread_end_ms, confidence, contributor_count, attestations, upvotes, downvotes, disputes, coverage_negatives, low_confidence, served, subcategory_tally_json, severity_tally_json, action_tally_json | Index on `(version_id, served)` |
 | `filter_attestations` | **submission_id**, **entry_id**, filter_id, contributor_id, kind (`support`\|`dispute`\|`coverage_negative`), implicit (0/1), counted (0/1), prior_filter_id | Index on `(filter_id, contributor_id)`. Implicit rows have `entry_id = "cov:" + filterId` |
 | `filter_votes` | **filter_id**, **contributor_id**, vote (`up`\|`down`), receipt_id, excluded, updated_at | Index on `contributor_id` |
 | `master_revisions` | **version_id**, **revision**, snapshot_digest, generated_at, snapshot_bytes (nullable after supersession, if no receipt) | — |
@@ -1376,7 +1411,7 @@ conservatively; none changes a wire format:
 | `matchToleranceMs` | 500 | N in §6.5. Never sent to clients |
 | `severityWeights` | `{"low":1,"medium":1,"high":3}` | §6.7 |
 | `confidenceFloor` | 0.05 | Serving floor (§6.8) |
-| `coverageNegativeWeight` | 1.0 | Weight of a coverage negative; 1.0 counts it as a full downvote (owner decision). Lower it to weaken coverage negatives |
+| `coverageNegativeWeight` | 0.25 | Weight of a coverage negative; 0.25 counts it as a quarter of a downvote (owner decision). Raise it to strengthen coverage negatives |
 | `candidatePromotionContributors` | 3 | §3.5 |
 | `alignmentSearchMs` | 30000 | §6.3 |
 | `alignmentMinAnchors` | 3 | §6.3 |
@@ -1423,10 +1458,10 @@ suggested default for each, which the owner should confirm.
 
 1. **Action merge rule.** The suggested default is a plurality vote, where
    ties keep the incumbent, then the first member's action (§6.7).
-2. **Coverage-negative weight.** Resolved: the owner set the default to 1.0, so a
-   shared submission that scanned the channel over a filter's range without
-   finding it counts as a full downvote. Coverage is per channel, not per model
-   (§5.2, §6.8). The weight stays operator-configurable (§8.1).
+2. **Coverage-negative weight.** Resolved: the owner set the default back to
+   0.25, so a shared submission that scanned the channel over a filter's range
+   without finding it counts as a quarter of a downvote. Coverage is per channel,
+   not per model (§5.2, §6.8). The weight stays operator-configurable (§8.1).
 3. **Tier 1–3 match to a version with a different label.** The suggested
    default is that the label wins: the submission doesn't attach, and it is
    handled by rule 1, 2 or 4. The key collision is visible to moderators

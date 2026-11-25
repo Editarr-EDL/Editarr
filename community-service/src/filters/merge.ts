@@ -4,7 +4,7 @@ import { sweepClusters } from './clustering';
 import { selectCounted } from './counted';
 import { assignFilterIds } from './ids';
 import { DEFAULT_MERGE_POLICY, type MergePolicy } from './policy';
-import { nextRevision, servedContent } from './revision';
+import { nextRevision, servedContent, SNAPSHOT_MAX_BYTES, snapshotFilter } from './revision';
 import { collectSignals, type FilterBounds } from './signals';
 import { compareAscii, integerMedian, wilson } from './stats';
 import type { MasterFilter, MergeInput, MergeResult } from './types';
@@ -37,6 +37,7 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
     const classification = classifyCluster(cluster, row, policy);
     row.incumbentSubcategory = classification.subcategory;
     row.incumbentAction = classification.action;
+    row.incumbentExpression = classification.expression;
     return { filterId, cluster, classification, quarantined: row.quarantined };
   });
   const bounds: FilterBounds[] = classified.map(({ filterId, cluster, classification }) =>
@@ -52,9 +53,9 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
     const positive = count.attestations + count.upvotes;
     const negative = count.downvotes + count.disputes + policy.coverageNegativeWeight * count.coverageNegatives;
     const confidence = wilson(positive, negative);
-    const { category, subcategory, severity, action, startMs, endMs, spread, tallies } = classification;
+    const { category, subcategory, severity, action, expression, startMs, endMs, spread, tallies } = classification;
     return {
-      filterId, mergedIds: mergedIds.get(filterId) ?? [], category, subcategory, severity, action, startMs, endMs, spread,
+      filterId, mergedIds: mergedIds.get(filterId) ?? [], category, subcategory, severity, action, expression, startMs, endMs, spread,
       confidence, contributorCount: count.attestations,
       support: { attestations: count.attestations, upvotes: count.upvotes },
       negative: { downvotes: count.downvotes, disputes: count.disputes, coverageNegatives: count.coverageNegatives },
@@ -64,20 +65,21 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
     };
   }).sort(compareSnapshot);
   capServed(filters, policy.maxServedFilters);
-  const servedFilters = filters.filter(filter => filter.served);
 
   const runtimeMs = counted.length ? integerMedian(counted.map(submission => submission.input.durationMs)) : null;
   const trust = versionTrust(input, counted.map(submission => submission.input.contributorId), rows, quarantinedContributors);
-  const computed = servedContent(input.versionId, input.header, runtimeMs, trust, servedFilters);
+  const content = (served: readonly MasterFilter[]) => servedContent(input.versionId, input.header, runtimeMs, trust, served);
+  const computed = fitServedSize(filters, content);
+  const servedFilters = filters.filter(filter => filter.served);
   const frozen = moderation.versionQuarantined ? input.previous?.servedContent ?? null : null;
-  const content = frozen ?? computed;
+  const stored = frozen ?? computed;
   const fits = new Map(counted.map(submission => [submission.input.submissionId, submission.fit]));
   return {
     versionId: input.versionId, filters, servedFilters,
     registry: [...rows.values()].sort((a, b) => compareAscii(a.filterId, b.filterId)),
     submissions: states.map(state => ({ ...state, fit: fits.get(state.submissionId) ?? null })),
-    attestations, runtimeMs, trust, servedContent: content,
-    revision: nextRevision(input.previous, content, moderation.versionQuarantined),
+    attestations, runtimeMs, trust, servedContent: stored,
+    revision: nextRevision(input.previous, stored, moderation.versionQuarantined),
   };
 }
 
@@ -86,12 +88,39 @@ export function compareSnapshot(a: MasterFilter, b: MasterFilter) {
   return a.startMs - b.startMs || a.endMs - b.endMs || compareAscii(a.category, b.category) || compareAscii(a.filterId, b.filterId);
 }
 
-/** Keep at most `limit` served filters: highest confidence first, then snapshot order. */
+/** Served filters by serving priority: highest confidence first, then snapshot order. */
+function servingRank(filters: readonly MasterFilter[]) {
+  return filters.filter(filter => filter.served).sort((a, b) => b.confidence - a.confidence || compareSnapshot(a, b));
+}
+
+/** Keep at most `limit` served filters, in serving priority. */
 function capServed(filters: MasterFilter[], limit: number) {
-  const served = filters.filter(filter => filter.served);
-  if (served.length <= limit) return;
-  const ranked = [...served].sort((a, b) => b.confidence - a.confidence || compareSnapshot(a, b));
-  for (const filter of ranked.slice(limit)) filter.served = false;
+  for (const filter of servingRank(filters).slice(limit)) filter.served = false;
+}
+
+/** Room for the `revision` and `generatedAt` fields `snapshotBytes` inserts, at their largest. */
+const REVISION_FIELDS_BYTES = new TextEncoder().encode(
+  `,"revision":${Number.MAX_SAFE_INTEGER},"generatedAt":${Number.MAX_SAFE_INTEGER}`).byteLength;
+const utf8Length = (value: string) => new TextEncoder().encode(value).byteLength;
+
+/**
+ * Keep the snapshot within `SNAPSHOT_MAX_BYTES` (§7.3): while its bytes, with the largest
+ * possible revision fields, would exceed it, stop serving the lowest-priority served filter
+ * (the count cap's order). Returns the served content of the filters left served.
+ */
+function fitServedSize(filters: MasterFilter[], content: (served: readonly MasterFilter[]) => string) {
+  const served = () => filters.filter(filter => filter.served);
+  let result = content(served());
+  let excess = utf8Length(result) + REVISION_FIELDS_BYTES - SNAPSHOT_MAX_BYTES;
+  if (excess <= 0) return result;
+  // Each dropped filter frees its own JSON and one separating comma.
+  for (const filter of servingRank(filters).reverse()) {
+    if (excess <= 0) break;
+    filter.served = false;
+    excess -= utf8Length(JSON.stringify(snapshotFilter(filter))) + 1;
+  }
+  result = content(served());
+  return result;
 }
 
 /**

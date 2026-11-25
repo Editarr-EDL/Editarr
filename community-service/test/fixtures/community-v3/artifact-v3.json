@@ -74,6 +74,7 @@
         "subcategory": "punching",
         "severity": "medium",
         "action": "skip",
+        "expression": null,
         "evidence": {
           "origin": "downloaded",
           "manualReview": true,
@@ -91,19 +92,38 @@
         "subcategory": null,
         "severity": null,
         "action": null,
+        "expression": null,
         "evidence": {
           "origin": "model",
           "manualReview": false,
           "locallyVerified": false,
           "modelVersion": ""
         }
+      },
+      {
+        "entryId": "e3",
+        "kind": "support",
+        "proposedFilterId": null,
+        "startMs": 2400000,
+        "endMs": 2401200,
+        "category": "language",
+        "subcategory": "swearing",
+        "severity": "medium",
+        "action": "mute",
+        "expression": "Crème brûlée",
+        "evidence": {
+          "origin": "manual",
+          "manualReview": true,
+          "locallyVerified": true,
+          "modelVersion": null
+        }
       }
     ]
   },
-  "canonicalJson": "{\"schemaVersion\":\"community-artifact-3\",\"submissionId\":\"sub_01J9Z3K5C6Q\",\"createdAt\":1795553648,\"author\":{\"contributorId\":\"c_7f3a\",\"keyId\":\"sha256:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c\"},\"work\":{\"kind\":\"movie\",\"tmdb\":\"603\",\"tvdb\":null,\"season\":null,\"episode\":null,\"lastEpisode\":null,\"title\":\"The Matrix\",\"year\":1999},\"version\":{\"choice\":\"alias\",\"aliasId\":\"theatrical\"},\"media\":{\"durationMs\":8160512,\"matchKeys\":[{\"type\":\"sha256_sampled\",\"value\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"sizeBytes\":4823749120},{\"type\":\"md5_quick\",\"value\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"sizeBytes\":4823749120},{\"type\":\"audio_stream\",\"algorithm\":\"editarr-community-audio-pcm-s16le-16000-mono-sha256-1\",\"value\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"}]},\"alignmentHint\":{\"versionId\":\"v_12ab\",\"revision\":7,\"offsetMs\":-1200,\"scale\":1,\"anchors\":6},\"coverage\":[{\"category\":\"violence\",\"intervals\":[{\"startMs\":0,\"endMs\":8160512}]}],\"entries\":[{\"entryId\":\"e1\",\"kind\":\"support\",\"proposedFilterId\":\"f_9c1d\",\"startMs\":600000,\"endMs\":605000,\"category\":\"violence\",\"subcategory\":\"punching\",\"severity\":\"medium\",\"action\":\"skip\",\"evidence\":{\"origin\":\"downloaded\",\"manualReview\":true,\"locallyVerified\":true,\"modelVersion\":null}},{\"entryId\":\"e2\",\"kind\":\"dispute\",\"proposedFilterId\":\"f_44aa\",\"startMs\":1200000,\"endMs\":1203000,\"category\":\"language\",\"subcategory\":null,\"severity\":null,\"action\":null,\"evidence\":{\"origin\":\"model\",\"manualReview\":false,\"locallyVerified\":false,\"modelVersion\":\"\"}}]}",
-  "gzipBase64": "H4sIAAAAAAACE6VU224TMRD9FeTnrLT3S94AgYCKBxDiAVRFXns2a8WXxZeUUOXfGe8mbVqKQOq+JGOPz/icOeNb4tgIin4F64TRZE2YUSpo4Q8JtV4MlPmkICviQq+EiznvOWZhuEmzD9234qp6XX/CBGaBeuAvPVlnTVdVVVGX7YrQ4EdjyfoWgbW3og/e2BmCbZqhoHhyB4cFc6R5Va+rumwqSpuqrIuyKVmatxUfKt4Pec9o3xSc1lVWVG1bdND1TVO2WZ8D7bO0adKWkeOK3Bi7izV3QkdkZfYCsJJXvMewTiMjv4+BDlIiO6Ausl8imIQzHM6hpM6/ebjkhZcYkC8jvPhIkdZPBDwARaJZ13V4g/1ZUCQ+GsFiNpWCOkycf2fKfoR4mlEZb62ACxpP8GCpx9MfHVm3WZ1WWY671LPxCg649v2W+MMEd5ptHFWTBI7YeyrDXOuZX2y5+AWvDh6wYNnmRVN2WZ4eV3e1Fa82P4Jgu4uy/T++/4ClgQuzcR79pGaxtsYKPyrcQn08tTa58GhMTiamEpfVEhIUK00TZbRJFmmS7OJ27JkfOV4f5/ZttQLt3wntY7tOvZ47ut9kOY00LezF4oBmRcwwOPCxnQmSTVEEbDneKEM0jf6wuFMjNDOIRbcwt5jhPCH3Q0QVRoJm0cNYEywSWmzgUI8ZFzFB8wvD4FWv4xraC5bc+H+ZNIiinGbDhWky1uPCZM1kHPC3QmKJOXHYdCyLtrqrE/VN74thqTl8+q74SlxsTAGpCr2NG4A8sX/RRdjUMDea+eUFcjsxYYz68RkHFUYHbEXc4+ZGS0P57HVFdaDyMybCDVl7GwCH1aCy8oDvmRgEZp2WFQ6vvHvk4hAfo+UuJMnvJeHCTcHD3yQpy2U8zpLEjl5qgnHxWBRJ9TbExj4S5fz8nOVY4rMUp+foKSFmQn9oMKAvnhLhtP5QBUKOaJLfW2Rr5wIGAAA=",
-  "artifactDigest": "b923db85327ded7d0a010784e38262f38958e96c0782b703ee0b4fa29a85adc8",
-  "manifest": "{\"schema_version\":\"community-manifest-1\",\"artifact_format\":\"gzip-json\",\"artifact_schema_version\":\"community-artifact-3\",\"artifact_digest\":\"b923db85327ded7d0a010784e38262f38958e96c0782b703ee0b4fa29a85adc8\",\"submission_id\":\"sub_01J9Z3K5C6Q\",\"contributor_id\":\"c_7f3a\",\"key_id\":\"sha256:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c\",\"summary\":{}}",
-  "signatureBaseHex": "656469746172722d636f6d6d756e6974792d61727469666163742d7369676e61747572652d76310000000014636f6d6d756e6974792d6d616e69666573742d3100000014636f6d6d756e6974792d61727469666163742d3300000009677a69702d6a736f6e0000000f7375625f30314a395a334b3543365100000006635f37663361000000477368613235363a35363437356161373534363334373463303238356466356462663262636162373364613635313335383833396539623737343831623265616231303737303863f6c231ab13102d4567c83d9cafb9f3e92ea8c34bade28b4a2e9f5e275d14be6bb923db85327ded7d0a010784e38262f38958e96c0782b703ee0b4fa29a85adc8",
-  "envelope": "{\"schema_version\":\"community-artifact-signature-1\",\"signature\":\"+9P4PfSA0okKS9evy+hLcS+WBtfI/mkqoz8/4YL8ha45+ezC89ujY1I63I3ITzE6wlSQ6m7P2WFFabphQe+zBw==\"}"
+  "canonicalJson": "{\"schemaVersion\":\"community-artifact-3\",\"submissionId\":\"sub_01J9Z3K5C6Q\",\"createdAt\":1795553648,\"author\":{\"contributorId\":\"c_7f3a\",\"keyId\":\"sha256:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c\"},\"work\":{\"kind\":\"movie\",\"tmdb\":\"603\",\"tvdb\":null,\"season\":null,\"episode\":null,\"lastEpisode\":null,\"title\":\"The Matrix\",\"year\":1999},\"version\":{\"choice\":\"alias\",\"aliasId\":\"theatrical\"},\"media\":{\"durationMs\":8160512,\"matchKeys\":[{\"type\":\"sha256_sampled\",\"value\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"sizeBytes\":4823749120},{\"type\":\"md5_quick\",\"value\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"sizeBytes\":4823749120},{\"type\":\"audio_stream\",\"algorithm\":\"editarr-community-audio-pcm-s16le-16000-mono-sha256-1\",\"value\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"}]},\"alignmentHint\":{\"versionId\":\"v_12ab\",\"revision\":7,\"offsetMs\":-1200,\"scale\":1,\"anchors\":6},\"coverage\":[{\"category\":\"violence\",\"intervals\":[{\"startMs\":0,\"endMs\":8160512}]}],\"entries\":[{\"entryId\":\"e1\",\"kind\":\"support\",\"proposedFilterId\":\"f_9c1d\",\"startMs\":600000,\"endMs\":605000,\"category\":\"violence\",\"subcategory\":\"punching\",\"severity\":\"medium\",\"action\":\"skip\",\"expression\":null,\"evidence\":{\"origin\":\"downloaded\",\"manualReview\":true,\"locallyVerified\":true,\"modelVersion\":null}},{\"entryId\":\"e2\",\"kind\":\"dispute\",\"proposedFilterId\":\"f_44aa\",\"startMs\":1200000,\"endMs\":1203000,\"category\":\"language\",\"subcategory\":null,\"severity\":null,\"action\":null,\"expression\":null,\"evidence\":{\"origin\":\"model\",\"manualReview\":false,\"locallyVerified\":false,\"modelVersion\":\"\"}},{\"entryId\":\"e3\",\"kind\":\"support\",\"proposedFilterId\":null,\"startMs\":2400000,\"endMs\":2401200,\"category\":\"language\",\"subcategory\":\"swearing\",\"severity\":\"medium\",\"action\":\"mute\",\"expression\":\"Crème brûlée\",\"evidence\":{\"origin\":\"manual\",\"manualReview\":true,\"locallyVerified\":true,\"modelVersion\":null}}]}",
+  "gzipBase64": "H4sIAAAAAAACE6WUzW4TMRDHX6XyOSvt92ZzgwoEVD2AEAdQFXnt2cSKvV5sb9JQ5X3gGTj2xRh7kzQtRUTqXpKxxzOe3/zHd8SyJSj6BYwVuiMzwrRSQyfcNqLGiZYyF2VkQuzQKGG9z3uOXmjO4+RD/TW7Ki7Lj+jADFAH/JUjs6Sqi6LIynw6IXRwS23I7A4Dd86IZnDahBBsXrUZxZMr2I4xlzQtyllR5lVBaVXkZZZXOYvTacHbgjdt2jDaVBmnZZFkxXSa1VA3VZVPkyYF2iRxVcVTRnYTstFm5XOuROcjK70WgJmc4g2aZewrcmtvdIOUWB1Q66sfLeiF1RwOpqTWvXm85ISTaJDPS7i4pljWLQbcAsVCk7qu8QbrA1AsfKkF895UCmrRMfyGkt0S/GlGpb+1Ai6oP8EHQx2evrZkNk3KuEhS3KWOLa9gi2vf7ojb9nBkNrdU9RI4xl5TOYRcL/x8y8UPeL11gAnzaZpVeZ2k8W5yzK14Mf8+CLY6Sdv85zsjLB240HPrUE8qwFpoI9xS4RbycdSY6ESj3jnqmYpsUkqIEFYcR0p3OhrRRMnJ7dgLP7K72YX2LToFnXsnOufbte916Oh6nqTUl2lgLUYFVBOi29aC8+2MsNgYIWDL8UYJRutQHwZ3SgzNNMaiCwgtZjhPWPvWRxVaQse8hjEnGCxolIFFHiEuxoSOnwgGr3rj11BeMPr6/+OkgYeynw079L02Dhd6o3ttgb8VElMEx3Zes8TL6pjH840fkmGqYD5/V3wlTjb6AUsV3cJvANaJ/fMqwqYOodHMjS+QXYkebbjtDdgR4X4u14KHyMgcNbEQ3pvrTSc15UH9inYDlZ/QETZk5swAOL4aWcstvnCiFei1X1Y4zvL47PkEOy/CE0jpAyQubD84+BekPB8H5gDJ9/iUEtrZU0ySdovBt/oJpsODdAA02gc4exDnoQkl/kWlRe08h2W//pgLIU+pZOdJZ1/GgUiaPyaC9jgIZxAhdoMv6xnCUWOLTumQS3P/U8FFY+5/y/tfYftZVAHRyxV0s/sDBMAeW1IHAAA=",
+  "artifactDigest": "08bdeb0d32360044cc4cd63c20cd52d9572cd2b757a50ddbe661ce1719ad931c",
+  "manifest": "{\"schema_version\":\"community-manifest-1\",\"artifact_format\":\"gzip-json\",\"artifact_schema_version\":\"community-artifact-3\",\"artifact_digest\":\"08bdeb0d32360044cc4cd63c20cd52d9572cd2b757a50ddbe661ce1719ad931c\",\"submission_id\":\"sub_01J9Z3K5C6Q\",\"contributor_id\":\"c_7f3a\",\"key_id\":\"sha256:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c\",\"summary\":{}}",
+  "signatureBaseHex": "656469746172722d636f6d6d756e6974792d61727469666163742d7369676e61747572652d76310000000014636f6d6d756e6974792d6d616e69666573742d3100000014636f6d6d756e6974792d61727469666163742d3300000009677a69702d6a736f6e0000000f7375625f30314a395a334b3543365100000006635f37663361000000477368613235363a353634373561613735343633343734633032383564663564626632626361623733646136353133353838333965396237373438316232656162313037373038632edb9465975441ed11dac2fe0356ffa38ef7af48c3296875b62060580f6e25f008bdeb0d32360044cc4cd63c20cd52d9572cd2b757a50ddbe661ce1719ad931c",
+  "envelope": "{\"schema_version\":\"community-artifact-signature-1\",\"signature\":\"cU4e1QAsR5+5H2oMAqlpVYAbxiiBeYrKX0z5IWvlWlObn1W917aeK/RC1secjQ3ow92ZAuMwjoQHrbVUV/mcBQ==\"}"
 }

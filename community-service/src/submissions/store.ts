@@ -22,7 +22,7 @@ export function submissionInput(stored: StoredSubmission, acceptedSeq: number): 
     coverage: artifact.coverage.map(item => ({ category: item.category, intervals: item.intervals })),
     entries: artifact.entries.map(entry => ({ entryId: entry.entryId, kind: entry.kind, proposedFilterId: entry.proposedFilterId,
       startMs: entry.startMs, endMs: entry.endMs, category: entry.category, subcategory: entry.subcategory,
-      severity: entry.severity, action: entry.action, origin: entry.evidence.origin,
+      severity: entry.severity, action: entry.action, expression: entry.expression ?? null, origin: entry.evidence.origin,
       locallyVerified: entry.evidence.locallyVerified, priorFilterId: null })),
   };
 }
@@ -41,9 +41,9 @@ export function submissionStatements(db: SqlDatabase, stored: StoredSubmission, 
         stored.tier, stored.artifactBytes, stored.manifestBytes, stored.envelopeBytes, JSON.stringify(artifactMatchKeys(artifact)),
         artifact.alignmentHint === null ? null : JSON.stringify(artifact.alignmentHint), now, stored.submissionId),
     db.prepare(`INSERT INTO submission_entries (submission_id, entry_id, kind, proposed_filter_id, start_ms, end_ms, category,
-        subcategory, severity, action, origin, manual_review, locally_verified, model_version)
+        subcategory, severity, action, expression, origin, manual_review, locally_verified, model_version)
       SELECT ?, value ->> '$.entryId', value ->> '$.kind', value ->> '$.proposedFilterId', value ->> '$.startMs', value ->> '$.endMs',
-        value ->> '$.category', value ->> '$.subcategory', value ->> '$.severity', value ->> '$.action',
+        value ->> '$.category', value ->> '$.subcategory', value ->> '$.severity', value ->> '$.action', value ->> '$.expression',
         value ->> '$.evidence.origin', value ->> '$.evidence.manualReview', value ->> '$.evidence.locallyVerified',
         value ->> '$.evidence.modelVersion' FROM json_each(?)`).bind(stored.submissionId, JSON.stringify(artifact.entries)),
     db.prepare(`INSERT INTO submission_coverage (submission_id, category, ordinal, start_ms, end_ms)

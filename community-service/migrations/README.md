@@ -2,8 +2,8 @@
 
 ## Current schema
 
-The current schema is the **`community-master-1` baseline, version 1**:
-`0001_master_baseline.sql`. It is the first migration of a new lineage, recorded in
+The current schema is **`community-master-1` version 2**: the baseline
+`0001_master_baseline.sql` and `0002_filter_expressions.sql`. It is the first migration of a new lineage, recorded in
 the immutable single-row `schema_lineage` table. See
 [contract §8](../../docs/community-scan-service-contracts.md#8-storage-schema-service)
 and [ADR 0002](../../docs/adr/0002-community-master-filter-sets.md).
@@ -51,6 +51,11 @@ The budget ledger, quota, release, contribution, artifact payload, import receip
 revision vote and per-handler usage tables were not carried into the baseline.
 
 ## Later migrations
+
+- **0002 filter expressions:** nullable `submission_entries.expression` (language
+  supports only), `filter_registry.incumbent_expression` and `master_filters.expression`
+  for the word or phrase of a language filter (contract §5.2, §6.7). Existing rows keep
+  their values; the upgrade runs after the verified backup.
 
 Add a new numbered file for every later schema change; never edit an applied
 migration. Later migrations return to verified-backup-first upgrades: the offline

@@ -220,7 +220,7 @@ it.each([false, true])("allows in-flight cancellation without overriding a commi
 });
 it("requires a version before previewing and shows master-set estimates in the summary", async () => {
   vi.mocked(api.prepareSharingPreview).mockResolvedValue({ ...sharingPreviewFixture(),
-    estimates: { approximate: true, newFilters: 4, confirmations: 27, adjustments: 3, disputes: 1 },
+    estimates: { approximate: true, newFilters: 4, confirmations: 27, adjustments: 3 },
     versionChoice: { choice: "other", text: "IMAX", label: "IMAX" },
     work: { kind: "movie", tmdb: "603", tvdb: null, title: "The Matrix", year: 1999 }, entryCount: 35 });
   render(<ShareAction source={{ kind: "scan", id: "source-local" }} name="Public source" />);
@@ -234,7 +234,7 @@ it("requires a version before previewing and shows master-set estimates in the s
   fireEvent.change(picker, { target: { value: "__other__" } });
   fireEvent.change(screen.getByLabelText("Version name (optional)"), { target: { value: "IMAX" } });
   const summary = within(await prepare());
-  expect(summary.getByText("≈4 new, ≈27 confirmations, 3 adjustments, 1 dispute")).toBeVisible();
+  expect(summary.getByText("≈4 new, ≈27 confirmations, 3 adjustments")).toBeVisible();
   expect(summary.getByText(/The Matrix \(1999\)/)).toHaveTextContent("The Matrix (1999) · IMAX");
   expect(vi.mocked(api.prepareSharingPreview).mock.calls.at(-1)?.[1]).toMatchObject({
     link_id: null, version_choice: { choice: "other", text: "IMAX" } });

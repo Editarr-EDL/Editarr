@@ -196,7 +196,8 @@ Returns the master view:
   "filters": [ {
     "filterId": "f_9c1d…", "category": "violence",
     "master": { "startMs": 600000, "endMs": 605050, "subcategory": "punching", "severity": "high", "action": "skip",
-                "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.354197347, "contributorCount": 4,
+                "expression": null,
+                "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.393857102, "contributorCount": 4,
                 "support": { "attestations": 4, "upvotes": 1 }, "negative": { "downvotes": 1, "disputes": 0, "coverageNegatives": 1 },
                 "lowConfidence": false, "present": true },
     "locallyVerified": true, "myVote": "up", "active": true } ] }
@@ -216,7 +217,9 @@ Field rules:
 - `filters` lists the filters the latest snapshot serves. The view is read-only:
   there are no local filter decisions (ADR 0002 U1).
 - `master` holds the filter's master values, mapped to the local timeline
-  through `alignment` when one is present.
+  through `alignment` when one is present. `expression` is a language filter's
+  merged word or phrase (contract §6.7), or null; the list shows it beside the
+  severity and action.
 - `locallyVerified` drives the "Locally verified" badge. It is true when the
   filter overlaps a finding of the same top-level category from a completed
   local model scan of this local version (after alignment; never while the
@@ -287,8 +290,9 @@ the same top-level category from a completed local model scan of the review's lo
 versions or among its scans (U7); it works for snapshots whose link is gone.
 
 - **Values.** A master mute becomes an `audio` filter with `mcf_channel: "audio"`;
-  a skip becomes a `visual` filter with `mcf_channel: "both"`. `label`, `details`
-  and `group_key` start empty; `confidence` is the master confidence. A filter whose
+  a skip becomes a `visual` filter with `mcf_channel: "both"`. `label` is the
+  master `expression` (a language filter's word or phrase), or empty without one;
+  `details` and `group_key` start empty; `confidence` is the master confidence. A filter whose
   subcategory doesn't belong to its category arrives unclassified (needs
   classification, like any review filter). Bounds are clipped to the runtime known
   when the filter is added (the shortest completed scan of the review, else of its
@@ -298,11 +302,12 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   on Refresh: a filter below the threshold, or Low Confidence while Show Low
   Confidence is off, arrives disabled. Changing the preferences later changes no
   review.
-- **`community_edited`** is true once the user directly changed the filter's enabled
-  state, times, classification, severity or action. The web app sets it on those
-  edits; bulk changes such as Apply Filter Defaults leave it unset, so they never
-  count as the user's verdict. Clients send it back on save; once set it never
-  resets, and the server ignores it on scan filters. Refresh and sharing use it.
+- **`community_edited`** is true once the user directly changed the filter's times,
+  classification, severity, action or, for a language filter, label (its expression). The web app sets it on
+  those edits. Turning a filter on or off, alone or by group, is a personal choice
+  of the review and never counts; nor do bulk changes such as Apply Filter Defaults.
+  Clients send it back on save; once set it never resets, and the server ignores it
+  on scan filters. Refresh and sharing use it.
 - **Policy.** The review owner's filter policy applies to community filters like
   any other: an enforced rule can require and enable one, and enforced severities
   replace its severity, as for hand-added filters.
@@ -323,9 +328,11 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   submitted filters by master filter ID, following `mergedIds` (a merged filter
   continues an edited review filter first, then any other, then one the user
   deleted):
-  - an edited filter (`community_edited`) keeps the user's values;
-  - an unedited filter takes the new master values and starting state, even when
-    bulk defaults had changed it;
+  - an edited filter (`community_edited`) keeps the user's values, including its
+    label;
+  - an unedited filter takes the new master values, including the expression as
+    its label, even when bulk defaults had changed them, and keeps the enabled
+    state the review gave it (one returning after removal starts as a new one);
   - a new served filter is added, enabled or disabled as above;
   - a filter the master no longer serves stays in the review with
     `community.removed: true`, disabled unless the user had edited it;
@@ -346,7 +353,8 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   errors (or `403 capability_denied`).
 - **Subtitles** (U5) use one rule for every filter: an enabled audio-channel
   language mute with a word or phrase (its label) redacts that expression. A
-  community filter starts without one, so it redacts nothing unless the user gives
+  community language filter's label is its master expression, so it redacts like
+  a scan filter; one without an expression redacts nothing unless the user gives
   it a label, exactly like any wordless filter. There is no community-specific
   subtitle alignment or summary.
 - **Exports.** A review needs at least one scan **or** one community filter to
@@ -542,18 +550,19 @@ The projection builds the entries as follows:
 
 | Source | Entry |
 | --- | --- |
-| Scan cue, or a review's scan filter | A `support` entry. When the local alignment places it on a served master filter (one the review doesn't already attest to), `proposedFilterId` is set |
-| Review community filter the user edited, now enabled | A `support` entry for its master filter (`proposedFilterId`), with the user's bounds, subcategory, severity and action, `origin: "downloaded"`, `manualReview: true`, and `locallyVerified` when a local model finding of the same category overlaps it. A filter that started disabled and the user enabled is a support too |
-| Review community filter the user disabled, that started enabled | A `dispute` entry for its master filter, with the master bounds |
-| Review community filter that started disabled and is still disabled | Not shared, even when the user adjusted its values |
+| Scan cue, or a review's scan filter | A `support` entry. When the local alignment places it on a served master filter (one the review doesn't already attest to), `proposedFilterId` is set. A language cue carries its label as `expression` when the label is a valid expression (contract §5.2) |
+| Enabled review community filter the user edited | A `support` entry for its master filter (`proposedFilterId`), with the user's bounds, subcategory, severity, action and, for a language filter, its label as `expression`; `origin: "downloaded"`, `manualReview: true`, and `locallyVerified` when a local model finding of the same category overlaps it |
+| Disabled review community filter | Not shared, whether or not the user edited it: turning a filter off is personal and is never a dispute |
 | Untouched review community filter (`community_edited` unset) | Not shared |
 | Community filter of a snapshot of another community version than the submission's link, or no longer served by the master | Not shared |
 | Local scan coverage | `coverage`: each completed audio stage covers every audio category, and each completed visual stage every video category except `commercial_content` and `dispensable_scenes`, for its analyzed ranges, whichever model ran. Saved reviews send none |
 
-"Edited" is the review filter's `community_edited` (§3). The Community tab's
-retired local decisions are never shared. In the estimates, confirmations count
-proposed cues and supported community filters, adjustments the supported ones
-whose values the user changed, and disputes the disabled ones.
+"Edited" is the review filter's `community_edited` (§3). Editarr never sends
+`dispute` entries (the protocol keeps the kind for compatibility); a 👎 vote (§6)
+is the only negative a user casts. The Community tab's retired local decisions are
+never shared. In the estimates, confirmations count proposed cues and supported
+community filters, and adjustments the supported ones whose values the user
+changed.
 
 The response:
 
@@ -564,14 +573,14 @@ master-set summary:
 ```json
 { "version": 1, "previewId": "…", "expiresAt": 1795554548,
   "terms": { "version": "…", "text": "…" }, "preview": { … },
-  "estimates": { "approximate": true, "newFilters": 4, "confirmations": 27, "adjustments": 3, "disputes": 1 },
+  "estimates": { "approximate": true, "newFilters": 4, "confirmations": 27, "adjustments": 3 },
   "versionChoice": { "choice": "alias", "aliasId": "theatrical", "label": "Theatrical" },
   "work": { "kind": "movie", "tmdb": "603", "tvdb": null, "title": "The Matrix", "year": 1999 },
   "entryCount": 35, "warnings": [] }
 ```
 
 - The UI renders the estimates as "≈4 new, ≈27 confirmations, 3
-  adjustments, 1 dispute".
+  adjustments".
 - The estimates are approximate because the server makes the final match
   using N, which clients never receive.
 
@@ -801,10 +810,12 @@ verified snapshot of that revision, else the link's rows), aligned as the snapsh
 was, with the owner's threshold and Low Confidence preference deciding each
 `default_selected`. Against those defaults:
 
-- a stored filter the owner had adjusted, or enabled despite the threshold, becomes
-  an enabled review filter with the adjusted values and `community_edited` set;
-- a filter the owner had rejected (left out of the snapshot) becomes a disabled
-  review filter with `community_edited` set, so sharing disputes it;
+- a stored filter the owner had adjusted becomes an enabled review filter with the
+  adjusted values and `community_edited` set;
+- a stored filter the owner had enabled despite the threshold stays enabled and is
+  unedited, since turning a filter on or off is never an edit;
+- a filter the owner had rejected (left out of the snapshot) becomes a disabled,
+  unedited review filter, so it is simply not shared;
 - the master's other filters the snapshot left out are added disabled and unedited;
 - untouched stored filters are unedited.
 
@@ -813,6 +824,13 @@ digest is recomputed in the new form, so a snapshot whose link hasn't changed re
 `current`. Decisions on links that no review includes no longer apply anywhere; the
 `community_master_filters` decision columns, update rows and dismissals are kept
 unused. No other row changes.
+
+**Development databases from the earlier 0040.** Builds of this branch before the
+owner's W4 decision (ADR 0002) shipped a 0040 that counted turning a filter on or off
+as an edit and made rejected decisions edited. 0040 was changed in place because it
+was never released, so no released database is affected. A development database
+already upgraded with that earlier 0040 isn't upgraded again; restore it from the
+pre-0040 backup the adoption path wrote before upgrading, and upgrade again.
 
 The migration runs only after the verified, recoverable backup, and its downgrade
 refuses while any community review filter exists. The upgrade tests start from

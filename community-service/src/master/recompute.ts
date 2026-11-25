@@ -54,19 +54,19 @@ export async function recomputeStatements(db: SqlDatabase, state: VersionState, 
   const submissions = json(state.submissions.map(submission => submission.submissionId));
   const statements: SqlStatement[] = [
     db.prepare('DELETE FROM master_filters WHERE version_id IN (SELECT value FROM json_each(?))').bind(sources),
-    db.prepare(`INSERT INTO filter_registry (filter_id, version_id, created_seq, incumbent_subcategory, incumbent_action, state,
-        merged_into, quarantined)
+    db.prepare(`INSERT INTO filter_registry (filter_id, version_id, created_seq, incumbent_subcategory, incumbent_action,
+        incumbent_expression, state, merged_into, quarantined)
       SELECT value ->> '$.filterId', ?, value ->> '$.createdSeq', value ->> '$.incumbentSubcategory', value ->> '$.incumbentAction',
-        value ->> '$.state', value ->> '$.mergedInto', value ->> '$.quarantined' FROM json_each(?) WHERE true
+        value ->> '$.incumbentExpression', value ->> '$.state', value ->> '$.mergedInto', value ->> '$.quarantined' FROM json_each(?) WHERE true
       ON CONFLICT(filter_id) DO UPDATE SET version_id = excluded.version_id, created_seq = excluded.created_seq,
         incumbent_subcategory = excluded.incumbent_subcategory, incumbent_action = excluded.incumbent_action,
-        state = excluded.state, merged_into = excluded.merged_into, quarantined = excluded.quarantined`)
+        incumbent_expression = excluded.incumbent_expression, state = excluded.state, merged_into = excluded.merged_into, quarantined = excluded.quarantined`)
       .bind(versionId, json(result.registry.map(row => ({ ...row, quarantined: Number(row.quarantined) })))),
-    db.prepare(`INSERT INTO master_filters (filter_id, version_id, category, subcategory, severity, action, start_ms, end_ms,
+    db.prepare(`INSERT INTO master_filters (filter_id, version_id, category, subcategory, severity, action, expression, start_ms, end_ms,
         spread_start_ms, spread_end_ms, confidence, contributor_count, attestations, upvotes, downvotes, disputes,
         coverage_negatives, low_confidence, served, subcategory_tally_json, severity_tally_json, action_tally_json)
       SELECT value ->> '$.filterId', ?, value ->> '$.category', value ->> '$.subcategory', value ->> '$.severity',
-        value ->> '$.action', value ->> '$.startMs', value ->> '$.endMs', value ->> '$.spread.startMs', value ->> '$.spread.endMs',
+        value ->> '$.action', value ->> '$.expression', value ->> '$.startMs', value ->> '$.endMs', value ->> '$.spread.startMs', value ->> '$.spread.endMs',
         value ->> '$.confidence', value ->> '$.contributorCount', value ->> '$.support.attestations', value ->> '$.support.upvotes',
         value ->> '$.negative.downvotes', value ->> '$.negative.disputes', value ->> '$.negative.coverageNegatives',
         value ->> '$.lowConfidence', value ->> '$.served', value -> '$.tallies.subcategory', value -> '$.tallies.severity',

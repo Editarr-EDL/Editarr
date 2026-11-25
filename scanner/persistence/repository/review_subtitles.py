@@ -100,7 +100,7 @@ def subtitle_mutes(policy, duration_seconds=None) -> tuple[SubtitleMute, ...]:
     """The words filtered subtitles redact: one rule for every filter, whatever its source.
 
     Each enabled audio-channel language mute with a word or phrase (its label) redacts
-    that expression; a mute without one, such as a community filter, changes nothing.
+    that expression; a mute without one changes nothing.
     """
     return tuple(
         SubtitleMute(item.start_seconds, item.end_seconds, item.label)

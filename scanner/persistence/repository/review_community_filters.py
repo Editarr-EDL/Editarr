@@ -3,11 +3,13 @@
 Including a master set stores a snapshot of its served filters (review_community_sources)
 and one ordinary `review_filters` row per snapshot entry, which then takes part in
 selection, adjustment, policy, exports, sidecars and subtitles like a scan filter; only
-its provenance (`community_source_id`, `community_filter_id`) differs. Below-threshold
-and Low Confidence filters start disabled. A refresh takes a new snapshot and keeps the
-user's edits by filter ID (following merges); unedited filters take the new master
-values, new ones start enabled or disabled the same way, and filters the master no
-longer serves stay flagged "Removed from community", disabled unless the user edited them.
+its provenance (`community_source_id`, `community_filter_id`) differs. Its label is the
+filter's expression. Below-threshold and Low Confidence filters start disabled. A
+refresh takes a new snapshot and keeps the user's edits by filter ID (following
+merges); unedited filters take the new master values (including the expression) but
+keep the enabled state the user chose, new ones start enabled or disabled the same way,
+and filters the master no longer serves stay flagged "Removed from community", disabled
+unless the user edited them.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ from scanner.modeling.community_review_filters import (
     clip,
     filter_values,
     merge_targets,
+    served,
     starts_enabled,
 )
 
@@ -84,6 +87,7 @@ def link_entries(db: Session, link: CommunityMasterLinkRow) -> list[dict]:
                 "subcategory": values["subcategory"],
                 "severity": values["severity"],
                 "edit_action": values["action"],
+                "expression": values.get("expression"),
                 "start_ms": values["startMs"],
                 "end_ms": values["endMs"],
                 "low_confidence": bool(values.get("lowConfidence")),
@@ -233,7 +237,11 @@ def _refreshed_rows(
             if fid in edited:
                 rows.append(_row(review_id, plan.row.id, entry, _values(value), edited=True))
             elif not entry.get("outside"):
+                # New master values, keeping the user's own choice to turn it on or off;
+                # a filter returning after removal (which disabled it) starts afresh.
                 values = {"id": value.id, **filter_values(entry)}
+                if served(old.get(fid, {})):
+                    values["selected"] = bool(value.selected)
                 rows.append(_row(review_id, plan.row.id, entry, values))
             continue
         gone = {**old[fid], "served": False}

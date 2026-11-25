@@ -1,23 +1,28 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { initializeDatabase, openDatabase, upgradeDatabase, verifiedBackup, migrationsDirectory, SCHEMA_LINEAGE } from '../../src/runtime/schema.mjs';
 
 const baseline = readFileSync(new URL('0001_master_baseline.sql', migrationsDirectory), 'utf8');
+const MIGRATIONS = readdirSync(migrationsDirectory).filter(name => /^\d{4}_.+\.sql$/.test(name)).sort();
+const CURRENT = MIGRATIONS.length;
 const workspace = prefix => mkdtempSync(join(tmpdir(), prefix));
 
-/** A migrations directory holding the baseline plus a synthetic later migration. */
-function laterMigrations(directory, sql) {
-  const root = join(directory, 'migrations');
+/** A migrations directory holding the first `count` real migrations plus an optional synthetic later one. */
+function migrationsRoot(directory, count, sql = null) {
+  const root = join(directory, `migrations-${count}${sql === null ? '' : '-later'}`);
   mkdirSync(root);
-  copyFileSync(new URL('0001_master_baseline.sql', migrationsDirectory), join(root, '0001_master_baseline.sql'));
-  writeFileSync(join(root, '0002_later.sql'), sql);
+  for (const name of MIGRATIONS.slice(0, count)) copyFileSync(new URL(name, migrationsDirectory), join(root, name));
+  if (sql !== null) writeFileSync(join(root, `${String(count + 1).padStart(4, '0')}_later.sql`), sql);
   return pathToFileURL(`${root}/`);
 }
+
+/** A migrations directory holding every real migration plus a synthetic later migration. */
+const laterMigrations = (directory, sql) => migrationsRoot(directory, CURRENT, sql);
 
 test('initialization is explicit, refuses overwrite and holds a single-writer lock', () => {
   const directory = workspace('community-schema-');
@@ -28,7 +33,7 @@ test('initialization is explicit, refuses overwrite and holds a single-writer lo
     assert.throws(() => initializeDatabase(path), /EEXIST/);
     const { database, version } = openDatabase(path);
     try {
-      assert.equal(version, 1);
+      assert.equal(version, CURRENT);
       assert.equal(database.connection.prepare('SELECT lineage FROM schema_lineage').get().lineage, SCHEMA_LINEAGE);
       assert.equal(database.connection.prepare("SELECT count(*) AS count FROM alias_spellings WHERE source = 'seed'").get().count, 19);
       const other = new DatabaseSync(path);
@@ -65,7 +70,7 @@ test('read-only inspection refuses mutations and leaves database bytes unchanged
     const before = readFileSync(path);
     const { database, version } = openDatabase(path, undefined, false, { readOnly: true });
     try {
-      assert.equal(version, 1);
+      assert.equal(version, CURRENT);
       assert.equal(database.connection.prepare('SELECT COUNT(*) AS count FROM operations').get().count, 0);
       assert.throws(() => database.connection.exec('CREATE TABLE forbidden (value TEXT)'), /readonly/);
     } finally { database.close(); }
@@ -136,11 +141,11 @@ test('a later migration upgrades the baseline only after a verified backup and p
     await upgradeDatabase(path, snapshot, root);
     const { database, version } = openDatabase(path, root);
     try {
-      assert.equal(version, 2);
+      assert.equal(version, CURRENT + 1);
       assert.deepEqual(database.connection.prepare('SELECT public_key FROM installation_keys').get().public_key, new Uint8Array([0, 255, 1, 128]));
     } finally { database.close(); }
     const restored = new DatabaseSync(snapshot, { readOnly: true });
-    try { assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 1); }
+    try { assert.equal(restored.prepare('PRAGMA user_version').get().user_version, CURRENT); }
     finally { restored.close(); }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
@@ -155,9 +160,52 @@ test('a failed later migration rolls back and keeps its recoverable backup', asy
     for (const candidate of [path, snapshot]) {
       const restored = new DatabaseSync(candidate, { readOnly: true });
       try {
-        assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 1);
+        assert.equal(restored.prepare('PRAGMA user_version').get().user_version, CURRENT);
         assert.equal(restored.prepare("SELECT count(*) AS count FROM sqlite_schema WHERE name = 'partial'").get().count, 0);
       } finally { restored.close(); }
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('0002 upgrades a baseline store to filter expressions after a verified backup and keeps its rows', async () => {
+  const directory = workspace('community-expressions-');
+  const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
+  try {
+    initializeDatabase(path, migrationsRoot(directory, 1));
+    const source = new DatabaseSync(path);
+    source.exec(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, display_name_key, created_at)
+        VALUES ('contributor', '12345678901234567', 'One Two Three', 'one two three', 1);`);
+    source.close();
+    assert.throws(() => openDatabase(path), /database_upgrade_required/);
+    await upgradeDatabase(path, snapshot);
+    const { database, version } = openDatabase(path);
+    try {
+      assert.equal(version, 2);
+      assert.equal(database.connection.prepare('SELECT display_name FROM contributors').get().display_name, 'One Two Three');
+      const columns = table => database.connection.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().map(row => row.name);
+      assert.ok(columns('submission_entries').includes('expression'));
+      assert.ok(columns('filter_registry').includes('incumbent_expression'));
+      assert.ok(columns('master_filters').includes('expression'));
+    } finally { database.close(); }
+    const restored = new DatabaseSync(snapshot, { readOnly: true });
+    try {
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 1);
+      assert.equal(restored.prepare('SELECT count(*) AS count FROM contributors').get().count, 1);
+    } finally { restored.close(); }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('expressions are stored only on language supports and hold 1–64 characters', () => {
+  const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  try {
+    for (const name of MIGRATIONS) database.exec(readFileSync(new URL(name, migrationsDirectory), 'utf8'));
+    const insert = (entryId, kind, category, expression) => database.prepare(`INSERT INTO submission_entries (submission_id,
+        entry_id, kind, start_ms, end_ms, category, origin, manual_review, locally_verified, expression)
+      VALUES ('s', ?, ?, 0, 1, ?, 'manual', 1, 1, ?)`).run(entryId, kind, category, expression);
+    insert('e1', 'support', 'language', 'damn');
+    insert('e2', 'support', 'violence', null);
+    assert.throws(() => insert('e3', 'support', 'violence', 'damn'), /CHECK/);
+    assert.throws(() => insert('e4', 'dispute', 'language', 'damn'), /CHECK/);
+    assert.throws(() => insert('e5', 'support', 'language', 'x'.repeat(65)), /CHECK/);
+  } finally { database.close(); }
 });

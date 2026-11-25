@@ -34,7 +34,7 @@ export function compareClusters(a: Cluster, b: Cluster) {
  */
 export function assignFilterIds(versionId: string, clusters: readonly Cluster[], duplicates: ReadonlyMap<PreparedEntry, Cluster>,
   registry: readonly RegistryEntry[], nextCreatedSeq?: number) {
-  const rows = new Map(registry.map(row => [row.filterId, { ...row }]));
+  const rows = new Map(registry.map(row => [row.filterId, { ...row, incumbentExpression: row.incumbentExpression ?? null }]));
   const rank = new Map(registry.map(row => [row.filterId, row.createdSeq]));
   let seq = nextCreatedSeq ?? registry.reduce((max, row) => Math.max(max, row.createdSeq), 0) + 1;
   const ordered = [...clusters].sort(compareClusters);
@@ -44,7 +44,7 @@ export function assignFilterIds(versionId: string, clusters: readonly Cluster[],
     if (id === null) id = newId(versionId, cluster, claimed);
     if (!rows.has(id)) {
       rows.set(id, { filterId: id, createdSeq: seq++, incumbentSubcategory: null, incumbentAction: null,
-        state: 'active', mergedInto: null, quarantined: false });
+        incumbentExpression: null, state: 'active', mergedInto: null, quarantined: false });
     }
     ids.set(cluster, id); claimed.set(id, cluster);
   }

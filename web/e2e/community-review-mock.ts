@@ -1,8 +1,9 @@
 /**
  * A saved review whose PUT keeps community filters the way the backend does
  * (scanner/persistence/repository/review_community_filters.py): including a master set adds its served
- * filters as normal review filters (below-threshold ones disabled), and Refresh keeps edited filters,
- * takes new master values for the others, adds new filters and flags filters no longer served.
+ * filters as normal review filters (below-threshold ones disabled, labeled with their expression), and
+ * Refresh keeps edited filters, takes new master values for the others while keeping their enabled state,
+ * adds new filters and flags filters no longer served.
  */
 import type { Page } from "@playwright/test";
 import { json, mockReview } from "./app-fixtures";
@@ -13,14 +14,14 @@ type Source = { id: string; entries: ServedFilter[]; removed: Set<string>; revis
 type Save = { community_memberships?: ReviewCommunityMembership[]; filters: ReviewFilter[] };
 
 const material = (entries: ServedFilter[]) => JSON.stringify(entries.map((entry) =>
-  [entry.filterId, entry.category, entry.subcategory, entry.severity, entry.action, entry.startMs, entry.endMs]));
+  [entry.filterId, entry.category, entry.subcategory, entry.severity, entry.action, entry.startMs, entry.endMs, entry.expression]));
 
 function defaults(sourceId: string, entry: ServedFilter, id = `row-${sourceId}-${entry.filterId}`): ReviewFilter {
   const mute = entry.action === "mute";
   return { id, source_scan_id: null, source_finding_id: null, community_source_id: sourceId, community_filter_id: entry.filterId,
     source: mute ? "audio" : "visual", category: entry.category as ReviewFilter["category"],
     subcategory: entry.subcategory as ReviewFilter["subcategory"], severity: entry.severity as ReviewFilter["severity"],
-    mcf_channel: mute ? "audio" : "both", mcf_comment: null, label: null, details: null, group_key: null,
+    mcf_channel: mute ? "audio" : "both", mcf_comment: null, label: entry.expression, details: null, group_key: null,
     start_seconds: entry.startMs / 1000, end_seconds: entry.endMs / 1000, confidence: entry.confidence,
     edit_action: mute ? "mute" : "skip", selected: entry.startsEnabled, community_edited: false };
 }
@@ -60,7 +61,12 @@ export async function mockCommunityReview(page: Page, community: CommunityMaster
     const rows: ReviewFilter[] = [];
     for (const row of current) {
       const entry = served.find((item) => item.filterId === row.community_filter_id);
-      if (entry) { rows.push(edited(row) ? row : defaults(source.id, entry, row.id)); source.removed.delete(entry.filterId); continue; }
+      if (entry) {
+        const returning = source.removed.has(entry.filterId);
+        rows.push(edited(row) ? row : { ...defaults(source.id, entry, row.id), ...(returning ? {} : { selected: row.selected }) });
+        source.removed.delete(entry.filterId);
+        continue;
+      }
       source.removed.add(row.community_filter_id!);
       rows.push(edited(row) ? row : { ...row, selected: false });
     }

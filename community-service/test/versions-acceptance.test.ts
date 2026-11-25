@@ -41,8 +41,8 @@ describe('D13 decision (pure)', () => {
 
   it('derives medians, Wilson trust and promotion from counted rows', () => {
     expect([integerMedian([3, 1, 2]), integerMedian([1, 2, 3, 6]), integerMedian([])]).toEqual([2, 2, null]);
-    expect([wilson(1, 0), wilson(1, 2), wilson(3, 0), wilson(5, 2), wilson(1, 9)])
-      .toEqual([0.207654955, 0.117618231, 0.375528264, 0.354197347, 0.046964148]);
+    expect([wilson(1, 0), wilson(1, 2), wilson(3, 0), wilson(5, 1.25), wilson(1, 9)])
+      .toEqual([0.207654955, 0.117618231, 0.375528264, 0.393857102, 0.046964148]);
     expect(versionTrust(['a', 'b'], ['b', 'c'])).toBe(wilson(2, 1));
     const row = (contributorId: string, acceptedSeq: number, tier: 1 | null, quarantined = false) =>
       ({ contributorId, acceptedSeq, tier, durationMs: acceptedSeq * 1000, quarantined });

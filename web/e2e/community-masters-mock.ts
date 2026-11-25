@@ -25,7 +25,11 @@ function filter(filterId: string, category: string, startMs: number, subcategory
 
 /** A served master filter as a saved review includes it: its values and whether it starts enabled. */
 export type ServedFilter = { filterId: string; category: string; subcategory: string; severity: string; action: string;
-  startMs: number; endMs: number; confidence: number; contributorCount: number; lowConfidence: boolean; startsEnabled: boolean };
+  expression: string | null; startMs: number; endMs: number; confidence: number; contributorCount: number; lowConfidence: boolean;
+  startsEnabled: boolean };
+
+/** A language filter carrying its word or phrase. */
+const saying = (item: MasterFilter, expression: string): MasterFilter => ({ ...item, master: { ...item.master, expression } });
 
 export type CommunityMastersMock = {
   requests: { method: string; path: string; body: unknown }[];
@@ -49,7 +53,7 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     linkState: "active", mergedInto: null });
   let filters = [
     filter("f_fight", "violence", 600_000, "violence", 0.8, { locallyVerified: true, myVote: "up" }),
-    filter("f_lang", "language", 900_000, "swearing", 0.3, {}, false, "medium"),
+    saying(filter("f_lang", "language", 900_000, "swearing", 0.3, {}, false, "medium"), "damn"),
     filter("f_gone", "nudity", 1_200_000, "nudity", 0.2, {}, true),
   ];
   // The backend rule for which filters start enabled (scanner/modeling/community_review_filters.py).
@@ -60,7 +64,7 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     alignment: { offsetMs: 0, scale: 1, anchors: 0 }, alignmentRevision: 12 } : null },
   servedFilters: () => filters.map((item) => ({ filterId: item.filterId, category: item.category,
     subcategory: item.master.subcategory ?? "", severity: item.master.severity ?? "", action: item.master.action,
-    startMs: item.master.startMs, endMs: item.master.endMs, confidence: item.master.confidence,
+    expression: item.master.expression ?? null, startMs: item.master.startMs, endMs: item.master.endMs, confidence: item.master.confidence,
     contributorCount: item.master.contributorCount, lowConfidence: item.master.lowConfidence, startsEnabled: startsEnabled(item) })) };
   const link = () => mock.state.link!;
 
@@ -111,7 +115,7 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
       if (action === "check") {
         const changed = mock.state.link.latestRevision < 13;
         if (changed) {
-          filters = [filters[0], filter("f_lang", "language", 901_000, "swearing", 0.4, {}, false, "high"),
+          filters = [filters[0], saying(filter("f_lang", "language", 901_000, "swearing", 0.4, {}, false, "high"), "Damn"),
             filter("f_new", "violence", 1_800_000, "violence", 0.7)];
           mock.state.link = { ...mock.state.link, appliedRevision: 13, latestRevision: 13 };
         }
@@ -120,7 +124,7 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
     }
     if (path.startsWith("sharing/")) {
       if (path.endsWith("/preview")) return json(route, { ...sharingPreviewFixture(), version: 1,
-        estimates: { approximate: true, newFilters: 4, confirmations: 27, adjustments: 3, disputes: 1 },
+        estimates: { approximate: true, newFilters: 4, confirmations: 27, adjustments: 3 },
         versionChoice: body.version_choice.choice === "other"
           ? { choice: "other", text: body.version_choice.text, label: body.version_choice.text ?? "Other" }
           : { choice: "alias", aliasId: body.version_choice.alias_id, label: "Theatrical" },

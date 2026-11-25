@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertSnapshotSize, DEFAULT_MASTER_POLICY, mergeVersion, parseMasterPolicy, SNAPSHOT_MAX_BYTES, snapshotBytes,
 } from '../src/filters';
+import fixture from './fixtures/community-v3/master-snapshot.json';
 import { HEADER, persist, workedExample } from './helpers/filters';
 
 describe('revision content (§6.9)', () => {
@@ -32,7 +33,9 @@ describe('revision content (§6.9)', () => {
     expect(Object.keys(snapshot)).toEqual(['schemaVersion', 'service', 'versionId', 'revision', 'generatedAt', 'work', 'versionInfo', 'filters']);
     expect(Object.keys(snapshot.versionInfo)).toEqual(['status', 'aliasId', 'label', 'labelText', 'runtimeMs', 'trust']);
     expect(snapshot).toMatchObject({ schemaVersion: 'community-master-snapshot-1', revision: 13, versionInfo: { runtimeMs: 8_160_512 } });
-    expect(snapshot.filters[0].confidence).toBe(0.354197347);
+    expect(snapshot.filters[0].confidence).toBe(0.393857102);
+    expect(snapshot.filters.map((filter: { expression: string | null }) => filter.expression)).toEqual([null, 'Damn']);
+    expect(snapshot.filters.map((filter: object) => Object.keys(filter))).toEqual((JSON.parse(fixture.snapshotJson) as { filters: object[] }).filters.map(filter => Object.keys(filter)));
     expect(() => assertSnapshotSize(new Uint8Array(SNAPSHOT_MAX_BYTES))).not.toThrow();
     expect(() => assertSnapshotSize(new Uint8Array(SNAPSHOT_MAX_BYTES + 1))).toThrow('snapshot_too_large');
   });

@@ -268,8 +268,19 @@ def test_subtitles_redact_enabled_audio_language_mutes_with_words_whatever_their
         served_filter(
             "f_off", 30_000, 32_000, action="mute", category="language", subcategory="swearing"
         ),
+        served_filter(
+            "f_said",
+            40_000,
+            42_000,
+            action="mute",
+            category="language",
+            subcategory="swearing",
+            expression="damn",
+        ),
     )
     saved = save(masters, review, include(link["linkId"]))
+    # A community filter's label is its expression, so it redacts like any other.
+    assert community(saved)["f_said"].label == "damn"
 
     def edit(filters):
         for value in filters:
@@ -281,6 +292,9 @@ def test_subtitles_redact_enabled_audio_language_mutes_with_words_whatever_their
     save(masters, review, keep(saved), edit=edit)
     with session(masters) as db:
         policy = prepare_review_policy(db, db.get(SavedReviewRow, review))
-        assert subtitle_mutes(policy, 120) == (SubtitleMute(20.0, 22.0, "darn"),)
+        assert subtitle_mutes(policy, 120) == (
+            SubtitleMute(20.0, 22.0, "darn"),
+            SubtitleMute(40.0, 42.0, "damn"),
+        )
         assert "community_subtitles" not in get_saved_review(db, review).model_dump()
         assert db.scalars(select(ReviewCommunitySourceRow)).one()

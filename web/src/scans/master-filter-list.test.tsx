@@ -107,3 +107,10 @@ it("hides downvoted rows only from the list, keeping one downvoted here until th
   fireEvent.click(toggle);
   expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });
+
+it("shows a language filter's word or phrase with its severity and action", () => {
+  render(<Harness filters={[masterFilter({ category: "language",
+    master: { ...masterFilter().master, subcategory: "swearing", action: "mute", expression: "damn" } })]} />);
+  const row = screen.getAllByRole("row")[1];
+  expect(within(row).getByText(/“damn” · /)).toBeInTheDocument();
+});
