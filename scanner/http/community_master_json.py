@@ -142,5 +142,6 @@ def sync_json(status: SyncStatus, *, ran: bool, locate) -> dict:
         "nextDueAt": epoch(status.next_due_at),
         "lastError": status.last_error,
         "unreadCount": status.unread_count - hidden_unread,
+        "pendingDownloads": status.pending_downloads,
         "notifications": shown,
     }

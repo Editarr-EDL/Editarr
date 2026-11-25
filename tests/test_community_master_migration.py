@@ -163,6 +163,11 @@ def _upgrade_with_backup(path, tmp_path):
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
     with sqlite3.connect(path) as database:
         assert database.execute("PRAGMA foreign_key_check").fetchall() == []
+        for table, column in (
+            ("community_master_links", "pending_revision"),
+            ("community_sync_state", "downloads_retry_at"),
+        ):
+            assert column in {row[1] for row in database.execute(f"PRAGMA table_info({table})")}
     return original
 
 

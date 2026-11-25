@@ -75,6 +75,8 @@ class CommunityMasterLinkRow(Base):
     alignment_revision = Column(Integer, nullable=True)
     link_state = Column(String(16), nullable=False)
     merged_into = Column(String(128), nullable=True)
+    # A newer revision the daily sync found but has not downloaded yet.
+    pending_revision = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
 
@@ -221,6 +223,8 @@ class CommunitySyncStateRow(Base):
     last_success_at = Column(DateTime, nullable=True)
     next_due_at = Column(DateTime, nullable=True)
     last_error_code = Column(String(64), nullable=True)
+    # Pending snapshot downloads wait until this time after `rate_limited`.
+    downloads_retry_at = Column(DateTime, nullable=True)
 
 
 class CommunitySyncNotificationRow(Base):

@@ -1092,7 +1092,11 @@ is `400 invalid_vote`. A contributor may cast `votesPerHour` votes (from
 `429 rate_limited` with `Retry-After`. Retries of a completed vote are not counted.
 A vote may name a retired filter ID listed in the receipt snapshot's `mergedIds`;
 the self-vote check follows the whole `mergedInto` chain to the current filter.
-Changing or removing a vote keeps a moderator's `exclude_vote`. A vote on a filter
+The vote is stored under the current filter ID. Changing or removing a vote
+replaces every non-excluded vote of the caller whose filter ID resolves through
+`mergedInto` to the same current filter, so a vote left on a since-merged ID
+never keeps counting. Changing or removing a vote keeps a moderator's
+`exclude_vote`. A vote on a filter
 whose version is merged meanwhile is recomputed on the target. The vote list returns
 `404 version_not_found`, `409 version_merged` and `410 version_unavailable` like
 §7.3.
@@ -1125,6 +1129,10 @@ whose version is merged meanwhile is recomputed on the target. The vote list ret
 - Unchanged items are omitted.
 - `unavailable` covers quarantined and unknown versions.
 - Sync issues no receipts.
+- Downloading changed versions uses `GET …/master` and its
+  `versionChecksPerHour` limit (§7.3). A client finishes the run's batches
+  first and defers downloads past that limit until `Retry-After`, without a
+  new run.
 
 **Clarifications.** Runs are scoped to the signing key's installation. A request
 that would exceed the run's batches or window, or start a run past the daily limit,
@@ -1362,7 +1370,7 @@ conservatively; none changes a wire format:
 | `alignmentMinAnchors` | 3 | §6.3 |
 | `alignmentMinDriftSpanMs` | 300000 | §6.3 |
 | `alignmentMaxScaleDeviation` | 0.05 | §6.3. Covers 23.976/25 fps speed-up |
-| `maxServedFilters` | 4000 | Per snapshot |
+| `maxServedFilters` | 4000 | Per snapshot; 1–4,000, the client's snapshot limit |
 | `syncRunsPerDay` | 1 | Per installation, rolling 24 h |
 | `syncMaxBatchesPerRun` | 20 | — |
 | `syncRunWindowSeconds` | 600 | — |
