@@ -200,7 +200,8 @@ Returns the master view:
                 "spread": { "startMs": 300, "endMs": 350 }, "confidence": 0.393857102, "contributorCount": 4,
                 "support": { "attestations": 4, "upvotes": 1 }, "negative": { "downvotes": 1, "disputes": 0, "coverageNegatives": 1 },
                 "lowConfidence": false, "present": true },
-    "locallyVerified": true, "myVote": "up", "active": true } ] }
+    "locallyVerified": true, "myVote": "up", "active": true } ],
+  "retiredVotes": { "f_41b0…": "down" } }
 ```
 
 Field rules:
@@ -226,6 +227,10 @@ Field rules:
   votes through, the filter that lists it.
 - `myVote` is the account's acknowledged vote on the filter (`up`, `down` or
   null); the web app shows it on the filter's vote button here and in reviews.
+- `retiredVotes` maps each filter the link no longer serves (its local row is kept
+  with `present: false`) to the account's last acknowledged vote on it; filters
+  without a vote are left out. Reviews still holding such a filter show that vote
+  on its unavailable vote button.
 - `locallyVerified` drives the "Locally verified" badge. It is true when the
   filter overlaps a finding of the same top-level category from a completed
   local model scan of this local version (after alignment; never while the
@@ -379,8 +384,10 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   votes from the master view (`GET /api/community/masters/{link_id}`), matching
   `community_filter_id` to `filterId` or to a filter's `mergedIds`. A snapshot
   without a live link (`link_id` null or `state: "link_unavailable"`), a filter the
-  link no longer serves, a link the caller can't read, or an account without
-  `community.feedback.submit` shows the vote unavailable.
+  link no longer serves (showing its `retiredVotes` entry), a link the caller can't
+  read, or an account without `community.feedback.submit` shows the vote
+  unavailable. A failed read other than `404` offers **Retry loading votes** on the
+  snapshot's Included scans entry.
 - Duplicating a review copies every snapshot with its filters; the link reference
   is kept only when the duplicate's owner owns the link. Deleting an account's
   master state keeps snapshots and filters and clears their link; transferring it,

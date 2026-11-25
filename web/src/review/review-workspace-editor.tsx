@@ -95,7 +95,8 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
           </span>;
         })}
         <ReviewCommunityEntries entries={community.entries} draft={draft} maySearch={community.maySearch}
-          disabled={busy || !access.field("evidence")} onChange={setDraft} />
+          disabled={busy || !access.field("evidence")} onChange={setDraft}
+          votesFailed={votes.loadFailed} onRetryVotes={votes.retry} />
       </div>;
   const roles = hasCombinedMembership && <div className="saved-review-membership-roles">
       <strong>Combined scan roles</strong>

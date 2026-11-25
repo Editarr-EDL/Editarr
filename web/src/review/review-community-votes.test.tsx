@@ -5,6 +5,10 @@ import type { ReviewCommunitySource, ReviewFilter } from "../api/api-review-type
 import { masterFilter, masterView } from "../scans/community-master-test-fixtures";
 import { SavedReviewOverview } from "./review-overview";
 import { useReviewCommunityVotes, voteUnavailable } from "./use-review-community-votes";
+import { communityEntries } from "./review-community";
+import { ReviewCommunityEntries } from "./review-community-sources";
+import { createReviewDraft } from "./review-draft";
+import type { SavedReview } from "../api/api-review-types";
 
 const capabilities = vi.hoisted(() => ({ granted: new Set(["community.search", "community.feedback.submit"]) }));
 vi.mock("../auth/auth-gate", async (original) => ({
@@ -41,9 +45,12 @@ function Review({ filters, sources, onChangeFilter = vi.fn() }: {
   filters: ReviewFilter[]; sources: ReviewCommunitySource[]; onChangeFilter?: () => void;
 }) {
   const votes = useReviewCommunityVotes(sources);
-  return <SavedReviewOverview filters={filters} memberships={[]} scans={[]} busy={false} defaultSort="time"
+  const draft = createReviewDraft({ id: "review-1", name: "Review", revision: 1, memberships: [], filters,
+    community_sources: sources } as unknown as SavedReview);
+  return <><ReviewCommunityEntries entries={communityEntries(draft, sources, [])} draft={draft} disabled={false} maySearch
+    onChange={vi.fn()} votesFailed={votes.loadFailed} onRetryVotes={votes.retry} /><SavedReviewOverview filters={filters} memberships={[]} scans={[]} busy={false} defaultSort="time"
     onToggleFilters={vi.fn()} onChangeFilter={onChangeFilter} onDeleteFilter={vi.fn()} onApplyDefaults={vi.fn()}
-    onPreviewFilter={vi.fn()} preview={null} previewDisabled={false} renderFilterVote={votes.renderVote} />;
+    onPreviewFilter={vi.fn()} preview={null} previewDisabled={false} renderFilterVote={votes.renderVote} /></>;
 }
 const row = (text: string) => screen.getAllByRole("row").find((item) => item.textContent?.includes(text))!;
 const pillIn = (text: string) => within(row(text)).queryByRole("button", { name: /^Your vote/ });
@@ -79,7 +86,8 @@ it("shows each community row's vote, leaves scan rows without one and follows me
 });
 
 it("explains why a detached snapshot, an unserved filter or an account without permission can't vote", async () => {
-  vi.mocked(fetchCommunityMaster).mockResolvedValue(masterView([masterFilter({ filterId: "f_up", myVote: "up" })]));
+  vi.mocked(fetchCommunityMaster).mockResolvedValue({ ...masterView([masterFilter({ filterId: "f_up", myVote: "up" })]),
+    retiredVotes: { f_gone: "down" } });
   const filters = [reviewFilter("f_up", 10), reviewFilter("f_gone", 100),
     reviewFilter("f_x", 200, { community_source_id: "src-2" }), reviewFilter("f_y", 250, { community_source_id: "src-3" })];
   const sources = [source(), source({ source_id: "src-2", link_id: null }),
@@ -88,6 +96,9 @@ it("explains why a detached snapshot, an unserved filter or an account without p
   await waitFor(() => expect(pillIn("Fight f_up")).toHaveAttribute("data-vote", "up"));
   expect(pillIn("Fight f_up")).not.toHaveAttribute("aria-disabled");
   expect(pillIn("Fight f_gone")).toHaveAttribute("aria-disabled", "true");
+  // A filter no longer served keeps showing the last vote on it.
+  expect(pillIn("Fight f_gone")).toHaveAttribute("data-vote", "down");
+  expect(pillIn("Fight f_y")).toHaveAttribute("data-vote", "none");
   expect(pillIn("Fight f_gone")).toHaveAccessibleDescription(voteUnavailable.notServed);
   expect(pillIn("Fight f_x")).toHaveAccessibleDescription(voteUnavailable.detached);
   expect(pillIn("Fight f_y")).toHaveAccessibleDescription(voteUnavailable.detached);
@@ -116,4 +127,17 @@ it("explains a link the reviewer can't read and a refused vote", async () => {
   fireEvent.click(screen.getByRole("menuitemradio", { name: "Thumbs up" }));
   expect(await within(row("Fight f_up")).findByRole("alert")).toHaveTextContent("You can’t vote on your own filter.");
   expect(pillIn("Fight f_up")).toHaveAttribute("data-vote", "none");
+});
+
+it("offers Retry loading votes after a failed load and shows the votes once it succeeds", async () => {
+  vi.mocked(fetchCommunityMaster).mockRejectedValueOnce(new MasterApiError("network_unavailable", true, 0))
+    .mockResolvedValue(masterView([masterFilter({ filterId: "f_up", myVote: "up" })]));
+  render(<Review sources={[source()]} filters={[reviewFilter("f_up", 10)]} />);
+  const retry = await screen.findByRole("button", { name: "Retry loading votes" });
+  expect(screen.getByText("Couldn’t load your votes on these filters.")).toBeInTheDocument();
+  expect(pillIn("Fight f_up")).toHaveAccessibleDescription(voteUnavailable.loadFailed);
+  fireEvent.click(retry);
+  await waitFor(() => expect(pillIn("Fight f_up")).toHaveAttribute("data-vote", "up"));
+  expect(pillIn("Fight f_up")).not.toHaveAttribute("aria-disabled");
+  expect(screen.queryByRole("button", { name: "Retry loading votes" })).toBeNull();
 });

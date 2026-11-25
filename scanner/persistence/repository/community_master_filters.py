@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import select
@@ -53,9 +53,13 @@ class MasterFilterView:
 
 @dataclass(frozen=True)
 class MasterView:
+    """The link, preferences and served rows; `retired_votes` maps filters the link no
+    longer serves to the account's last acknowledged vote on them."""
+
     link: CommunityMasterLinkRow
     preferences: Preferences
     filters: tuple[MasterFilterView, ...]
+    retired_votes: Mapping[str, str] = field(default_factory=dict)
 
 
 def baseline_of(row: CommunityMasterFilterRow) -> MasterValues:
@@ -137,7 +141,8 @@ def filter_view(
 
 
 def master_view(db: Session, owner_id: int, link_id: str) -> MasterView:
-    """The link with every served row, in master start order."""
+    """The link with every served row, in master start order, and the account's votes
+    on rows it no longer serves."""
     link = require_link(db, owner_id, link_id)
     preferences = get_preferences(db, owner_id)
     rows = db.scalars(
@@ -149,7 +154,14 @@ def master_view(db: Session, owner_id: int, link_id: str) -> MasterView:
         (filter_view(row, link, preferences) for row in rows),
         key=lambda view: (view.master["startMs"], view.master["endMs"], view.filter_id),
     )
-    return MasterView(link, preferences, tuple(views))
+    retired = db.execute(
+        select(CommunityMasterFilterRow.filter_id, CommunityMasterFilterRow.my_vote).where(
+            CommunityMasterFilterRow.link_id == link.id,
+            CommunityMasterFilterRow.present.is_(False),
+            CommunityMasterFilterRow.my_vote.is_not(None),
+        )
+    ).all()
+    return MasterView(link, preferences, tuple(views), dict(retired))
 
 
 def _require_row(db: Session, owner_id: int, link_id: str, filter_id: str):

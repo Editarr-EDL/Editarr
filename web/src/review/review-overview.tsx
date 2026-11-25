@@ -193,8 +193,8 @@ export function SavedReviewOverview({
           <CommunityFilterSource filters={result.filters} /></td>
         <td><span className="finding-preview"><span className="saved-review-filter-actions">{result.filters.map(filter => <span className="saved-review-filter-action" key={filter.id}>
           {requiredIds.has(filter.id) && <small>Required by instance policy</small>}
-          <button type="button" className="btn-secondary compact-button" aria-label={`Preview filter ${filter.id}`} onClick={() => onPreviewFilter(filter)} disabled={busy || previewDisabled}>Preview</button>
-          {renderFilterVote && isCommunityFilter(filter) && renderFilterVote(filter, voteName(filter, source, categoryName))}
+          <span className="saved-review-filter-primary"><button type="button" className="btn-secondary compact-button" aria-label={`Preview filter ${filter.id}`} onClick={() => onPreviewFilter(filter)} disabled={busy || previewDisabled}>Preview</button>
+          {renderFilterVote && isCommunityFilter(filter) && renderFilterVote(filter, voteName(filter, source, categoryName))}</span>
           <button type="button" className="btn-secondary compact-button" aria-label={`Edit filter ${filter.id}`} aria-expanded={editingFilterId === filter.id} disabled={busy} onClick={() => setEditingFilterId(current => current === filter.id ? null : filter.id)}>Edit</button>
           <button type="button" className="danger-button compact-button" aria-label={`Delete filter ${filter.id}`} disabled={busy || !cuesEditable || requiredIds.has(filter.id)} onClick={() => { if (editingFilterId === filter.id) setEditingFilterId(null); onDeleteFilter(filter.id); }}>Delete</button>
         </span>)}</span>{preview && result.filters.some(filter => filter.id === preview.filterId) && (source === "audio" ? <audio aria-label={`Mute preview for ${rowName} at ${formatTime(result.startSeconds)}`} controls src={preview.url}>Your browser does not support audio previews.</audio> : <video aria-label={`Video preview for ${rowName} at ${formatTime(result.startSeconds)}`} controls src={preview.url}>Your browser does not support video previews.</video>)}</span></td>

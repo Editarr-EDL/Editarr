@@ -9,6 +9,15 @@ const choices: Array<{ value: VoteValue; label: string; glyph: string }> = [
 ];
 const stateLabel = (vote: MyVote) => vote === "up" ? "Thumbs up" : vote === "down" ? "Thumbs down" : "none";
 const menuGap = 6;
+
+/** The pill's nearest scrolling ancestor, whose visible bounds it must stay in for the menu to stay open. */
+function scrollingAncestor(element: Element): Element | null {
+  for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(node);
+    if (/(auto|scroll|hidden)/.test(`${overflowX} ${overflowY}`)) return node;
+  }
+  return null;
+}
 const viewportInset = 8;
 
 /**
@@ -44,6 +53,11 @@ export function VoteMenuButton({ value, name, busy = false, unavailable = null, 
 
   useLayoutEffect(() => {
     if (!open) return;
+    /** Close once the pill can't be seen, keeping keyboard focus on the pill rather than losing it. */
+    const dismiss = () => {
+      setOpenState(false);
+      if (menu.current?.contains(document.activeElement)) trigger.current?.focus({ preventScroll: true });
+    };
     /** Keep the menu under the pill (or above it near the bottom); close it once the pill scrolls out of view. */
     const place = () => {
       const button = trigger.current;
@@ -53,7 +67,7 @@ export function VoteMenuButton({ value, name, busy = false, unavailable = null, 
       const viewWidth = document.documentElement.clientWidth;
       const measured = anchor.width > 0 || anchor.height > 0;
       if (measured && (anchor.bottom <= 0 || anchor.top >= window.innerHeight || anchor.right <= 0 || anchor.left >= viewWidth)) {
-        setOpenState(false);
+        dismiss();
         return;
       }
       const { width, height } = popup.getBoundingClientRect();
@@ -73,10 +87,16 @@ export function VoteMenuButton({ value, name, busy = false, unavailable = null, 
       setOpen(false);
       if (!target.closest?.("button, a, input, select, textarea, [tabindex]")) trigger.current?.focus();
     };
+    // A pill scrolled out of its table or list is hidden even while still inside the window.
+    const observer = typeof IntersectionObserver === "undefined" || !trigger.current ? null
+      : new IntersectionObserver((records) => { if (records.some((record) => !record.isIntersecting)) dismiss(); },
+        { root: scrollingAncestor(trigger.current) });
+    if (observer && trigger.current) observer.observe(trigger.current);
     document.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("scroll", place, true);
     window.addEventListener("resize", place);
     return () => {
+      observer?.disconnect();
       document.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
@@ -94,7 +114,8 @@ export function VoteMenuButton({ value, name, busy = false, unavailable = null, 
     const index = items.indexOf(document.activeElement as HTMLElement);
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
     if (event.key === "Escape") { event.preventDefault(); close(); }
-    else if (event.key === "Tab") close(false);
+    // Tabbing continues from the pill, so focus doesn't jump from the portaled menu to the end of the page.
+    else if (event.key === "Tab") close();
     else if (step) { event.preventDefault(); items[(index + step + items.length) % items.length]?.focus(); }
     else if (event.key === "Home" || event.key === "End") { event.preventDefault(); items[event.key === "Home" ? 0 : items.length - 1]?.focus(); }
   };
@@ -115,7 +136,7 @@ export function VoteMenuButton({ value, name, busy = false, unavailable = null, 
       <span className="vote-menu-caret" aria-hidden="true">▾</span>
     </button>
     {unavailable && <span id={reasonId} className="visually-hidden">{unavailable}</span>}
-    {open && createPortal(<div ref={menu} id={menuId} className="vote-menu" role="menu" aria-label={`Vote for ${name}`}
+    {open && createPortal(<div ref={menu} id={menuId} className="vote-menu" role="menu" aria-orientation="horizontal" aria-label={`Vote for ${name}`}
       onKeyDown={onMenuKeyDown}>
       {choices.map((choice) => <button key={choice.value} type="button" role="menuitemradio" tabIndex={-1}
         aria-checked={current === choice.value} aria-label={choice.label} title={choice.label}

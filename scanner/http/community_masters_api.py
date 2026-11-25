@@ -182,6 +182,7 @@ def view_master(
             "link": link_json(db, view.link),
             "preferences": preferences_json(view.preferences),
             "filters": [filter_json(row, merges.get(row.filter_id, ())) for row in view.filters],
+            "retiredVotes": dict(view.retired_votes),
         }
         db.rollback()
         return result

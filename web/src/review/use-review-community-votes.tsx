@@ -12,13 +12,14 @@ import { MasterVote } from "../scans/master-vote";
 /** What a community review filter's vote pill shows: the served filter voted on and its vote, or why it can't vote. */
 export type ReviewVoteTarget = { linkId: string | null; filterId: string; myVote: MyVote; unavailable: string | null };
 
-type Loaded = { filters: MasterFilter[] } | { error: string };
+type Loaded = { filters: MasterFilter[]; retired: Record<string, "up" | "down"> } | { error: string; retryable: boolean };
 
 export const voteUnavailable = {
   permission: "Your account can’t vote on community filters.",
   detached: "This filter’s community version is no longer linked, so it can’t be voted on here.",
   notServed: "The community no longer serves this filter, so it can’t be voted on.",
   loading: "Loading your vote…",
+  loadFailed: "Couldn’t load your votes. Use Retry loading votes under Included scans.",
 };
 
 /** The served filter a review filter votes on: its own master filter, or the one that merged it (`mergedIds`). */
@@ -49,7 +50,7 @@ export function useReviewCommunityVotes(sources: ReviewCommunitySource[]) {
       setViews((current) => {
         const view = current[linkId];
         if (!view || !("filters" in view)) return current;
-        return { ...current, [linkId]: { filters: view.filters.map((item) => item.filterId === filterId ? { ...item, myVote } : item) } };
+        return { ...current, [linkId]: { ...view, filters: view.filters.map((item) => item.filterId === filterId ? { ...item, myVote } : item) } };
       });
     };
     window.addEventListener(COMMUNITY_VOTE_CHANGED_EVENT, onVote);
@@ -67,9 +68,14 @@ export function useReviewCommunityVotes(sources: ReviewCommunitySource[]) {
     const controller = new AbortController();
     for (const linkId of linkKey.split("\n")) {
       fetchCommunityMaster(linkId, controller.signal)
-        .then((view) => { if (!controller.signal.aborted) setViews((current) => ({ ...current, [linkId]: { filters: view.filters } })); })
+        .then((view) => {
+          if (!controller.signal.aborted) setViews((current) => ({ ...current, [linkId]: { filters: view.filters, retired: view.retiredVotes ?? {} } }));
+        })
         .catch((reason) => {
-          if (!controller.signal.aborted) setViews((current) => ({ ...current, [linkId]: { error: masterErrorText(reason) } }));
+          // A link the reviewer can't read stays unreadable; anything else may load on retry.
+          const retryable = (reason as { code?: string })?.code !== "not_found";
+          if (!controller.signal.aborted) setViews((current) => ({ ...current,
+            [linkId]: { error: retryable ? voteUnavailable.loadFailed : masterErrorText(reason), retryable } }));
         });
     }
     return () => controller.abort();
@@ -82,7 +88,8 @@ export function useReviewCommunityVotes(sources: ReviewCommunitySource[]) {
     const linkId = source?.link_id && source.state !== "link_unavailable" ? source.link_id : null;
     const loaded = linkId ? views[linkId] : undefined;
     const served = loaded && "filters" in loaded ? servedFilterFor(loaded.filters, filterId) : null;
-    const myVote = served?.myVote ?? null;
+    // A filter the link no longer serves shows the last vote stored for it.
+    const myVote = served ? served.myVote : loaded && "retired" in loaded ? loaded.retired[filterId] ?? null : null;
     const target = { linkId, filterId: served?.filterId ?? filterId, myVote };
     if (!mayVote || !maySearch) return { ...target, unavailable: voteUnavailable.permission };
     if (!linkId) return { ...target, unavailable: voteUnavailable.detached };
@@ -97,5 +104,10 @@ export function useReviewCommunityVotes(sources: ReviewCommunitySource[]) {
     return <MasterVote key={`${target.linkId}:${target.filterId}`} linkId={target.linkId} filterId={target.filterId}
       name={name} myVote={target.myVote} unavailable={target.unavailable} />;
   };
-  return { targetFor, renderVote };
+  /** Whether a snapshot's link failed to load votes in a way Retry may fix. */
+  const loadFailed = (linkId: string | null) => {
+    const loaded = linkId ? views[linkId] : undefined;
+    return !!loaded && "error" in loaded && loaded.retryable;
+  };
+  return { targetFor, renderVote, loadFailed, retry: reload };
 }

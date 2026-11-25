@@ -72,6 +72,20 @@ def test_the_view_lists_the_earlier_ids_a_merged_filter_continues(masters):
     assert merged == {"f_a": [], "f_m": ["f_b", "f_c"]}
 
 
+def test_the_view_keeps_votes_on_filters_no_longer_served(masters):
+    link_id = masters.link(USER, "v_1", "2", *REVISION_1)["linkId"]
+    for filter_id, vote in (("f_a", "up"), ("f_c", "down")):
+        body = {"vote": vote, "operation_id": f"vote-{filter_id}", "confirmed": True}
+        voted = masters.send("POST", f"/masters/{link_id}/filters/{filter_id}/vote", USER, body)
+        assert voted.status_code == 200, voted.text
+    assert masters.ok("GET", f"/masters/{link_id}", USER)["retiredVotes"] == {}
+    masters.service.publish("v_1", 2, *REVISION_2)
+    masters.ok("POST", f"/masters/{link_id}/check", USER, {})
+    view = masters.ok("GET", f"/masters/{link_id}", USER)
+    assert view["retiredVotes"] == {"f_c": "down"}
+    assert {row["filterId"]: row["myVote"] for row in view["filters"]}["f_a"] == "up"
+
+
 def test_a_fuzzy_link_applies_new_revisions_through_its_alignment(masters):
     link_id = updated_link(masters, tier="4")
     masters.ok("POST", f"/masters/{link_id}/check", USER, {})

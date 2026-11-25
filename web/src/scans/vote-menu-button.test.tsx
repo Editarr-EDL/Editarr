@@ -102,3 +102,33 @@ it("shows a pending vote as busy and an unavailable one with its reason", () => 
   fireEvent.keyDown(pill(), { key: "ArrowDown" });
   expect(screen.queryByRole("menu")).toBeNull();
 });
+
+it("lets Tab and Shift+Tab continue from the pill", () => {
+  render(<Harness />);
+  fireEvent.click(pill());
+  expect(screen.getByRole("menu")).toHaveAttribute("aria-orientation", "horizontal");
+  expect(fireEvent.keyDown(item("No vote"), { key: "Tab" })).toBe(true);
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(pill()).toHaveFocus();
+  fireEvent.click(pill());
+  expect(fireEvent.keyDown(item("No vote"), { key: "Tab", shiftKey: true })).toBe(true);
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(pill()).toHaveFocus();
+});
+
+it("closes when the pill scrolls out of its scrolling container, keeping focus on the pill", () => {
+  let report: IntersectionObserverCallback = () => undefined;
+  const roots: Array<Element | Document | null | undefined> = [];
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) { report = callback; roots.push(options?.root); }
+    observe() {}
+    disconnect() {}
+  });
+  render(<div style={{ overflowX: "auto" }} data-testid="scroller"><Harness /></div>);
+  fireEvent.click(pill());
+  expect(roots).toEqual([screen.getByTestId("scroller")]);
+  act(() => report([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver));
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(pill()).toHaveFocus();
+  vi.unstubAllGlobals();
+});

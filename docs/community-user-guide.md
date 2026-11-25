@@ -179,7 +179,9 @@ and show in the Community tab too. A filter whose community ID was merged into
 another votes on the filter that continues it. The button is shown unavailable,
 with the reason in its tooltip, when your account can't vote, when the set the
 review included was deleted, replaced or belongs to another account, or when the
-community no longer serves the filter.
+community no longer serves the filter (it still shows the vote you last gave it).
+If your votes couldn't be loaded, use **Retry loading votes** on the set's entry
+under **Included scans**.
 
 Unchecking the entry and saving removes the set and its filters from the review. A
 set that still needs alignment can't be included or refreshed until you approve its
