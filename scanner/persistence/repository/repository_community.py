@@ -11,10 +11,8 @@ from sqlalchemy.orm import Session
 from scanner.db import (
     CommunityConnectionRow,
     CommunityIdentityRow,
-    CommunityImportRow,
     CommunityOperationRow,
     SavedReviewRow,
-    ScanRow,
     UserRow,
 )
 from scanner.security.community_identity import load_or_create_installation_identity
@@ -152,61 +150,6 @@ def set_connection(
     row.sharing_enabled = sharing_enabled
     row.consent_version = consent_version
     row.consented_at = consented_at
-    db.flush()
-    return row
-
-
-def find_import(
-    db: Session, *, service_url: str, revision_id: str, digest: str
-) -> CommunityImportRow | None:
-    """Find a previously committed artifact before creating another local scan."""
-    return (
-        db.query(CommunityImportRow)
-        .filter_by(service_url=service_url, revision_id=revision_id, digest=digest)
-        .one_or_none()
-    )
-
-
-def attach_import(
-    db: Session,
-    *,
-    scan_id: str,
-    service_url: str,
-    contribution_id: str,
-    revision_id: str,
-    digest: str,
-    author_id: str,
-    artifact_type: str,
-) -> CommunityImportRow:
-    """Stage provenance beside an imported scan in the caller's transaction.
-
-    Call find_import before creating the scan, and commit the scan plus this row
-    together. A duplicate artifact linked to another scan must reuse that scan.
-    """
-    scan = db.get(ScanRow, scan_id)
-    if scan is None or scan.origin != "imported":
-        raise ValueError("Community provenance requires an imported scan")
-    existing = find_import(db, service_url=service_url, revision_id=revision_id, digest=digest)
-    if existing is not None:
-        if (
-            existing.scan_id,
-            existing.contribution_id,
-            existing.author_id,
-            existing.artifact_type,
-        ) != (scan_id, contribution_id, author_id, artifact_type):
-            raise ValueError("Import already linked to another scan or conflicting metadata")
-        return existing
-    row = CommunityImportRow(
-        id=str(uuid.uuid4()),
-        scan_id=scan_id,
-        service_url=service_url,
-        contribution_id=contribution_id,
-        revision_id=revision_id,
-        digest=digest,
-        author_id=author_id,
-        artifact_type=artifact_type,
-    )
-    db.add(row)
     db.flush()
     return row
 

@@ -218,8 +218,11 @@ No CLI, scheduler, startup, restore or ordinary Discord login rotates keys.
 
 Migration 0037 and [ADR 0002](adr/0002-community-master-filter-sets.md) retire the
 revision-based lookup, download, import-receipt, vote and review-repair flows. These
-local routes still require authentication, same-origin and CSRF, and now answer
-`410 {"error":"protocol_retired"}` with `Cache-Control: no-store`:
+local routes still require authentication, same-origin and CSRF, and their
+registered capability (`community.search` for lookup, `community.feedback.submit`
+for votes, `community.download` for the others; a caller without it gets `403
+capability_denied`). They now answer `410 {"error":"protocol_retired"}` with
+`Cache-Control: no-store`:
 
 | Retired route | Replacement |
 | --- | --- |
@@ -416,24 +419,18 @@ metadata fields. `ReviewMcfDocument` is the review-owned editable copy.
 `SavedReviewSummary` contains `revision`, `content_revision`, `edl_content_revision`,
 `mcf_content_revision`, `exports`, and nullable `repair`. A repair is present exactly
 when persisted `review_scan_repairs` rows exist. It contains `message`, ordered
-`missing_scan_ids`, earliest `detected_at`, `recover` counts (`kept_cues`,
-`removed_memberships`, `removed_accepted_credits`), and nullable `community`
-(`available`, nullable `unavailable_reason`). The message is
+`missing_scan_ids`, earliest `detected_at`, and `recover` counts (`kept_cues`,
+`removed_memberships`, `removed_accepted_credits`). The message is
 "This review uses a scan that no longer exists."
 
 Flagged reviews remain listed, but ordinary review operations return
 `409 {detail: {code: "review_needs_repair", message, repair}}` with
-`Cache-Control: no-store`. Delete and the two explicit repair commands remain
+`Cache-Control: no-store`. Delete and the explicit recover command remain
 available under their normal authority. Hidden reviews still return 404.
 Recover preserves copied cue values as manual/null-finding cues, removes missing
 memberships and accepted credits, rebuilds policy evidence, and clears repairs.
-Community repair requires review-save and `community.download` authority, current
-target access, and the existing verified-download gates. It restores provenance
-through event IDs (exact content fallback only without an old map) and rebinds the
-receipt atomically. Any unmatched reference rolls back the attempt. A failed
-download returns `409 community_scan_unavailable` in the same envelope, with
-`reason` and `transient`. Definitive reasons persist; retryable failures do not.
-Both commands return `SavedReview`; repeating a successful command is harmless.
+It returns `SavedReview`; repeating a successful recovery is harmless. The
+community repair route is [retired](#retired-revision-routes).
 Existing sidecars are not removed by migration or repair.
 
 `ExportStatus.exports` always has `edl` and `mcf`

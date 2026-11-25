@@ -146,7 +146,7 @@ def test_migration_resources_work_from_an_isolated_wheel(tmp_path):
             "import sqlite3; "
             "assert sqlite3.connect('fresh.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0037_community_master_sets'",
+            "'0038_retire_receipt_capabilities'",
         ],
         cwd=tmp_path,
         env=environment,
@@ -281,7 +281,7 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
             "import sqlite3; "
             "assert sqlite3.connect('data/scanner.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0037_community_master_sets'",
+            "'0038_retire_receipt_capabilities'",
         ],
         cwd=tmp_path,
         env=environment,
@@ -317,8 +317,8 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
     )
     vectors = support / "fixtures" / "community"
     vectors.mkdir(parents=True)
-    for name in ("donation-artifacts-v2.json", "download-receipt-v1.json"):
-        shutil.copyfile(root / "tests/fixtures/community" / name, vectors / name)
+    name = "donation-artifacts-v2.json"
+    shutil.copyfile(root / "tests/fixtures/community" / name, vectors / name)
     result = subprocess.run(
         [
             sys.executable,

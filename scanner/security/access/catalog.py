@@ -17,7 +17,7 @@ from .catalog_operations import OPERATION_CAPABILITIES
 from .catalog_sharing import COMMUNITY_CAPABILITIES, EXPORT_CAPABILITIES
 from .vocabulary import TARGET_RULES, AccountClass, OwnerPower
 
-CAPABILITY_CONTRACT_VERSION = "editarr-capabilities-9"
+CAPABILITY_CONTRACT_VERSION = "editarr-capabilities-10"
 
 
 def _index(rows: tuple[CapabilitySpec, ...]) -> Mapping[Capability, CapabilitySpec]:

@@ -8,9 +8,6 @@ from sqlalchemy import or_, select
 from scanner.db import (
     AuthSessionRow,
     CommunityIdentityRow,
-    CommunityImportRow,
-    CommunityImportTargetRow,
-    MediaItemRow,
     SavedReviewRow,
     ScanRow,
     UserRow,
@@ -43,7 +40,6 @@ PUBLISH_REVIEW = ActionPair(C.COMMUNITY_PUBLISH_OWN_REVIEW, C.COMMUNITY_PUBLISH_
 CHECK = ActionPair(C.COMMUNITY_PUBLICATIONS_CHECK_OWN, C.COMMUNITY_PUBLICATIONS_CHECK_OTHER)
 RETRY = ActionPair(C.COMMUNITY_PUBLICATIONS_RETRY_OWN, C.COMMUNITY_PUBLICATIONS_RETRY_OTHER)
 RETRACT = ActionPair(C.COMMUNITY_PUBLICATIONS_RETRACT_OWN, C.COMMUNITY_PUBLICATIONS_RETRACT_OTHER)
-RECEIPTS = ActionPair(C.COMMUNITY_RECEIPTS_RECOVER_OWN, C.COMMUNITY_RECEIPTS_RECOVER_OTHER)
 
 
 def contributor_account(db, user_id: int) -> AccountRef:
@@ -52,13 +48,6 @@ def contributor_account(db, user_id: int) -> AccountRef:
     if user is None or user.status != "active":
         raise not_found()
     return AccountRef(UserId(user.id), Role(user.role))
-
-
-@dataclass(frozen=True)
-class ImportTarget:
-    import_id: str
-    media_item_id: str
-    media_source_id: str
 
 
 @dataclass(frozen=True)
@@ -73,7 +62,7 @@ class ActivityAccess:
     """Authorize one source and contributor against fresh account and media state."""
 
     reviews: ReviewAccess
-    source: SourceRef | ScanMedia | ImportTarget
+    source: SourceRef | ScanMedia
     action: Action
     contributor_owner: int | None = None
     credential_ref: str | None = None
@@ -89,32 +78,6 @@ class ActivityAccess:
         return self.reviews.db
 
     def facts(self) -> ActivitySource:
-        if isinstance(self.source, ImportTarget):
-            imported = self.db.get(CommunityImportRow, self.source.import_id)
-            target = self.db.get(
-                CommunityImportTargetRow,
-                (self.source.import_id, self.source.media_item_id, self.source.media_source_id),
-            )
-            media = self.db.get(MediaItemRow, self.source.media_item_id)
-            scan = self.db.get(ScanRow, imported.scan_id) if imported is not None else None
-            if (
-                imported is None
-                or not all(
-                    (imported.artifact_bytes, imported.manifest_bytes, imported.signature_bytes)
-                )
-                or target is None
-                or media is None
-                or scan is None
-                or scan.status != "complete"
-            ):
-                raise not_found()
-            return ActivitySource(
-                None,
-                ScanMedia(
-                    media.server_id, media.jellyfin_id, media.library_id, target.resolved_local_path
-                ),
-                (),
-            )
         if isinstance(self.source, ScanMedia):
             return ActivitySource(None, self.source, ())
         if self.source.kind == "review":
@@ -158,7 +121,7 @@ class ActivityAccess:
                 decide(self.reviews.access, VIEW, ResourceRef(facts.owner, decision)), Allowed
             ):
                 raise not_found()
-        elif isinstance(self.source, (SourceRef, ImportTarget)):
+        elif isinstance(self.source, SourceRef):
             if not isinstance(
                 decide(self.reviews.access, C.SCANS_FINDINGS_READ, MediaRef(decision)), Allowed
             ):

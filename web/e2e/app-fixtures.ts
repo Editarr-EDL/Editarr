@@ -96,7 +96,7 @@ export function authenticationStatus(state: "setup_required" | "unauthenticated"
     sign_in: { jellyfin: true },
     display_name: signedIn ? "owner" : null,
     access: signedIn ? {
-      version: "editarr-capabilities-9",
+      version: "editarr-capabilities-10",
       permission_revision: 1,
       principal: { user_id: 1, role: "owner", credential: "session", status: "active", link_state: "verified" },
       capabilities: [...CAPABILITIES],

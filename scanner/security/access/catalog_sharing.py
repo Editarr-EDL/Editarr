@@ -19,14 +19,12 @@ _ASSIGN_MODE = "Assign an individual user's filter mode"
 _ENFORCE = "Enforce individual rules/subcategory severities"
 _FRESH = Authentication.FRESH_INTERACTIVE
 
-_FIND = "Search/find filters and download/import scans"
+_FIND = "Search/find and download community master filter sets"
 _VOTE = "Vote/submit feedback"
 _PUBLISH_OWN = "Publish own review or shared scan evidence"
 _PUBLISH_OTHER = "Publish another user's review"
 _PUBLICATIONS = "Check/retry/retract publications"
 _IDENTITY = "Manage connection/profile/enrollment/disconnection/key recovery"
-_OWN_RECEIPTS = "Recover/retry own import receipts"
-_OTHER_RECEIPTS = "Recover/retry another user's import receipts"
 
 EXPORT_CAPABILITIES: tuple[CapabilitySpec, ...] = (
     spec(C.EXPORTS_PERSONAL_DOWNLOAD_OWN, _OWN, EVERYONE, _OWN_EXPORTS),
@@ -73,11 +71,4 @@ COMMUNITY_CAPABILITIES: tuple[CapabilitySpec, ...] = (
     spec(C.COMMUNITY_IDENTITY_DISCONNECT_OTHER, Target.OTHER_ACCOUNT, ADMINS, _IDENTITY),
     spec(C.COMMUNITY_IDENTITY_KEYS_OWN, Target.SELF, EVERYONE, _IDENTITY),
     spec(C.COMMUNITY_IDENTITY_KEYS_OTHER, Target.OTHER_ACCOUNT, ADMINS, _IDENTITY),
-    spec(C.COMMUNITY_RECEIPTS_RECOVER_OWN, _OWN, EVERYONE, _OWN_RECEIPTS),
-    spec(
-        C.COMMUNITY_RECEIPTS_RECOVER_OTHER,
-        Target.OTHER_ACCOUNT_RESOURCE,
-        ADMINS,
-        _OTHER_RECEIPTS,
-    ),
 )

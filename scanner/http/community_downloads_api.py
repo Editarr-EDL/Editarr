@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.grants import PrincipalAccess
 from scanner.security.access.request_access import request_access
 
@@ -11,10 +12,10 @@ router = APIRouter(prefix="/api/community/downloads", tags=["community"])
 
 
 @router.post("")
-async def download(_access: PrincipalAccess = Depends(request_access)):
-    return protocol_retired()
+async def download(access: PrincipalAccess = Depends(request_access)):
+    return protocol_retired(access, C.COMMUNITY_DOWNLOAD)
 
 
 @router.post("/status")
-async def status(_access: PrincipalAccess = Depends(request_access)):
-    return protocol_retired()
+async def status(access: PrincipalAccess = Depends(request_access)):
+    return protocol_retired(access, C.COMMUNITY_DOWNLOAD)

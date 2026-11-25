@@ -48,7 +48,6 @@ _SHARE = _gated(
 _SEARCH = _gated(C.COMMUNITY_SEARCH)
 _DOWNLOAD = _gated(C.COMMUNITY_DOWNLOAD)
 _FEEDBACK = _gated(C.COMMUNITY_FEEDBACK_SUBMIT)
-_RECEIPTS = _gated(C.COMMUNITY_RECEIPTS_RECOVER_OWN, C.COMMUNITY_RECEIPTS_RECOVER_OTHER)
 _PUBLICATION_CHECK = _gated(
     C.COMMUNITY_PUBLICATIONS_CHECK_OWN, C.COMMUNITY_PUBLICATIONS_CHECK_OTHER
 )
@@ -437,8 +436,8 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
     ("GET /api/community/sync", _DOWNLOAD),
     ("POST /api/community/sync/run", _DOWNLOAD),
     ("POST /api/community/sync/notifications/read", _DOWNLOAD),
-    ("POST /api/community/import-receipts/recover", _RECEIPTS),
-    ("POST /api/community/import-receipts/{import_id}/retry", _RECEIPTS),
+    ("POST /api/community/import-receipts/recover", _DOWNLOAD),
+    ("POST /api/community/import-receipts/{import_id}/retry", _DOWNLOAD),
 )
 
 

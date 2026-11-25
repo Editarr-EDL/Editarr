@@ -91,8 +91,6 @@ export async function verifyCommunity(run, owner) {
     const memberPage = await open(member, 1440);
     await enroll(memberPage, "a".repeat(64));
     const memberState = await memberApi("GET", "/api/community/connection/status"); assert.equal(memberState.status, 200);
-    await memberPage.getByRole("button", { name: "Recover import receipts", exact: true }).click();
-    await expect(memberPage.getByText("No eligible import receipts.", { exact: true })).toBeVisible();
     await proof(memberPage, "community-own-1440");
     const adminPage = await open(admin, 1440); await enroll(adminPage, "b".repeat(64));
     const adminState = await adminApi("GET", "/api/community/connection/status"); assert.equal(adminState.status, 200);
@@ -116,7 +114,7 @@ export async function verifyCommunity(run, owner) {
     const review = (await imported.json()).review;
     const source = `/api/community/sharing/sources/review/${review.id}`;
     const preview = await memberApi("POST", `${source}/preview`, { name: "Original member contribution", identity_confirmed: true,
-      media: { provider: "tmdb", entity_type: "movie", reference: "123" } }); assert.equal(preview.status, 200);
+      media: { provider: "tmdb", entity_type: "movie", reference: "123" }, version_choice: { choice: "alias", alias_id: "theatrical" } }); assert.equal(preview.status, 200);
     const queued = await memberApi("POST", `/api/community/sharing/previews/${preview.body.previewId}/approve`, { confirmed: true }); assert.equal(queued.status, 200);
 
     for (const width of [1440, 320]) {
@@ -127,20 +125,19 @@ export async function verifyCommunity(run, owner) {
       await account.getByText("Community connection", { exact: true }).click();
       await expect(account.getByRole("heading", { name: "Community scans for mu32-member", exact: true })).toBeVisible();
       await expect(account.getByRole("button", { name: "Disconnect community", exact: true })).toBeEnabled();
-      await expect(account.getByRole("button", { name: "Recover import receipts", exact: true })).toBeEnabled();
       await expect(account.getByRole("region", { name: "Community scans for mu32-member", exact: true }).getByText(memberState.body.identity.installationId, { exact: true })).toBeVisible();
       await expect(account.getByText(adminState.body.identity.installationId, { exact: true })).toHaveCount(0);
       await account.getByRole("heading", { name: "Community scans for mu32-member", exact: true }).scrollIntoViewIfNeeded();
       await proof(page, `community-named-${width}`);
       await account.getByRole("button", { name: "Close", exact: true }).click();
 
-      const deniedCapabilities = ["community.identity.disconnect.other", "community.identity.keys.other", "community.identity.profile.other", "community.receipts.recover.other"];
+      const deniedCapabilities = ["community.identity.disconnect.other", "community.identity.keys.other", "community.identity.profile.other"];
       assert.equal((await ownerApi("PATCH", `/api/users/${admin.id}/permissions`, { overrides: Object.fromEntries(deniedCapabilities.map(capability => [capability, "deny"])), ...fresh })).status, 200);
       await page.reload();
       await page.getByRole("button", { name: "View mu32-member", exact: true }).click();
       await account.getByText("Community connection", { exact: true }).click();
       await expect(account.getByRole("heading", { name: "Community scans for mu32-member", exact: true })).toBeVisible();
-      for (const name of ["Disconnect community", "Recover with Discord", "Recover import receipts", "Save name"]) await expect(account.getByRole("button", { name, exact: true })).toHaveCount(0);
+      for (const name of ["Disconnect community", "Recover with Discord", "Save name"]) await expect(account.getByRole("button", { name, exact: true })).toHaveCount(0);
       assert.equal((await adminApi("POST", `/api/users/${member.id}/community/keys/rotate`, { confirmed: true })).status, 403);
       await account.getByRole("heading", { name: "Community scans for mu32-member", exact: true }).scrollIntoViewIfNeeded();
       await proof(page, `community-permission-refresh-${width}`);

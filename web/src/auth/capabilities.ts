@@ -1,5 +1,5 @@
 /**
- * The capability catalog the server may grant (`editarr-capabilities-9`).
+ * The capability catalog the server may grant (`editarr-capabilities-10`).
  * `tests/test_web_capability_contract.py` keeps this list equal to the backend catalog.
  */
 export const CAPABILITIES = [
@@ -39,8 +39,7 @@ export const CAPABILITIES = [
   "community.identity.enroll.other", "community.identity.profile.own",
   "community.identity.profile.other", "community.identity.disconnect.own",
   "community.identity.disconnect.other", "community.identity.keys.own",
-  "community.identity.keys.other", "community.receipts.recover.own",
-  "community.receipts.recover.other", "connections.view", "connections.test", "connections.edit",
+  "community.identity.keys.other", "connections.view", "connections.test", "connections.edit",
   "connections.disconnect", "models.inventory.view", "models.download", "models.progress.view.own",
   "models.download.cancel", "models.delete", "path_mappings.view", "path_mappings.test",
   "path_mappings.create", "path_mappings.update", "path_mappings.delete", "path_mappings.reorder",

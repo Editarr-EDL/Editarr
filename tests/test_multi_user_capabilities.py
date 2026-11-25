@@ -125,7 +125,7 @@ def _rows_to_capabilities() -> dict[str, set[C]]:
 
 
 def test_matrix_is_parsed_completely():
-    assert len(MATRIX) == 70
+    assert len(MATRIX) == 68
     assert all(len(cells) == 3 for cells in MATRIX.values())
 
 
@@ -251,8 +251,8 @@ def test_enforcing_filter_policy_requires_fresh_owner_authentication():
 
 
 def test_contract_digest_is_pinned_to_its_version():
-    assert CAPABILITY_CONTRACT_VERSION == "editarr-capabilities-9"
-    assert contract_digest() == "a3c9b242cf4785d533e79843e3e77688c412430759f27924fc489174c245a9d4"
+    assert CAPABILITY_CONTRACT_VERSION == "editarr-capabilities-10"
+    assert contract_digest() == "3fbadef64c0239432704aad73b77b1668dfcf86253222051480d8370af25f866"
 
 
 def test_every_web_fixture_names_the_current_contract_version():

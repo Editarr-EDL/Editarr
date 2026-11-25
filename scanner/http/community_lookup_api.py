@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.grants import PrincipalAccess
 from scanner.security.access.request_access import request_access
 
@@ -11,5 +12,5 @@ router = APIRouter(prefix="/api/community/lookup", tags=["community"])
 
 
 @router.post("")
-async def lookup(_access: PrincipalAccess = Depends(request_access)):
-    return protocol_retired()
+async def lookup(access: PrincipalAccess = Depends(request_access)):
+    return protocol_retired(access, C.COMMUNITY_SEARCH)

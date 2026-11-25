@@ -4,12 +4,10 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from scanner.db import CommunityImportRow, CommunityOperationRow
+from scanner.db import CommunityOperationRow
 from scanner.persistence.migrations.adoption import upgrade_existing_database
 from scanner.persistence.repository.repository_community import (
-    attach_import,
     enqueue_operation,
-    find_import,
     load_local_identity,
     pending_after_restore,
     set_connection,
@@ -24,15 +22,6 @@ from tests.community_identity_support import identity_home, only_identity_ref
 from tests.community_schema_fixture import create_unversioned_fixture
 
 SERVICE = "https://community.example"
-IMPORT = dict(
-    scan_id="legacy-scan-001",
-    service_url=SERVICE,
-    contribution_id="contribution-1",
-    revision_id="revision-1",
-    digest="sha256:123",
-    author_id="author-1",
-    artifact_type="filter-set",
-)
 OPERATION = dict(
     operation_id="retry-1",
     service_url=SERVICE,
@@ -55,24 +44,6 @@ def engine(tmp_path):
         connection.execute(text("UPDATE scans SET origin='imported' WHERE id='legacy-scan-001'"))
     yield engine
     engine.dispose()
-
-
-def test_scan_and_provenance_rollback_and_idempotent_reuse(engine):
-    with Session(engine) as db:
-        with pytest.raises(RuntimeError, match="rollback"), db.begin():
-            attach_import(db, **IMPORT)
-            raise RuntimeError("rollback")
-        assert (
-            find_import(db, service_url=SERVICE, revision_id="revision-1", digest="sha256:123")
-            is None
-        )
-        db.rollback()
-        with db.begin():
-            first = attach_import(db, **IMPORT)
-            assert attach_import(db, **IMPORT).id == first.id
-        assert db.query(CommunityImportRow).count() == 1
-        with pytest.raises(ValueError, match="conflicting metadata"):
-            attach_import(db, **(IMPORT | {"author_id": "another"}))
 
 
 def test_operation_retry_and_restore_reconciliation(engine):

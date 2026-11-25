@@ -23,7 +23,6 @@ from tests.community_identity_support import identity_home
 
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / ".github/skills/verify-editarr/scripts/lib"
-LOOKUP = json.loads((ROOT / "tests/fixtures/community/catalog-lookup-v1.json").read_text())
 PROFILE = json.loads((ROOT / "tests/fixtures/community/enrollment-profile-v1.json").read_text())
 
 
@@ -103,16 +102,6 @@ def test_contributors_start_with_distinct_valid_names(double):
     assert all(len(name) in bounds for name in names)
 
 
-def test_lookup_body_must_match_the_availability_schema(double):
-    _, transport, (member, _), answers = double
-    send(transport, member, "POST", "/v1/availability/batch", b"{}", "empty-lookup")
-    assert answers[-1] == (400, {"error": {"code": "invalid_lookup"}})
-    valid = LOOKUP["availabilityRequest"]
-    found = send(transport, member, "POST", "/v1/availability/batch", valid, "valid-lookup")
-    assert answers[-1][0] == 200, answers[-1]
-    assert [item["id"] for item in found["items"]] == [item["id"] for item in valid["items"]]
-
-
 def test_identity_accepts_only_its_real_methods(double):
     _, transport, (member, _), answers = double
     send(transport, member, "DELETE", "/v1/identity", operation="delete-identity")
@@ -152,3 +141,27 @@ def test_rename_refuses_another_contributors_current_name_in_any_case(double, fo
     rename(transport, member, "Probe Member Name", "own-rename")
     restored = rename(transport, member, original, "restore-own-name")
     assert restored["displayName"] == original
+
+
+def test_match_body_must_match_the_service_schema_and_finds_no_versions(double):
+    _, transport, (member, _), answers = double
+    send(transport, member, "POST", "/v1/match", {"version": 1, "keys": []}, "match-empty")
+    assert answers[-1] == (400, {"error": {"code": "invalid_match"}})
+    query = {
+        "version": 1,
+        "keys": [{"type": "tmdb", "kind": "movie", "id": "603"}],
+        "label": None,
+        "runtimeMs": None,
+        "limit": 20,
+    }
+    assert send(transport, member, "POST", "/v1/match", query, "match-valid") == {
+        "version": 1,
+        "results": [],
+    }
+
+
+def test_submission_body_must_match_the_service_parser(double):
+    service, transport, (member, _), answers = double
+    send(transport, member, "POST", "/v1/submissions", {"version": 1}, "submit-bad")
+    assert answers[-1] == (400, {"error": {"code": "invalid_submission"}})
+    assert service.posts == []

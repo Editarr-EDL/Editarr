@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -5,13 +7,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from scanner.db import AuthSettingsRow, Base, get_db
+from scanner.db import AuthSettingsRow, Base, UserCapabilityOverrideRow, UserRow, get_db
+from scanner.formats.export_layout import new_local_export_id
 from scanner.http import community_api, community_identity_api
 from scanner.security import auth_policy
+from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.request_access import install_access_errors
 from scanner.security.auth_repository import issue_session
 from scanner.settings.config import Settings
-from tests.multi_user_access_support import add_linked_owner
+from tests.multi_user_access_support import _link, add_linked_owner, stand_in_identity
 from tests.test_auth_policy import _deployment_snapshot
 
 
@@ -48,7 +52,7 @@ def context(tmp_path, monkeypatch, request):
 
     app.dependency_overrides[get_db] = database
     with TestClient(app, base_url="https://editarr.example", client=("127.0.0.1", 50000)) as client:
-        yield client, issued
+        yield client, issued, factory, configuration
     engine.dispose()
 
 
@@ -61,7 +65,7 @@ def headers(issued):
 
 
 def test_privileged_routes_require_session_even_with_local_bypass(context):
-    client, issued = context
+    client, issued, *_ = context
     assert client.get("/editarr/api/community/connection").status_code == 401
     assert client.get("/editarr/api/community/connection/status").status_code == 401
     assert client.post("/editarr/api/community/enrollment/start").status_code == 401
@@ -93,7 +97,7 @@ def test_privileged_routes_require_session_even_with_local_bypass(context):
     ],
 )
 def test_retired_revision_routes_stay_protected_and_answer_gone(context, method, path):
-    client, issued = context
+    client, issued, *_ = context
     target = "/editarr/api/community/" + path
     kwargs = {"json": {}} if method == "POST" else {}
     assert client.request(method, target, **kwargs).status_code == 401
@@ -111,7 +115,7 @@ def test_retired_revision_routes_stay_protected_and_answer_gone(context, method,
 
 
 def test_start_and_confirmation_require_csrf_and_explicit_approval(context, monkeypatch):
-    client, issued = context
+    client, issued, *_ = context
     valid = headers(issued)
     missing = {name: value for name, value in valid.items() if name != "X-CSRF-Token"}
     assert (
@@ -132,7 +136,7 @@ def test_start_and_confirmation_require_csrf_and_explicit_approval(context, monk
 
 
 def test_cross_origin_confirmation_is_rejected_before_handoff(context):
-    client, issued = context
+    client, issued, *_ = context
     response = client.post(
         "/editarr/api/community/enrollment/complete",
         headers=headers(issued) | {"Origin": "https://attacker.test"},
@@ -144,7 +148,7 @@ def test_cross_origin_confirmation_is_rejected_before_handoff(context):
 
 @pytest.mark.parametrize("path", ["rotate", "rotation-retry", "rotation-status"])
 def test_rotation_requires_real_session_csrf_and_confirmation(context, path):
-    client, issued = context
+    client, issued, *_ = context
     target = "/editarr/api/community/keys/" + path
     assert client.post(target, json={"confirmed": True}).status_code == 401
     valid = headers(issued)
@@ -173,7 +177,7 @@ def test_rotation_requires_real_session_csrf_and_confirmation(context, path):
 
 @pytest.mark.parametrize("path", ["start", "complete", "check", "retry"])
 def test_recovery_requires_real_session_csrf_and_confirmation(context, path):
-    client, issued = context
+    client, issued, *_ = context
     target = "/editarr/api/community/keys/recovery/" + path
     body = {"confirmed": True, "old_key_id": "sha256:" + "a" * 64, "state_id": "b" * 64}
     assert client.post(target, json=body).status_code == 401
@@ -209,7 +213,7 @@ def test_recovery_requires_real_session_csrf_and_confirmation(context, path):
     "method,path", [("GET", ""), ("DELETE", ""), ("POST", "/check"), ("POST", "/retry")]
 )
 def test_publication_requires_real_admin_csrf_and_confirmation(context, method, path):
-    client, issued = context
+    client, issued, *_ = context
     target = "/editarr/api/community/publications/publish-1" + path
     kwargs = {"json": {"confirmed": True}} if method == "POST" else {}
     assert client.request(method, target, **kwargs).status_code == 401
@@ -246,7 +250,7 @@ def test_publication_requires_real_admin_csrf_and_confirmation(context, method, 
     ],
 )
 def test_sharing_preview_routes_require_admin_and_csrf(context, method, path):
-    client, issued = context
+    client, issued, *_ = context
     target = "/editarr/api/community/sharing" + path
     body = (
         {
@@ -276,3 +280,49 @@ def test_sharing_preview_routes_require_admin_and_csrf(context, method, path):
         client.request(method, target, headers=valid, **body).json()["code"]
         == "preview_not_configured"
     )
+
+
+@pytest.mark.parametrize(
+    "method,path,capability",
+    [
+        ("POST", "import-receipts/recover", C.COMMUNITY_DOWNLOAD),
+        ("POST", "import-receipts/import-1/retry", C.COMMUNITY_DOWNLOAD),
+        ("POST", "downloads", C.COMMUNITY_DOWNLOAD),
+        ("POST", "lookup", C.COMMUNITY_SEARCH),
+        ("GET", "votes/revision-1", C.COMMUNITY_FEEDBACK_SUBMIT),
+    ],
+)
+def test_retired_routes_keep_their_registered_capability_gate(context, method, path, capability):
+    """A caller denied the route's registered capability gets 403, not the 410 stub."""
+    client, _issued, factory, configuration = context
+    now = datetime.now(timezone.utc)
+    with factory() as db:
+        user = UserRow(
+            role="user",
+            status="active",
+            username="member",
+            normalized_username="member",
+            local_export_id=new_local_export_id().value,
+        )
+        db.add(user)
+        db.flush()
+        _link(db, user.id, stand_in_identity(user.id))
+        db.add(
+            UserCapabilityOverrideRow(
+                user_id=user.id,
+                capability=capability.value,
+                effect="deny",
+                updated_at=now,
+            )
+        )
+        db.commit()
+        member = issue_session(db, remember_me=False, user_id=user.id, configuration=configuration)
+    target = "/editarr/api/community/" + path
+    kwargs = {"json": {}} if method == "POST" else {}
+    result = client.request(method, target, headers=headers(member), **kwargs)
+    assert result.status_code == 403
+    assert result.json()["code"] == "capability_denied"
+    with factory() as db:
+        db.query(UserCapabilityOverrideRow).delete()
+        db.commit()
+    assert client.request(method, target, headers=headers(member), **kwargs).status_code == 410

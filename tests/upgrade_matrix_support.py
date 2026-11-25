@@ -199,6 +199,14 @@ class State:
         return reached and (self.until is None or source is None or source < self.until)
 
 
+_RETIRED_STATE = {
+    OPERATIONS: [("op-publish", "publish", "failed", "legacy-scan-001", "consent-1", None, None)],
+    RETIRED_OPERATIONS: [
+        ("op-receipt", "receipt", "acknowledged", None, None, "receipt-1", None, _RETIRED),
+        ("op-vote", "vote", "submitted", None, None, None, "like", _RETIRED),
+    ],
+}
+
 STATES = (
     State(
         None,
@@ -251,16 +259,10 @@ STATES = (
                 ("op-vote", "vote", "submitted", None, None, None, "like"),
             ]
         },
-        after={
-            OPERATIONS: [
-                ("op-publish", "publish", "failed", "legacy-scan-001", "consent-1", None, None)
-            ],
-            RETIRED_OPERATIONS: [
-                ("op-receipt", "receipt", "acknowledged", None, None, "receipt-1", None, _RETIRED),
-                ("op-vote", "vote", "submitted", None, None, None, "like", _RETIRED),
-            ],
-        },
+        after=_RETIRED_STATE,
+        until="0037_community_master_sets",
     ),
+    State("0037_community_master_sets", _RETIRED_STATE),
     State(
         "0007_community_publications",
         {
