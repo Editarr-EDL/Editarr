@@ -32,7 +32,7 @@ describe('revision content (§6.9)', () => {
     expect(Object.keys(snapshot)).toEqual(['schemaVersion', 'service', 'versionId', 'revision', 'generatedAt', 'work', 'versionInfo', 'filters']);
     expect(Object.keys(snapshot.versionInfo)).toEqual(['status', 'aliasId', 'label', 'labelText', 'runtimeMs', 'trust']);
     expect(snapshot).toMatchObject({ schemaVersion: 'community-master-snapshot-1', revision: 13, versionInfo: { runtimeMs: 8_160_512 } });
-    expect(snapshot.filters[0].confidence).toBe(0.393857102);
+    expect(snapshot.filters[0].confidence).toBe(0.354197347);
     expect(() => assertSnapshotSize(new Uint8Array(SNAPSHOT_MAX_BYTES))).not.toThrow();
     expect(() => assertSnapshotSize(new Uint8Array(SNAPSHOT_MAX_BYTES + 1))).toThrow('snapshot_too_large');
   });

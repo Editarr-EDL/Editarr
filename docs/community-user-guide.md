@@ -86,8 +86,11 @@ their time, category, severity, action, confidence and contributor count.
 - Filters with a **Locally verified** check icon (hover or focus it for the
   tooltip) are ones you confirmed or adjusted, or that overlap a local model
   finding of the same category.
-- A filter is **Low Confidence** when its negative signals (downvotes, disputes and
-  contributors whose coverage found nothing there) outweigh its support. Untouched
+- A filter is **Low Confidence** when its negative signals outweigh its support
+  (attestations plus upvotes). Negatives come from downvotes, disputes, and other
+  contributors' shared submissions that scanned that channel (audio or video) over
+  that range without finding the filter; each counts as one downvote. Your local
+  scans never count toward anything unless you share them. Untouched
   Low Confidence filters are not active unless you turn on **Show Low Confidence
   filters**. **Minimum confidence** hides other untouched filters below your
   threshold. Both preferences belong to your account; filters you touched ignore
@@ -107,6 +110,9 @@ chosen. The work needs a TMDB or TVDB ID, plus season and episode for TV.
 The preview shows the exact public payload and an approximate summary such as
 "≈4 new, ≈27 confirmations, 3 adjustments, 1 dispute". The numbers are estimates
 because the service makes the final match. Your cues and coverage are shared;
+coverage tells the service which channels (audio or video) and time ranges your
+scan analyzed, so community filters there that your scan did not find count
+against them;
 community filters you confirmed or adjusted count as confirmations or
 adjustments, and filters you rejected are shared as disputes. Untouched downloaded
 filters are not re-shared. Private file paths, credentials and alternate-track

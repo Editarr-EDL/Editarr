@@ -1,41 +1,25 @@
 """Which categories a completed scan stage examined, for submission coverage (§5.2).
 
-Coverage creates implicit negatives on other contributors' filters, so a stage covers
-only the categories its recorded model or filter actually detects. A model whose
-categories are not listed here (such as the general Qwen VL detectors) covers nothing.
+Coverage is per channel, not per model: a completed stage that analyzed a channel
+covers every MCF family judged on that channel (`MCF_FAMILY_CHANNELS`), whichever
+model ran. Other contributors' filters in those families that the scan did not
+reproduce then receive implicit coverage negatives (§6.8).
 """
 
-import json
+from scanner.modeling.model_core import MCF_FAMILY_CHANNELS, McfChannel
 
-# Visual `video_model` values and the top-level categories their detectors emit.
-VISUAL_MODEL_CATEGORIES = {
-    "nudenet": ("nudity",),
-    "image_safety_gate": ("nudity", "violence"),
-    "siglip2_moderation_nsfw": ("nudity",),
-    "siglip2_moderation_violence": ("violence",),
-    "shieldstral": ("nudity", "sex", "violence"),
-    "d1-3b": ("drugs", "nudity", "sex", "violence"),
-}
-# Audio `audio_filter` values; each flags language only.
-AUDIO_FILTER_CATEGORIES = {
-    "better_profanity": ("language",),
-    "glin_profanity": ("language",),
-    "alt_profanity_check": ("language",),
-    "alt-profanity-check": ("language",),
-    "qwen": ("language",),
-}
+# Scan stages that analyze one media channel.
+STAGE_CHANNELS = {"visual": McfChannel.VIDEO, "audio_scan": McfChannel.AUDIO}
 
 
-def stage_categories(stage: str, effective_settings_json: str | None) -> tuple[str, ...]:
-    """The categories a stage covered, from its recorded effective settings; () if unknown."""
-    try:
-        settings = json.loads(effective_settings_json or "{}")
-    except ValueError:
-        return ()
-    if not isinstance(settings, dict):
-        return ()
-    if stage == "visual":
-        return VISUAL_MODEL_CATEGORIES.get(settings.get("video_model"), ())
-    if stage == "audio_scan":
-        return AUDIO_FILTER_CATEGORIES.get(settings.get("audio_filter"), ())
-    return ()
+def channel_categories(channel: McfChannel) -> tuple[str, ...]:
+    """The sorted top-level families analyzed on `channel`."""
+    return tuple(
+        sorted(family.value for family, owner in MCF_FAMILY_CHANNELS.items() if owner == channel)
+    )
+
+
+def stage_categories(stage: str) -> tuple[str, ...]:
+    """The families a completed `stage` covered; () for stages that analyze no channel."""
+    channel = STAGE_CHANNELS.get(stage)
+    return channel_categories(channel) if channel is not None else ()

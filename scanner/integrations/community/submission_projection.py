@@ -7,7 +7,7 @@
 | `rejected` master row | `dispute` |
 | `verified`/`adjusted` row no cue proposes | `support` with the effective values |
 | Untouched master row | not shared |
-| Completed scan stages | `coverage`, for the categories their model detects |
+| Completed scan stages | `coverage`, for every category on the channel they analyzed |
 
 All times are milliseconds on the local file timeline.
 """
@@ -153,12 +153,12 @@ def _cues(data: dict, kind: str, duration_ms: int, warnings: list[str]):
 
 
 def _coverage(data: dict, kind: str, duration_ms: int) -> list[dict]:
-    """Completed stage intervals per category; reviews may be retimed, so only scans."""
+    """Completed stage intervals per channel category; reviews may be retimed, so only scans."""
     if kind != "scan" or data["root"]["origin"] != "generated":
         return []
     spans = defaultdict(list)
     for stage in data["stages"]:
-        categories = stage_categories(stage["stage"], stage.get("effective_settings_json"))
+        categories = stage_categories(stage["stage"])
         if stage["status"] != "complete" or not categories:
             continue
         for interval in _intervals(stage.get("intervals_json")):

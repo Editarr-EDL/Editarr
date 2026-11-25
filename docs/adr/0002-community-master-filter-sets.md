@@ -86,9 +86,15 @@ users and must keep their data.
 
 **Signals**
 
-- Attestations, receipt-bound per-filter 👍/👎 votes, disputes and weak
-  coverage negatives feed a Wilson lower bound (z = 1.96, with one positive
-  and one negative prior) (D9, D14, D17).
+- Attestations, receipt-bound per-filter 👍/👎 votes, disputes and coverage
+  negatives feed a Wilson lower bound (z = 1.96, with one positive and one
+  negative prior) (D9, D14, D17).
+- Coverage is per channel, not per model: a shared scan covers every audio
+  category for the ranges it analyzed audio, and every video category for the
+  ranges it analyzed the picture. A coverage negative counts as a full downvote
+  by default (`coverageNegativeWeight` 1.0, operator-configurable); the owner
+  replaced the earlier 0.25 proposal. Local scans count toward nothing unless
+  they are shared.
 - A filter is flagged **Low Confidence** when negatives exceed
   attestations + upvotes.
 - One contributor counts once per filter. A re-shared downloaded filter counts

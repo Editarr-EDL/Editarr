@@ -178,20 +178,37 @@ def test_without_a_link_every_cue_is_new_and_coverage_comes_from_completed_stage
     assert projection.estimates.new_filters == 1
 
 
-@pytest.mark.parametrize(
-    ("model", "categories"),
-    [
-        ("nudenet", ["nudity"]),
-        ("siglip2_moderation_violence", ["violence"]),
-        ("shieldstral", ["nudity", "sex", "violence"]),
-        ("qwen3-vl-8b", []),
-        (None, []),
-    ],
-)
-def test_visual_coverage_claims_only_what_the_recorded_model_detects(model, categories):
+VIDEO_CATEGORIES = [
+    "commercial_content",
+    "discrimination",
+    "dispensable_scenes",
+    "drugs",
+    "fear",
+    "nudity",
+    "sex",
+    "violence",
+]
+
+
+@pytest.mark.parametrize("model", ["nudenet", "shieldstral", "qwen3-vl-8b", None])
+def test_visual_coverage_claims_every_video_category_regardless_of_model(model):
     settings = {} if model is None else {"video_model": model}
     coverage, _projection = _coverage(_stage("visual", **settings))
-    assert sorted(coverage) == categories
+    assert sorted(coverage) == VIDEO_CATEGORIES
+
+
+@pytest.mark.parametrize("audio_filter", ["better_profanity", "qwen", None])
+def test_audio_only_scan_covers_only_audio_categories(audio_filter):
+    settings = {} if audio_filter is None else {"audio_filter": audio_filter}
+    coverage, _projection = _coverage(
+        _stage("audio_scan", **settings), _stage("audio_extract"), _stage("setup")
+    )
+    assert list(coverage) == ["language"]
+
+
+def test_audio_and_visual_scan_covers_every_category():
+    coverage, _projection = _coverage(_stage("visual"), _stage("audio_scan"))
+    assert sorted(coverage) == sorted([*VIDEO_CATEGORIES, "language"])
 
 
 def test_reviews_mark_manual_cues_and_downloaded_cues_need_local_verification():
