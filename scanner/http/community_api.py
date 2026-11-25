@@ -23,6 +23,11 @@ from .community_identity_api import RotationConfirmation
 from .community_identity_api import router as identity_router
 from .community_identity_api import users_router as identity_users_router
 from .community_lookup_api import router as lookup_router
+from .community_master_alignment_api import router as master_alignment_router
+from .community_master_feedback_api import router as master_feedback_router
+from .community_master_filters_api import router as master_filters_router
+from .community_master_updates_api import router as master_updates_router
+from .community_masters_api import router as masters_router
 from .community_retired import protocol_retired
 from .community_sharing_api import router as sharing_router
 from .community_votes_api import router as votes_router
@@ -129,3 +134,8 @@ router.include_router(sharing_router)
 router.include_router(lookup_router)
 router.include_router(downloads_router)
 router.include_router(votes_router)
+router.include_router(masters_router)
+router.include_router(master_alignment_router)
+router.include_router(master_filters_router)
+router.include_router(master_feedback_router)
+router.include_router(master_updates_router)

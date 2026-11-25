@@ -45,6 +45,9 @@ _SHARE = _gated(
     C.COMMUNITY_PUBLISH_OTHER_REVIEW,
     C.COMMUNITY_PUBLISH_SCAN_EVIDENCE,
 )
+_SEARCH = _gated(C.COMMUNITY_SEARCH)
+_DOWNLOAD = _gated(C.COMMUNITY_DOWNLOAD)
+_FEEDBACK = _gated(C.COMMUNITY_FEEDBACK_SUBMIT)
 _RECEIPTS = _gated(C.COMMUNITY_RECEIPTS_RECOVER_OWN, C.COMMUNITY_RECEIPTS_RECOVER_OTHER)
 _PUBLICATION_CHECK = _gated(
     C.COMMUNITY_PUBLICATIONS_CHECK_OWN, C.COMMUNITY_PUBLICATIONS_CHECK_OTHER
@@ -413,6 +416,27 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
         "DELETE /api/community/publications/{operation_id}",
         _gated(C.COMMUNITY_PUBLICATIONS_RETRACT_OWN, C.COMMUNITY_PUBLICATIONS_RETRACT_OTHER),
     ),
+    ("POST /api/community/find", _SEARCH),
+    ("GET /api/community/aliases", _SEARCH),
+    ("POST /api/community/masters", _DOWNLOAD),
+    ("GET /api/community/masters", _SEARCH),
+    ("GET /api/community/masters/{link_id}", _SEARCH),
+    ("GET /api/community/masters/{link_id}/active-filters", _SEARCH),
+    ("POST /api/community/masters/{link_id}/alignment/preview", _DOWNLOAD),
+    ("POST /api/community/masters/{link_id}/alignment/approve", _DOWNLOAD),
+    ("PATCH /api/community/masters/{link_id}/filters/{filter_id}", _DOWNLOAD),
+    ("GET /api/community/preferences", _SEARCH),
+    ("PATCH /api/community/preferences", _DOWNLOAD),
+    ("POST /api/community/masters/{link_id}/filters/{filter_id}/vote", _FEEDBACK),
+    ("POST /api/community/masters/{link_id}/filters/{filter_id}/vote/retry", _FEEDBACK),
+    ("POST /api/community/masters/{link_id}/reports", _FEEDBACK),
+    ("POST /api/community/masters/{link_id}/check", _DOWNLOAD),
+    ("GET /api/community/masters/{link_id}/update", _DOWNLOAD),
+    ("POST /api/community/masters/{link_id}/update/decisions", _DOWNLOAD),
+    ("POST /api/community/masters/{link_id}/update/accept-all", _DOWNLOAD),
+    ("GET /api/community/sync", _DOWNLOAD),
+    ("POST /api/community/sync/run", _DOWNLOAD),
+    ("POST /api/community/sync/notifications/read", _DOWNLOAD),
     ("POST /api/community/import-receipts/recover", _RECEIPTS),
     ("POST /api/community/import-receipts/{import_id}/retry", _RECEIPTS),
 )

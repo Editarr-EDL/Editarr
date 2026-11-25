@@ -231,6 +231,20 @@ local routes still require authentication, same-origin and CSRF, and now answer
 
 Retired imports and their scans remain local data (local community API §10.2).
 
+### Master filter set routes
+
+The [local community API](community-local-api.md) defines the request and
+response shapes. Every route requires authentication; unsafe methods and every
+`POST` also require same-origin and CSRF, and responses are no-store. Links,
+local decisions, votes, preferences and sync notifications belong to the
+calling account; another account's link is `404`.
+
+| Routes | Capability |
+| --- | --- |
+| `POST /api/community/find`, `GET /api/community/aliases`, `GET /api/community/masters`, `GET /api/community/masters/{link_id}`, `GET /api/community/masters/{link_id}/active-filters`, `GET /api/community/preferences` | `community.search` |
+| `POST /api/community/masters`, `POST …/masters/{link_id}/alignment/preview`, `POST …/alignment/approve`, `PATCH …/masters/{link_id}/filters/{filter_id}`, `PATCH /api/community/preferences`, `POST …/masters/{link_id}/check`, `GET …/masters/{link_id}/update`, `POST …/update/decisions`, `POST …/update/accept-all`, `GET /api/community/sync`, `POST /api/community/sync/run`, `POST /api/community/sync/notifications/read` | `community.download` |
+| `POST …/masters/{link_id}/filters/{filter_id}/vote`, `POST …/vote/retry`, `POST …/masters/{link_id}/reports` | `community.feedback.submit` |
+
 ### Publication jobs
 
 The publication outbox persists exact backend-approved signed publication bytes before network work.
