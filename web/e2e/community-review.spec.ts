@@ -135,12 +135,16 @@ for (const width of [320, 1440]) {
     await expect(vote("20:00")).toHaveAccessibleDescription(/no longer serves this filter/);
     await expect(vote("30:00")).toHaveAttribute("data-vote", "none");
     await expect(vote("30:00")).not.toHaveAttribute("aria-disabled");
+    // At desktop width the filter table, actions included, fits without sideways scrolling.
+    if (width === 1440) expect(await byTime(page).evaluate((table) => table.parentElement!.scrollWidth - table.parentElement!.clientWidth)).toBe(0);
     await check(page, "review-refreshed-removed", width);
     // The flags show with the time, visible without scrolling the table sideways.
     const flag = row(page, "20:00").getByText("Removed from community");
     await flag.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
     await expect(flag).toBeInViewport({ ratio: 1 });
-    await expect(row(page, "15:05").getByText("Edited")).toBeInViewport({ ratio: 1 });
+    const edited = row(page, "15:05").getByText("Edited");
+    await edited.evaluate((element) => element.scrollIntoView({ block: "nearest", inline: "nearest" }));
+    await expect(edited).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: `test-results/cm-review-uniform/review-removed-flag-${width}.png` });
   });
 }

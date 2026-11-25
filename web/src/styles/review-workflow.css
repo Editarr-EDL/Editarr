@@ -57,6 +57,8 @@
 .review-community-label { font-weight: 600; }
 .review-community-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 4px; }
 .review-community-flags .master-badge { white-space: normal; border-radius: 6px; }
+/* Confidence badges wrap in the narrow Source column so the actions column keeps Preview and the vote side by side. */
+.review-community-filter .master-badge { white-space: normal; overflow-wrap: normal; border-radius: 6px; }
 .review-community-edited { border-color: #58709a; color: #b9d6ff; }
 .review-community-removed { border-color: #8a5a40; color: #ffc19e; background: #2b211b; }
 .review-workflow .saved-review-panel { overflow: visible; }
