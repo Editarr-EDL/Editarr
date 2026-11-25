@@ -59,32 +59,40 @@ it("shows contributor counts without names and explains Low Confidence in a tool
   vi.restoreAllMocks();
 });
 
-it("votes, clears the vote on a second press and retries a retryable failure with the same operation", async () => {
+const pill = () => screen.getByRole("button", { name: /^Your vote/ });
+const vote = (name: "Thumbs up" | "Thumbs down" | "No vote") => {
+  fireEvent.click(pill());
+  fireEvent.click(screen.getByRole("menuitemradio", { name }));
+};
+
+it("votes from the menu, clears the vote and retries a retryable failure with the same operation", async () => {
   vi.mocked(voteMasterFilter).mockResolvedValueOnce({ version: 1, state: "completed", result: {} })
     .mockResolvedValueOnce({ version: 1, state: "completed", result: {} })
     .mockRejectedValueOnce(new MasterApiError("service_unavailable", true, 503))
     .mockResolvedValueOnce({ version: 1, state: "completed", result: {} });
   render(<Harness filters={[masterFilter()]} />);
-  const up = () => screen.getByRole("button", { name: /^Thumbs up/ });
-  const down = () => screen.getByRole("button", { name: /^Thumbs down/ });
-  fireEvent.click(up());
-  await waitFor(() => expect(up()).toHaveAttribute("aria-pressed", "true"));
+  expect(pill()).toHaveAccessibleName("Your vote: none. Change vote for Violence · Punching at 10:00.000–10:05.050");
+  vote("Thumbs up");
+  await waitFor(() => expect(pill()).toHaveAttribute("data-vote", "up"));
   expect(voteMasterFilter).toHaveBeenLastCalledWith("link-1", "f1", expect.objectContaining({ vote: "up" }), false);
-  fireEvent.click(up());
-  await waitFor(() => expect(up()).toHaveAttribute("aria-pressed", "false"));
+  vote("No vote");
+  await waitFor(() => expect(pill()).toHaveAttribute("data-vote", "none"));
   expect(voteMasterFilter).toHaveBeenLastCalledWith("link-1", "f1", expect.objectContaining({ vote: "none" }), false);
-  fireEvent.click(down());
+  vote("Thumbs down");
   const retry = await screen.findByRole("button", { name: "Retry vote" });
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+  expect(pill()).toHaveAttribute("aria-disabled", "true");
   const intent = vi.mocked(voteMasterFilter).mock.calls[2][2];
   fireEvent.click(retry);
-  await waitFor(() => expect(down()).toHaveAttribute("aria-pressed", "true"));
+  await waitFor(() => expect(pill()).toHaveAttribute("data-vote", "down"));
   expect(voteMasterFilter).toHaveBeenLastCalledWith("link-1", "f1", intent, true);
+  expect(screen.queryByRole("button", { name: "Retry vote" })).toBeNull();
 });
 
 it("explains an ineligible vote", async () => {
   vi.mocked(voteMasterFilter).mockRejectedValue(new MasterApiError("vote_ineligible", false, 409, "self_vote"));
   render(<Harness filters={[masterFilter()]} />);
-  fireEvent.click(screen.getByRole("button", { name: /^Thumbs up/ }));
+  vote("Thumbs up");
   expect(await screen.findByRole("alert")).toHaveTextContent("You can’t vote on your own filter.");
   expect(screen.queryByRole("button", { name: "Retry vote" })).toBeNull();
 });
@@ -100,8 +108,8 @@ it("hides downvoted rows only from the list, keeping one downvoted here until th
   fireEvent.click(toggle);
   expect(rowNames()).toEqual(["00:01.000–00:02.000"]);
   expect(screen.getByText(/1 hidden by your filter settings/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /^Thumbs down/ }));
-  await waitFor(() => expect(screen.getByRole("button", { name: /^Thumbs down/ })).toHaveAttribute("aria-pressed", "true"));
+  vote("Thumbs down");
+  await waitFor(() => expect(pill()).toHaveAttribute("data-vote", "down"));
   expect(rowNames()).toHaveLength(1);
   fireEvent.click(toggle);
   fireEvent.click(toggle);

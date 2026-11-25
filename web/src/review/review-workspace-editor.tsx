@@ -13,6 +13,7 @@ import { useReviewAccountLabel } from "./review-access";
 import { ReviewCommunityEntries } from "./review-community-sources";
 import { hasExportEvidence } from "./review-community";
 import { useReviewCommunity } from "./use-review-community";
+import { useReviewCommunityVotes } from "./use-review-community-votes";
 import {
   isReviewDraftDirty, isReviewDraftContentDirty, updateReviewFilter,
   deleteReviewFilter, discardReviewDraft, stageManualReviewFilter,
@@ -28,6 +29,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
   const me = usePrincipal()?.userId ?? null;
   const [dialog, setDialog] = useState<"export" | "delete" | null>(null);
   const community = useReviewCommunity(workspace);
+  const votes = useReviewCommunityVotes(community.sources);
   const {
     scans, selected, draft, busy, preview, editingReviewName, reviewNameBeforeEdit,
     showManualFilter, preflightFocusFilterId, draftNameValidation,
@@ -75,6 +77,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       previewDisabled={!access.preview}
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
+      renderFilterVote={votes.renderVote}
     />;
   const results = overview;
   const memberships = <div className="saved-review-memberships">

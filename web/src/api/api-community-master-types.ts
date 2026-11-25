@@ -46,9 +46,10 @@ export type MasterValues = FilterValues & {
   lowConfidence: boolean; present: boolean;
 };
 export type MyVote = "up" | "down" | null;
-/** A served master filter, read-only. `active`: it starts enabled when a review includes it. */
+/** A served master filter, read-only. `active`: it starts enabled when a review includes it. `mergedIds`:
+ * earlier filter IDs it continues, so a review filter still keyed by one of them votes on this filter. */
 export type MasterFilter = {
-  filterId: string; category: string; master: MasterValues; locallyVerified: boolean; myVote: MyVote; active: boolean;
+  filterId: string; mergedIds?: string[]; category: string; master: MasterValues; locallyVerified: boolean; myVote: MyVote; active: boolean;
 };
 /** The threshold and Show Low Confidence decide which filters start enabled in reviews.
  * `hideDownvoted` only hides downvoted rows from the master list. */

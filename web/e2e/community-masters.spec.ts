@@ -104,14 +104,24 @@ for (const width of [320, 1440]) {
     await panel.getByRole("button", { name: "Show filters" }).click();
     await expect(panel.getByText("2 filters shown · 1 hidden by your filter settings")).toBeVisible();
     await expectTooltip(page, panel.getByRole("button", { name: "Locally verified" }), /Locally verified/);
-    const thumbsUp = panel.getByRole("button", { name: /^Thumbs up for Violence at/ });
-    await expect(thumbsUp).toHaveAttribute("aria-pressed", "true");
-    const thumbsDown = panel.getByRole("button", { name: /^Thumbs down for Violence at/ });
-    await thumbsDown.click();
-    await expect(thumbsDown).toHaveAttribute("aria-pressed", "true");
-    await expect(thumbsUp).toHaveAttribute("aria-pressed", "false");
+    // One vote pill per filter shows the vote at a glance; its menu changes it.
+    const vote = panel.getByRole("button", { name: /^Your vote: .*Change vote for Violence at/ });
+    await expect(vote).toHaveAttribute("data-vote", "up");
+    await expect(panel.getByRole("button", { name: /^Your vote: none\. Change vote for .*Swearing at/ })).toHaveAttribute("data-vote", "none");
+    await vote.click();
+    const menu = page.getByRole("menu", { name: /^Vote for Violence at/ });
+    await expect(menu.getByRole("menuitemradio", { name: "Thumbs up" })).toHaveAttribute("aria-checked", "true");
+    await expect(menu.getByRole("menuitemradio", { name: "Thumbs up" })).toBeFocused();
+    await expectNoAccessibilityViolations(page);
+    await page.screenshot({ path: `test-results/community-masters-vote-menu-${width}.png` });
+    await page.keyboard.press("ArrowRight");
+    await expect(menu.getByRole("menuitemradio", { name: "Thumbs down" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toHaveCount(0);
+    await expect(vote).toHaveAttribute("data-vote", "down");
+    await expect(vote).toBeFocused();
     expect(community.requests.find((request) => request.path.endsWith("/vote"))?.body).toMatchObject({ vote: "down", confirmed: true });
-    await expectKeyboardFocusVisible(page, thumbsDown);
+    await expectKeyboardFocusVisible(page, vote);
 
     const threshold = panel.getByRole("slider", { name: "Minimum confidence" });
     await threshold.fill("0.5");
@@ -131,7 +141,7 @@ for (const width of [320, 1440]) {
     await expect(hide).not.toBeChecked();
     await hide.check();
     await expect(panel.getByText("2 filters shown · 1 hidden by your filter settings")).toBeVisible();
-    await expect(thumbsDown).toHaveCount(0);
+    await expect(vote).toHaveCount(0);
     await expect.poll(() => community.requests.filter((request) => request.path === "preferences").at(-1)?.body)
       .toEqual({ confidence_threshold: 0, show_low_confidence: true, hide_downvoted: true });
     await checkLayout(page, "hide-toggle", width);

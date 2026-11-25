@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { MasterFilter, MasterPreferences, MasterView } from "../api/api-community-master-types";
 import { ConfidenceBadge, LocallyVerifiedIcon } from "./community-master-badges";
 import { filterName, filterVisible, formatRange, percent } from "./community-master-format";
-import { MasterVoteButtons } from "./master-vote-buttons";
+import { MasterVote } from "./master-vote";
 
 /** Threshold slider and the "Show Low Confidence filters" and "Hide downvoted filters" toggles (both
  * off by default). The threshold and Low Confidence decide which filters start enabled when a review
@@ -74,7 +74,7 @@ export function MasterFilterList({ view, preferences, canVote, onFilter }: {
             <td>{filter.master.contributorCount}</td>
             <td>{filter.locallyVerified ? <LocallyVerifiedIcon /> : <span className="muted-copy">—</span>}</td>
             <td><div className="community-row-actions">
-              {canVote && <MasterVoteButtons linkId={link.linkId} filterId={filter.filterId} name={name} myVote={filter.myVote}
+              {canVote && <MasterVote linkId={link.linkId} filterId={filter.filterId} name={name} myVote={filter.myVote}
                 onVoted={(myVote) => { keep(filter.filterId); onFilter({ ...filter, myVote }); }} />}
             </div></td>
           </tr>;

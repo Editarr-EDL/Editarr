@@ -54,6 +54,29 @@ for (const width of [320, 1440]) {
     await expect(page.getByRole("region", { name: "Timeline summary" })).toContainText("0 selected scans and 3 community filters");
     await check(page, "review-community-included", width);
 
+    // Each community row votes right beside its Preview, immediately and outside the review's save.
+    const vote = (time: string) => row(page, time).getByRole("button", { name: /^Your vote: / });
+    await expect(vote("10:00")).toHaveAttribute("data-vote", "up");
+    await expect(vote("15:00")).toHaveAttribute("data-vote", "none");
+    await expect(vote("20:00")).toHaveAttribute("data-vote", "none");
+    await vote("20:00").click();
+    const menu = page.getByRole("menu", { name: /^Vote for / });
+    await expect(menu.getByRole("menuitemradio", { name: "No vote" })).toBeFocused();
+    await menu.getByRole("menuitemradio", { name: "Thumbs down" }).click();
+    await expect(vote("20:00")).toHaveAttribute("data-vote", "down");
+    expect(community.requests.filter((request) => request.path.endsWith("/vote")).map((request) => [request.path, request.body]))
+      .toEqual([["masters/link-v_extended/filters/f_gone/vote", expect.objectContaining({ vote: "down", confirmed: true })]]);
+    await expect(page.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+    await vote("15:00").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(menu).toBeVisible();
+    await expectNoAccessibilityViolations(page);
+    await page.screenshot({ path: `test-results/cm-review-votes/review-vote-menu-${width}.png` });
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(vote("15:00")).toBeFocused();
+    await check(page, "review-votes", width);
+
     // Disable one and adjust another exactly like a scan filter.
     await row(page, "10:00").getByRole("checkbox").uncheck();
     await row(page, "15:00").getByRole("button", { name: /^Edit filter/ }).click();
@@ -97,6 +120,11 @@ for (const width of [320, 1440]) {
     await expect(row(page, "20:00")).toContainText("Removed from community");
     await expect(row(page, "20:00").getByRole("checkbox")).not.toBeChecked();
     await expect(row(page, "30:00").getByRole("checkbox")).toBeChecked();
+    // A filter no longer served can't be voted on; the new one can.
+    await expect(vote("20:00")).toHaveAttribute("aria-disabled", "true");
+    await expect(vote("20:00")).toHaveAccessibleDescription(/no longer serves this filter/);
+    await expect(vote("30:00")).toHaveAttribute("data-vote", "none");
+    await expect(vote("30:00")).not.toHaveAttribute("aria-disabled");
     await check(page, "review-refreshed-removed", width);
     // The flags show with the time, visible without scrolling the table sideways.
     const flag = row(page, "20:00").getByText("Removed from community");

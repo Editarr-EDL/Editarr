@@ -43,32 +43,11 @@
 .community-results-table th { font-weight: 500; }
 .community-results-table thead { background: #252c38; }
 .community-results-table thead th:nth-child(2) { width: 24%; }
-.community-icon-button {
-  display: inline-flex;
-  gap: 3px;
-  justify-content: center;
-  align-items: center;
-  min-width: 34px;
-  min-height: 34px;
-  padding: 2px 4px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-}
-.community-icon-button svg { width: 16px; height: 16px; flex: 0 0 16px; }
-.community-icon-button:hover:not(:disabled) { background: #2c3546; }
-.community-icon-button[aria-pressed="true"] { background: #354870; color: #e0eaff; }
 .community-strength { color: #a0dfbe; }
 .community-row-actions { display: flex; gap: 3px; align-items: flex-start; }
-.community-vote-button { min-width: 46px; font-size: 12px; font-variant-numeric: tabular-nums; }
 
-@media (pointer: coarse) {
-  .community-icon-button { min-width: 44px; min-height: 44px; }
-}
 @media (max-width: 560px) {
   .community-results-table th, .community-results-table td { padding: 6px 4px; }
   .community-results-table thead th:nth-child(2) { width: 23%; }
   .community-row-actions { gap: 0; flex-wrap: wrap; }
-  .community-vote-button { min-width: 44px; font-size: 11px; padding-inline: 1px; }
 }

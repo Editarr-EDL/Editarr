@@ -111,7 +111,12 @@ export async function mockCommunityMasters(page: Page, options: { linked?: boole
         mock.state.link = { ...mock.state.link, alignmentState: "approved", alignment: { offsetMs: 0, scale: 1, anchors: 0 }, alignmentRevision: 12 };
         return json(route, { version: 1, link: link() });
       }
-      if (action.endsWith("/vote")) return json(route, { version: 1, state: "completed", result: { accepted: true } });
+      const voted = action.match(/^filters\/([^/]+)\/vote$/);
+      if (voted) {
+        // Votes stick, so a reloaded view or review shows them.
+        filters = filters.map((item) => item.filterId === voted[1] ? { ...item, myVote: body.vote === "none" ? null : body.vote } : item);
+        return json(route, { version: 1, state: "completed", result: { accepted: true } });
+      }
       if (action === "check") {
         const changed = mock.state.link.latestRevision < 13;
         if (changed) {
