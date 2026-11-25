@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from scanner.db import CommunityMasterFilterRow, ScanRow
 from scanner.modeling.community_filter_proposals import LinkedFilter
-from scanner.persistence.repository.community_master_filters import effective_values
+from scanner.persistence.repository.community_master_filters import master_values
 from scanner.persistence.repository.community_master_links import alignment_of, get_link
 
 from .donation_sources import SourceRef, canonical
@@ -75,7 +75,7 @@ def source_version_id(db: Session, source: SourceRef) -> str | None:
 def link_projection(
     db: Session, request: "SubmissionRequest", source: SourceRef
 ) -> LinkProjection | None:
-    """The account's link rows on the local timeline.
+    """The account's served link filters on the local timeline, for scan cues to propose.
 
     The link must follow the source's own local version on the client's service
     (`link_unavailable`). A link still awaiting alignment has no local timeline yet
@@ -101,12 +101,11 @@ def link_projection(
     )
     filters = []
     for row in rows:
-        values = effective_values(row, alignment)
+        values = master_values(row, alignment)
         filters.append(
             LinkedFilter(
                 row.filter_id,
                 row.category,
-                row.state,
                 values["startMs"],
                 values["endMs"],
                 values["subcategory"],

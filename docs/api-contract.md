@@ -239,13 +239,15 @@ Retired imports and their scans remain local data (local community API §10.2).
 The [local community API](community-local-api.md) defines the request and
 response shapes. Every route requires authentication; unsafe methods and every
 `POST` also require same-origin and CSRF, and responses are no-store. Links,
-local decisions, votes, preferences and sync notifications belong to the
-calling account; another account's link is `404`.
+votes, preferences and sync notifications belong to the calling account; another
+account's link is `404`. The master view is read-only: filter decisions happen in
+the saved reviews that include a set, and the local filter decision and update
+review routes are retired (local community API §5, §9).
 
 | Routes | Capability |
 | --- | --- |
 | `POST /api/community/find`, `GET /api/community/aliases`, `GET /api/community/masters`, `GET /api/community/masters/{link_id}`, `GET /api/community/masters/{link_id}/active-filters`, `GET /api/community/preferences` | `community.search` |
-| `POST /api/community/masters`, `POST …/masters/{link_id}/alignment/preview`, `POST …/alignment/approve`, `PATCH …/masters/{link_id}/filters/{filter_id}`, `PATCH /api/community/preferences`, `POST …/masters/{link_id}/check`, `GET …/masters/{link_id}/update`, `POST …/update/decisions`, `POST …/update/accept-all`, `GET /api/community/sync`, `POST /api/community/sync/run`, `POST /api/community/sync/notifications/read` | `community.download` |
+| `POST /api/community/masters`, `POST …/masters/{link_id}/alignment/preview`, `POST …/alignment/approve`, `PATCH /api/community/preferences`, `POST …/masters/{link_id}/check`, `GET /api/community/sync`, `POST /api/community/sync/run`, `POST /api/community/sync/notifications/read` | `community.download` |
 | `POST …/masters/{link_id}/filters/{filter_id}/vote`, `POST …/vote/retry`, `POST …/masters/{link_id}/reports` | `community.feedback.submit` |
 
 ### Publication jobs
@@ -919,19 +921,25 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
   boundary. Mutations use the current
   review `revision`; content changes also advance `content_revision` and affected format
   revisions. Saves include the complete editable `mcf_document` and `synchronization`.
-- Community filter snapshots: `SavedReview.community_sources` lists the community
-  master-set snapshots a review includes; create and save requests take
-  `community_memberships` (omitted on save keeps them). Results and EDL/MCF exports
-  use only the stored snapshot filters. Exports need at least one scan or one
-  snapshot with filters; a community-only review exports beside the review target's
-  file. Snapshot filters are clipped to the runtime, take the owner's enforced
-  severities, and a misclassified one is left out of every format (and doesn't count
-  as export evidence). Community language mutes reach filtered subtitles only through
-  an aligned word-level finding of a local audio scan; `community_subtitles` reports
-  how many were applied, need an audio scan, or are unaligned. Including a link or refreshing a snapshot needs
-  `community.search` and evidence-edit permission, and only the review owner may take a
-  snapshot of their own link; see
-  [review membership](community-local-api.md#saved-review-community-filter-snapshots).
+- Community filters: `SavedReview.community_sources` lists the community master-set
+  snapshots a review includes; create and save requests take `community_memberships`
+  (omitted on save keeps them). Including a set adds each served filter to `filters`
+  as a normal review filter with `source_scan_id: null`, `community_source_id`,
+  `community_filter_id`, `community_edited` (set by direct user edits, never by Apply
+  Filter Defaults) and read-only `community` provenance (version label, confidence,
+  contributor count, `removed`, `locally_verified`). Below-threshold and Low
+  Confidence filters start disabled. Community filters are enabled, disabled and
+  adjusted like scan filters and go through the same policy, EDL/MCF export, sidecar,
+  subtitle and sharing paths. Refreshing a snapshot keeps the user's edits by filter
+  ID, takes new master values for unedited filters, adds new ones, and flags filters
+  no longer served as removed. Exports need at least one scan or one community filter;
+  a community-only review exports beside the review target's file. Including a link
+  or refreshing a snapshot needs `community.search` and evidence-edit permission, and
+  only the review owner may take a snapshot of their own link; see
+  [review community filters](community-local-api.md#saved-review-community-filters).
+- Filtered subtitles redact the words of every enabled audio-channel language mute
+  that has a word or phrase (its label), whatever the filter's source; a mute without
+  one, such as an unlabeled community filter, changes no subtitle.
 - Manual filters: `new_manual_filters` in saved-review create/save requests stages
   human-authored audio mute and visual skip filters with required MCF classification. The successful transaction creates
   or reuses the target version's Manual evidence scan and returns assigned provenance;

@@ -82,34 +82,34 @@ Results at 65% or higher apply immediately. Lower matches show **Needs alignment
 with your file before it applies**: open the set's **Align before applying** step,
 add anchors that say where filters start on your file, previewing their clips (or
 enter an offset), choose
-**Preview alignment**, then **Approve alignment**. No filter from that set is active
-until alignment is approved.
+**Preview alignment**, then **Approve alignment**. A set can't be included in a
+review until its alignment is approved.
 
-## Review the community filters
+## Browse the community filters
 
 The **Community** tab lists each linked set's filters with their time, category,
-severity, action, confidence and contributor count. Notification links from
-**Filter updates** open this tab.
+severity, action, confidence and contributor count. It is for browsing, voting and
+checking for updates; you enable, disable and adjust filters in the saved reviews
+that include them. Notification links from **Filter updates** open this tab.
 
-- **Confirm** or **Reject** each filter. Your decisions are kept locally and are
-  never overwritten by updates; **Reset** returns a filter to the master values.
 - Filters with a **Locally verified** check icon (hover or focus it for the
-  tooltip) are ones you confirmed or adjusted, or that overlap a local model
-  finding of the same category.
+  tooltip) overlap a finding of the same category from a completed scan of this
+  version.
 - A filter is **Low Confidence** when its negative signals outweigh its support
   (attestations plus upvotes). Negatives come from downvotes, disputes, and other
   contributors' shared submissions that scanned that channel (audio or video) over
   that range without finding the filter; by default each counts as one downvote. Your local
-  scans never count toward anything unless you share them. Untouched
-  Low Confidence filters are not active unless you turn on **Show Low Confidence
-  filters**. **Minimum confidence** hides other untouched filters below your
-  threshold. Both preferences belong to your account; filters you touched ignore
-  them.
-- **Hide rejected and downvoted filters** (off by default) removes filters you
-  rejected or voted down from the list. It only hides them: rejected filters are
-  already inactive, and downvoted filters you did not reject stay active. A filter
-  you reject or vote down while it is on stays listed until you change a list
-  setting or reopen the set. The setting belongs to your account.
+  scans never count toward anything unless you share them.
+- **Minimum confidence** and **Show Low Confidence filters** decide which filters
+  start enabled when a review includes the set or brings in new filters with
+  Refresh: filters below your threshold, and Low Confidence filters unless you show
+  them, are still added to the review but start disabled. The list here hides them
+  the same way. Both preferences belong to your account; changing them later
+  doesn't change reviews that already include the set.
+- **Hide downvoted filters** (off by default) removes filters you voted down from
+  the list. It only hides them. A filter you vote down while it is on stays listed
+  until you change a list setting or reopen the set. The setting belongs to your
+  account.
 - Use **Thumbs up** or **Thumbs down** to vote on an individual filter. Votes
   require a current community connection and your downloaded copy of the set; you
   cannot vote on your own filters. A vote that could not be sent stays pending with
@@ -119,35 +119,57 @@ severity, action, confidence and contributor count. Notification links from
 
 Linking a set never changes a saved review. In the **Review** tab, **Included
 scans** lists a **Community filters** entry for each set linked to this version.
-Check it and save the review to store a snapshot of the set's active filters at
-that moment: your decisions, minimum confidence, Low Confidence setting, approved
-alignment and accepted updates all apply. The review's results show these filters
-next to the scan filters, marked with their community source and confidence, and
-EDL and MCF exports and published sidecars use the stored snapshot.
+Check it and save the review to add **all** of the set's filters to the review's
+results, next to the scan filters. Each shows its community source, confidence,
+contributor count and version; filters below your minimum confidence, and Low
+Confidence filters unless you show them, start disabled.
 
-Later changes in the Community tab do not touch the review. When the set's active
-filters differ from the snapshot, the entry shows **Community filters changed since
-included** with **Refresh community filters**; refreshing and saving stores a new
-snapshot and a new review revision, so earlier exports show as out of date.
-Unchecking the entry and saving removes the snapshot. A set that still needs
-alignment can't be included or refreshed until you approve its alignment. If the
-set is later deleted or replaced, the review keeps its stored filters but can't
-refresh them. Duplicating a review copies its snapshots.
+From then on community filters are ordinary review filters. Enable or disable them,
+edit their times, category, severity or action, preview or delete them exactly like
+scan filters; an **Edited** label marks the ones you changed yourself. Enabling or
+disabling a whole group at once counts as your edit of each filter it changes.
+Changes made by **Apply Filter Defaults** don't count as your edits. Once you edit a
+community filter it stays marked Edited, even if you later set it back to its
+original values, and sharing the review sends it as your verdict. Your instance's filter
+policy applies to them like any other filter, and EDL and MCF exports, published
+sidecars and filtered subtitles use them the same way.
+
+Later changes to the set don't touch the review. **Check for filter updates** (or
+the daily check) downloads the newest filters for the set; the review entry then
+shows **Community filters changed since included** with **Refresh community
+filters**. Refreshing and saving brings the changes in as a new review revision, so
+earlier exports show as out of date:
+
+- filters you edited keep your changes, even when the community merged them into
+  another filter;
+- filters you didn't edit take the new community values (including ones only
+  Apply Filter Defaults changed);
+- new filters are added, enabled or disabled by your current minimum confidence and
+  Low Confidence setting;
+- filters the community no longer serves stay in the review marked **Removed from
+  community**, disabled unless you had edited them;
+- filters you deleted from the review stay deleted;
+- a filter that was left out because it lay outside your file is added once the
+  community moves it inside.
+
+Reviews made before this version keep their community filters. Decisions you made
+in the Community tab then (adjusting, confirming above your threshold, or rejecting
+a filter) become edits of those reviews' filters: a rejected filter appears disabled
+and marked Edited. Decisions on sets no review included no longer apply.
+
+Unchecking the entry and saving removes the set and its filters from the review. A
+set that still needs alignment can't be included or refreshed until you approve its
+alignment. If the set is later deleted or replaced, the review keeps its filters but
+can't refresh them. Duplicating a review copies its community filters.
 
 A review can contain only community filters: with no scans included, it still
-exports and publishes EDL and MCF files beside the media file from its stored
-community filters. A review needs at least one scan or community filter to export.
-The timeline summary and the Community filters table show included community
-filters as exports render them: clipped to the file's runtime and with your
-instance's enforced severities (marked "enforced"). A filter whose classification is
-invalid, or that lies outside the file, is marked "not exported" and left out.
+exports and publishes EDL and MCF files beside the media file. A review needs at
+least one scan or community filter to export.
 
-Filtered subtitles need the words that were said, which community filters don't
-have. A community language mute changes subtitles only when the version has a
-completed local audio scan with a language finding that overlaps it; the scan's words
-are then removed exactly as for your own filters. Otherwise subtitles are left alone,
-and the Review and Subtitles steps say how many community mutes weren't applied and
-whether an audio scan is needed.
+Filtered subtitles follow one rule for every filter: an enabled language mute on
+the audio channel removes the word or phrase in its label. Community filters arrive
+without one, so they don't change subtitles unless you give them a label, exactly
+like any other filter without a word.
 
 ## Share your filters
 
@@ -161,10 +183,13 @@ The preview shows the exact public payload and an approximate summary such as
 because the service makes the final match. Your cues and coverage are shared;
 coverage tells the service which channels (audio or video) and time ranges your
 scan analyzed, so community filters there that your scan did not find count
-against them;
-community filters you confirmed or adjusted count as confirmations or
-adjustments, and filters you rejected are shared as disputes. Untouched downloaded
-filters are not re-shared. Private file paths, credentials and alternate-track
+against them. When you share a review, the community filters you edited are shared
+as your verdicts on them: one that is enabled confirms it with your times,
+category, severity and action (an adjustment when you changed them), and one you
+disabled after it started enabled disputes it. A filter that started disabled and
+is still disabled isn't shared, and neither are community filters you didn't touch,
+filters from another community version than the set you share against, or ones the
+community no longer serves. Private file paths, credentials and alternate-track
 inventories are excluded. Confirm rights and standing reuse permission before
 approving.
 
@@ -178,23 +203,19 @@ contribution. Cancellation after submission can be uncertain, and a committed
 contribution remains published. There is no author withdrawal command; operators
 can moderate visibility.
 
-## Daily update checks and update review
+## Daily update checks
 
 Editarr checks your linked versions for newer master-set revisions at most once a
 day when you open the web app. The sidebar's **Filter updates** entry shows
 unread notifications for changed, merged or unavailable versions and links to each
-item page; use **Mark all as read** to clear them. On an item page,
+item's Community tab; use **Mark all as read** to clear them. On an item page,
 **Check for filter updates** checks that set immediately without using the daily
 allowance.
 
-A newer revision is downloaded but never applied on its own. Choose **Review** to
-see the changes grouped as **New**, **Changed**, **Removed** and **Now Low
-Confidence**, with the changed fields for each filter. For each row choose
-**Accept**, **Keep mine** or **Dismiss**, or use a group's **Accept all**. Accept all
-skips filters you edited, so decide those one at a time; they are never silently
-overwritten. Sets that needed alignment must have their
-alignment approved for the new revision before updates can be accepted.
-Confidence-only changes apply without review.
+A newer revision is downloaded and shown in the Community tab at once; there is
+nothing to review there. Saved reviews keep their filters until you choose
+**Refresh community filters** in the review (see above). A set aligned to your
+file keeps its alignment for new revisions.
 
 ## Earlier community imports
 

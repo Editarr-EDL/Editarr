@@ -44,26 +44,10 @@ export interface ReviewScanMembership {
   role: ReviewScanRole;
 }
 
-/** One stored community filter on the local timeline, in seconds. */
-export interface ReviewCommunityFilter {
-  filter_id: string;
-  category: string;
-  subcategory: string;
-  severity: string;
-  edit_action: ReviewEditAction;
-  start_seconds: number;
-  end_seconds: number;
-  confidence: number | null;
-}
-
-/** How a stored snapshot compares with its master link's active filters now. */
+/** How a stored snapshot compares with its master link's served filters now. */
 export type ReviewCommunitySourceState = "current" | "changed" | "alignment_required" | "link_unavailable";
 
-/** How community language mutes reach filtered subtitles: only `applied` ones (aligned with a
- * word-level finding of a local audio scan) change them. */
-export interface CommunitySubtitleSummary { applied: number; needs_audio_scan: number; unaligned: number }
-
-/** A snapshot of one master link's active filters that the review uses for results and exports. */
+/** A snapshot of one master link's served filters; its filters are normal review filters. */
 export interface ReviewCommunitySource {
   source_id: string;
   link_id: string | null;
@@ -76,9 +60,24 @@ export interface ReviewCommunitySource {
   captured_at: string;
   state: ReviewCommunitySourceState;
   link_state: string | null;
-  filters: ReviewCommunityFilter[];
-  /** Filters left out of exports because their subcategory doesn't belong to their category. */
-  unusable_filter_ids?: string[];
+  /** The filters the master served when the snapshot was taken. */
+  filter_count: number;
+}
+
+/** Read-only provenance of a review filter from a community snapshot. */
+export interface ReviewFilterCommunity {
+  source_id: string;
+  filter_id: string;
+  /** The community version's label. */
+  label: string;
+  master_revision: number;
+  confidence: number | null;
+  contributor_count: number | null;
+  low_confidence: boolean;
+  /** The master no longer served it at the last refresh. */
+  removed: boolean;
+  /** Its own bounds overlap a finding of the same category from a local model scan. */
+  locally_verified: boolean;
 }
 
 /** Keep a stored snapshot (`source_id`), take a new one from it (`refresh`), or include a link (`link_id`). */
@@ -93,8 +92,16 @@ export interface ReviewScanReference {
 
 export interface ReviewFilter {
   id: string;
-  source_scan_id: string;
+  /** The scan a scan filter came from; null for a community filter. */
+  source_scan_id: string | null;
   source_finding_id: number | null;
+  /** The included community snapshot and master filter a community filter came from. */
+  community_source_id?: string | null;
+  community_filter_id?: string | null;
+  /** A community filter the user edited directly; bulk changes such as Apply Filter Defaults leave it unset. */
+  community_edited?: boolean | null;
+  /** Read-only community provenance; the server ignores it on save. */
+  community?: ReviewFilterCommunity | null;
   source: ReviewFilterSource;
   category: McfCategoryFamily | null;
   subcategory: McfCategory | null;
@@ -170,7 +177,6 @@ export interface SavedReview extends SavedReviewSummary, ReviewPolicyToken {
   synchronization: ReviewSynchronization;
   accepted_credits: AcceptedCreditsProvenance | null;
   community_sources?: ReviewCommunitySource[];
-  community_subtitles?: CommunitySubtitleSummary;
 }
 
 export interface ReviewCreate {

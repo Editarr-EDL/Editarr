@@ -357,11 +357,11 @@ def find_and_download(application):
     assert [item["linkId"] for item in listed["links"]] == [applied["linkId"]], listed
     path = f"/api/community/masters/{applied['linkId']}"
     view = application.request("GET", path)
-    assert set(view["link"]["pendingUpdate"].values()) == {0}, view
+    assert "pendingUpdate" not in view["link"], view
     assert view["preferences"] == {
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": False,
+        "hideDownvoted": False,
     }, view
     assert view["filters"] and all(item["active"] for item in view["filters"]), view
     active = application.request("GET", f"{path}/active-filters")

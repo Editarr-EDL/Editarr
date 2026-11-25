@@ -230,11 +230,37 @@ def _versioned_specification(revision):
         return schema_specification(connection, versioned=True, seed_values=False)
 
 
+# Column names a revision's published earlier shape used; the next revision renames them.
+_EARLIER_COLUMN_NAMES = {
+    "0039_review_community_sources": {
+        ("community_master_preferences", "hide_downvoted"): "hide_rejected_downvoted",
+    },
+}
+
+
+def _earlier_specification(expected, revision):
+    """Return the revision's earlier published shape, or None when it has none."""
+    renames = _EARLIER_COLUMN_NAMES.get(revision)
+    if not renames:
+        return None
+    earlier = json.loads(json.dumps(expected))
+    for (table, name), old_name in renames.items():
+        for column in earlier["tables"][table]["columns"]:
+            if column["name"] == name:
+                column["name"] = old_name
+    return earlier
+
+
 def verify_versioned_schema(connection, revision):
-    """Reject modified schemas at a known packaged revision."""
+    """Reject modified schemas at a known packaged revision.
+
+    A revision whose published shape later changed in place also accepts that earlier
+    shape; the following migration converts it.
+    """
     _verified_baseline()
     expected = _versioned_specification(revision)
-    if schema_specification(connection, versioned=True, seed_values=False) != expected:
+    actual = schema_specification(connection, versioned=True, seed_values=False)
+    if actual != expected and actual != _earlier_specification(expected, revision):
         raise ValueError("Unsupported versioned database schema or required seeds")
     _verify_seed_domains(connection, expected)
 

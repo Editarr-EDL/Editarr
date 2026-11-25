@@ -69,11 +69,11 @@ from scanner.modeling.model_core import (
     normalize_scan_name,
 )
 from scanner.modeling.model_review_community import (
-    CommunitySubtitleSummary,
-    ReviewCommunityFilter,
     ReviewCommunityMembership,
     ReviewCommunitySource,
+    ReviewFilterCommunity,
 )
+from scanner.modeling.model_review_filters import PROVENANCE_FIELDS
 from scanner.modeling.model_review_repairs import (
     ReviewRecoveryCounts,
     ReviewRepairSummary,

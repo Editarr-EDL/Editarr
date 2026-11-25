@@ -21,9 +21,8 @@ def _review_export_scans(
 ) -> tuple[list[ReviewScanMembershipRow], dict[str, ScanRow], Path]:
     """Validate export memberships and return their shared physical media path.
 
-    A review without scans exports only when it includes community filter snapshots
-    with filters; its media is then the review target's own file (see
-    `_community_only_media`).
+    A review without scans exports only when it has community filters; its media is
+    then the review target's own file (see `_community_only_media`).
     """
     memberships = list(review.memberships)
     if not memberships:
@@ -87,15 +86,12 @@ def _review_export_scans(
 
 
 def _community_only_media(db: Session, review: SavedReviewRow) -> Path:
-    """The readable target file of a review whose only evidence is community snapshots.
+    """The readable target file of a review whose only evidence is community filters.
 
-    Refuses a review with neither scans nor usable snapshot filters (misclassified ones
-    are never exported), and a file that no longer matches the review's bound version.
+    Refuses a review with neither scans nor community filters, and a file that no
+    longer matches the review's bound version.
     """
-    from .review_community_export import classified
-    from .review_community_sources import review_filters
-
-    if not any(classified(item) for item in review_filters(review)):
+    if not any(row.community_source_id is not None for row in review.filters):
         raise ReviewMembershipError("A review must include at least one scan or community filter")
     if not review.media_item.path:
         raise ReviewMembershipError("The review media file is unavailable")

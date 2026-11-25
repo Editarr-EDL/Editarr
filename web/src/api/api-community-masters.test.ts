@@ -1,9 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
-  applyCommunityMaster, decideMasterFilter, fetchMasterActiveFilters, findCommunityVersions, listCommunityMasters,
+  applyCommunityMaster, fetchMasterActiveFilters, findCommunityVersions, listCommunityMasters,
   reportCommunityMaster, saveMasterPreferences, voteMasterFilter,
 } from "./api-community-masters";
-import { acceptAllMasterUpdate, decideMasterUpdate, markSyncNotificationsRead, runCommunitySync } from "./api-community-updates";
+import { checkMasterUpdates, markSyncNotificationsRead, runCommunitySync } from "./api-community-updates";
 import { setCsrfToken } from "./api-transport";
 
 afterEach(() => { vi.unstubAllGlobals(); setCsrfToken(null); });
@@ -22,10 +22,8 @@ it("sends snake_case bodies with CSRF to the documented routes", async () => {
   await voteMasterFilter("l/1", "f1", { vote: "up", operationId: "vote-1" }, true);
   await runCommunitySync();
   await markSyncNotificationsRead(["n1"]);
-  await decideMasterUpdate("l1", 13, [{ rowId: "r1", decision: "keep_mine" }]);
-  await acceptAllMasterUpdate("l1", 13, "nowLowConfidence");
+  await checkMasterUpdates("l1");
   await fetchMasterActiveFilters("l 1");
-  await decideMasterFilter("l1", "f1", { decision: "adjust", expected_state: "pending", severity: "low" });
   await reportCommunityMaster("l1", { target: { type: "version", id: "v_1" }, reason: "spam", note: "  " });
   await reportCommunityMaster("l1", { target: { type: "filter", id: "f1" }, reason: "inaccurate", note: " Off by a minute " });
   const calls = fetch.mock.calls as unknown as [string, RequestInit][];
@@ -34,15 +32,13 @@ it("sends snake_case bodies with CSRF to the documented routes", async () => {
     ["POST", "/api/community/find", { target, label: { alias_id: "theatrical" }, refresh: false }],
     ["POST", "/api/community/masters", { target, find_key: "fk", community_version_id: "v_12ab", confirmed: true }],
     ["GET", "/api/community/masters?item_id=abc&media_source_id=src+1", null],
-    ["PATCH", "/api/community/preferences", { confidence_threshold: 0.25, show_low_confidence: true, hide_rejected_downvoted: false }],
+    ["PATCH", "/api/community/preferences", { confidence_threshold: 0.25, show_low_confidence: true, hide_downvoted: false }],
     ["POST", "/api/community/masters/l%2F1/filters/f1/vote", { vote: "up", operation_id: "vote-1", confirmed: true }],
     ["POST", "/api/community/masters/l%2F1/filters/f1/vote/retry", { operation_id: "vote-1", confirmed: true }],
     ["POST", "/api/community/sync/run", {}],
     ["POST", "/api/community/sync/notifications/read", { notification_ids: ["n1"] }],
-    ["POST", "/api/community/masters/l1/update/decisions", { to_revision: 13, decisions: [{ row_id: "r1", decision: "keep_mine" }] }],
-    ["POST", "/api/community/masters/l1/update/accept-all", { to_revision: 13, group: "nowLowConfidence" }],
+    ["POST", "/api/community/masters/l1/check", {}],
     ["GET", "/api/community/masters/l%201/active-filters", null],
-    ["PATCH", "/api/community/masters/l1/filters/f1", { decision: "adjust", expected_state: "pending", severity: "low" }],
     ["POST", "/api/community/masters/l1/reports", { target: { type: "version", id: "v_1" }, reason: "spam", confirmed: true }],
     ["POST", "/api/community/masters/l1/reports",
       { target: { type: "filter", id: "f1" }, reason: "inaccurate", note: "Off by a minute", confirmed: true }],
@@ -70,7 +66,6 @@ it("keeps error codes, vote reasons and merged targets, and never turns failures
 it("accepts 204 No Content from the routes that return no body", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
   await expect(markSyncNotificationsRead("all")).resolves.toBeUndefined();
-  await expect(decideMasterUpdate("l1", 13, [{ rowId: "r1", decision: "accept" }])).resolves.toBeUndefined();
 });
 
 it("maps validation lists, rate limits and bare 404s to codes the UI can explain", async () => {

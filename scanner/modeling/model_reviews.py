@@ -3,10 +3,9 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 from .model_core import (
-    MAX_PERSISTED_INTEGER,
     EditAction,
     ExportFormat,
     McfCategory,
@@ -25,9 +24,13 @@ from .model_core import (
 )
 from .model_publications import ExportPublication
 from .model_review_community import (
-    CommunitySubtitleSummary,
     ReviewCommunityMembership,
     ReviewCommunitySource,
+)
+from .model_review_filters import (
+    ReviewFilter,
+    ReviewFilterInput,
+    SavedReviewFilter,
 )
 from .model_review_repairs import ReviewRepairSummary
 from .model_scans import (
@@ -52,49 +55,6 @@ class ReviewScanReference(BaseModel):
     role: ReviewScanRole
 
 
-class ReviewFilter(BaseModel):
-    id: str
-    source_scan_id: str
-    source_finding_id: int | None = Field(default=None, gt=0, le=MAX_PERSISTED_INTEGER, strict=True)
-    source: Literal["audio", "visual"]
-    category: McfCategoryFamily | None
-    subcategory: McfCategory | None
-    severity: Severity | None = None
-    mcf_channel: McfChannel | None = None
-    mcf_comment: str | None = None
-    label: str | None
-    details: str | None
-    group_key: str | None
-    start_seconds: float
-    end_seconds: float | None
-    confidence: float | None
-    edit_action: EditAction
-    selected: bool
-
-    @field_validator("mcf_comment")
-    @classmethod
-    def validate_mcf_comment(cls, value):
-        return _validate_mcf_comment(value)
-
-    @model_validator(mode="after")
-    def validate_classification(self):
-        _validate_classification_pair(self.category, self.subcategory, required=False)
-        return self
-
-
-class SavedReviewFilter(ReviewFilter):
-    """A saved review's filter with read-only edit provenance."""
-
-    # Accept plain ReviewFilter values (label_edited then defaults to False).
-    model_config = ConfigDict(from_attributes=True)
-
-    # True when the stored label differs from the label of the scan finding the filter
-    # was copied from, i.e. someone changed it. False when it matches, and when the
-    # source finding is unavailable (provenance unknown). A hand-added filter's label is
-    # its source finding's, so it is False there too; its scan origin is "manual".
-    label_edited: bool = False
-
-
 class SavedReview(SavedReviewSummary):
     memberships: list[ReviewScanMembership]
     scans: list[ReviewScanReference]
@@ -111,28 +71,6 @@ class SavedReview(SavedReviewSummary):
     synchronization: ReviewSynchronization
     accepted_credits: AcceptedCreditsProvenance | None = None
     community_sources: list[ReviewCommunitySource] = Field(default_factory=list)
-    community_subtitles: CommunitySubtitleSummary = Field(default_factory=CommunitySubtitleSummary)
-
-
-class ReviewFilterInput(ReviewFilter, ReviewWriteModel):
-    id: ReviewFilterId
-
-    @model_validator(mode="before")
-    @classmethod
-    def ignore_read_only_provenance(cls, value):
-        """Accept and drop SavedReviewFilter's read-only flag when a client echoes it."""
-        if isinstance(value, dict) and "label_edited" in value:
-            value = {key: item for key, item in value.items() if key != "label_edited"}
-        return value
-    start_seconds: float = Field(ge=0, allow_inf_nan=False)
-    end_seconds: float | None = Field(allow_inf_nan=False)
-    confidence: float | None = Field(ge=0, le=1, allow_inf_nan=False)
-
-    @model_validator(mode="after")
-    def validate_range(self):
-        if self.end_seconds is not None and self.end_seconds <= self.start_seconds:
-            raise ValueError("End time must be after start time")
-        return self
 
 
 class CreditsModelConsent(BaseModel):

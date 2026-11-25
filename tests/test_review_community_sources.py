@@ -1,4 +1,5 @@
-"""Saved reviews include community filters as stored snapshots of a master link."""
+"""Saved reviews include community filters as normal review filters from a stored snapshot
+of a master link (local API §3, ADR 0002 U2–U4)."""
 
 from contextlib import contextmanager
 
@@ -8,6 +9,7 @@ from sqlalchemy import select
 import scanner.api  # noqa: F401 - load the application before repository modules
 from scanner.db import (
     ReviewCommunitySourceRow,
+    ReviewFilterRow,
     ReviewMcfDocumentRow,
     ReviewSynchronizationRow,
     SavedReviewRow,
@@ -29,7 +31,6 @@ from scanner.persistence.repository.repository_review_mutation import (
     duplicate_saved_review,
     save_saved_review,
 )
-from scanner.persistence.repository.review_community_sources import review_filters
 from scanner.persistence.repository.review_export_content import render_review_export
 from scanner.persistence.repository.review_policy import prepare_review_policy
 from scanner.repository import ReviewMembershipError
@@ -37,7 +38,7 @@ from tests.community_master_http_support import activities, masters
 from tests.community_master_service_support import served_filter
 from tests.multi_user_access_support import ADMIN, PEER_USER, USER
 
-__all__ = ["activities", "masters"]
+__all__ = ["activities", "masters", "review", "save", "include", "keep", "community", "session"]
 
 FILTERS = (
     served_filter("f_a", 10_000, 20_000),
@@ -69,9 +70,15 @@ def session(masters, actor=USER):
         yield db
 
 
-def save(masters, review_id, memberships, actor=USER):
+def save(masters, review_id, memberships=None, actor=USER, edit=None):
+    """Save the stored review again; `edit(filters)` may change the filter dicts first."""
     with session(masters, actor) as db:
         stored = get_saved_review(db, review_id)
+        filters = [
+            value.model_dump(exclude={"label_edited", "community"}) for value in stored.filters
+        ]
+        if edit is not None:
+            filters = edit(filters) or filters
         return save_saved_review(
             db,
             review_id,
@@ -79,10 +86,12 @@ def save(masters, review_id, memberships, actor=USER):
                 revision=stored.revision,
                 name=stored.name,
                 memberships=stored.memberships,
-                filters=[value.model_dump(exclude={"label_edited"}) for value in stored.filters],
+                filters=filters,
                 mcf_document=stored.mcf_document,
                 synchronization=stored.synchronization,
                 community_memberships=memberships,
+                policy_owner_id=stored.policy_owner_id,
+                policy_revision=stored.policy_revision,
             ),
         )
 
@@ -98,66 +107,145 @@ def keep(saved, refresh=False):
     ]
 
 
-def spans(source):
-    return [(item.filter_id, item.start_seconds, item.end_seconds) for item in source.filters]
+def community(review):
+    """The review's community filters by master filter ID."""
+    return {value.community_filter_id: value for value in review.filters if value.community}
 
 
-def test_including_stores_a_snapshot_that_later_changes_only_flag(masters, review):
+def spans(review):
+    return sorted(
+        (fid, value.start_seconds, value.end_seconds, value.selected)
+        for fid, value in community(review).items()
+    )
+
+
+def test_included_filters_are_normal_review_filters_with_community_provenance(masters, review):
     link = masters.link(USER, "v_1", "2", *FILTERS)
     saved = save(masters, review, include(link["linkId"]))
     (source,) = saved.community_sources
     assert source.state == "current" and source.link_id == link["linkId"]
     assert source.master_revision == 1 and source.label == "Theatrical"
-    assert spans(source) == [("f_a", 10.0, 20.0), ("f_b", 40.0, 41.0)]
-    assert source.filters[0].confidence == 0.5
+    assert source.filter_count == 2
+    assert spans(saved) == [("f_a", 10.0, 20.0, True), ("f_b", 40.0, 41.0, True)]
+    skip, mute = community(saved)["f_a"], community(saved)["f_b"]
+    assert (skip.source, skip.mcf_channel, skip.edit_action) == ("visual", "both", "skip")
+    assert (mute.source, mute.mcf_channel, mute.edit_action) == ("audio", "audio", "mute")
+    assert skip.source_scan_id is None and skip.community_source_id == source.source_id
+    assert skip.label is None and skip.confidence == 0.5
+    assert skip.community.label == "Theatrical" and skip.community.contributor_count == 2
+    assert not skip.community_edited and not skip.community.removed
     assert (saved.revision, saved.edl_content_revision) == (1, 1)
 
-    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_b", USER, {"decision": "reject"})
-    masters.ok("PATCH", "/preferences", USER, {"confidence_threshold": 0.9})
+    masters.service.publish("v_1", 2, served_filter("f_a", 11_000, 20_000))
+    masters.ok("POST", f"/masters/{link['linkId']}/check", USER, {})
     with session(masters) as db:
         later = get_saved_review(db, review)
     assert later.community_sources[0].state == "changed"
-    assert spans(later.community_sources[0]) == spans(source)
+    assert spans(later) == spans(saved)
     assert (later.revision, later.content_revision, later.edl_content_revision) == (1, 1, 1)
 
 
-def test_refresh_and_removal_advance_the_review_revisions(masters, review):
+def test_threshold_and_low_confidence_decide_which_filters_start_enabled(masters, review):
+    link = masters.link(
+        USER,
+        "v_1",
+        "2",
+        served_filter("f_strong", 10_000, 20_000, confidence=0.8),
+        served_filter("f_weak", 30_000, 31_000, confidence=0.2),
+        served_filter("f_low", 50_000, 51_000, confidence=0.9, lowConfidence=True),
+    )
+    masters.ok("PATCH", "/preferences", USER, {"confidence_threshold": 0.5})
+    saved = save(masters, review, include(link["linkId"]))
+    assert {fid: value.selected for fid, value in community(saved).items()} == {
+        "f_strong": True,
+        "f_weak": False,
+        "f_low": False,
+    }
+    assert community(saved)["f_low"].community.low_confidence
+    masters.ok("PATCH", "/preferences", USER, {"show_low_confidence": True})
+    save(masters, review, [])
+    again = save(masters, review, include(link["linkId"]))
+    assert community(again)["f_low"].selected
+
+
+def test_enabling_disabling_and_adjusting_work_like_scan_filters(masters, review):
     link = masters.link(USER, "v_1", "2", *FILTERS)
     saved = save(masters, review, include(link["linkId"]))
-    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_b", USER, {"decision": "reject"})
-    unchanged = save(masters, review, keep(saved))
-    assert unchanged.revision == saved.revision
 
-    refreshed = save(masters, review, keep(saved, refresh=True))
-    (source,) = refreshed.community_sources
-    assert source.source_id == saved.community_sources[0].source_id
-    assert source.state == "current" and spans(source) == [("f_a", 10.0, 20.0)]
-    assert refreshed.revision == saved.revision + 1
-    assert refreshed.edl_content_revision == saved.edl_content_revision + 1
-    assert refreshed.mcf_content_revision == saved.mcf_content_revision + 1
+    def edit(filters):
+        for value in filters:
+            if value["community_filter_id"] == "f_a":
+                value.update(
+                    start_seconds=11.0, severity="low", subcategory="kicking", community_edited=True
+                )
+            if value["community_filter_id"] == "f_b":
+                value.update(selected=False, community_edited=True)
 
-    removed = save(masters, review, [])
-    assert removed.community_sources == [] and removed.revision == refreshed.revision + 1
-    with masters.app.accounts.factory() as db:
-        assert db.scalars(select(ReviewCommunitySourceRow)).all() == []
-
-
-def test_exports_read_only_the_snapshot(masters, review):
-    link = masters.link(USER, "v_1", "2", *FILTERS)
-    save(masters, review, include(link["linkId"]))
-    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_a", USER, {"decision": "reject"})
+    edited = save(masters, review, keep(saved), edit=edit)
+    assert edited.revision == saved.revision + 1
+    assert edited.edl_content_revision == saved.edl_content_revision + 1
+    adjusted, disabled = community(edited)["f_a"], community(edited)["f_b"]
+    assert (adjusted.start_seconds, adjusted.severity, adjusted.subcategory) == (
+        11.0,
+        "low",
+        "kicking",
+    )
+    assert adjusted.community_edited and disabled.community_edited and not disabled.selected
     with session(masters) as db:
         row = db.get(SavedReviewRow, review)
         policy = prepare_review_policy(db, row)
-        filters = review_filters(row)
-        assert [item.filter_id for item in filters] == ["f_a", "f_b"]
-        edl, _ = render_review_export(row, policy, ExportFormat.EDL, 120, filters)
+        edl, _ = render_review_export(row, policy, ExportFormat.EDL, 120)
         row.mcf_document.material_start_seconds, row.mcf_document.material_end_seconds = 0, 120
-        mcf, _ = render_review_export(row, policy, ExportFormat.MCF, 120, filters)
-    lines = [line for line in edl.decode().splitlines() if not line.startswith("#")]
-    assert lines == ["10.000 20.000 3", "40.000 41.000 1"]
+        mcf, _ = render_review_export(row, policy, ExportFormat.MCF, 120)
+    assert [line for line in edl.decode().splitlines() if not line.startswith("#")] == [
+        "11.000 20.000 3"
+    ]
     text = mcf.decode()
-    assert "00:00:10.000 --> 00:00:20.000" in text and "00:00:40.000 --> 00:00:41.000" in text
+    assert "00:00:11.000 --> 00:00:20.000" in text and "kicking" in text
+    assert "00:00:40.000" not in text
+
+
+def test_community_filter_provenance_is_checked(masters, review):
+    link = masters.link(USER, "v_1", "2", *FILTERS)
+    saved = save(masters, review, include(link["linkId"]))
+
+    def unknown(filters):
+        for value in filters:
+            if value["community_filter_id"] == "f_a":
+                value["community_filter_id"] = "f_unknown"
+
+    with pytest.raises(ReviewMembershipError, match="provenance"):
+        save(masters, review, keep(saved), edit=unknown)
+
+    def dropped(filters):
+        for value in filters:
+            value["community_source_id"] = value["community_source_id"] and "other"
+
+    with pytest.raises(ReviewMembershipError, match="community source"):
+        save(masters, review, keep(saved), edit=dropped)
+
+
+def test_removing_the_source_removes_its_filters(masters, review):
+    link = masters.link(USER, "v_1", "2", *FILTERS)
+    saved = save(masters, review, include(link["linkId"]))
+    unchanged = save(masters, review, keep(saved))
+    assert unchanged.revision == saved.revision
+    removed = save(
+        masters,
+        review,
+        [],
+        edit=lambda filters: [v for v in filters if not v["community_source_id"]],
+    )
+    assert removed.community_sources == [] and community(removed) == {}
+    assert removed.revision == saved.revision + 1
+    with masters.app.accounts.factory() as db:
+        assert db.scalars(select(ReviewCommunitySourceRow)).all() == []
+        assert (
+            db.scalars(
+                select(ReviewFilterRow).where(ReviewFilterRow.community_source_id.is_not(None))
+            ).all()
+            == []
+        )
 
 
 def test_only_the_owner_may_include_their_own_aligned_link(masters, review):
@@ -174,9 +262,22 @@ def test_only_the_owner_may_include_their_own_aligned_link(masters, review):
         ReviewCommunityMembership(link_id="a", source_id="b")
 
 
-def test_duplicates_copy_the_snapshot(masters, review):
+def test_duplicates_copy_the_snapshot_and_its_filters(masters, review):
     link = masters.link(USER, "v_1", "2", *FILTERS)
-    saved = save(masters, review, include(link["linkId"]))
+    save(masters, review, include(link["linkId"]))
+    saved = save(
+        masters,
+        review,
+        None,
+        edit=lambda filters: [
+            {
+                **v,
+                "selected": v["community_filter_id"] != "f_b",
+                "community_edited": v["community_filter_id"] == "f_b",
+            }
+            for v in filters
+        ],
+    )
     for actor, link_id in ((USER, link["linkId"]), (ADMIN, None)):
         with session(masters, actor) as db:
             copy = duplicate_saved_review(
@@ -190,20 +291,25 @@ def test_duplicates_copy_the_snapshot(masters, review):
                 ),
             )
         (source,) = copy.community_sources
-        assert source.link_id == link_id and spans(source) == spans(saved.community_sources[0])
+        assert source.link_id == link_id and spans(copy) == spans(saved)
         assert source.source_id != saved.community_sources[0].source_id
+        assert {value.community_source_id for value in community(copy).values()} == {
+            source.source_id
+        }
+        assert community(copy)["f_b"].community_edited
         assert source.state == ("current" if link_id else "link_unavailable")
 
 
 def test_account_deletion_keeps_snapshots_and_transfer_and_replace_repoint(masters, review):
     link = masters.link(USER, "v_1", "2", *FILTERS)
-    save(masters, review, include(link["linkId"]))
+    saved = save(masters, review, include(link["linkId"]))
     masters.service.publish("v_2", 1, served_filter("f_z"))
     replaced = masters.apply(USER, "v_2", replace=True).json()["link"]
     with session(masters) as db:
-        (source,) = get_saved_review(db, review).community_sources
+        stored = get_saved_review(db, review)
+    (source,) = stored.community_sources
     assert source.link_id == replaced["linkId"] and source.state == "changed"
-    assert [item.filter_id for item in source.filters] == ["f_a", "f_b"]
+    assert spans(stored) == spans(saved)
 
     peer = masters.link(PEER_USER, "v_1", "2", *FILTERS)
     with masters.app.accounts.factory() as db:
@@ -214,25 +320,26 @@ def test_account_deletion_keeps_snapshots_and_transfer_and_replace_repoint(maste
         delete_master_state(db, PEER_USER)
         db.commit()
     with session(masters) as db:
-        (source,) = get_saved_review(db, review).community_sources
-    assert source.link_id is None and source.state == "link_unavailable"
-    assert [item.filter_id for item in source.filters] == ["f_a", "f_b"]
+        stored = get_saved_review(db, review)
+    assert stored.community_sources[0].link_id is None
+    assert stored.community_sources[0].state == "link_unavailable"
+    assert spans(stored) == spans(saved)
 
 
-def test_hide_rejected_downvoted_is_a_saved_per_account_preference(masters):
+def test_hide_downvoted_is_a_saved_per_account_preference(masters):
     link = masters.link(USER, "v_1", "2", *FILTERS)
-    saved = masters.ok("PATCH", "/preferences", USER, {"hide_rejected_downvoted": True})
+    saved = masters.ok("PATCH", "/preferences", USER, {"hide_downvoted": True})
     assert saved == {
         "version": 1,
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": True,
+        "hideDownvoted": True,
     }
-    assert masters.ok("GET", "/preferences", PEER_USER)["hideRejectedDownvoted"] is False
+    assert masters.ok("GET", "/preferences", PEER_USER)["hideDownvoted"] is False
     view = masters.ok("GET", f"/masters/{link['linkId']}", USER)
-    assert view["preferences"]["hideRejectedDownvoted"] is True
+    assert view["preferences"]["hideDownvoted"] is True
     assert all(row["active"] for row in view["filters"])
-    refused = masters.send("PATCH", "/preferences", USER, {"hide_rejected_downvoted": "yes"})
+    refused = masters.send("PATCH", "/preferences", USER, {"hide_downvoted": "yes"})
     assert refused.status_code == 422
 
 
@@ -265,162 +372,21 @@ def test_snapshot_changes_need_evidence_edit_and_community_search(monkeypatch):
     assert len(required) == 3
 
 
-def _community_only(masters, review_id, link_id):
-    save(masters, review_id, include(link_id))
+def test_filters_are_clipped_to_the_runtime_without_counting_as_a_change(masters, review):
+    from scanner.db import ScanRow
+
     with masters.app.accounts.factory() as db:
-        row = db.get(SavedReviewRow, review_id)
-        row.memberships.clear()
-        row.mcf_document.material_end_seconds = 120
+        db.get(ScanRow, masters.scan_id).duration_seconds = 100
+        db.get(ReviewSynchronizationRow, review).end_seconds = 100
         db.commit()
-
-
-def test_a_community_only_review_exports_edl_and_mcf_sidecars(masters, review):
-    from scanner.persistence.repository.repository_review_operations import (
-        export_saved_review_edl,
-        export_saved_review_mcf,
+    link = masters.link(
+        USER,
+        "v_1",
+        "2",
+        served_filter("f_tail", 95_000, 130_000),
+        served_filter("f_after", 120_000, 130_000),
     )
-
-    link = masters.link(USER, "v_1", "2", *FILTERS)
-    _community_only(masters, review, link["linkId"])
-    with session(masters) as db:
-        stored = get_saved_review(db, review)
-        assert stored.memberships == [] and stored.community_sources
-        edl = export_saved_review_edl(
-            db,
-            review,
-            stored.revision,
-            policy_revision=stored.policy_revision,
-            policy_owner_id=stored.policy_owner_id,
-        )
-    assert edl.exported_scans == [] and edl.exported_format_revision == stored.edl_content_revision
-    sidecar = masters.scans.file("masters").with_suffix(".edl")
-    lines = [line for line in sidecar.read_text().splitlines() if not line.startswith("#")]
-    assert lines == ["10.000 20.000 3", "40.000 41.000 1"]
-    with session(masters) as db:
-        mcf = export_saved_review_mcf(
-            db,
-            review,
-            stored.revision,
-            policy_revision=stored.policy_revision,
-            policy_owner_id=stored.policy_owner_id,
-        )
-        summary = get_saved_review(db, review).exports.exports
-    assert mcf.exported_scans == []
-    assert "00:00:10.000 --> 00:00:20.000" in sidecar.with_suffix(".mcf").read_text()
-    assert summary[ExportFormat.EDL].current and summary[ExportFormat.MCF].current
-
-    # Refreshing is a new review revision, so the published sidecars become outdated.
-    refreshed = save(masters, review, keep(stored, refresh=True))
-    assert refreshed.exports.exports[ExportFormat.EDL].outdated is True
-    assert refreshed.exports.exports[ExportFormat.MCF].outdated is True
-
-
-def test_a_review_without_scans_or_community_filters_still_refuses_export(masters, review):
-    from scanner.persistence.repository.repository_review_operations import (
-        export_saved_review_edl,
-    )
-
-    link = masters.link(USER, "v_1", "2", *FILTERS)
-    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_a", USER, {"decision": "reject"})
-    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_b", USER, {"decision": "reject"})
-    _community_only(masters, review, link["linkId"])
-    with session(masters) as db:
-        stored = get_saved_review(db, review)
-        assert stored.community_sources[0].filters == []
-        with pytest.raises(ReviewMembershipError, match="at least one scan or community filter"):
-            export_saved_review_edl(
-                db,
-                review,
-                stored.revision,
-                policy_revision=stored.policy_revision,
-                policy_owner_id=stored.policy_owner_id,
-            )
-
-
-@pytest.mark.parametrize("format", ["edl", "mcf"])
-def test_a_community_only_publication_retains_its_snapshot_for_policy_regeneration(
-    masters, review, format
-):
-    import json
-
-    from scanner.db import MediaItemExportRow
-    from scanner.persistence.repository.export_publication import publish_export
-    from scanner.persistence.repository.export_recovery import publication_lock
-    from scanner.persistence.repository.export_retained import prepare_retained_export
-    from scanner.security.access.vocabulary import Role
-    from tests.multi_user_access_support import build_access
-
-    link = masters.link(USER, "v_1", "2", *FILTERS)
-    _community_only(masters, review, link["linkId"])
-    with session(masters) as db, publication_lock(db):
-        stored = get_saved_review(db, review)
-        result = publish_export(
-            db, review, stored.revision, ExportFormat(format), access=build_access(Role.USER)
-        )
-    assert result is not None
-    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_a", USER, {"decision": "reject"})
-    with masters.app.accounts.factory() as db:
-        row = db.scalars(select(MediaItemExportRow)).one()
-        snapshot = json.loads(row.snapshot_json)
-        assert snapshot["sources"] == []
-        assert prepare_retained_export(db, row, snapshot) == row.content_bytes
-    assert b"10.000" in row.content_bytes or b"00:00:10.000" in row.content_bytes
-
-
-def test_snapshots_are_unclipped_so_a_later_runtime_is_not_a_change(masters, review):
-    link = masters.link(USER, "v_1", "2", served_filter("f_tail", 95_000, 130_000))
     saved = save(masters, review, include(link["linkId"]))
-    masters.set_duration(100)
-    with session(masters) as db:
-        (source,) = get_saved_review(db, review).community_sources
-        row = db.get(SavedReviewRow, review)
-        edl, _ = render_review_export(
-            row, prepare_review_policy(db, row), ExportFormat.EDL, 100, review_filters(row)
-        )
-    assert source.state == "current" and spans(source) == spans(saved.community_sources[0])
-    assert spans(source) == [("f_tail", 95.0, 130.0)]
-    assert [line for line in edl.decode().splitlines() if not line.startswith("#")] == [
-        "95.000 100.000 3"
-    ]
-
-
-def test_community_only_export_needs_a_usable_filter_and_clips_to_the_probed_file(
-    masters, review, monkeypatch
-):
-    from scanner import repository as root
-    from scanner.persistence.repository.repository_review_operations import (
-        export_saved_review_edl,
-    )
-
-    def export(db, stored):
-        return export_saved_review_edl(
-            db,
-            review,
-            stored.revision,
-            policy_revision=stored.policy_revision,
-            policy_owner_id=stored.policy_owner_id,
-        )
-
-    link = masters.link(USER, "v_1", "2", served_filter("f_wrong", 10_000, 20_000))
-    _community_only(masters, review, link["linkId"])
-    # The service refuses misclassified filters, so only a stored snapshot can hold one.
-    with masters.app.accounts.factory() as db:
-        row = db.scalars(select(ReviewCommunitySourceRow)).one()
-        row.filters_json = row.filters_json.replace('"punching"', '"swearing"')
-        db.commit()
-    with session(masters) as db:
-        stored = get_saved_review(db, review)
-        assert stored.community_sources[0].unusable_filter_ids == ["f_wrong"]
-        with pytest.raises(ReviewMembershipError, match="at least one scan or community filter"):
-            export(db, stored)
-
-    masters.service.publish("v_2", 1, served_filter("f_tail", 95_000, 130_000))
-    replaced = masters.apply(USER, "v_2", replace=True).json()["link"]
-    save(masters, review, [])
-    save(masters, review, include(replaced["linkId"]))
-    monkeypatch.setattr(root, "get_video_duration", lambda _path: 100.0)
-    with session(masters) as db:
-        export(db, get_saved_review(db, review))
-    sidecar = masters.scans.file("masters").with_suffix(".edl")
-    lines = [line for line in sidecar.read_text().splitlines() if not line.startswith("#")]
-    assert lines == ["95.000 100.000 3"]
+    assert spans(saved) == [("f_tail", 95.0, 100.0, True)]
+    assert not community(saved)["f_tail"].community_edited
+    assert saved.community_sources[0].state == "current"

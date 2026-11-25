@@ -1,4 +1,4 @@
-"""Update checks, update review, daily sync, votes and reports over HTTP (local API §6, §8, §9)."""
+"""Update checks, daily sync, votes and reports over HTTP (local API §6, §8)."""
 
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
@@ -30,152 +30,50 @@ def updated_link(masters, tier="2"):
         masters.ok(
             "POST", path + "/approve", USER, {"token": token, "for_revision": 1, "confirmed": True}
         )
-    masters.ok(
-        "PATCH",
-        f"/masters/{link['linkId']}/filters/f_b",
-        USER,
-        {"decision": "adjust", "start_ms": 30_500 + (500 if tier != "2" else 0)},
-    )
     masters.service.publish("v_1", 2, *REVISION_2)
     return link["linkId"]
 
 
-def groups(update):
-    return {name: [row["filterId"] for row in rows] for name, rows in update["groups"].items()}
-
-
-def test_check_stores_a_newer_revision_for_review_only(masters):
+def test_check_downloads_and_applies_a_newer_revision(masters):
     link_id = updated_link(masters)
     checked = masters.ok("POST", f"/masters/{link_id}/check", USER, {})
-    assert checked == {
-        "version": 1,
-        "changed": True,
-        "latestRevision": 2,
-        "pendingUpdate": {"new": 1, "changed": 2, "removed": 1, "nowLowConfidence": 1},
-    }
+    assert checked == {"version": 1, "changed": True, "latestRevision": 2}
     assert masters.ok("POST", f"/masters/{link_id}/check", USER, {})["changed"] is False
     view = masters.ok("GET", f"/masters/{link_id}", USER)
-    assert view["link"]["appliedRevision"] == 1 and view["link"]["latestRevision"] == 2
-    assert {row["filterId"]: row["effective"]["startMs"] for row in view["filters"]}[
-        "f_a"
-    ] == 10_000
+    assert view["link"]["appliedRevision"] == 2 and view["link"]["latestRevision"] == 2
+    assert "pendingUpdate" not in view["link"]
+    rows = {row["filterId"]: row for row in view["filters"]}
+    assert sorted(rows) == ["f_a", "f_b", "f_d", "f_e"]
+    assert rows["f_a"]["master"]["startMs"] == 12_000
+    assert set(rows["f_a"]) == {
+        "filterId",
+        "category",
+        "master",
+        "locallyVerified",
+        "myVote",
+        "active",
+    }
+    assert not rows["f_d"]["active"]
     assert masters.send("POST", f"/masters/{link_id}/check", PEER_USER, {}).status_code == 404
 
 
-def test_update_review_decisions_and_accept_all(masters):
-    link_id = updated_link(masters)
-    masters.ok("POST", f"/masters/{link_id}/check", USER, {})
-    update = masters.ok("GET", f"/masters/{link_id}/update", USER)
-    assert (update["fromRevision"], update["toRevision"], update["alignmentRequired"]) == (
-        1,
-        2,
-        False,
-    )
-    assert groups(update) == {
-        "new": ["f_e"],
-        "changed": ["f_a", "f_b"],
-        "removed": ["f_c"],
-        "nowLowConfidence": ["f_d"],
-    }
-    mine = next(row for row in update["groups"]["changed"] if row["filterId"] == "f_b")
-    assert mine["touched"] is True and mine["allowed"] == ["keep_mine", "accept", "dismiss"]
-    assert mine["mine"]["startMs"] == 30_500 and mine["newMaster"]["severity"] == "low"
-    assert mine["oldMaster"]["severity"] == "high" and mine["changedFields"] == ["severity"]
-    decisions = f"/masters/{link_id}/update/decisions"
-    not_allowed = masters.send(
-        "POST",
-        decisions,
-        USER,
-        {"to_revision": 2, "decisions": [{"row_id": "f_a", "decision": "keep_mine"}]},
-    )
-    assert not_allowed.json() == {"code": "decision_not_allowed", "retryable": False}
-    stale = masters.send(
-        "POST",
-        decisions,
-        USER,
-        {"to_revision": 1, "decisions": [{"row_id": "f_a", "decision": "accept"}]},
-    )
-    assert stale.json() == {"code": "update_changed", "retryable": False}
-    many = [{"row_id": f"f_{index}", "decision": "accept"} for index in range(501)]
-    assert (
-        masters.send("POST", decisions, USER, {"to_revision": 2, "decisions": many}).status_code
-        == 422
-    )
-    remaining = masters.ok(
-        "POST",
-        f"/masters/{link_id}/update/accept-all",
-        USER,
-        {"to_revision": 2, "group": "changed"},
-    )
-    assert groups(remaining)["changed"] == ["f_b"]
-    assert (
-        masters.send(
-            "POST",
-            f"/masters/{link_id}/update/accept-all",
-            PEER_USER,
-            {"to_revision": 2, "group": "new"},
-        ).status_code
-        == 404
-    )
-    done = masters.send(
-        "POST",
-        decisions,
-        USER,
-        {
-            "to_revision": 2,
-            "decisions": [
-                {"row_id": "f_b", "decision": "keep_mine"},
-                {"row_id": "f_c", "decision": "accept"},
-                {"row_id": "f_d", "decision": "accept"},
-                {"row_id": "f_e", "decision": "dismiss"},
-            ],
-        },
-    )
-    assert done.status_code == 204 and done.content == b""
-    assert not any(masters.ok("GET", f"/masters/{link_id}/update", USER)["groups"].values())
-    view = masters.ok("GET", f"/masters/{link_id}", USER)
-    assert view["link"]["appliedRevision"] == 2
-    rows = {row["filterId"]: row for row in view["filters"]}
-    assert rows["f_a"]["effective"]["startMs"] == 12_000
-    assert (
-        rows["f_b"]["effective"]["startMs"] == 30_500 and rows["f_b"]["master"]["severity"] == "low"
-    )
-    assert rows["f_d"]["state"] == "low_confidence" and not rows["f_d"]["active"]
-    assert "f_c" not in rows and "f_e" not in rows
-
-
-def test_fuzzy_updates_need_alignment_for_their_revision(masters):
+def test_a_fuzzy_link_applies_new_revisions_through_its_alignment(masters):
     link_id = updated_link(masters, tier="4")
     masters.ok("POST", f"/masters/{link_id}/check", USER, {})
-    update = masters.ok("GET", f"/masters/{link_id}/update", USER)
-    assert (update["alignmentRequired"], update["alignmentApproved"]) == (True, False)
-    accept = {
-        row["filterId"]: row["canAccept"] for rows in update["groups"].values() for row in rows
-    }
-    assert accept == {"f_a": False, "f_b": False, "f_c": True, "f_d": False, "f_e": False}
-    refused = masters.send(
-        "POST",
-        f"/masters/{link_id}/update/decisions",
-        USER,
-        {"to_revision": 2, "decisions": [{"row_id": "f_a", "decision": "accept"}]},
-    )
-    assert refused.json()["code"] == "decision_not_allowed"
-    unchanged = masters.ok(
-        "POST", f"/masters/{link_id}/update/accept-all", USER, {"to_revision": 2, "group": "new"}
-    )
-    assert groups(unchanged)["new"] == ["f_e"]
-    path = f"/masters/{link_id}/alignment"
-    token = masters.ok("POST", path + "/preview", USER, {"offset_ms": 500})["token"]
-    masters.ok(
-        "POST", path + "/approve", USER, {"token": token, "for_revision": 2, "confirmed": True}
-    )
-    update = masters.ok("GET", f"/masters/{link_id}/update", USER)
-    assert update["alignmentApproved"] is True
-    assert update["groups"]["changed"][0]["newMaster"]["startMs"] == 12_500
-    accepted = masters.ok(
-        "POST", f"/masters/{link_id}/update/accept-all", USER, {"to_revision": 2, "group": "new"}
-    )
-    assert groups(accepted)["new"] == []
+    view = masters.ok("GET", f"/masters/{link_id}", USER)
+    assert {row["filterId"]: row["master"]["startMs"] for row in view["filters"]}["f_a"] == 12_500
+
+
+def test_decision_and_update_review_routes_are_gone(masters):
+    link_id = updated_link(masters)
+    base = f"/masters/{link_id}"
+    for method, path, body in (
+        ("PATCH", base + "/filters/f_a", {"decision": "verify"}),
+        ("GET", base + "/update", None),
+        ("POST", base + "/update/decisions", {"to_revision": 2, "decisions": []}),
+        ("POST", base + "/update/accept-all", {"to_revision": 2, "group": "new"}),
+    ):
+        assert masters.send(method, path, USER, body).status_code in (404, 405), path
 
 
 def test_daily_sync_records_located_notifications_per_account(masters):
@@ -257,7 +155,7 @@ def test_votes_are_receipt_bound_and_retry_saved_bytes(masters):
     assert voted["state"] == "completed" and voted["result"]["vote"] == "up"
     assert masters.service.votes[0]["vote"] == "up" and "receiptId" in masters.service.votes[0]
     row = masters.ok("GET", f"/masters/{link['linkId']}", USER)["filters"][0]
-    assert (row["myVote"], row["touched"]) == ("up", True)
+    assert row["myVote"] == "up"
     ineligible = masters.send(
         "POST",
         f"{path}/f_zz/vote",
@@ -343,15 +241,7 @@ def test_download_routes_refuse_without_the_capability(masters):
     masters.deny(USER, C.COMMUNITY_DOWNLOAD)
     for method, path, body in (
         ("POST", base + "/check", {}),
-        ("GET", base + "/update", None),
-        (
-            "POST",
-            base + "/update/decisions",
-            {"to_revision": 1, "decisions": [{"row_id": "f_a", "decision": "accept"}]},
-        ),
-        ("POST", base + "/update/accept-all", {"to_revision": 1, "group": "new"}),
         ("POST", base + "/alignment/preview", {"offset_ms": 0}),
-        ("PATCH", base + "/filters/f_a", {"decision": "verify"}),
         ("PATCH", "/preferences", {"show_low_confidence": True}),
         ("GET", "/sync", None),
         ("POST", "/sync/run", {}),

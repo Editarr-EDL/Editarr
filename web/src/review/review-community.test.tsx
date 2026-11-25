@@ -2,42 +2,48 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it } from "vitest";
 import type { MasterLinkSummary } from "../api/api-community-master-types";
-import type { ReviewCommunityFilter, ReviewCommunitySource, SavedReview } from "../api/api-review-types";
+import type { ReviewCommunitySource, ReviewFilter, SavedReview } from "../api/api-review-types";
 import { masterLink } from "../scans/community-master-test-fixtures";
-import { communityEntries, entryFilters, exportedCommunityFilters, filtersDiffer, hasExportEvidence, setCommunityIncluded, stageCommunityRefresh } from "./review-community";
-import { CommunitySubtitleNote, ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
+import { communityEntries, hasExportEvidence, setCommunityIncluded, stageCommunityRefresh } from "./review-community";
+import { ReviewCommunityEntries } from "./review-community-sources";
+import { CommunityFilterFlags, CommunityFilterSource } from "./review-community-badges";
 import { createReviewDraft, isReviewDraftDirty, type ReviewDraft } from "./review-draft";
 
 afterEach(cleanup);
 
-const filter = (id: string, start: number, overrides: Partial<ReviewCommunityFilter> = {}): ReviewCommunityFilter => ({
-  filter_id: id, category: "violence", subcategory: "punching", severity: "high", edit_action: "skip",
-  start_seconds: start, end_seconds: start + 5, confidence: 0.5, ...overrides,
-});
 const source = (overrides: Partial<ReviewCommunitySource> = {}): ReviewCommunitySource => ({
   source_id: "src-1", link_id: "link-1", community_version_id: "v_12ab", label: "Theatrical", tier: "2", match_percent: 80,
   master_revision: 12, alignment: null, captured_at: "2026-11-24T00:00:00", state: "current", link_state: "active",
-  filters: [filter("f1", 10), filter("f2", 40)], ...overrides,
+  filter_count: 2, ...overrides,
 });
-const review = (sources: ReviewCommunitySource[]) => ({
+const communityFilter = (id: string, overrides: Partial<ReviewFilter> = {}): ReviewFilter => ({
+  id: `row-${id}`, source_scan_id: null, source_finding_id: null, community_source_id: "src-1", community_filter_id: id,
+  source: "visual", category: "violence", subcategory: "punching", severity: "high", mcf_channel: "both", mcf_comment: null,
+  label: null, details: null, group_key: null, start_seconds: 10, end_seconds: 15, confidence: 0.5, edit_action: "skip",
+  selected: true,
+  community: { source_id: "src-1", filter_id: id, label: "Theatrical", master_revision: 12, confidence: 0.5,
+    contributor_count: 3, low_confidence: false, removed: false, locally_verified: false },
+  ...overrides,
+});
+const review = (sources: ReviewCommunitySource[], filters: ReviewFilter[] = []) => ({
   id: "review-1", name: "Review", revision: 1, content_revision: 1, edl_content_revision: 1, mcf_content_revision: 1,
-  memberships: [], filters: [], synchronization: { start_seconds: 0, end_seconds: 100, end_mode: "file_end" },
+  memberships: [], filters, synchronization: { start_seconds: 0, end_seconds: 100, end_mode: "file_end" },
   mcf_document: null, accepted_credits: null, community_sources: sources,
 }) as unknown as SavedReview;
 
-it("folds the saved snapshot's link into one entry and compares filters without confidence", () => {
+it("folds the saved snapshot's link into one entry and reads the server's changed state", () => {
   const draft = createReviewDraft(review([source()]));
-  const live = { "link-1": [filter("f1", 10, { confidence: 0.9 }), filter("f2", 40)], "link-2": [filter("f9", 1)] };
-  const entries = communityEntries(draft, [source()], [masterLink(), masterLink({ linkId: "link-2", label: "Extended" })], live);
-  expect(entries.map((entry) => [entry.key, entry.included, entry.changed])).toEqual([["src-1", true, false], ["link-2", false, false]]);
-  expect(filtersDiffer(source().filters, [filter("f1", 10)])).toBe(true);
+  const links = [masterLink(), masterLink({ linkId: "link-2", label: "Extended" })];
+  expect(communityEntries(draft, [source()], links).map((entry) => [entry.key, entry.included, entry.changed]))
+    .toEqual([["src-1", true, false], ["link-2", false, false]]);
+  expect(communityEntries(draft, [source({ state: "changed" })], links)[0].changed).toBe(true);
 });
 
-it("includes, refreshes and removes snapshots through the draft", () => {
-  const draft = createReviewDraft(review([source()]));
-  const [stored, extended] = communityEntries(draft, [source()], [masterLink(), masterLink({ linkId: "link-2", label: "Extended" })],
-    { "link-1": [filter("f1", 10)], "link-2": [filter("f9", 1)] });
-  expect(stored.changed).toBe(true);
+it("includes, refreshes and removes snapshots with their filters through the draft", () => {
+  const filters = [communityFilter("f1"), communityFilter("f2", { selected: false })];
+  const draft = createReviewDraft(review([source({ state: "changed" })], filters));
+  const [stored, extended] = communityEntries(draft, [source({ state: "changed" })],
+    [masterLink(), masterLink({ linkId: "link-2", label: "Extended" })]);
   const refreshed = stageCommunityRefresh(draft, stored);
   expect(refreshed.communityMemberships).toEqual([{ source_id: "src-1", refresh: true }]);
   expect(isReviewDraftDirty(refreshed)).toBe(true);
@@ -45,79 +51,45 @@ it("includes, refreshes and removes snapshots through the draft", () => {
   expect(added.communityMemberships).toEqual([{ source_id: "src-1", refresh: true }, { link_id: "link-2" }]);
   const removed = setCommunityIncluded(added, stored, false);
   expect(removed.communityMemberships).toEqual([{ link_id: "link-2" }]);
+  expect(removed.filters).toEqual([]);
   const restored = setCommunityIncluded(removed, stored, true);
   expect(restored.communityMemberships).toContainEqual({ source_id: "src-1" });
-  expect(entryFilters({ ...stored, refreshStaged: true }).preview).toBe(true);
-  expect(entryFilters(stored).filters.map((value) => value.filter_id)).toEqual(["f1", "f2"]);
+  expect(restored.filters.map((value) => [value.community_filter_id, value.selected])).toEqual([["f1", true], ["f2", false]]);
 });
 
-function Entries({ sources, links, live }: {
-  sources: ReviewCommunitySource[]; links: MasterLinkSummary[]; live: Record<string, ReviewCommunityFilter[]>;
-}) {
-  const [draft, setDraft] = useState<ReviewDraft>(() => createReviewDraft(review(sources)));
-  const entries = communityEntries(draft, sources, links, live);
-  return <><ReviewCommunityEntries entries={entries} draft={draft} disabled={false} maySearch onChange={setDraft} />
-    <ReviewCommunityResults entries={entries} /></>;
+it("needs a scan or a community filter to export", () => {
+  expect(hasExportEvidence(review([source()]))).toBe(false);
+  expect(hasExportEvidence(review([source()], [communityFilter("f1")]))).toBe(true);
+});
+
+function Entries({ sources, links, filters = [] }: { sources: ReviewCommunitySource[]; links: MasterLinkSummary[]; filters?: ReviewFilter[] }) {
+  const [draft, setDraft] = useState<ReviewDraft>(() => createReviewDraft(review(sources, filters)));
+  return <ReviewCommunityEntries entries={communityEntries(draft, sources, links)} draft={draft} disabled={false} maySearch onChange={setDraft} />;
 }
 
-it("shows the changed notice and stages Refresh community filters", () => {
-  render(<Entries sources={[source()]} links={[masterLink()]} live={{ "link-1": [filter("f1", 10)] }} />);
-  expect(screen.getByRole("checkbox", { name: "Community filters · Theatrical" })).toBeChecked();
-  expect(screen.getByText("Community filters changed since included.")).toBeVisible();
-  const table = screen.getByRole("region", { name: "Community review filters table" });
-  expect(table).toHaveTextContent("Community · Theatrical");
-  expect(table).toHaveTextContent("50%");
+it("offers Refresh only for a changed, refreshable snapshot and explains the staged refresh", () => {
+  render(<Entries sources={[source({ state: "changed" })]} links={[masterLink()]} />);
+  expect(screen.getByText("Community filters changed since included.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Refresh community filters" }));
-  expect(screen.getByText("Refresh staged. Save the review to store the current filters.")).toBeVisible();
-  expect(screen.getByRole("region", { name: "Community review filters table" })).toHaveTextContent("(not saved yet)");
+  expect(screen.getByText(/Refresh staged\. Save the review to bring in the community changes; your edits are kept\./)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Refresh community filters" })).toBeNull();
 });
 
-it("blocks links that need alignment and explains unavailable or merged sets", () => {
-  render(<Entries sources={[source({ link_id: null, state: "link_unavailable", label: "Director's Cut" })]}
-    links={[masterLink({ alignmentState: "required" }), masterLink({ linkId: "link-3", label: "IMAX", linkState: "merged" })]} live={{}} />);
-  const fuzzy = screen.getByRole("checkbox", { name: "Community filters · Theatrical" });
-  expect(fuzzy).toBeDisabled();
-  expect(fuzzy).toHaveAccessibleDescription("Align these filters in the Community tab before including them.");
-  expect(screen.getByRole("checkbox", { name: "Community filters · Director's Cut" })).toHaveAccessibleDescription(/no longer available/);
-  expect(screen.getByRole("checkbox", { name: "Community filters · IMAX" })).toBeEnabled();
-  expect(screen.getByText("Merged")).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Refresh community filters" })).not.toBeInTheDocument();
+it("blocks including a link that awaits alignment and explains a new inclusion", () => {
+  render(<Entries sources={[]} links={[masterLink({ alignmentState: "required" }), masterLink({ linkId: "link-2", label: "Extended" })]} />);
+  expect(screen.getByRole("checkbox", { name: "Community filters · Theatrical" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Community filters · Extended" }));
+  expect(screen.getByText(/Saving the review adds these community filters to the results/)).toBeInTheDocument();
 });
 
-it("treats a review with only community filters as exportable, but not one with no evidence", () => {
-  expect(hasExportEvidence(review([source()]))).toBe(true);
-  expect(hasExportEvidence(review([source({ filters: [] })]))).toBe(false);
-  expect(hasExportEvidence(review([]))).toBe(false);
-  expect(hasExportEvidence({ ...review([]), memberships: [{ scan_id: "s", role: "audio" }] })).toBe(true);
-});
-
-it("counts a category change as changed, like the server", () => {
-  expect(filtersDiffer([filter("f1", 10)], [filter("f1", 10, { category: "language" })])).toBe(true);
-});
-
-it("needs a usable community filter to export", () => {
-  expect(hasExportEvidence(review([source({ unusable_filter_ids: ["f1", "f2"] })]))).toBe(false);
-  expect(hasExportEvidence(review([source({ unusable_filter_ids: ["f1"] })]))).toBe(true);
-});
-
-it("summarizes and lists community filters as exports render them", () => {
-  const stored = source({ filters: [filter("f1", 10), filter("f2", 98), filter("f3", 200), filter("bad", 20)], unusable_filter_ids: ["bad"] });
-  const draft = createReviewDraft(review([stored]));
-  const entries = communityEntries(draft, [stored], [], {});
-  const enforced = { punching: "low" };
-  expect(exportedCommunityFilters(entries, 100, enforced).map((value) => [value.filter_id, value.end_seconds, value.severity]))
-    .toEqual([["f1", 15, "low"], ["f2", 100, "low"]]);
-  render(<ReviewCommunityResults entries={entries} durationSeconds={100} enforced={enforced} />);
-  const table = screen.getByRole("region", { name: "Community review filters table" });
-  expect(table).toHaveTextContent("low (enforced; community: high)");
-  expect(table).toHaveTextContent("(not exported: outside the file)");
-  expect(table).toHaveTextContent("(not exported)");
-});
-
-it("explains community mutes that filtered subtitles leave out", () => {
-  const { rerender } = render(<CommunitySubtitleNote summary={{ applied: 1, needs_audio_scan: 0, unaligned: 0 }} />);
-  expect(screen.queryByText(/not applied to subtitles/)).not.toBeInTheDocument();
-  rerender(<CommunitySubtitleNote summary={{ applied: 0, needs_audio_scan: 2, unaligned: 1 }} />);
-  expect(screen.getByText(/2 community mutes not applied to subtitles: run an audio scan/)).toBeVisible();
-  expect(screen.getByText(/1 community mute not applied to subtitles: not aligned with a local language finding/)).toBeVisible();
+it("labels a community filter's source with its version, confidence, contributors and flags", () => {
+  const filters = [communityFilter("f1", { community_edited: true, community: { ...communityFilter("f1").community!,
+    removed: true, locally_verified: true } })];
+  render(<><CommunityFilterSource filters={filters} /><CommunityFilterFlags filters={filters} /></>);
+  expect(screen.getByText("Community · Theatrical")).toBeInTheDocument();
+  expect(screen.getByText("50% confidence")).toBeInTheDocument();
+  expect(screen.getByText("3 contributors")).toBeInTheDocument();
+  expect(screen.getByText("Edited")).toBeInTheDocument();
+  expect(screen.getByText("Removed from community")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Locally verified" })).toBeInTheDocument();
 });

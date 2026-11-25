@@ -1,4 +1,4 @@
-"""camelCase JSON bodies of the master-set routes (local API §3–§9)."""
+"""camelCase JSON bodies of the master-set routes (local API §3–§8)."""
 
 from __future__ import annotations
 
@@ -11,11 +11,6 @@ from scanner.modeling.community_master_state import Preferences
 from scanner.persistence.repository.community_master_filters import MasterFilterView
 from scanner.persistence.repository.community_master_links import alignment_of
 from scanner.persistence.repository.community_master_sync import SyncStatus
-from scanner.persistence.repository.community_master_updates import (
-    UpdateRowView,
-    UpdateView,
-    pending_counts,
-)
 
 UNLABELED = "Other"
 
@@ -45,7 +40,6 @@ def link_json(db: Session, link: CommunityMasterLinkRow) -> dict:
         "alignmentState": link.alignment_state,
         "alignment": alignment_of(link),
         "alignmentRevision": link.alignment_revision,
-        "pendingUpdate": pending_counts(db, link.id),
         "linkState": link.link_state,
         "mergedInto": link.merged_into,
     }
@@ -55,7 +49,7 @@ def preferences_json(preferences: Preferences) -> dict:
     return {
         "confidenceThreshold": preferences.confidence_threshold,
         "showLowConfidence": preferences.show_low_confidence,
-        "hideRejectedDownvoted": preferences.hide_rejected_downvoted,
+        "hideDownvoted": preferences.hide_downvoted,
     }
 
 
@@ -64,41 +58,9 @@ def filter_json(view: MasterFilterView) -> dict:
         "filterId": view.filter_id,
         "category": view.category,
         "master": view.master,
-        "local": view.local,
-        "effective": view.effective,
-        "state": view.state,
-        "touched": view.touched,
         "locallyVerified": view.locally_verified,
         "myVote": view.my_vote,
         "active": view.active,
-    }
-
-
-def _row_json(row: UpdateRowView) -> dict:
-    return {
-        "rowId": row.row_id,
-        "filterId": row.filter_id,
-        "category": row.category,
-        "touched": row.touched,
-        "changedFields": list(row.changed_fields),
-        "mine": row.mine,
-        "oldMaster": row.old_master,
-        "newMaster": row.new_master,
-        "mergedInto": row.merged_into,
-        "allowed": list(row.allowed),
-        "canAccept": row.can_accept,
-    }
-
-
-def update_json(view: UpdateView) -> dict:
-    """`GET …/update`; every bound is on the local timeline through the stored alignment."""
-    return {
-        "version": 1,
-        "fromRevision": view.from_revision,
-        "toRevision": view.to_revision,
-        "alignmentRequired": view.alignment_required,
-        "alignmentApproved": view.alignment_approved,
-        "groups": {group: [_row_json(row) for row in rows] for group, rows in view.groups.items()},
     }
 
 

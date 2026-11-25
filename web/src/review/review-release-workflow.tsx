@@ -1,4 +1,3 @@
-import { CommunitySubtitleNote } from "./review-community-sources";
 import { hasExportEvidence } from "./review-community";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ExportFormat } from "../api/api-mcf-types";
@@ -131,6 +130,6 @@ export function ReviewReleaseStep({ step, workspace, onStepChange, onStartAudioS
   if (!canExportSavedReview(selected.owner_id, me, workspace.access.allowed)) {
     return <p className="muted-copy">You do not have access to export this review.</p>;
   }
-  return <><CommunitySubtitleNote summary={selected.community_subtitles} /><ReviewSubtitlePanel subtitles={subtitles} onStartAudioScan={workspace.access.allowed("scans.start") ? onStartAudioScan : undefined}
-    onContinue={() => { subtitles.prepare(); onStepChange("publish"); }} /></>;
+  return <ReviewSubtitlePanel subtitles={subtitles} onStartAudioScan={workspace.access.allowed("scans.start") ? onStartAudioScan : undefined}
+    onContinue={() => { subtitles.prepare(); onStepChange("publish"); }} />;
 }

@@ -45,7 +45,7 @@ function clone<T>(value: T): T {
 }
 
 /** Drop derived, read-only provenance so it never marks a draft dirty. */
-function comparableFilter({ label_edited: _derived, ...filter }: ReviewFilter): Omit<ReviewFilter, "label_edited"> {
+function comparableFilter({ label_edited: _derived, community: _community, ...filter }: ReviewFilter): Omit<ReviewFilter, "label_edited" | "community"> {
   return filter;
 }
 
@@ -269,12 +269,21 @@ export function snapshotReviewFilters(draft: ReviewDraft, filters: ReviewFilter[
   };
 }
 
+/** Changes to these fields mark a community filter as edited by the user (shared as their verdict). */
+const COMMUNITY_EDIT_FIELDS = ["selected", "start_seconds", "end_seconds", "category", "subcategory", "severity", "edit_action"] as const;
+
 /**
- * Apply a local filter edit. A label change marks `label_edited` immediately so the display
- * follows the relabel; restoring the loaded label restores its loaded flag (keeping the draft clean).
+ * Apply a local filter edit. A direct change to a community filter's enabled state, times,
+ * classification, severity or action marks it `community_edited`. A label change marks
+ * `label_edited` immediately so the display follows the relabel; restoring the loaded label
+ * restores its loaded flag (keeping the draft clean).
  */
 export function updateReviewFilter(draft: ReviewDraft, filterId: string, patch: Partial<ReviewFilter>): ReviewDraft {
   const pair = draft.filterBases[filterId];
+  const target = draft.filters.find((filter) => filter.id === filterId);
+  if (target?.community_source_id && COMMUNITY_EDIT_FIELDS.some((field) => field in patch && patch[field] !== target[field])) {
+    patch = { ...patch, community_edited: true };
+  }
   if ("label" in patch && !("label_edited" in patch)) {
     const current = draft.filters.find((filter) => filter.id === filterId);
     const loaded = pair?.effective;
@@ -368,7 +377,8 @@ export function duplicateReviewDraft(draft: ReviewDraft, name: string): ReviewDr
   const duplicate = {
     ...createReviewDraft(null, name),
     memberships: clone(draft.memberships),
-    filters: draft.filters.map((filter) => ({ ...clone(filter), id: stableId() })),
+    // Community filters belong to the saved review's snapshots; a new review includes them again by link.
+    filters: draft.filters.filter((filter) => !filter.community_source_id).map((filter) => ({ ...clone(filter), id: stableId() })),
     mcfDocument: clone(draft.mcfDocument),
     synchronization: clone(draft.synchronization),
     acceptedCredits: clone(draft.acceptedCredits),

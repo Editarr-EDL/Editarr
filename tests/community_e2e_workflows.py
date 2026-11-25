@@ -239,4 +239,4 @@ def contributions_and_updates(configuration, author, reader, link):
     checked = reader.master("check", link_id=link["linkId"])
     assert checked["changed"] is True, checked
     view = reader.master("view", link_id=link["linkId"])
-    assert view["latestRevision"] > view["appliedRevision"]
+    assert view["latestRevision"] == view["appliedRevision"] == checked["latestRevision"], view

@@ -33,8 +33,6 @@ from scanner.runtime.subtitle_transcript import (
 )
 
 from .repository_paths import resolve_local_path
-from .review_community_sources import export_runtime
-from .review_community_subtitles import community_subtitle_mutes
 from .review_export_target import _review_export_scans
 from .review_policy import prepare_review_policy, require_policy_evidence, require_policy_revision
 from .review_policy_evidence import policy_export_filters
@@ -98,6 +96,26 @@ def _require_unambiguous_name(db, target, actual: Path) -> None:
             )
 
 
+def subtitle_mutes(policy, duration_seconds=None) -> tuple[SubtitleMute, ...]:
+    """The words filtered subtitles redact: one rule for every filter, whatever its source.
+
+    Each enabled audio-channel language mute with a word or phrase (its label) redacts
+    that expression; a mute without one, such as a community filter, changes nothing.
+    """
+    return tuple(
+        SubtitleMute(item.start_seconds, item.end_seconds, item.label)
+        for item in policy_export_filters(policy, duration_seconds=duration_seconds)
+        if item.selected
+        and item.source == "audio"
+        and item.category == McfCategoryFamily.LANGUAGE
+        and item.edit_action == EditAction.MUTE
+        and item.mcf_channel != McfChannel.VIDEO
+        and item.end_seconds is not None
+        and item.end_seconds > item.start_seconds
+        and item.label
+    )
+
+
 def review_subtitle_evidence(
     db,
     review_id: str,
@@ -124,24 +142,7 @@ def review_subtitle_evidence(
     if review.media_source_id != (target.source.media_source_id or ""):
         raise SubtitleError("subtitle_media_changed", "The selected media version changed")
     _require_unambiguous_name(db, target, media)
-    scan_mutes = tuple(
-        SubtitleMute(item.start_seconds, item.end_seconds, item.label)
-        for item in policy_export_filters(policy, duration_seconds=target.source.duration_seconds)
-        if item.selected
-        and item.source == "audio"
-        and item.category == McfCategoryFamily.LANGUAGE
-        and item.edit_action == EditAction.MUTE
-        and item.mcf_channel != McfChannel.VIDEO
-        and item.end_seconds is not None
-        and item.end_seconds > item.start_seconds
-        and item.label
-    )
-    runtime = export_runtime(
-        db, review, list(scans.values()), lambda: target.source.duration_seconds
-    )
-    community = community_subtitle_mutes(db, review, runtime).mutes
-    # A community mute redacts through a local finding that a scan mute may already use.
-    mutes = tuple(dict.fromkeys(scan_mutes + community))
+    mutes = subtitle_mutes(policy, target.source.duration_seconds)
     return ReviewSubtitleEvidence(
         target.source.media_source_id or "",
         media,

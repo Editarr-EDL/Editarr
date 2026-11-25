@@ -158,9 +158,17 @@ def label_edits(review, findings: dict[int, ScanFindingRow]) -> dict[str, bool]:
     }
 
 
-def with_label_provenance(filters, edits: dict[str, bool]) -> list[SavedReviewFilter]:
-    """Attach precomputed label provenance (see :func:`label_edits`) to response filters."""
+def with_label_provenance(
+    filters, edits: dict[str, bool], community: dict | None = None
+) -> list[SavedReviewFilter]:
+    """Attach precomputed label provenance (see :func:`label_edits`) and, for community
+    filters, their community provenance to response filters."""
+    community = community or {}
     return [
-        SavedReviewFilter(**value.model_dump(), label_edited=edits.get(value.id, False))
+        SavedReviewFilter(
+            **value.model_dump(exclude={"label_edited", "community"}),
+            label_edited=edits.get(value.id, False),
+            community=community.get(value.id),
+        )
         for value in filters
     ]

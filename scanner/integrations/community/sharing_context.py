@@ -29,7 +29,8 @@ def audio_source_ids(data: dict, reference: SourceRef) -> set[str]:
     identifiers = {
         item.get("source_scan_id", item.get("scan_id"))
         for item in data["findings"]
-        if (
+        if not item.get("community_source_id")
+        and (
             item["mcf_channel"]
             or ("both" if not generated else "audio" if item["source"] == "audio" else "video")
         )

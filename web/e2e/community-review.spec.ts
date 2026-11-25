@@ -1,87 +1,105 @@
 /**
- * Saved reviews include community filters as stored snapshots (docs/community-local-api.md §3): the
- * Review tab's Included scans offers each master set, results list the stored filters, and Community
- * tab changes only show a "changed" notice until the user refreshes and saves.
+ * Community filters are normal review filters (docs/community-local-api.md §3, ADR 0002 U1–U5): the
+ * Review tab's Included scans offers each master set, its filters join the normal results where they
+ * are enabled, disabled and adjusted like scan filters, the Community tab only browses, votes and
+ * downloads updates, and Refresh brings community changes in while keeping the user's edits.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi, mockReview } from "./app-fixtures";
-import { mockCommunityMasters, type CommunityMastersMock } from "./community-masters-mock";
+import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi } from "./app-fixtures";
+import { mockCommunityMasters } from "./community-masters-mock";
+import { mockCommunityReview } from "./community-review-mock";
 import { chooseExportFormat, chooseWorkflowStep } from "./workflow-actions";
-import type { ReviewCommunityMembership } from "../src/api/api-review-types";
 
-/** One saved review whose PUT stores community snapshots the way the backend does. */
-async function mockCommunityReview(page: Page, community: CommunityMastersMock) {
-  let review = { ...mockReview("review-c", "Community review", "source-1"), community_sources: [] as unknown[] };
-  const saves: { community_memberships?: ReviewCommunityMembership[] }[] = [];
-  let snapshots = 0;
-  const snapshot = (sourceId: string) => ({ source_id: sourceId, link_id: community.state.link!.linkId,
-    community_version_id: community.state.link!.communityVersionId, label: community.state.link!.label, tier: "4",
-    match_percent: 30, master_revision: 12, alignment: null, captured_at: "2026-11-24T00:00:00", state: "current",
-    link_state: "active", filters: community.snapshotFilters() });
-  await page.route("**/api/library-items/movie-1/reviews*", (route) => route.request().method() === "GET"
-    ? json(route, [review]) : route.fallback());
-  await page.route("**/api/reviews/review-c", async (route) => {
-    if (route.request().method() === "GET") return json(route, review);
-    const body = route.request().postDataJSON();
-    saves.push(body);
-    const sources = (body.community_memberships ?? []).map((value: ReviewCommunityMembership) => value.link_id
-      ? snapshot(`snap-${++snapshots}`)
-      : value.refresh ? snapshot(value.source_id!) : review.community_sources.find((source) =>
-        (source as { source_id: string }).source_id === value.source_id));
-    review = { ...review, revision: review.revision + 1, content_revision: review.content_revision + 1,
-      edl_content_revision: review.edl_content_revision + 1, community_sources: sources };
-    return json(route, review);
-  });
-  return saves;
+async function openReview(page: Page, name: string) {
+  await page.goto("/#/library/movies/item/movie-1");
+  await chooseWorkflowStep(page, "Review");
+  const open = page.getByRole("button", { name: `Open review ${name}` });
+  if (await open.isVisible()) await open.click();
 }
 
+async function check(page: Page, name: string, width: number) {
+  await expectNoHorizontalPageOverflow(page);
+  await expectNoAccessibilityViolations(page);
+  // Show each scrolling table from its first column.
+  await page.evaluate(() => document.querySelectorAll("*").forEach((element) => { if (element.scrollLeft) element.scrollLeft = 0; }));
+  await page.screenshot({ path: `test-results/cm-review-uniform/${name}-${width}.png`, fullPage: true });
+}
+
+const byTime = (page: Page) => page.getByRole("table", { name: "Review filters by time" });
+const row = (page: Page, time: string) => byTime(page).getByRole("row").filter({ hasText: time });
+
 for (const width of [320, 1440]) {
-  test(`${width}px include, flag and refresh community filters in a saved review`, async ({ page }) => {
+  test(`${width}px include, edit and refresh community filters as normal review filters`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockApi(page);
     await page.route("**/api/scans/history", (route) => json(route, []));
     const community = await mockCommunityMasters(page, { linked: true });
     const saves = await mockCommunityReview(page, community);
-    await page.goto("/#/library/movies/item/movie-1");
-    await chooseWorkflowStep(page, "Review");
-    const open = page.getByRole("button", { name: "Open review Community review" });
-    if (await open.isVisible()) await open.click();
+    await openReview(page, "Community review");
 
     const included = page.getByRole("complementary", { name: "Review scan evidence" });
     const entry = included.getByRole("checkbox", { name: "Community filters · Extended Edition" });
     await expect(entry).not.toBeChecked();
     await entry.check();
-    const results = page.getByRole("region", { name: "Community review filters table" });
-    await expect(results).toContainText("(not saved yet)");
-    await expect(results).toContainText("Community · Extended Edition");
+    await expect(included.getByText(/Saving the review adds these community filters to the results/)).toBeVisible();
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect.poll(() => saves[0]?.community_memberships).toEqual([{ link_id: "link-v_extended" }]);
-    await expect(results).not.toContainText("(not saved yet)");
-    await expect(results.getByRole("row")).toHaveCount(3);
-    await expectNoHorizontalPageOverflow(page);
-    await expectNoAccessibilityViolations(page);
-    await page.screenshot({ path: `test-results/community-review-included-${width}.png`, fullPage: true });
 
+    await page.getByRole("combobox", { name: "Sort" }).selectOption("time");
+    await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(3);
+    await expect(row(page, "10:00").getByRole("checkbox")).toBeChecked();
+    await expect(row(page, "15:00").getByRole("checkbox")).toBeChecked();
+    // Low Confidence filters arrive disabled.
+    await expect(row(page, "20:00").getByRole("checkbox")).not.toBeChecked();
+    await expect(page.getByRole("region", { name: "Timeline summary" })).toContainText("0 selected scans and 3 community filters");
+    await check(page, "review-community-included", width);
+
+    // Disable one and adjust another exactly like a scan filter.
+    await row(page, "10:00").getByRole("checkbox").uncheck();
+    await row(page, "15:00").getByRole("button", { name: /^Edit filter/ }).click();
+    await page.getByRole("spinbutton", { name: /start seconds/ }).fill("905");
+    await page.getByRole("button", { name: "Done" }).click();
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await expect.poll(() => saves[1]?.filters.find((filter) => filter.community_filter_id === "f_lang")?.start_seconds).toBe(905);
+    expect(saves[1].filters.find((filter) => filter.community_filter_id === "f_fight")?.selected).toBe(false);
+    await expect(byTime(page).getByText("Edited")).toHaveCount(2);
+    await check(page, "review-community-edited", width);
+
+    // The Community tab is read-only for decisions and only downloads the newer filters.
     await chooseWorkflowStep(page, "Community");
     const panel = page.getByRole("region", { name: "Community filters", exact: true });
     await panel.getByRole("button", { name: "Show filters" }).click();
-    await panel.getByRole("button", { name: /^Reject Language/ }).click();
-    await expect(panel.getByText("Not applied")).toBeVisible();
+    for (const name of [/^Confirm/, /^Reject/, /^Reset/]) await expect(panel.getByRole("button", { name })).toHaveCount(0);
+    await panel.getByRole("button", { name: "Check for filter updates" }).click();
+    await expect(panel.getByText(/Downloaded the latest community filters/)).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Review" })).toHaveCount(0);
+    await check(page, "community-tab", width);
 
     await chooseWorkflowStep(page, "Review");
     await expect(included.getByText("Community filters changed since included.")).toBeVisible();
-    // The review keeps its stored snapshot until the user refreshes it.
-    await expect(results.getByRole("row")).toHaveCount(3);
-    expect(saves).toHaveLength(1);
-    await expectNoHorizontalPageOverflow(page);
-    await expectNoAccessibilityViolations(page);
-    await page.screenshot({ path: `test-results/community-review-changed-${width}.png`, fullPage: true });
+    // The review keeps its filters until the user refreshes them.
+    await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(3);
+    expect(saves).toHaveLength(2);
+    await check(page, "review-refresh-available", width);
     await included.getByRole("button", { name: "Refresh community filters" }).click();
-    await expect(included.getByText("Refresh staged. Save the review to store the current filters.")).toBeVisible();
+    await expect(included.getByText(/Refresh staged\. Save the review to bring in the community changes/)).toBeVisible();
     await page.getByRole("button", { name: "Save Changes" }).click();
-    await expect.poll(() => saves[1]?.community_memberships).toEqual([{ source_id: "snap-1", refresh: true }]);
+    await expect.poll(() => saves[2]?.community_memberships).toEqual([{ source_id: "snap-1", refresh: true }]);
     await expect(included.getByText("Community filters changed since included.")).toHaveCount(0);
-    await expect(results.getByRole("row")).toHaveCount(2);
+    await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(4);
+    // Edits stay; the filter no longer served is flagged and stays disabled; the new one arrives enabled.
+    await expect(row(page, "10:00").getByRole("checkbox")).not.toBeChecked();
+    await expect(row(page, "15:05")).toContainText("Edited");
+    await expect(row(page, "20:00")).toContainText("Removed from community");
+    await expect(row(page, "20:00").getByRole("checkbox")).not.toBeChecked();
+    await expect(row(page, "30:00").getByRole("checkbox")).toBeChecked();
+    await check(page, "review-refreshed-removed", width);
+    // The flags show with the time, visible without scrolling the table sideways.
+    const flag = row(page, "20:00").getByText("Removed from community");
+    await flag.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
+    await expect(flag).toBeInViewport({ ratio: 1 });
+    await expect(row(page, "15:05").getByText("Edited")).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: `test-results/cm-review-uniform/review-removed-flag-${width}.png` });
   });
 }
 
@@ -91,30 +109,18 @@ for (const width of [320, 1440]) {
     await mockApi(page);
     await page.route("**/api/scans/history", (route) => json(route, []));
     const community = await mockCommunityMasters(page, { linked: true });
-    const review = { ...mockReview("review-c", "Community only", "source-1"), community_sources: [{
-      source_id: "snap-1", link_id: community.state.link!.linkId, community_version_id: "v_extended", label: "Extended Edition",
-      tier: "4", match_percent: 30, master_revision: 12, alignment: null, captured_at: "2026-11-24T00:00:00", state: "current",
-      link_state: "active", filters: community.snapshotFilters() }],
-      community_subtitles: { applied: 0, needs_audio_scan: 1, unaligned: 0 } };
-    await page.route("**/api/library-items/movie-1/reviews*", (route) => route.request().method() === "GET"
-      ? json(route, [review]) : route.fallback());
-    await page.route("**/api/reviews/review-c", (route) => json(route, review));
-    await page.goto("/#/library/movies/item/movie-1");
-    await chooseWorkflowStep(page, "Review");
-    const open = page.getByRole("button", { name: "Open review Community only" });
-    if (await open.isVisible()) await open.click();
-    await expect(page.getByRole("region", { name: "Community review filters table" })).toContainText("Community · Extended Edition");
-    const note = /1 community mute not applied to subtitles: run an audio scan/;
-    await expect(page.getByText(note)).toBeVisible();
+    await mockCommunityReview(page, community, "Community only");
+    await openReview(page, "Community only");
+    await page.getByRole("complementary", { name: "Review scan evidence" })
+      .getByRole("checkbox", { name: "Community filters · Extended Edition" }).check();
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await expect(page.getByText("Community · Extended Edition").first()).toBeVisible();
     await chooseWorkflowStep(page, "Subtitles");
-    await expect(page.getByRole("tabpanel", { name: "Subtitles" }).getByText(note)).toBeVisible();
-    await page.screenshot({ path: `test-results/community-subtitle-note-${width}.png`, fullPage: true });
+    await expect(page.getByText(/community mute/)).toHaveCount(0);
     const exportButton = await chooseExportFormat(page, "EDL");
     await exportButton.click();
     const dialog = page.getByRole("dialog", { name: "Export" });
     await expect(dialog.getByRole("button", { name: "Download EDL" })).toBeEnabled();
-    await expectNoHorizontalPageOverflow(page);
-    await expectNoAccessibilityViolations(page);
-    await page.screenshot({ path: `test-results/community-only-export-${width}.png`, fullPage: true });
+    await check(page, "community-only-export", width);
   });
 }

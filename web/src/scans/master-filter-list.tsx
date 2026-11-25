@@ -1,17 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { decideMasterFilter } from "../api/api-community-masters";
 import type { MasterFilter, MasterPreferences, MasterView } from "../api/api-community-master-types";
 import { ConfidenceBadge, LocallyVerifiedIcon } from "./community-master-badges";
-import { filterActive, filterName, filterVisible, formatRange, masterErrorText, percent } from "./community-master-format";
+import { filterName, filterVisible, formatRange, percent } from "./community-master-format";
 import { MasterVoteButtons } from "./master-vote-buttons";
-import { notifyCommunityFiltersChanged } from "./community-master-events";
 
-const stateLabels: Record<MasterFilter["state"], string> = {
-  pending: "From community", verified: "Confirmed", adjusted: "Adjusted", rejected: "Rejected", low_confidence: "Low Confidence",
-};
-
-/** Threshold slider and the "Show Low Confidence filters" and "Hide rejected and downvoted filters"
- * toggles (both off by default). Hiding only affects which rows the list shows. */
+/** Threshold slider and the "Show Low Confidence filters" and "Hide downvoted filters" toggles (both
+ * off by default). The threshold and Low Confidence decide which filters start enabled when a review
+ * includes or refreshes them; hiding downvoted filters only affects the list. */
 export function MasterPreferenceControls({ preferences, disabled, onChange }: {
   preferences: MasterPreferences; disabled?: boolean; onChange: (value: MasterPreferences) => void;
 }) {
@@ -27,87 +22,59 @@ export function MasterPreferenceControls({ preferences, disabled, onChange }: {
     <label className="master-toggle"><input type="checkbox" checked={preferences.showLowConfidence} disabled={disabled}
       onChange={(event) => onChange({ ...preferences, showLowConfidence: event.target.checked })} />
       Show Low Confidence filters</label>
-    <label className="master-toggle"><input type="checkbox" checked={!!preferences.hideRejectedDownvoted} disabled={disabled}
-      onChange={(event) => onChange({ ...preferences, hideRejectedDownvoted: event.target.checked })} />
-      Hide rejected and downvoted filters</label>
+    <label className="master-toggle"><input type="checkbox" checked={!!preferences.hideDownvoted} disabled={disabled}
+      onChange={(event) => onChange({ ...preferences, hideDownvoted: event.target.checked })} />
+      Hide downvoted filters</label>
+    <p className="muted-copy master-preferences-note">Filters below the minimum confidence, and Low Confidence filters unless
+      shown, start disabled when a review includes or refreshes them.</p>
   </div>;
 }
 
 /**
- * Master set filter rows filtered by the user's preferences. Touched rows always show. Each row has
- * its confidence, contributor count (never names), the Locally verified icon, votes and local decisions.
- * `serverActive` uses the server's `active` flag; otherwise activity is recomputed for unsaved preferences.
- * A row rejected or downvoted here stays listed while "Hide rejected and downvoted filters" is on, so
- * focus and context aren't lost; it hides once that setting changes or the list reloads.
+ * The master set's filters that start enabled in reviews under the user's preferences, read-only:
+ * each row has its confidence, contributor count (never names), the Locally verified icon and votes.
+ * Filters are enabled, disabled and adjusted in the reviews that include them. A row downvoted here
+ * stays listed while "Hide downvoted filters" is on, so focus and context aren't lost; it hides once
+ * that setting changes or the list reloads.
  */
-export function MasterFilterList({ view, preferences, serverActive = false, canVote, canDecide, onFilter }: {
-  view: MasterView; preferences: MasterPreferences; serverActive?: boolean; canVote: boolean; canDecide: boolean;
-  onFilter: (filter: MasterFilter) => void;
+export function MasterFilterList({ view, preferences, canVote, onFilter }: {
+  view: MasterView; preferences: MasterPreferences; canVote: boolean; onFilter: (filter: MasterFilter) => void;
 }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
   const keep = (filterId: string) => setKept((current) => new Set(current).add(filterId));
   const scroller = useRef<HTMLDivElement>(null);
   const { link } = view;
-  const alignmentRequired = link.alignmentState === "required";
-  const { confidenceThreshold, showLowConfidence, hideRejectedDownvoted } = preferences;
+  const { confidenceThreshold, showLowConfidence, hideDownvoted } = preferences;
   useEffect(() => {
     // A new set of rows starts at Time and Filter, even if a row's actions were scrolled into view.
     setKept(new Set());
     if (scroller.current) scroller.current.scrollLeft = 0;
-  }, [confidenceThreshold, showLowConfidence, hideRejectedDownvoted]);
+  }, [confidenceThreshold, showLowConfidence, hideDownvoted]);
   const visible = view.filters.filter((filter) => filterVisible(filter, preferences)
-    || (kept.has(filter.filterId) && filterVisible(filter, { ...preferences, hideRejectedDownvoted: false })))
-    .sort((a, b) => a.effective.startMs - b.effective.startMs);
+    || (kept.has(filter.filterId) && filterVisible(filter, { ...preferences, hideDownvoted: false })))
+    .sort((a, b) => a.master.startMs - b.master.startMs);
   const hidden = view.filters.length - visible.length;
-
-  const decide = async (filter: MasterFilter, decision: "verify" | "reject" | "reset") => {
-    setBusy(filter.filterId);
-    setError(null);
-    try {
-      onFilter(await decideMasterFilter(link.linkId, filter.filterId, { decision, expected_state: filter.state }));
-      keep(filter.filterId);
-      notifyCommunityFiltersChanged();
-    }
-    catch (reason) { setError(masterErrorText(reason)); }
-    finally { setBusy(null); }
-  };
 
   return <div className="master-filter-list">
     <p className="muted-copy" role="status">{visible.length} {visible.length === 1 ? "filter" : "filters"} shown
       {hidden > 0 && ` · ${hidden} hidden by your filter settings`}</p>
-    {error && <p className="form-error" role="alert">{error}</p>}
     {visible.length > 0 && <div ref={scroller} className="community-results-scroll" role="region" aria-label={`${link.label} filters`} tabIndex={0}>
       <table className="community-results-table master-filter-table">
         <thead><tr><th scope="col">Time</th><th scope="col">Filter</th><th scope="col">Confidence</th>
-          <th scope="col">Contributors</th><th scope="col">Status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
+          <th scope="col">Contributors</th><th scope="col">Verified</th><th scope="col"><span className="visually-hidden">Votes</span></th></tr></thead>
         <tbody>{visible.map((filter) => {
-          const name = `${filterName({ category: filter.category, subcategory: filter.effective.subcategory })} at ${formatRange(filter.effective)}`;
-          const active = serverActive ? filter.active : filterActive(filter, preferences, alignmentRequired);
-          return <tr key={filter.filterId} className={active ? undefined : "master-row-inactive"}>
-            <td className="master-time">{formatRange(filter.effective)}</td>
-            <th scope="row">{filterName({ category: filter.category, subcategory: filter.effective.subcategory })}
-              <small className="muted-copy">{[filter.effective.severity, filter.effective.action].filter(Boolean).join(" · ")}</small></th>
+          const label = filterName({ category: filter.category, subcategory: filter.master.subcategory });
+          const name = `${label} at ${formatRange(filter.master)}`;
+          return <tr key={filter.filterId}>
+            <td className="master-time">{formatRange(filter.master)}</td>
+            <th scope="row">{label}
+              <small className="muted-copy">{[filter.master.severity, filter.master.action].filter(Boolean).join(" · ")}</small></th>
             <td><ConfidenceBadge confidence={filter.master.confidence} low={filter.master.lowConfidence} /></td>
             <td>{filter.master.contributorCount}</td>
-            <td><span className="master-status">{stateLabels[filter.state]}{filter.locallyVerified && <LocallyVerifiedIcon />}
-              {!active && <small className="muted-copy">Not applied</small>}</span></td>
+            <td>{filter.locallyVerified ? <LocallyVerifiedIcon /> : <span className="muted-copy">—</span>}</td>
             <td><div className="community-row-actions">
               {canVote && <MasterVoteButtons linkId={link.linkId} filterId={filter.filterId} name={name} myVote={filter.myVote}
-                onVoted={(myVote) => {
-                  keep(filter.filterId);
-                  const next = { ...filter, myVote, touched: filter.touched || myVote !== null };
-                  onFilter({ ...next, active: filterActive(next, preferences, alignmentRequired) });
-                }} />}
-              {canDecide && filter.state !== "verified" && filter.state !== "rejected" && <button type="button"
-                className="btn-secondary compact-button" disabled={busy !== null} aria-label={`Confirm ${name}`}
-                onClick={() => void decide(filter, "verify")}>Confirm</button>}
-              {canDecide && filter.state !== "rejected" && <button type="button" className="btn-secondary compact-button"
-                disabled={busy !== null} aria-label={`Reject ${name}`} onClick={() => void decide(filter, "reject")}>Reject</button>}
-              {canDecide && filter.touched && filter.state !== "pending" && filter.state !== "low_confidence" && <button type="button"
-                className="btn-secondary compact-button" disabled={busy !== null} aria-label={`Reset ${name}`}
-                onClick={() => void decide(filter, "reset")}>Reset</button>}
+                onVoted={(myVote) => { keep(filter.filterId); onFilter({ ...filter, myVote }); }} />}
             </div></td>
           </tr>;
         })}</tbody>

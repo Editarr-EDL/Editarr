@@ -59,15 +59,10 @@ def test_find_download_list_and_view_for_a_file_tier(masters):
     assert view["preferences"] == {
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": False,
+        "hideDownvoted": False,
     }
     (row,) = view["filters"]
-    assert (row["state"], row["active"], row["touched"], row["local"]) == (
-        "pending",
-        True,
-        False,
-        None,
-    )
+    assert row["active"] and row["myVote"] is None
     assert row["master"]["startMs"] == 10_000 and row["master"]["confidence"] == 0.5
 
 
@@ -121,8 +116,10 @@ def test_links_are_per_account_and_respect_capabilities_and_media(masters):
         masters.ok("GET", f"/masters?item_id={masters.item_id}", USER)["links"][0]["linkId"]
         == link["linkId"]
     )
-    decided = masters.send("PATCH", f"{path}/filters/f_a", PEER_USER, {"decision": "verify"})
-    assert decided.status_code == 404
+    voted = masters.send(
+        "POST", f"{path}/filters/f_a/vote", PEER_USER, {"vote": "up", "operation_id": "vote-x"}
+    )
+    assert voted.status_code in (404, 422)
     masters.app.accounts.set_override(USER, C.COMMUNITY_SEARCH, OverrideEffect.DENY)
     denied = masters.send("GET", path, USER)
     assert (denied.status_code, denied.json()["code"]) == (403, "capability_denied")
@@ -132,49 +129,14 @@ def test_links_are_per_account_and_respect_capabilities_and_media(masters):
     assert masters.send("GET", f"/masters?item_id={masters.item_id}", USER).status_code == 404
 
 
-def test_local_filter_decisions_validate_the_taxonomy_and_state(masters):
-    link = masters.link(USER)
-    path = f"/masters/{link['linkId']}/filters/f_a"
-    verified = masters.ok("PATCH", path, USER, {"decision": "verify", "expected_state": "pending"})
-    assert (verified["state"], verified["touched"], verified["locallyVerified"]) == (
-        "verified",
-        True,
-        True,
-    )
-    stale = masters.send("PATCH", path, USER, {"decision": "reject", "expected_state": "pending"})
-    assert stale.json() == {"code": "filter_state_changed", "retryable": False}
-    for body in (
-        {"decision": "adjust"},
-        {"decision": "adjust", "subcategory": "nudity"},
-        {"decision": "adjust", "start_ms": 30_000},
-        {"decision": "verify", "severity": "low"},
-        {"decision": "adjust", "severity": "extreme"},
-        {"decision": "adjust", "start_ms": -1},
-    ):
-        assert masters.send("PATCH", path, USER, body).status_code == 422, body
-    adjusted = masters.ok(
-        "PATCH", path, USER, {"decision": "adjust", "start_ms": 11_000, "severity": "low"}
-    )
-    assert adjusted["state"] == "adjusted" and adjusted["local"]["startMs"] == 11_000
-    assert adjusted["effective"]["severity"] == "low" and adjusted["master"]["startMs"] == 10_000
-    reset = masters.ok("PATCH", path, USER, {"decision": "reset"})
-    assert (reset["state"], reset["touched"], reset["local"]) == ("pending", False, None)
-    assert (
-        masters.send(
-            "PATCH", f"/masters/{link['linkId']}/filters/f_missing", USER, {"decision": "verify"}
-        ).status_code
-        == 404
-    )
-
-
-def test_preferences_are_per_account_and_decide_untouched_rows(masters):
+def test_preferences_are_per_account_and_decide_which_filters_start_enabled(masters):
     low = served_filter("f_low", 30_000, 31_000, confidence=0.2)
     link = masters.link(USER, "v_1", "2", served_filter("f_a"), low)
     assert masters.ok("GET", "/preferences", USER) == {
         "version": 1,
         "confidenceThreshold": 0.0,
         "showLowConfidence": False,
-        "hideRejectedDownvoted": False,
+        "hideDownvoted": False,
     }
     saved = masters.ok("PATCH", "/preferences", USER, {"confidence_threshold": 0.3})
     assert saved["confidenceThreshold"] == 0.3
@@ -196,10 +158,10 @@ def test_active_filters_feed_the_edl_range_merging(masters):
         served_filter("f_a", 10_000, 20_000),
         served_filter("f_b", 15_000, 25_000),
         served_filter("f_c", 40_000, 41_000, action="mute"),
-        served_filter("f_d", 60_000, 61_000),
+        served_filter("f_d", 60_000, 61_000, confidence=0.1),
     )
     link = masters.link(USER, "v_1", "2", *filters)
-    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_d", USER, {"decision": "reject"})
+    masters.ok("PATCH", "/preferences", USER, {"confidence_threshold": 0.3})
     active = masters.ok("GET", f"/masters/{link['linkId']}/active-filters", USER)
     assert [item["filterId"] for item in active["filters"]] == ["f_a", "f_b", "f_c"]
     assert active["localVersionId"] == VERSION_ID
@@ -256,15 +218,12 @@ def test_patch_routes_refuse_requests_without_csrf(masters):
     link = masters.link(USER)
     headers = dict(masters.app.accounts.unsafe_cookie(USER))
     headers.pop("X-CSRF-Token")
-    for path, body in (
-        (f"/masters/{link['linkId']}/filters/f_a", {"decision": "verify"}),
-        ("/preferences", {"show_low_confidence": True}),
-    ):
-        masters.app.client.cookies.clear()
-        refused = masters.app.client.patch(API + path, json=body, headers=headers)
-        assert refused.json()["code"] == "csrf_failed", path
-    row = masters.ok("GET", f"/masters/{link['linkId']}", USER)["filters"][0]
-    assert row["state"] == "pending"
+    masters.app.client.cookies.clear()
+    refused = masters.app.client.patch(
+        API + "/preferences", json={"show_low_confidence": True}, headers=headers
+    )
+    assert refused.json()["code"] == "csrf_failed"
+    assert masters.ok("GET", f"/masters/{link['linkId']}", USER)["filters"]
     assert masters.ok("GET", "/preferences", USER)["showLowConfidence"] is False
 
 
@@ -272,8 +231,9 @@ def test_path_identifiers_and_preference_numbers_are_strict(masters):
     link = masters.link(USER)
     assert masters.send("GET", "/masters/bad%20id", USER).status_code == 422
     assert masters.send("GET", "/masters/" + "a" * 129, USER).status_code == 422
-    bad_filter = f"/masters/{link['linkId']}/filters/f%20a"
-    assert masters.send("PATCH", bad_filter, USER, {"decision": "verify"}).status_code == 422
+    bad_filter = f"/masters/{link['linkId']}/filters/f%20a/vote"
+    body = {"vote": "up", "operation_id": "vote-1", "confirmed": True}
+    assert masters.send("POST", bad_filter, USER, body).status_code == 422
     for value in ("0.5", True):
         body = {"confidence_threshold": value}
         assert masters.send("PATCH", "/preferences", USER, body).status_code == 422

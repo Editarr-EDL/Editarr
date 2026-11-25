@@ -7,8 +7,9 @@ import { MasterFindResults } from "./master-find-results";
 
 /**
  * The item workflow's Community tab: Find Filters searches the community service for master filter
- * sets of this version, and the account's linked sets are reviewed here. Accounts without
- * `community.search` see why the tab is empty instead of the controls.
+ * sets of this version, and the account's linked sets are browsed, voted on and checked for updates
+ * here. Filter decisions happen in reviews. Accounts without `community.search` see why the tab is
+ * empty instead of the controls.
  */
 export function CommunityTab({ target }: { target: MasterTarget }) {
   const maySearch = useCan("community.search");
@@ -18,7 +19,7 @@ export function CommunityTab({ target }: { target: MasterTarget }) {
     <div className="section-heading">
       <div>
         <h2 id="community-tab-heading">Community filters</h2>
-        <p>Filter sets other people shared for this version. Review them here, then include them in a saved review from the Review tab.</p>
+        <p>Filter sets other people shared for this version. Browse and vote on them here, then include them in a saved review from the Review tab, where you enable, disable and adjust them.</p>
       </div>
       {maySearch && <button type="button" className="btn-primary" ref={trigger} aria-haspopup="dialog"
         onClick={() => setFinding(true)}>Find Filters</button>}

@@ -9,7 +9,8 @@ const kindText: Record<SyncNotification["kind"], string> = {
 
 /**
  * Sidebar notification entry for the daily community sync: an unread count, any sync problem, and a
- * list of updated items as links to the notified version's item page, where the banner offers Review.
+ * list of updated items as links to the notified version's Community tab. Reviews that include an
+ * updated set show "Refresh community filters".
  */
 export function CommunityUpdatesEntry({ sync, onNavigate }: {
   sync: ReturnType<typeof useCommunitySync>; onNavigate: (route: string) => boolean;

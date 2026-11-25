@@ -1,12 +1,12 @@
 """Project a local scan or saved review, and its master link, into a v3 submission
-(contract §5.2, local API §7, D21–D22).
+(contract §5.2, local API §7, D21–D22, ADR 0002 U6).
 
 | Source | Entry |
 | --- | --- |
 | Kept review or scan cue | `support`, proposing the master filter it overlaps |
-| `rejected` master row | `dispute` |
-| `verified`/`adjusted` row no cue proposes | `support` with the effective values |
-| Untouched master row | not shared |
+| Edited, enabled community review filter | `support` of its master filter, with the user's values |
+| Edited, disabled community review filter | `dispute` of its master filter |
+| Untouched community review filter | not shared |
 | Completed scan stages | `coverage`, for every category on the channel they analyzed |
 
 All times are milliseconds on the local file timeline.
@@ -26,12 +26,13 @@ from scanner.modeling.community_filter_proposals import (
     estimate,
     inverse_alignment,
     propose_filters,
-    shared_rows,
 )
 from scanner.modeling.community_master_state import intervals_overlap
 from scanner.modeling.community_match_keys import FileKey, HashKey
 from scanner.modeling.community_work_identity import WorkIdentity
 from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
+
+from .submission_attestations import review_attestations
 
 MAX_ENTRIES = 2000
 MAX_INTERVALS = 512
@@ -109,7 +110,7 @@ def _cues(data: dict, kind: str, duration_ms: int, warnings: list[str]):
     model = _model_findings(data)
     cues = []
     for row in data["findings"]:
-        if not row.get("selected", True):
+        if not row.get("selected", True) or row.get("community_source_id"):
             continue
         category, subcategory = _value(row.get("category")), row.get("subcategory")
         severity, end = _value(row.get("severity")), row.get("end_seconds")
@@ -195,24 +196,6 @@ def _intervals(encoded) -> list[dict]:
     ]
 
 
-def _row_entry(row: LinkedFilter, kind: str, duration_ms: int) -> dict | None:
-    start, end = max(0, row.start_ms), min(duration_ms, row.end_ms)
-    if not start < end:
-        return None
-    support = kind == "support"
-    return {
-        "kind": kind,
-        "proposedFilterId": row.filter_id,
-        "startMs": start,
-        "endMs": end,
-        "category": row.category,
-        "subcategory": row.subcategory if support else None,
-        "severity": row.severity if support else None,
-        "action": row.action if support else None,
-        "evidence": _evidence("downloaded", True, support, None),
-    }
-
-
 def _key_json(key: FileKey) -> dict:
     if isinstance(key, HashKey):
         return {"type": key.type, "value": key.value, "sizeBytes": key.size_bytes}
@@ -245,9 +228,18 @@ def project_submission(
     warnings: list[str] = []
     duration = options.duration_ms
     cues = _cues(data, kind, duration, warnings)
+    model = _model_findings(data)
+    attested = review_attestations(
+        data if kind == "review" else {},
+        duration,
+        lambda category, start, end: any(
+            intervals_overlap(start, end, first, last) for first, last in model[category]
+        ),
+        warnings,
+        link.version_id if link else None,
+    )
     rows: Iterable[LinkedFilter] = link.filters if link else ()
-    proposals = propose_filters([cue for cue, _values in cues], rows)
-    disputes, supports = shared_rows(rows, proposals.values())
+    proposals = propose_filters([cue for cue, _values in cues], rows, attested.filter_ids)
     entries = [
         {
             "kind": "support",
@@ -259,13 +251,7 @@ def project_submission(
         }
         for index, (cue, values) in enumerate(cues)
     ]
-    for row in supports:
-        entries.append(_row_entry(row, "support", duration))
-    for row in disputes:
-        entries.append(_row_entry(row, "dispute", duration))
-    if None in entries:
-        warnings.append("master_row_outside_media")
-    entries = [entry for entry in entries if entry is not None]
+    entries.extend(attested.entries)
     if len(entries) > MAX_ENTRIES:
         raise ValueError("A submission holds at most 2,000 entries")
     document = {
@@ -286,6 +272,6 @@ def project_submission(
     artifact = ArtifactV3.model_validate(document, strict=True, by_alias=True, by_name=False)
     return Projection(
         artifact,
-        estimate(proposals, len(cues), supports, disputes),
+        estimate(proposals, len(cues), attested.supports, attested.adjustments, attested.disputes),
         tuple(sorted(set(warnings))),
     )

@@ -47,7 +47,8 @@ from .repository_review_retime import (
 from .repository_review_retime import (
     retime_saved_review_draft as retime_saved_review_draft,
 )
-from .review_community_sources import copy_sources, prepare_sources
+from .review_community_filters import review_filter_rows
+from .review_community_sources import copy_sources, kept_plans, prepare_sources
 from .review_filter_tracking import track_manual_edits
 from .review_policy import (
     policy_write,
@@ -188,7 +189,7 @@ def _save_saved_review(
     root._validate_review_mcf_runtime(data.mcf_document, memberships, review=row)
     root._validate_synchronization_document(data.synchronization, data.mcf_document)
     inputs = list(data.filters) + manual_filters
-    community_rows = prepare_sources(db, row, data.community_memberships)
+    plans = prepare_sources(db, row, data.community_memberships)
     old_signatures = _revision_signatures(
         row.memberships,
         row.filters,
@@ -197,13 +198,13 @@ def _save_saved_review(
         row.accepted_credits,
     )
     old_name = row.name
-    new_filters = root._filter_rows_from_inputs(
-        db, review_id=row.id, memberships=memberships, filters=inputs
+    new_filters = review_filter_rows(
+        db, row, memberships, inputs, kept_plans(row) if plans is None else plans
     )
     track_manual_edits(db, row, new_filters, data.synchronization, memberships)
     new_signatures = _revision_signatures(
         requested_memberships,
-        inputs,
+        new_filters,
         data.mcf_document,
         data.synchronization,
         data.accepted_credits,
@@ -216,7 +217,7 @@ def _save_saved_review(
         requested_memberships,
         inputs,
     )
-    community_changed = community_rows is not None
+    community_changed = plans is not None
     content_changed = old_signatures[0] != new_signatures[0] or community_changed
     edl_changed = old_signatures[1] != new_signatures[1] or community_changed
     mcf_changed = old_signatures[2] != new_signatures[2] or community_changed
@@ -242,13 +243,15 @@ def _save_saved_review(
     row.memberships.clear()
     row.filters.clear()
     db.flush()
+    if plans is not None:
+        # Store the snapshots before the filters that reference them.
+        row.community_sources = [plan.row for plan in plans]
+        db.flush()
     row.memberships = list(memberships.values())
     row.filters = new_filters
     row.mcf_document = root._review_mcf_document_row(row.id, data.mcf_document)
     row.synchronization = root._review_synchronization_row(row.id, data.synchronization)
     row.accepted_credits = accepted_credits
-    if community_rows is not None:
-        row.community_sources = community_rows
     try:
         bind_review_evidence(db, row)
         prepare_review_policy(db, row)
@@ -339,6 +342,8 @@ def duplicate_saved_review(
         )
         for membership in source.memberships
     ]
+    source_ids = copy_sources(source, duplicate)
+    db.flush()
     duplicate.filters = [
         ReviewFilterRow(
             review_id=duplicate.id,
@@ -362,6 +367,9 @@ def duplicate_saved_review(
             selected=review_filter.selected,
             manually_added=review_filter.manually_added,
             manually_edited=review_filter.manually_edited,
+            community_source_id=source_ids.get(review_filter.community_source_id),
+            community_filter_id=review_filter.community_filter_id,
+            community_edited=review_filter.community_edited,
         )
         for review_filter in source.filters
     ]
@@ -388,7 +396,6 @@ def duplicate_saved_review(
             accepted_at=accepted.accepted_at,
         )
     copy_review_evidence(db, source, duplicate)
-    copy_sources(source, duplicate)
     prepare_review_policy(db, duplicate)
     db.commit()
     db.refresh(duplicate)

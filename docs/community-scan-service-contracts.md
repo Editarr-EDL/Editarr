@@ -472,7 +472,7 @@ submitter's file playback timeline.
 | `entries[].subcategory`, `entries[].severity`, `entries[].action` | For `support`, all three are required: a token in the category's taxonomy family, `low`/`medium`/`high`, and `skip`/`mute`. For other kinds, all three must be null. |
 | `entries[].evidence.origin` | `model` (local scan finding), `manual` (user-created), or `downloaded` (from a community master set) |
 | `entries[].evidence.manualReview` | Boolean. True when a person reviewed, edited or approved the cue |
-| `entries[].evidence.locallyVerified` | Boolean. True when the user confirmed or adjusted the cue, or it overlaps a local model finding of the same category (D21) |
+| `entries[].evidence.locallyVerified` | Boolean. True when a local scan cue is the user's own or was adjusted, or the cue overlaps a local model finding of the same category (D21). For an attestation of a downloaded community filter only the overlap counts ([ADR 0002](adr/0002-community-master-filter-sets.md) U7) |
 | `entries[].evidence.modelVersion` | Null or a string of at most 128 bytes. Required to be non-null when `origin` is `model` |
 
 The service checks these resource bounds before it parses the JSON:

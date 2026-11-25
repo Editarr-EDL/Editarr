@@ -130,7 +130,7 @@ def test_every_supported_revision_archives_other_files_and_keeps_every_row(tmp_p
     assert (
         adoption._inspect_database(path)
         == adoption.HEAD_REVISION
-        == "0039_review_community_sources"
+        == "0040_review_community_filters"
     )
     upgraded, _ = _snapshot(path)
     drop_0031_additions(upgraded, original)

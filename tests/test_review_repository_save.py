@@ -71,7 +71,11 @@ def test_saved_review_snapshots_and_revisions_are_isolated():
         assert saved.revision == 1
         assert saved.content_revision == 1
         assert saved.filters[0].model_dump(mode="json") == expected_filter | {
-            "label_edited": True  # "Private" replaced the finding's "Evidence"
+            "label_edited": True,  # "Private" replaced the finding's "Evidence"
+            "community_source_id": None,
+            "community_filter_id": None,
+            "community_edited": None,
+            "community": None,
         }
         assert db.get(ScanFindingRow, 1).label == "Evidence"
     finally:
