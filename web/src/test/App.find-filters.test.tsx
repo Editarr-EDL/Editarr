@@ -17,6 +17,7 @@ it("recovers local scans for Jellyfin and the selected review version", async ()
   let associated = false;
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), "http://editarr.test");
+    if (url.pathname === "/api/filter-candidates/available") return json({ available: true });
     if (url.pathname === "/api/filter-candidates") {
       searches.push(JSON.parse(String(init?.body)));
       return json({ media_item_id: "resolved-media", matches: [{ scan, match_reason: "quick_hash", already_associated: false }] });
@@ -28,8 +29,7 @@ it("recovers local scans for Jellyfin and the selected review version", async ()
     }
     if (url.pathname === "/api/scans/history") {
       historyPaths.push(url.searchParams.get("source_path"));
-      // Before association the found scan belongs to another item, so Recover Scans has something to match.
-      return json(associated ? [scan] : [{ ...scan, jellyfin_item_id: "other-item" }]);
+      return json(associated ? [scan] : []);
     }
     if (url.pathname.endsWith("/movie-1/reviews")) return json([review]);
     return baseApi(input, init);
@@ -74,8 +74,9 @@ it("uses item metadata and can search when the catalog withholds all paths", asy
       return json({ media_item_id: "media-1", matches: [] });
     }
     if (new URL(String(input), "http://editarr.test").pathname === "/api/scans/history") {
-      return json([completeScan({ id: "elsewhere", jellyfin_item_id: "other-item" })]);
+      return json([completeScan({ id: "other-version", jellyfin_item_id: "movie-1", media_source_id: "source-9" })]);
     }
+    if (String(input).endsWith("/filter-candidates/available")) return json({ available: false });
     return baseApi(input, init);
   }));
   const props = { breadcrumbs: [], onNavigate: vi.fn(), onDirtyChange: vi.fn() };
@@ -99,14 +100,20 @@ it("uses item metadata and can search when the catalog withholds all paths", asy
 });
 it("disables Recover Scans with an explanation when no local scan could be recovered", async () => {
   const baseApi = installProductionApi();
+  const probes: unknown[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-    if (new URL(String(input), "http://editarr.test").pathname === "/api/scans/history") return json([]);
+    const path = new URL(String(input), "http://editarr.test").pathname;
+    // A scan of an unrelated item doesn't make anything recoverable here.
+    if (path === "/api/scans/history") return json([completeScan({ id: "elsewhere", jellyfin_item_id: "other-item" })]);
+    if (path === "/api/filter-candidates/available") { probes.push(JSON.parse(String(init?.body))); return json({ available: false }); }
+    if (path === "/api/filter-candidates") throw new Error("Recover Scans must not search");
     return baseApi(input, init);
   }));
   render(<AuthenticationGate><MediaDetail item={mediaItem} breadcrumbs={[]} onNavigate={vi.fn()} onDirtyChange={vi.fn()} /></AuthenticationGate>);
   await openWorkflowStep("Scans");
   const button = await screen.findByRole("button", { name: "Recover Scans" });
   await waitFor(() => expect(button).toBeDisabled());
-  expect(button).toHaveAccessibleDescription(/no local scans of this item, its previous versions or other files/);
+  expect(button).toHaveAccessibleDescription(/no local scans of this item's other versions or files/);
+  expect(probes).toContainEqual(expect.objectContaining({ item_id: "movie-1", media_source_id: "source-1" }));
   expect(screen.queryByRole("button", { name: "Find Filters" })).not.toBeInTheDocument();
 });

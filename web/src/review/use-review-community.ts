@@ -11,7 +11,7 @@ type Workspace = ReturnType<typeof useSavedReviewWorkspace>;
 
 /**
  * The review's "Community filters" entries: stored snapshots plus the account's master links for this
- * version, with each link's active filters now. Links and filters reload whenever the Community tab
+ * version, with each link's unclipped active filters now (the basis snapshots are stored on). Links and filters reload whenever the Community tab
  * changes master links or their active filters. Without `community.search` only stored snapshots show.
  */
 export function useReviewCommunity(workspace: Workspace) {
@@ -36,7 +36,7 @@ export function useReviewCommunity(workspace: Workspace) {
       try {
         const listed = (await listCommunityMasters(itemId, mediaSourceId ?? null, controller.signal)).links ?? [];
         const usable = listed.filter((link) => link.linkState !== "replaced" && link.alignmentState !== "required");
-        const filters = await Promise.all(usable.map((link) => fetchMasterActiveFilters(link.linkId, controller.signal)
+        const filters = await Promise.all(usable.map((link) => fetchMasterActiveFilters(link.linkId, controller.signal, { clipped: false })
           .then((value) => [link.linkId, liveFilters(value)] as const).catch(() => null)));
         if (controller.signal.aborted) return;
         setLinks(listed);

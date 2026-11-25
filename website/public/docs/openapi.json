@@ -5717,7 +5717,7 @@
           "community"
         ],
         "summary": "Active Filters",
-        "description": "The link's in-effect filters on the local timeline, and their merged Simple EDL.\n\nThis is the read path reviews and EDL export use for a master set as a filter\nsource next to scans.",
+        "description": "The link's in-effect filters on the local timeline now, and their merged Simple EDL.\n\nSaved reviews store these values as a snapshot when they include or refresh the\nlink; `clipped=false` returns them unclipped, as the snapshot stores them, so the\nweb app can tell whether a stored snapshot changed.",
         "operationId": "active_filters_api_community_masters__link_id__active_filters_get",
         "parameters": [
           {
@@ -5729,6 +5729,16 @@
               "maxLength": 128,
               "pattern": "^[A-Za-z0-9_.-]{1,128}$",
               "title": "Link Id"
+            }
+          },
+          {
+            "name": "clipped",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Clipped"
             }
           }
         ],
@@ -7517,6 +7527,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FilterCandidateSearchResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/filter-candidates/available": {
+      "post": {
+        "summary": "Api Filter Candidates Available",
+        "description": "Whether Recover Scans could find anything: a reachable completed scan of another\nfile of the same work. Reads no media and writes nothing.",
+        "operationId": "api_filter_candidates_available_api_filter_candidates_available_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanMatchSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterCandidateAvailability"
                 }
               }
             }
@@ -17054,6 +17111,20 @@
         ],
         "title": "ExportSummary"
       },
+      "FilterCandidateAvailability": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "FilterCandidateAvailability",
+        "description": "Whether a Recover Scans search could find a candidate for the item version."
+      },
       "FilterCandidateSearchResult": {
         "properties": {
           "media_item_id": {
@@ -21505,6 +21576,13 @@
             },
             "type": "array",
             "title": "Filters"
+          },
+          "unusable_filter_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unusable Filter Ids"
           }
         },
         "type": "object",

@@ -135,6 +135,7 @@ from scanner.modeling.model_scans import (
     ExportScanReference,
     ExportStatus,
     ExportSummary,
+    FilterCandidateAvailability,
     FilterCandidateSearchResult,
     McfMetadata,
     ReviewMcfDocument,

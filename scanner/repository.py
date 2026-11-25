@@ -220,6 +220,7 @@ associated_scan_ids_for_media_item = repository_catalog.associated_scan_ids_for_
 create_scan_findings_batch = repository_catalog.create_scan_findings_batch
 get_scan_findings = repository_catalog.get_scan_findings
 find_filter_candidates = repository_catalog.find_filter_candidates
+possible_candidate_scans = repository_catalog.possible_candidate_scans
 
 
 library_item_export_statuses = repository_exports.library_item_export_statuses

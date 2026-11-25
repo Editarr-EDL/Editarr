@@ -1,3 +1,4 @@
+import { hasExportEvidence } from "./review-community";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ExportFormat } from "../api/api-mcf-types";
 import { usePrincipal } from "../auth/auth-gate";
@@ -106,7 +107,7 @@ function ReviewPublishPanel({ workspace, subtitles, onStepChange }: {
         </section>
       </div> : <p className="muted-copy">Publishing is unavailable for this review.</p>}
     {exportFormat && <ExportDialog review={selected} reviews={workspace.reviews} exports={workspace.exports} allowed={allowed}
-      formats={[exportFormat]} edlAvailable={selected.memberships.length > 0}
+      formats={[exportFormat]} exportAvailable={hasExportEvidence(selected)}
       onMcfIssues={(issues) => { workspace.setMcfPreflightIssues(issues); onStepChange("review"); }}
       onConflict={workspace.refreshAfterConflict} onPublished={() => void workspace.afterPublish()} onClose={() => setExportFormat(null)} />}
   </div>;

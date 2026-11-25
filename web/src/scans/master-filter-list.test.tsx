@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { MasterApiError, voteMasterFilter } from "../api/api-community-masters";
+import { decideMasterFilter, MasterApiError, voteMasterFilter } from "../api/api-community-masters";
 import type { MasterFilter, MasterPreferences } from "../api/api-community-master-types";
 import { masterFilter, masterView } from "./community-master-test-fixtures";
 import { MasterFilterList, MasterPreferenceControls } from "./master-filter-list";
@@ -108,4 +108,17 @@ it("hides rejected and downvoted rows only from the list when the toggle is on",
   fireEvent.click(toggle);
   expect(rowNames()).toEqual(["00:01.000–00:02.000"]);
   expect(screen.getByText(/2 hidden by your filter settings/)).toBeInTheDocument();
+});
+
+it("keeps a row rejected while hiding is on until the hide setting changes", async () => {
+  vi.mocked(decideMasterFilter).mockImplementation(async (_link, filterId) =>
+    ({ ...masterFilter({ filterId, touched: true, state: "rejected", active: false }), version: 1 }) as never);
+  render(<Harness filters={[masterFilter({ filterId: "kept" })]} />);
+  const hide = screen.getByRole("checkbox", { name: "Hide rejected and downvoted filters" });
+  fireEvent.click(hide);
+  fireEvent.click(screen.getByRole("button", { name: /^Reject / }));
+  await waitFor(() => expect(within(screen.getByRole("table")).getByText("Rejected")).toBeInTheDocument());
+  fireEvent.click(hide);
+  fireEvent.click(hide);
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });

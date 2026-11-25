@@ -31,12 +31,12 @@ function versionPublications(rows: ExportPublication[]): VersionPublications {
   return state;
 }
 
-async function open({ userId, capabilities, review = memberReview, rows = [] as ExportPublication[] }: { userId: number; capabilities: Capability[]; review?: SavedReview; rows?: ExportPublication[] }) {
+async function open({ userId, capabilities, review = memberReview, rows = [] as ExportPublication[], exportAvailable = true }: { userId: number; capabilities: Capability[]; review?: SavedReview; rows?: ExportPublication[]; exportAvailable?: boolean }) {
   vi.stubGlobal("fetch", vi.fn(async () => json(signedInStatus({ userId, role: userId === 1 ? "owner" : "user", capabilities }))));
   const exports = versionPublications(rows);
   const handlers = { onMcfIssues: vi.fn(), onConflict: vi.fn(async () => {}), onPublished: vi.fn(), onClose: vi.fn() };
   const allowed = (capability: Capability) => capabilities.includes(capability);
-  const view = render(<AuthenticationGate><ExportDialog review={review} reviews={reviewList} exports={exports} allowed={allowed} edlAvailable {...handlers} /></AuthenticationGate>);
+  const view = render(<AuthenticationGate><ExportDialog review={review} reviews={reviewList} exports={exports} allowed={allowed} exportAvailable={exportAvailable} {...handlers} /></AuthenticationGate>);
   const dialog = await screen.findByRole("dialog", { name: "Export" });
   return { dialog, exports, handlers, view };
 }
@@ -183,4 +183,14 @@ it("does not publish after the dialog unmounts during MCF preflight", async () =
   view.unmount();
   await act(async () => { finish({ eligible: true, issues: [] } as never); });
   expect(exportsApi.publishReviewExport).not.toHaveBeenCalled();
+});
+
+it("disables every format's download and publish together when the review has nothing to export", async () => {
+  const { dialog } = await open({ userId: 1, capabilities: ADMIN, exportAvailable: false });
+  const buttons = within(dialog).getAllByRole("button", { name: /^(Download|Publish) (EDL|MCF)$/ });
+  expect(buttons).toHaveLength(4);
+  for (const button of buttons) {
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Include at least one scan or community filter before exporting");
+  }
 });

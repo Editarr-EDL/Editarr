@@ -6,7 +6,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoAccessibilityViolations, expectNoHorizontalPageOverflow, json, mockApi, mockReview } from "./app-fixtures";
 import { mockCommunityMasters, type CommunityMastersMock } from "./community-masters-mock";
-import { chooseWorkflowStep } from "./workflow-actions";
+import { chooseExportFormat, chooseWorkflowStep } from "./workflow-actions";
 import type { ReviewCommunityMembership } from "../src/api/api-review-types";
 
 /** One saved review whose PUT stores community snapshots the way the backend does. */
@@ -82,5 +82,33 @@ for (const width of [320, 1440]) {
     await expect.poll(() => saves[1]?.community_memberships).toEqual([{ source_id: "snap-1", refresh: true }]);
     await expect(included.getByText("Community filters changed since included.")).toHaveCount(0);
     await expect(results.getByRole("row")).toHaveCount(2);
+  });
+}
+
+for (const width of [320, 1440]) {
+  test(`${width}px a review with only community filters can be exported`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockApi(page);
+    await page.route("**/api/scans/history", (route) => json(route, []));
+    const community = await mockCommunityMasters(page, { linked: true });
+    const review = { ...mockReview("review-c", "Community only", "source-1"), community_sources: [{
+      source_id: "snap-1", link_id: community.state.link!.linkId, community_version_id: "v_extended", label: "Extended Edition",
+      tier: "4", match_percent: 30, master_revision: 12, alignment: null, captured_at: "2026-11-24T00:00:00", state: "current",
+      link_state: "active", filters: community.snapshotFilters() }] };
+    await page.route("**/api/library-items/movie-1/reviews*", (route) => route.request().method() === "GET"
+      ? json(route, [review]) : route.fallback());
+    await page.route("**/api/reviews/review-c", (route) => json(route, review));
+    await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Review");
+    const open = page.getByRole("button", { name: "Open review Community only" });
+    if (await open.isVisible()) await open.click();
+    await expect(page.getByRole("region", { name: "Community review filters table" })).toContainText("Community · Extended Edition");
+    const exportButton = await chooseExportFormat(page, "EDL");
+    await exportButton.click();
+    const dialog = page.getByRole("dialog", { name: "Export" });
+    await expect(dialog.getByRole("button", { name: "Download EDL" })).toBeEnabled();
+    await expectNoHorizontalPageOverflow(page);
+    await expectNoAccessibilityViolations(page);
+    await page.screenshot({ path: `test-results/community-only-export-${width}.png`, fullPage: true });
   });
 }

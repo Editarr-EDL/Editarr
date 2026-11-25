@@ -1,12 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { fetchCapabilities, primaryImageUrl } from "../api/api-service";
-import {
-  deleteScan, enqueueScan, fetchAssociatedScans, fetchScanHistory, fetchScanQueue, requiresAudioTrackRefresh,
-} from "../api/api-scans";
+import { deleteScan, enqueueScan, fetchAssociatedScans, fetchScanHistory, fetchScanQueue, requiresAudioTrackRefresh } from "../api/api-scans";
 import { deleteExport, startCreditsDetection } from "../api/api-reviews";
 import type { ScanCapabilities } from "../api/api-system-types";
 import { identifyEditarrVersion, type EditarrItem } from "../api/api-stable-media";
-import { PreviousVersionScans } from "../scans/previous-version-scans";
 import { ScanVerificationDialog } from "../scans/scan-verification";
 import type { JellyfinMediaItem } from "../api/api-media-types";
 import type { ExportFormat, ExportStatus } from "../api/api-mcf-types";
@@ -22,8 +19,9 @@ import { useAudioTracks } from "../scans/use-audio-tracks";
 import { useVerificationAudioScan } from "../scans/use-verification-audio-scan";
 import { IDLE_SCAN_POLL_MS, scanPollDelay, useScanPolling } from "../scans/use-scan-polling";
 import { MediaWorkflowHeader } from "./media-workflow-header";
-import { navigate } from "../routes";
-import { ScanSelectionList, ScanDeleteDialog } from "../scans/scan-components";
+import { navigate, type ItemRouteStep } from "../routes";
+import { ScanDeleteDialog } from "../scans/scan-components";
+import { MediaScanHistory } from "./media-scan-history";
 import { SavedReviewPanel } from "../review/review-workspace";
 import { ManageExportsDialog } from "../review/review-controls";
 import { importStatusMessage } from "../review/review-types";
@@ -33,7 +31,6 @@ import { communityReviewScans } from "../review/community-review-scans";
 import { useCan } from "../auth/auth-gate";
 import { useScanRecovery } from "./use-scan-recovery";
 import { CommunityTab } from "../scans/community-tab";
-import type { ItemRouteStep } from "../routes";
 
 export type Breadcrumb = { label: string; route?: string };
 
@@ -109,7 +106,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const scanContext = JSON.stringify([item.id, selectedReviewMediaSourceId]);
   const currentScanContext = useRef(scanContext);
   currentScanContext.current = scanContext;
-  const [scanResult, setScanResult] = useState<{ context: string; scans: Scan[]; error: string | null; linked?: Scan[]; linkedError?: string; otherScans?: boolean } | null>(null);
+  const [scanResult, setScanResult] = useState<{ context: string; scans: Scan[]; error: string | null; linked?: Scan[]; linkedError?: string; otherVersionScans?: boolean } | null>(null);
   const scans = scanResult?.context === scanContext ? scanResult.scans : [];
   const linkedScans = scanResult?.context === scanContext ? scanResult.linked || [] : [];
   const linkedError = scanResult?.context === scanContext ? scanResult.linkedError : undefined;
@@ -153,10 +150,10 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
           target.target_item_id === item.id && target.media_source_id === selectedReviewMediaSourceId)
       ));
       if (currentScanContext.current !== scanContext) return IDLE_SCAN_POLL_MS;
-      // Completed scans of other files or items are what Recover Scans can match.
-      const loadedIds = new Set(loaded.map((scan) => scan.id));
-      const otherScans = history.some((scan) => scan.status === "complete" && !loadedIds.has(scan.id));
-      setScanResult({ context: scanContext, scans: loaded, error: null, otherScans, ...links });
+      // This item's completed scans of its other versions are what Recover Scans can match locally.
+      const otherVersionScans = history.some((scan) => scan.status === "complete" && scan.jellyfin_item_id === item.id
+        && (scan.media_source_id ?? null) !== selectedReviewMediaSourceId);
+      setScanResult({ context: scanContext, scans: loaded, error: null, otherVersionScans, ...links });
       return scanPollDelay(loaded);
     }
     catch (error) {
@@ -194,8 +191,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const reviewScans = communityReviewScans(readyScans, { source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId });
   const recovery = useScanRecovery({ item, sourceId: selectedReviewMediaSourceId, version: selectedReviewVersion,
     verifyImports: !!stableIdentity, loadScans, onMessage: setMessage,
-    recoverable: versionScans.length > 0 || pendingImports.length > 0 || linkedScans.length > 0
-      || !!(scanResult?.context === scanContext && scanResult.otherScans)
+    localRecoverable: pendingImports.length > 0 || linkedScans.length > 0
+      || !!(scanResult?.context === scanContext && scanResult.otherVersionScans)
       || previousVersions.some((previous) => previous.scans.length > 0) });
   useScanPolling(loadScans, loadScans);
   useEffect(() => {
@@ -354,18 +351,9 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
           onClick={() => openNewScan()}>New Scan</button>,
         recoverScans: recovery.button,
         community: <CommunityTab target={{ source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId }} />,
-        scanHistory: <>
-          {scansError
-          ? <div className="load-error" role="alert"><span>{scansError}</span>
-            <button type="button" className="btn-secondary" onClick={() => void loadScans()}>Retry</button></div>
-          : readyScans.length ? <ScanSelectionList scans={readyScans} onDeleteScan={setScanToDelete} onRenamed={() => void loadScans()} />
-            : <p className="muted-copy">{previousVersions.length || pendingImports.length || linkedScans.length ? "No verified scans for this version." : "No scans yet."}</p>}
-          {linkedError && <p role="alert">{linkedError} <button type="button" className="btn-secondary compact-button"
-            onClick={() => void loadScans()}>Retry</button></p>}
-          <PreviousVersionScans versions={previousVersions} imports={pendingImports} linkedScans={linkedScans}
-            verifiedCopies={readyScans.filter((scan) => scan.status === "complete" && !!scan.verified_from_scan_id
-              && !!currentVersion && scan.stable_version_id === currentVersion)} canVerify={mayVerify} onVerify={openVerification} />
-        </>,
+        scanHistory: <MediaScanHistory error={scansError} readyScans={readyScans} previousVersions={previousVersions}
+          pendingImports={pendingImports} linkedScans={linkedScans} linkedError={linkedError} currentVersion={currentVersion}
+          canVerify={mayVerify} onRetry={() => void loadScans()} onDeleteScan={setScanToDelete} onVerify={openVerification} />,
         onStartAudioScan: () => openNewScan(true),
         stageImportsForVerification: !!stableIdentity,
       }} />

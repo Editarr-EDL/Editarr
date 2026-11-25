@@ -44,7 +44,10 @@ export function ReviewCommunityEntries({ entries, draft, disabled, maySearch, on
         <span>Community filters · {entry.label}</span></label>
       {stale && <span className="master-badge master-link-state">{entry.link!.linkState === "merged" ? "Merged" : "Unavailable"}</span>}
       {status && <small id={statusId} className={entry.changed && entry.included && !entry.refreshStaged && !blocked
-        ? "review-community-changed" : "muted-copy"} role="status">{status}</small>}
+        ? "review-community-changed" : "muted-copy"}>{status}</small>}
+      {entry.included && !!entry.source?.unusable_filter_ids?.length && <small className="muted-copy">
+        {entry.source.unusable_filter_ids.length} {entry.source.unusable_filter_ids.length === 1 ? "filter has" : "filters have"} an
+        invalid classification and {entry.source.unusable_filter_ids.length === 1 ? "is" : "are"} left out of exports.</small>}
       {entry.included && entry.source && entry.changed && !entry.refreshStaged && !blocked
         && <button type="button" className="btn-secondary compact-button" disabled={disabled}
           onClick={() => onChange(stageCommunityRefresh(draft, entry))}>Refresh community filters</button>}
@@ -69,12 +72,13 @@ export function ReviewCommunityResults({ entries }: { entries: CommunityEntry[] 
         <thead><tr><th scope="col">Time</th><th scope="col">Filter</th><th scope="col">Severity</th>
           <th scope="col">Action</th><th scope="col">Confidence</th><th scope="col">Source</th></tr></thead>
         <tbody>{rows.map(({ entry, filter, preview }) => <tr key={`${entry.key}:${filter.filter_id}`}>
-          <td>{formatTime(filter.start_seconds)}–{formatTime(filter.end_seconds)}</td>
-          <th scope="row">{filterName(filter)}</th>
-          <td>{filter.severity || "—"}</td>
-          <td>{filter.edit_action === "mute" ? "Mute" : "Skip"}</td>
-          <td>{filter.confidence === null ? "—" : percent(filter.confidence)}</td>
-          <td>Community · {entry.label}{preview && <small className="muted-copy"> (not saved yet)</small>}</td>
+          <td data-label="Time">{formatTime(filter.start_seconds)}–{formatTime(filter.end_seconds)}</td>
+          <th scope="row" data-label="Filter">{filterName(filter)}
+            {entry.source?.unusable_filter_ids?.includes(filter.filter_id) && <small className="muted-copy"> (not exported)</small>}</th>
+          <td data-label="Severity">{filter.severity || "—"}</td>
+          <td data-label="Action">{filter.edit_action === "mute" ? "Mute" : "Skip"}</td>
+          <td data-label="Confidence">{filter.confidence === null ? "—" : percent(filter.confidence)}</td>
+          <td data-label="Source">Community · {entry.label}{preview && <small className="muted-copy"> (not saved yet)</small>}</td>
         </tr>)}</tbody>
       </table>
     </div>}

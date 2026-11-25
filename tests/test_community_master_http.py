@@ -300,6 +300,12 @@ def test_active_filters_are_clipped_to_the_local_file(masters):
     ]
     lines = [line for line in active["edl"].splitlines() if not line.startswith("#")]
     assert lines == ["10.000 20.000 3", "95.000 100.000 3"]
+    unclipped = masters.ok("GET", f"/masters/{link['linkId']}/active-filters?clipped=false", USER)
+    assert [(item["filterId"], item["endMs"]) for item in unclipped["filters"]] == [
+        ("f_a", 20_000),
+        ("f_b", 105_000),
+        ("f_c", 130_000),
+    ]
 
 
 def test_repeated_find_and_check_wait_for_the_cooldown(masters, monkeypatch):

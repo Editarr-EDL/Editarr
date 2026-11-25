@@ -38,13 +38,16 @@ function saveBlob(blob: Blob, filename: string) {
  * discovery. Replacing another review's file needs the server's confirmation,
  * and a stale confirmation replaces nothing.
  */
-export function ExportDialog({ review, reviews, exports, allowed, formats = EXPORT_FORMATS, edlAvailable, onMcfIssues, onConflict, onPublished, onClose }: {
+const NO_EVIDENCE = "Include at least one scan or community filter before exporting";
+
+export function ExportDialog({ review, reviews, exports, allowed, formats = EXPORT_FORMATS, exportAvailable, onMcfIssues, onConflict, onPublished, onClose }: {
   review: SavedReview;
   reviews: SavedReviewSummary[];
   exports: VersionPublications;
   allowed: Allowed;
   formats?: readonly ExportFormat[];
-  edlAvailable: boolean;
+  /** The saved review has a scan or community filters, so either format can be exported. */
+  exportAvailable: boolean;
   onMcfIssues: (issues: McfPreflightIssue[]) => void;
   onConflict: (reason: unknown) => Promise<void>;
   onPublished: () => void;
@@ -132,7 +135,7 @@ export function ExportDialog({ review, reviews, exports, allowed, formats = EXPO
     {canDownload(review.owner_id, me, allowed) && <section className="export-section" aria-labelledby="export-download-heading">
       <h3 id="export-download-heading">Download for yourself</h3>
       <div className="button-row">{formats.map((format) => <button key={format} type="button" className="btn-secondary compact-button"
-        disabled={busy || (format === "edl" && !edlAvailable)} title={format === "edl" && !edlAvailable ? "Include at least one scan before exporting EDL" : undefined}
+        disabled={busy || !exportAvailable} title={exportAvailable ? undefined : NO_EVIDENCE}
         onClick={() => void download(format)}>Download {upper(format)}</button>)}</div>
     </section>}
     {destination && <section className="export-section" aria-labelledby="export-publish-heading">
@@ -154,7 +157,7 @@ export function ExportDialog({ review, reviews, exports, allowed, formats = EXPO
             <strong>{upper(format)}</strong>
             {current ? <ExportConditionText publication={current} source={publicationSource(current, review.id, reviews)} /> : <small>No file published here yet.</small>}
           </div>
-          <button type="button" className="btn-primary compact-button" disabled={busy || Boolean(pending) || (format === "edl" && !edlAvailable)}
+          <button type="button" className="btn-primary compact-button" disabled={busy || Boolean(pending) || !exportAvailable} title={exportAvailable ? undefined : NO_EVIDENCE}
             onClick={() => void publish(format)}>{phase.kind === "working" && phase.format === format ? "Publishing…" : `Publish ${upper(format)}`}</button>
         </li>;
       })}</ul>

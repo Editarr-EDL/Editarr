@@ -19,10 +19,15 @@ from .version_reuse import source_pending_reuse
 def _review_export_scans(
     db: Session, review: SavedReviewRow
 ) -> tuple[list[ReviewScanMembershipRow], dict[str, ScanRow], Path]:
-    """Validate export memberships and return their shared physical media path."""
+    """Validate export memberships and return their shared physical media path.
+
+    A review without scans exports only when it includes community filter snapshots
+    with filters; its media is then the review target's own file (see
+    `_community_only_media`).
+    """
     memberships = list(review.memberships)
     if not memberships:
-        raise ReviewMembershipError("A review must include at least one scan")
+        return [], {}, _community_only_media(db, review)
     target_path = None
     if review.media_item.path:
         try:
@@ -79,3 +84,26 @@ def _review_export_scans(
     if review_file_matches(db, review.id, physical_path) is False:
         raise ReviewMembershipError("The original Editarr review version is unavailable")
     return memberships, scans, physical_path
+
+
+def _community_only_media(db: Session, review: SavedReviewRow) -> Path:
+    """The readable target file of a review whose only evidence is community snapshots.
+
+    Refuses a review with neither scans nor snapshot filters, and a file that no
+    longer matches the review's bound Editarr version.
+    """
+    from .review_community_sources import review_filters
+
+    if not review_filters(review):
+        raise ReviewMembershipError("A review must include at least one scan or community filter")
+    if not review.media_item.path:
+        raise ReviewMembershipError("The review media file is unavailable")
+    try:
+        path = Path(resolve_local_path(db, review.media_item.path).local_path).resolve()
+    except ValueError as exc:
+        raise ReviewMembershipError("The review media file is unavailable") from exc
+    if not path.is_file() or not os.access(path, os.R_OK):
+        raise ReviewMembershipError("The review media file is unavailable")
+    if review_file_matches(db, review.id, path) is False:
+        raise ReviewMembershipError("The original Editarr review version is unavailable")
+    return path

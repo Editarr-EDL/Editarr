@@ -64,3 +64,16 @@ def test_phrase_does_not_cross_punctuation_or_speaker_break():
     document = parse_subtitles(original, "srt")
     output = redact_subtitles(document, (SubtitleMute(1, 6, "hell you"),))
     assert output.document.render(output.replacements) == original
+
+
+def test_a_whole_cue_mute_removes_every_cue_it_overlaps():
+    content = (
+        b"1\r\n00:00:01,000 --> 00:00:02,000\r\nKeep me.\r\n\r\n"
+        b"2\r\n00:00:03,000 --> 00:00:04,000\r\nA word nobody named.\r\n\r\n"
+        b"3\r\n00:00:04,500 --> 00:00:05,000\r\nAnd me too.\r\n"
+    )
+    mutes = (SubtitleMute(3.5, 4.6, "", whole_cue=True),)
+    redaction = redact_subtitles(parse_subtitles(content, "srt"), mutes)
+    assert redaction.document.render(redaction.replacements) == (
+        b"1\r\n00:00:01,000 --> 00:00:02,000\r\nKeep me.\r\n\r\n"
+    )

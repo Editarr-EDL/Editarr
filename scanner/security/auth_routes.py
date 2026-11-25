@@ -96,6 +96,7 @@ PROTECTED_ROUTE_PATHS = frozenset(
         "/api/backups/jobs/{job_id}/download",
         "/api/filter-candidates",
         "/api/filter-candidates/associations",
+        "/api/filter-candidates/available",
         "/api/settings/filters",
         "/api/settings/filters/apply",
         "/api/settings/filters/default-mode",

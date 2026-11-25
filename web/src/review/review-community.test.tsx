@@ -4,7 +4,7 @@ import { afterEach, expect, it } from "vitest";
 import type { MasterLinkSummary } from "../api/api-community-master-types";
 import type { ReviewCommunityFilter, ReviewCommunitySource, SavedReview } from "../api/api-review-types";
 import { masterLink } from "../scans/community-master-test-fixtures";
-import { communityEntries, entryFilters, filtersDiffer, setCommunityIncluded, stageCommunityRefresh } from "./review-community";
+import { communityEntries, entryFilters, filtersDiffer, hasExportEvidence, setCommunityIncluded, stageCommunityRefresh } from "./review-community";
 import { ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
 import { createReviewDraft, isReviewDraftDirty, type ReviewDraft } from "./review-draft";
 
@@ -82,4 +82,15 @@ it("blocks links that need alignment and explains unavailable or merged sets", (
   expect(screen.getByRole("checkbox", { name: "Community filters · IMAX" })).toBeEnabled();
   expect(screen.getByText("Merged")).toBeVisible();
   expect(screen.queryByRole("button", { name: "Refresh community filters" })).not.toBeInTheDocument();
+});
+
+it("treats a review with only community filters as exportable, but not one with no evidence", () => {
+  expect(hasExportEvidence(review([source()]))).toBe(true);
+  expect(hasExportEvidence(review([source({ filters: [] })]))).toBe(false);
+  expect(hasExportEvidence(review([]))).toBe(false);
+  expect(hasExportEvidence({ ...review([]), memberships: [{ scan_id: "s", role: "audio" }] })).toBe(true);
+});
+
+it("counts a category change as changed, like the server", () => {
+  expect(filtersDiffer([filter("f1", 10)], [filter("f1", 10, { category: "language" })])).toBe(true);
 });

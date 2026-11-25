@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { decideMasterFilter } from "../api/api-community-masters";
 import type { MasterFilter, MasterPreferences, MasterView } from "../api/api-community-master-types";
 import { ConfidenceBadge, LocallyVerifiedIcon } from "./community-master-badges";
@@ -37,6 +37,8 @@ export function MasterPreferenceControls({ preferences, disabled, onChange }: {
  * Master set filter rows filtered by the user's preferences. Touched rows always show. Each row has
  * its confidence, contributor count (never names), the Locally verified icon, votes and local decisions.
  * `serverActive` uses the server's `active` flag; otherwise activity is recomputed for unsaved preferences.
+ * A row rejected or downvoted here stays listed while "Hide rejected and downvoted filters" is on, so
+ * focus and context aren't lost; it hides once that setting changes or the list reloads.
  */
 export function MasterFilterList({ view, preferences, serverActive = false, canVote, canDecide, onFilter }: {
   view: MasterView; preferences: MasterPreferences; serverActive?: boolean; canVote: boolean; canDecide: boolean;
@@ -44,9 +46,19 @@ export function MasterFilterList({ view, preferences, serverActive = false, canV
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
+  const keep = (filterId: string) => setKept((current) => new Set(current).add(filterId));
+  const scroller = useRef<HTMLDivElement>(null);
   const { link } = view;
   const alignmentRequired = link.alignmentState === "required";
-  const visible = view.filters.filter((filter) => filterVisible(filter, preferences))
+  const { confidenceThreshold, showLowConfidence, hideRejectedDownvoted } = preferences;
+  useEffect(() => {
+    // A new set of rows starts at Time and Filter, even if a row's actions were scrolled into view.
+    setKept(new Set());
+    if (scroller.current) scroller.current.scrollLeft = 0;
+  }, [confidenceThreshold, showLowConfidence, hideRejectedDownvoted]);
+  const visible = view.filters.filter((filter) => filterVisible(filter, preferences)
+    || (kept.has(filter.filterId) && filterVisible(filter, { ...preferences, hideRejectedDownvoted: false })))
     .sort((a, b) => a.effective.startMs - b.effective.startMs);
   const hidden = view.filters.length - visible.length;
 
@@ -55,6 +67,7 @@ export function MasterFilterList({ view, preferences, serverActive = false, canV
     setError(null);
     try {
       onFilter(await decideMasterFilter(link.linkId, filter.filterId, { decision, expected_state: filter.state }));
+      keep(filter.filterId);
       notifyCommunityFiltersChanged();
     }
     catch (reason) { setError(masterErrorText(reason)); }
@@ -65,7 +78,7 @@ export function MasterFilterList({ view, preferences, serverActive = false, canV
     <p className="muted-copy" role="status">{visible.length} {visible.length === 1 ? "filter" : "filters"} shown
       {hidden > 0 && ` · ${hidden} hidden by your filter settings`}</p>
     {error && <p className="form-error" role="alert">{error}</p>}
-    {visible.length > 0 && <div className="community-results-scroll" role="region" aria-label={`${link.label} filters`} tabIndex={0}>
+    {visible.length > 0 && <div ref={scroller} className="community-results-scroll" role="region" aria-label={`${link.label} filters`} tabIndex={0}>
       <table className="community-results-table master-filter-table">
         <thead><tr><th scope="col">Time</th><th scope="col">Filter</th><th scope="col">Confidence</th>
           <th scope="col">Contributors</th><th scope="col">Status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
@@ -83,6 +96,7 @@ export function MasterFilterList({ view, preferences, serverActive = false, canV
             <td><div className="community-row-actions">
               {canVote && <MasterVoteButtons linkId={link.linkId} filterId={filter.filterId} name={name} myVote={filter.myVote}
                 onVoted={(myVote) => {
+                  keep(filter.filterId);
                   const next = { ...filter, myVote, touched: filter.touched || myVote !== null };
                   onFilter({ ...next, active: filterActive(next, preferences, alignmentRequired) });
                 }} />}

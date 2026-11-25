@@ -126,4 +126,8 @@ def prepare_retained_export(db, row, snapshot):
     ):
         raise ReviewPolicyConflict("Retained MCF content is incomplete")
     community = snapshot_filters(snapshot["review"])
-    return render_review_export(review, prepared, row.format, duration, community)[0]
+    if duration is None and not scans:
+        duration = snapshot.get("duration_seconds")
+    return render_review_export(
+        review, prepared, row.format, duration, community, severities=policy.severities
+    )[0]

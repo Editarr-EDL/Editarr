@@ -46,8 +46,9 @@ explanation instead of the controls.
 
 Finding local scans is separate: the **Scans** tab's **Recover Scans** matches
 scans of this item's other versions and other local files and associates the ones
-you choose. It is disabled, with an explanation, when there are no local scans of
-this item, its previous versions or other files to recover.
+you choose. It is enabled when this item's other versions, its previous versions,
+pending imports or linked scans have scans, or when another file of the same movie or
+episode has a scan you can see; otherwise it is disabled with an explanation.
 
 Each result card shows the version name, a **Match %** and the filter and
 contributor counts. Match % reflects the strongest evidence that links your file
@@ -101,8 +102,9 @@ severity, action, confidence and contributor count. Notification links from
   them.
 - **Hide rejected and downvoted filters** (off by default) removes filters you
   rejected or voted down from the list. It only hides them: rejected filters are
-  already inactive, and downvoted filters you did not reject stay active. The
-  setting belongs to your account.
+  already inactive, and downvoted filters you did not reject stay active. A filter
+  you reject or vote down while it is on stays listed until you change a list
+  setting or reopen the set. The setting belongs to your account.
 - Use **Thumbs up** or **Thumbs down** to vote on an individual filter. Votes
   require a current community connection and your downloaded copy of the set; you
   cannot vote on your own filters. A vote that could not be sent stays pending with
@@ -126,6 +128,14 @@ Unchecking the entry and saving removes the snapshot. A set that still needs
 alignment can't be included or refreshed until you approve its alignment. If the
 set is later deleted or replaced, the review keeps its stored filters but can't
 refresh them. Duplicating a review copies its snapshots.
+
+A review can contain only community filters: with no scans included, it still
+exports and publishes EDL and MCF files beside the media file from its stored
+community filters. A review needs at least one scan or community filter to export.
+The timeline summary counts included community filters. Exports clip them to the
+file's runtime and apply your instance's enforced severities; a filter whose
+classification is invalid is marked "not exported" and left out. In filtered
+subtitles, a community language mute removes the subtitle lines it overlaps.
 
 ## Share your filters
 

@@ -254,7 +254,9 @@ Field rules:
 ### `GET /api/community/masters/{link_id}/active-filters`
 
 The link's in-effect filters now: the values a saved review stores when it
-includes or refreshes the link (no imported scan is generated). It returns the
+includes or refreshes the link (no imported scan is generated). `?clipped=false`
+returns them unclipped, exactly as a snapshot stores them, and the web app uses that
+to show whether a stored snapshot changed. By default it returns the
 link's `active` rows with their `effective` values on the local timeline, and
 the same filters merged by the existing Simple EDL range merging. Bounds are
 clipped to `[0, duration]` (the duration comes from a completed scan of the
@@ -287,9 +289,18 @@ adds:
   "captured_at": "2026-11-24T21:00:00", "state": "current"|"changed"|"alignment_required"|"link_unavailable",
   "link_state": "active"|"merged"|"unavailable"|"replaced"|null,
   "filters": [ { "filter_id": "f_…", "category": "violence", "subcategory": "punching", "severity": "high",
-                 "edit_action": "skip", "start_seconds": 600.1, "end_seconds": 605.05, "confidence": 0.39 } ] } ]
+                 "edit_action": "skip", "start_seconds": 600.1, "end_seconds": 605.05, "confidence": 0.39 } ],
+  "unusable_filter_ids": [] } ]
 ```
 
+- Snapshots store the link's filters **unclipped** on the local timeline. Exports clip
+  them to the runtime (the shortest completed scan of the review, or of its local
+  versions for a community-only review; retained publications keep the runtime they
+  used), apply the review owner's enforced severities, and leave out a filter whose
+  subcategory doesn't belong to its category in both EDL and MCF; such filters are
+  listed in `unusable_filter_ids`. Subtitle redaction treats each snapshot `language`
+  mute as removing every subtitle cue it overlaps, since community filters carry no
+  words.
 - `state` compares the snapshot with the link now: `changed` when the link's active
   filters differ (confidence alone doesn't count), `alignment_required` when the
   link awaits alignment, and `link_unavailable` when the link was deleted, is
@@ -308,6 +319,13 @@ adds:
   unreplaced link to a local version of the review's target; a link awaiting
   alignment is refused. These are `422 invalid_membership` errors (or
   `403 capability_denied`).
+- A review needs at least one scan **or** one community snapshot with filters to
+  export. A community-only review (no scans) exports, downloads and publishes EDL and
+  MCF sidecars from its snapshots beside the review target's own file, which must
+  still match the review's bound Editarr version; its publications list no
+  `exported_scans`, and their retained export snapshot carries the community filters
+  for policy regeneration. A review with neither is refused with
+  `invalid_membership`.
 - Duplicating a review copies every snapshot; the link reference is kept only when
   the duplicate's owner owns the link. Deleting an account's master state keeps
   snapshots and clears their link; transferring it, or replacing a link with another

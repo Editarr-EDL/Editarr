@@ -67,3 +67,6 @@ class ReviewCommunitySource(BaseModel):
     state: CommunitySourceState
     link_state: str | None = None
     filters: list[ReviewCommunityFilter] = Field(default_factory=list)
+    # Snapshot filters left out of exports because their subcategory doesn't belong to
+    # their category.
+    unusable_filter_ids: list[str] = Field(default_factory=list)

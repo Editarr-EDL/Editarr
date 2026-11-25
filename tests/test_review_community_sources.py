@@ -263,3 +263,122 @@ def test_snapshot_changes_need_evidence_edit_and_community_search(monkeypatch):
         check([ReviewCommunityMembership(source_id="s1", refresh=True)], set())
     check([ReviewCommunityMembership(link_id="l1")], {C.COMMUNITY_SEARCH})
     assert len(required) == 3
+
+
+def _community_only(masters, review_id, link_id):
+    save(masters, review_id, include(link_id))
+    with masters.app.accounts.factory() as db:
+        row = db.get(SavedReviewRow, review_id)
+        row.memberships.clear()
+        row.mcf_document.material_end_seconds = 120
+        db.commit()
+
+
+def test_a_community_only_review_exports_edl_and_mcf_sidecars(masters, review):
+    from scanner.persistence.repository.repository_review_operations import (
+        export_saved_review_edl,
+        export_saved_review_mcf,
+    )
+
+    link = masters.link(USER, "v_1", "2", *FILTERS)
+    _community_only(masters, review, link["linkId"])
+    with session(masters) as db:
+        stored = get_saved_review(db, review)
+        assert stored.memberships == [] and stored.community_sources
+        edl = export_saved_review_edl(
+            db,
+            review,
+            stored.revision,
+            policy_revision=stored.policy_revision,
+            policy_owner_id=stored.policy_owner_id,
+        )
+    assert edl.exported_scans == [] and edl.exported_format_revision == stored.edl_content_revision
+    sidecar = masters.scans.file("masters").with_suffix(".edl")
+    lines = [line for line in sidecar.read_text().splitlines() if not line.startswith("#")]
+    assert lines == ["10.000 20.000 3", "40.000 41.000 1"]
+    with session(masters) as db:
+        mcf = export_saved_review_mcf(
+            db,
+            review,
+            stored.revision,
+            policy_revision=stored.policy_revision,
+            policy_owner_id=stored.policy_owner_id,
+        )
+        summary = get_saved_review(db, review).exports.exports
+    assert mcf.exported_scans == []
+    assert "00:00:10.000 --> 00:00:20.000" in sidecar.with_suffix(".mcf").read_text()
+    assert summary[ExportFormat.EDL].current and summary[ExportFormat.MCF].current
+
+    # Refreshing is a new review revision, so the published sidecars become outdated.
+    refreshed = save(masters, review, keep(stored, refresh=True))
+    assert refreshed.exports.exports[ExportFormat.EDL].outdated is True
+    assert refreshed.exports.exports[ExportFormat.MCF].outdated is True
+
+
+def test_a_review_without_scans_or_community_filters_still_refuses_export(masters, review):
+    from scanner.persistence.repository.repository_review_operations import (
+        export_saved_review_edl,
+    )
+
+    link = masters.link(USER, "v_1", "2", *FILTERS)
+    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_a", USER, {"decision": "reject"})
+    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_b", USER, {"decision": "reject"})
+    _community_only(masters, review, link["linkId"])
+    with session(masters) as db:
+        stored = get_saved_review(db, review)
+        assert stored.community_sources[0].filters == []
+        with pytest.raises(ReviewMembershipError, match="at least one scan or community filter"):
+            export_saved_review_edl(
+                db,
+                review,
+                stored.revision,
+                policy_revision=stored.policy_revision,
+                policy_owner_id=stored.policy_owner_id,
+            )
+
+
+@pytest.mark.parametrize("format", ["edl", "mcf"])
+def test_a_community_only_publication_retains_its_snapshot_for_policy_regeneration(
+    masters, review, format
+):
+    import json
+
+    from scanner.db import MediaItemExportRow
+    from scanner.persistence.repository.export_publication import publish_export
+    from scanner.persistence.repository.export_recovery import publication_lock
+    from scanner.persistence.repository.export_retained import prepare_retained_export
+    from scanner.security.access.vocabulary import Role
+    from tests.multi_user_access_support import build_access
+
+    link = masters.link(USER, "v_1", "2", *FILTERS)
+    _community_only(masters, review, link["linkId"])
+    with session(masters) as db, publication_lock(db):
+        stored = get_saved_review(db, review)
+        result = publish_export(
+            db, review, stored.revision, ExportFormat(format), access=build_access(Role.USER)
+        )
+    assert result is not None
+    masters.ok("PATCH", f"/masters/{link['linkId']}/filters/f_a", USER, {"decision": "reject"})
+    with masters.app.accounts.factory() as db:
+        row = db.scalars(select(MediaItemExportRow)).one()
+        snapshot = json.loads(row.snapshot_json)
+        assert snapshot["sources"] == []
+        assert prepare_retained_export(db, row, snapshot) == row.content_bytes
+    assert b"10.000" in row.content_bytes or b"00:00:10.000" in row.content_bytes
+
+
+def test_snapshots_are_unclipped_so_a_later_runtime_is_not_a_change(masters, review):
+    link = masters.link(USER, "v_1", "2", served_filter("f_tail", 95_000, 130_000))
+    saved = save(masters, review, include(link["linkId"]))
+    masters.set_duration(100)
+    with session(masters) as db:
+        (source,) = get_saved_review(db, review).community_sources
+        row = db.get(SavedReviewRow, review)
+        edl, _ = render_review_export(
+            row, prepare_review_policy(db, row), ExportFormat.EDL, 100, review_filters(row)
+        )
+    assert source.state == "current" and spans(source) == spans(saved.community_sources[0])
+    assert spans(source) == [("f_tail", 95.0, 130.0)]
+    assert [line for line in edl.decode().splitlines() if not line.startswith("#")] == [
+        "95.000 100.000 3"
+    ]

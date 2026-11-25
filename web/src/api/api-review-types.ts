@@ -73,6 +73,8 @@ export interface ReviewCommunitySource {
   state: ReviewCommunitySourceState;
   link_state: string | null;
   filters: ReviewCommunityFilter[];
+  /** Filters left out of exports because their subcategory doesn't belong to their category. */
+  unusable_filter_ids?: string[];
 }
 
 /** Keep a stored snapshot (`source_id`), take a new one from it (`refresh`), or include a link (`link_id`). */

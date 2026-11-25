@@ -239,6 +239,12 @@ class ScanMatch(BaseModel):
     already_associated: bool = False
 
 
+class FilterCandidateAvailability(BaseModel):
+    """Whether a Recover Scans search could find a candidate for the item version."""
+
+    available: bool
+
+
 class FilterCandidateSearchResult(BaseModel):
     media_item_id: str
     matches: list[ScanMatch]

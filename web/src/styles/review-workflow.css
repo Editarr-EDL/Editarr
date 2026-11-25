@@ -150,6 +150,16 @@
   .review-workflow-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+/* Narrow screens stack each community result into a labelled card instead of scrolling sideways. */
+@media (max-width: 560px) {
+  .review-community-table { min-width: 0; }
+  .review-community-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .review-community-table, .review-community-table tbody { display: block; }
+  .review-community-table tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid #2f3846; }
+  .review-community-table :is(td, th) { display: grid; gap: 2px; padding: 0; border: 0; text-align: start; }
+  .review-community-table :is(td, th)::before { content: attr(data-label); color: #9aa6b8; font-size: 12px; font-weight: 600; }
+}
+
 @media (max-width: 560px) {
   .media-workflow-heading .detail-poster { flex-basis: 48px; width: 48px; height: 68px; }
   .review-workflow-tabs { gap: 4px; }

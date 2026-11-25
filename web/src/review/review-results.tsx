@@ -79,7 +79,9 @@ function subtractReviewRanges(
 }
 
 /** Build selected and unselected skip/mute ranges for the review timeline. */
-export function savedReviewTimelineRanges(filters: SavedReview["filters"]): SavedReviewTimelineRange[] {
+export function savedReviewTimelineRanges(
+  filters: ReadonlyArray<Pick<SavedReview["filters"][number], "selected" | "edit_action" | "start_seconds" | "end_seconds">>,
+): SavedReviewTimelineRange[] {
   return [true, false].flatMap((selected) => {
     const applicable = filters.filter((filter) => filter.selected === selected);
     const skip = mergeReviewRanges(applicable

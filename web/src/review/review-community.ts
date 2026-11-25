@@ -1,5 +1,5 @@
 import type { ActiveMasterFilters, MasterLinkSummary } from "../api/api-community-master-types";
-import type { ReviewCommunityFilter, ReviewCommunityMembership, ReviewCommunitySource } from "../api/api-review-types";
+import type { ReviewCommunityFilter, ReviewCommunityMembership, ReviewCommunitySource, SavedReview } from "../api/api-review-types";
 import type { ReviewDraft } from "./review-draft";
 
 /** One "Community filters" entry under Included scans: a stored snapshot, a linkable master set, or both. */
@@ -28,11 +28,11 @@ export function liveFilters(active: ActiveMasterFilters): ReviewCommunityFilter[
 }
 
 const signature = (filters: ReviewCommunityFilter[]) => JSON.stringify(filters.map((item) => [
-  item.filter_id, Math.round(item.start_seconds * 1000), Math.round(item.end_seconds * 1000),
+  item.filter_id, item.category, Math.round(item.start_seconds * 1000), Math.round(item.end_seconds * 1000),
   item.subcategory, item.severity, item.edit_action,
 ]));
 
-/** Whether two filter lists differ in anything but confidence, as the server compares them. */
+/** Whether two unclipped filter lists differ in anything but confidence, as the server compares them. */
 export const filtersDiffer = (a: ReviewCommunityFilter[], b: ReviewCommunityFilter[]) => signature(a) !== signature(b);
 
 const membershipFor = (draft: ReviewDraft, entry: Pick<CommunityEntry, "link" | "source">) =>
@@ -84,4 +84,9 @@ export function entryFilters(entry: CommunityEntry): { filters: ReviewCommunityF
   if (!entry.included) return { filters: [], preview: false };
   if (entry.source && !entry.refreshStaged) return { filters: entry.source.filters, preview: false };
   return { filters: entry.live ?? [], preview: true };
+}
+
+/** Whether a saved review has evidence to export: a scan, or a community snapshot with filters. */
+export function hasExportEvidence(review: Pick<SavedReview, "memberships" | "community_sources">): boolean {
+  return review.memberships.length > 0 || !!review.community_sources?.some((source) => source.filters.length > 0);
 }

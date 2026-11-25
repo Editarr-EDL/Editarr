@@ -11,6 +11,7 @@ import { ReviewScanInfo, reviewScanName } from "./review-scan-source";
 import { ShareAction } from "../scans/sharing-dialog";
 import { useReviewAccountLabel } from "./review-access";
 import { ReviewCommunityEntries, ReviewCommunityResults } from "./review-community-sources";
+import { entryFilters, hasExportEvidence } from "./review-community";
 import { useReviewCommunity } from "./use-review-community";
 import {
   isReviewDraftDirty, isReviewDraftContentDirty, updateReviewFilter,
@@ -74,6 +75,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       previewDisabled={!access.preview}
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
+      communityFilters={community.entries.flatMap((entry) => entryFilters(entry).filters)}
     />;
   const results = <div className="review-results-with-community">{overview}<ReviewCommunityResults entries={community.entries} /></div>;
   const memberships = <div className="saved-review-memberships">
@@ -214,7 +216,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       </span>}
     </div>
     {selected && dialog === "export" && <ExportDialog review={selected} reviews={reviews} exports={exports} allowed={access.allowed}
-      edlAvailable={draft.memberships.length > 0} onMcfIssues={workspace.setMcfPreflightIssues}
+      exportAvailable={hasExportEvidence(selected)} onMcfIssues={workspace.setMcfPreflightIssues}
       onConflict={workspace.refreshAfterConflict} onPublished={() => void workspace.afterPublish()} onClose={() => setDialog(null)} />}
     {selected && dialog === "delete" && <ReviewDeletionDialog review={selected} onClose={() => setDialog(null)}
       onDeleted={(result) => { setDialog(null); workspace.forgetDeletedReview(result.review_id, result.retained.length, result.removed.length); }} />}

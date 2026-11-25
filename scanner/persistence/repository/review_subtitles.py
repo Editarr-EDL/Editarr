@@ -33,6 +33,8 @@ from scanner.runtime.subtitle_transcript import (
 )
 
 from .repository_paths import resolve_local_path
+from .review_community_export import subtitle_mutes
+from .review_community_sources import review_filters
 from .review_export_target import _review_export_scans
 from .review_policy import prepare_review_policy, require_policy_evidence, require_policy_revision
 from .review_policy_evidence import policy_export_filters
@@ -133,7 +135,7 @@ def review_subtitle_evidence(
         and item.end_seconds is not None
         and item.end_seconds > item.start_seconds
         and item.label
-    )
+    ) + subtitle_mutes(review_filters(review), target.source.duration_seconds)
     return ReviewSubtitleEvidence(
         target.source.media_source_id or "",
         media,

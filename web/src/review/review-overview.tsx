@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useMcfRegistry } from "../shared/mcf-registry";
 import { ReviewScanInfo, reviewScanSourceLabel } from "./review-scan-source";
 import type { Scan } from "../api/api-scan-types";
-import type { SavedReview } from "../api/api-review-types";
+import type { ReviewCommunityFilter, SavedReview } from "../api/api-review-types";
 import { formatTime } from "../shared/display";
 import { McfClassificationFields, McfRegistryStatus } from "./review-mcf";
 import { mergeReviewRanges, savedReviewTimelineRanges, CensoredAudioWord, censorAudioWord, savedReviewFilterDescription, filterSourceOrigin, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, severityText, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
@@ -76,8 +76,11 @@ export function SavedReviewOverview({
   cuesEditable = true,
   metadataEditable = true,
   defaultSort = "category",
+  communityFilters = [],
 }: {
   filters: SavedReview["filters"];
+  /** Included community filters; they count toward the timeline summary and always apply. */
+  communityFilters?: ReviewCommunityFilter[];
   memberships: SavedReview["memberships"];
   scans: Scan[];
   busy: boolean;
@@ -148,13 +151,16 @@ export function SavedReviewOverview({
       onFocusFilterComplete?.();
     });
   }, [filters, focusFilterId, onFocusFilterComplete, registry]);
-  const selectedResultCount = visibleResults.filter((result) => result.filters.every((filter) => filter.selected)).length;
-  const skipped = mergeReviewRanges(filters
+  const community = communityFilters.map((filter) => ({ ...filter, selected: true }));
+  const timelineFilters = [...filters, ...community];
+  const selectedResultCount = visibleResults.filter((result) => result.filters.every((filter) => filter.selected)).length + community.length;
+  const resultCount = visibleResults.length + community.length;
+  const skipped = mergeReviewRanges(timelineFilters
     .filter((filter) => filter.selected && filter.edit_action === "skip")
     .map((filter) => [filter.start_seconds, Math.max(filter.start_seconds, filter.end_seconds ?? filter.start_seconds + 1)]))
     .reduce((total, [start, end]) => total + end - start, 0);
-  const timelineEnd = Math.max(1, ...scans.map((scan) => scan.duration_seconds || 0), ...filters.map((filter) => filter.end_seconds ?? filter.start_seconds + 1));
-  const timelineRanges = savedReviewTimelineRanges(filters);
+  const timelineEnd = Math.max(1, ...scans.map((scan) => scan.duration_seconds || 0), ...timelineFilters.map((filter) => filter.end_seconds ?? filter.start_seconds + 1));
+  const timelineRanges = savedReviewTimelineRanges(timelineFilters);
 
   const renderResult = (item: TieredReviewResult, source: "audio" | "visual", key: string, categoryName: string) => {
     const result = item.result;
@@ -243,10 +249,10 @@ export function SavedReviewOverview({
       <div className="scan-review-heading">
         <div>
           <h3>Timeline summary</h3>
-          <p>Combined results from {memberships.length} selected {memberships.length === 1 ? "scan" : "scans"}.</p>
+          <p>Combined results from {memberships.length} selected {memberships.length === 1 ? "scan" : "scans"}{community.length > 0 && ` and ${community.length} community ${community.length === 1 ? "filter" : "filters"}`}.</p>
         </div>
         <div className="scan-review-summary">
-          <strong>{selectedResultCount}/{visibleResults.length} results</strong>
+          <strong>{selectedResultCount}/{resultCount} results</strong>
           <span>Skipped Time {formatTime(skipped)}</span>
         </div>
       </div>

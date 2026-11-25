@@ -29,6 +29,7 @@ from scanner.models import ReviewCommunityFilter, ReviewCommunitySource
 
 from .community_master_links import alignment_of, utcnow
 from .community_master_sources import ActiveMasterFilter, link_active_filters
+from .review_community_export import unusable_filter_ids
 
 MAX_SOURCES = 32
 
@@ -71,8 +72,8 @@ def link_usable(link: CommunityMasterLinkRow | None, owner_id: int | None) -> bo
 
 
 def live_filters(db: Session, link: CommunityMasterLinkRow) -> list[dict]:
-    """The link's active filters now, in snapshot form."""
-    return [_filter_json(item) for item in link_active_filters(db, link.owner_id, link)]
+    """The link's active filters now, unclipped, in snapshot form; exports clip them."""
+    return [_filter_json(item) for item in link_active_filters(db, link.owner_id, link, clip=False)]
 
 
 def capture(
@@ -134,6 +135,9 @@ def review_sources(db: Session, review: SavedReviewRow) -> list[ReviewCommunityS
                 )
                 for item in _snapshot_filters(row)
             ],
+            unusable_filter_ids=unusable_filter_ids(
+                _as_active(item, row.id) for item in _snapshot_filters(row)
+            ),
         )
         for row in review.community_sources
     ]
@@ -312,3 +316,16 @@ def move_link_sources(db: Session, old_link_id: str, new_link_id: str) -> None:
         else:
             row.link_id, row.link = new_link_id, new_link
     db.flush()
+
+
+def community_duration(db: Session, review: SavedReviewRow) -> float | None:
+    """The shortest known runtime of the review's local versions, in seconds, for
+    clipping a community-only review's exports; None when no completed scan records one."""
+    from .community_master_sources import version_duration_ms
+
+    known = [
+        value
+        for version in review_version_ids(db, review)
+        if (value := version_duration_ms(db, version)) is not None
+    ]
+    return min(known) / 1000 if known else None

@@ -32,6 +32,7 @@ for (const width of [320, 1440]) {
       }
     });
     await page.route("**/api/scans/history", (route) => json(route, associated ? [existing, scan] : [existing]));
+    await page.route("**/api/filter-candidates/available", (route) => json(route, { available: true }));
     await page.route("**/api/media/audio-tracks?*", (route) => json(route, {
       file_version: "a".repeat(64), tracks: [], selection: null, selection_stale: false,
     }));
@@ -116,6 +117,7 @@ for (const width of [320, 1440]) {
     await mockApi(page);
     let searchCount = 0;
     let associationCount = 0;
+    await page.route("**/api/filter-candidates/available", (route) => json(route, { available: true }));
     await page.route("**/api/filter-candidates", (route) => {
       searchCount++;
       if (searchCount === 1) return json(route, { detail: "Local lookup unavailable" }, 503);
@@ -161,6 +163,11 @@ for (const width of [320, 1440]) {
     for (const path of ["**/api/scans/history", "**/api/scans/queue", "**/api/library-items/movie-1/scans"]) {
       await page.route(path, (route) => json(route, []));
     }
+    const probes: unknown[] = [];
+    await page.route("**/api/filter-candidates/available", (route) => {
+      probes.push(route.request().postDataJSON());
+      return json(route, { available: false });
+    });
     await page.route("**/api/media/audio-tracks?*", (route) => json(route, {
       file_version: "a".repeat(64), tracks: [], selection: null, selection_stale: false,
     }));
@@ -169,8 +176,9 @@ for (const width of [320, 1440]) {
     await chooseWorkflowStep(page, "Scans");
     const trigger = page.getByRole("button", { name: "Recover Scans" });
     await expect(trigger).toBeDisabled();
-    await expect(trigger).toHaveAccessibleDescription(/no local scans of this item, its previous versions or other files/);
-    await expect(page.getByText(/no local scans of this item/)).toBeVisible();
+    await expect(trigger).toHaveAccessibleDescription(/no local scans of this item's other versions or files/);
+    await expect(page.getByText(/no local scans of this item's other versions/)).toBeVisible();
+    expect(probes).toContainEqual(expect.objectContaining({ item_id: "movie-1" }));
     await expectNoHorizontalPageOverflow(page);
     await expectNoAccessibilityViolations(page);
     await page.screenshot({ path: `test-results/recover-scans-disabled-${width}.png`, fullPage: true });

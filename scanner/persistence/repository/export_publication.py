@@ -235,6 +235,7 @@ def retained_review_snapshot(db, output):
         "source_review_id": review.id,
         "review_revision": review.revision,
         "media_path": str(output.media),
+        "duration_seconds": output.duration_seconds,
         "review": get_saved_review(db, review.id).model_dump(mode="json"),
         "policy_evidence": [
             {column.name: getattr(binding, column.name) for column in binding.__table__.columns}

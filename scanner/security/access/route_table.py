@@ -256,6 +256,7 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
     ("GET /api/media/audio-tracks", _gated(C.SCANS_START)),
     ("POST /api/media/audio-tracks/selection", _gated(C.SCANS_START)),
     ("POST /api/filter-candidates", _FINDINGS),
+    ("POST /api/filter-candidates/available", _FINDINGS),
     ("POST /api/filter-candidates/associations", _gated(C.MEDIA_IDENTITY_EDIT)),
     ("POST /api/scans", _START),
     ("GET /api/scans/history", _gated(*_SEEN)),
