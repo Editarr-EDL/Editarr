@@ -89,3 +89,56 @@ def test_downgrade_refuses_to_discard_a_hide_preference(tmp_path):
         (0,),
         (1,),
     ]
+
+
+def test_a_database_from_the_earlier_published_0039_upgrades_keeping_its_hide_values(tmp_path):
+    """The first published 0039 named the preference `hide_rejected_downvoted`."""
+    path = tmp_path / "data" / "scanner.db"
+    path.parent.mkdir(mode=0o700)
+    _seed(path)
+    engine = create_engine(f"sqlite:///{path}")
+    try:
+        with engine.begin() as db:
+            upgrade_connection(db, "0039_review_community_sources")
+            db.exec_driver_sql(
+                "ALTER TABLE community_master_preferences "
+                "RENAME COLUMN hide_downvoted TO hide_rejected_downvoted"
+            )
+            db.exec_driver_sql(
+                "UPDATE community_master_preferences SET hide_rejected_downvoted = 1 "
+                "WHERE owner_id = 2"
+            )
+    finally:
+        engine.dispose()
+    before = _read(path, _PREFERENCES)
+    assert adoption._inspect_database(path) == "0039_review_community_sources"
+
+    generation = adoption.upgrade_existing_database(path, path.parent)
+
+    validate_safety_snapshot(generation)
+    assert adoption._inspect_database(path) == adoption.HEAD_REVISION
+    assert _read(path, _PREFERENCES) == before
+    assert _read(
+        path, "SELECT owner_id, hide_downvoted FROM community_master_preferences ORDER BY owner_id"
+    ) == [(1, 0), (2, 1)]
+    recovered = adoption.export_upgrade_recovery(path, path.parent, tmp_path / "recovered.db")
+    assert adoption._inspect_database(recovered) == "0039_review_community_sources"
+    assert _read(recovered, _PREFERENCES) == before
+
+
+def test_a_mismatched_hide_column_is_still_refused(tmp_path):
+    path = tmp_path / "data" / "scanner.db"
+    path.parent.mkdir(mode=0o700)
+    _seed(path)
+    engine = create_engine(f"sqlite:///{path}")
+    try:
+        with engine.begin() as db:
+            upgrade_connection(db, "0039_review_community_sources")
+            db.exec_driver_sql(
+                "ALTER TABLE community_master_preferences "
+                "RENAME COLUMN hide_downvoted TO hide_something_else"
+            )
+    finally:
+        engine.dispose()
+    with pytest.raises(ValueError, match="Unsupported versioned database schema"):
+        adoption._inspect_database(path)

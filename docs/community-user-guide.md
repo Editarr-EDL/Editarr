@@ -126,8 +126,11 @@ Confidence filters unless you show them, start disabled.
 
 From then on community filters are ordinary review filters. Enable or disable them,
 edit their times, category, severity or action, preview or delete them exactly like
-scan filters; an **Edited** label marks the ones you changed yourself. Changes made
-by **Apply Filter Defaults** don't count as your edits. Your instance's filter
+scan filters; an **Edited** label marks the ones you changed yourself. Enabling or
+disabling a whole group at once counts as your edit of each filter it changes.
+Changes made by **Apply Filter Defaults** don't count as your edits. Once you edit a
+community filter it stays marked Edited, even if you later set it back to its
+original values, and sharing the review sends it as your verdict. Your instance's filter
 policy applies to them like any other filter, and EDL and MCF exports, published
 sidecars and filtered subtitles use them the same way.
 

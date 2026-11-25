@@ -23,7 +23,9 @@ enabled below the threshold) counts as edited by the user, a filter the owner ha
 rejected becomes a disabled, edited filter, and the master's other filters, which
 the snapshot left out, are added disabled. A snapshot without a link keeps its
 stored filters as their own defaults. Community-tab decisions of links that no
-review includes no longer apply; their rows are kept. No other row changes. The
+review includes no longer apply; their rows are kept. A database built by the earlier
+published 0039 has `community_master_preferences.hide_rejected_downvoted`; it is renamed
+to `hide_downvoted`, keeping each account's value. No other row changes. The
 adoption path runs this only after its verified, recoverable backup.
 """
 
@@ -285,7 +287,20 @@ def _materialize(bind):
         )
 
 
+def _rename_earlier_preference(bind):
+    """Rename the column an earlier published 0039 named `hide_rejected_downvoted`."""
+    columns = {
+        row[1] for row in bind.exec_driver_sql("PRAGMA table_info(community_master_preferences)")
+    }
+    if "hide_rejected_downvoted" in columns:
+        bind.exec_driver_sql(
+            "ALTER TABLE community_master_preferences "
+            "RENAME COLUMN hide_rejected_downvoted TO hide_downvoted"
+        )
+
+
 def upgrade():
+    _rename_earlier_preference(op.get_bind())
     with op.batch_alter_table("review_filters", recreate="always") as batch:
         batch.alter_column("source_scan_id", existing_type=sa.String(), nullable=True)
         batch.add_column(sa.Column("community_source_id", sa.String(36), nullable=True))

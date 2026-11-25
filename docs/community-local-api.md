@@ -769,6 +769,11 @@ exists. The upgrade test starts from `0038_retire_receipt_capabilities` with sto
 preferences and recovers the pre-upgrade database from the backup; the upgrade
 matrix covers every earlier revision.
 
+The first published 0039 named the column `hide_rejected_downvoted`. A database at
+0039 with that column passes the schema check (only that one name may differ), and
+0040 renames the column to `hide_downvoted`, keeping each value; a test upgrades
+from that shape and recovers it from the backup.
+
 ### 10.5 Community filters as review filters (migration `0040_review_community_filters`)
 
 `review_filters` is rebuilt (SQLite batch mode) so a review filter comes from a scan
