@@ -193,8 +193,9 @@ A review can contain only community filters: with no scans included, it still
 exports and publishes EDL and MCF files beside the media file. A review needs at
 least one scan or community filter to export.
 
-Filtered subtitles follow one rule for every filter: an enabled language mute on
-the audio channel removes the word or phrase in its label. A community language
+Filtered subtitles follow one rule for every filter: an enabled language filter on
+the audio channel removes the word or phrase in its label, whether it mutes or
+skips (a subtitle line can still show just before or after a skip). A community language
 mute's label is the community's word or phrase, so it filters subtitles like a
 scan filter; one without a word doesn't change subtitles unless you give it a
 label, exactly like any other filter without a word.

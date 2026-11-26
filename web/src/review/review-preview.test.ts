@@ -88,3 +88,33 @@ it("previews a saved community filter's unchanged clip against its saved review"
   ]);
   expect(workspace.result.current.preview?.filterId).toBe("community-filter");
 });
+
+it("previews an edited community filter with its edited action, like a scan filter", async () => {
+  const community: ReviewFilter = { ...reviewFilter("community-filter", "audio"), source_scan_id: null, source_finding_id: null,
+    community_source_id: "src-1", community_filter_id: "master-1", start_seconds: 30, end_seconds: 34 };
+  const review = savedReview({ filters: [community] });
+  vi.stubGlobal("URL", class extends URL {
+    static createObjectURL = vi.fn(() => "blob:preview");
+    static revokeObjectURL = vi.fn();
+  });
+  const bodies: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const pathname = new URL(String(input), "http://editarr.test").pathname;
+    if (pathname === "/api/library-items/movie-1/reviews/preview") {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(new Blob(["clip"]));
+    }
+    if (pathname.endsWith("/mcf-registry")) return json({ families: [] });
+    if (pathname === "/api/reviews/review-1") return json(review);
+    if (pathname.endsWith("/reviews")) return json([review]);
+    return json({});
+  }));
+  const workspace = renderHook(() => useSavedReviewWorkspace({
+    item: { id: "movie-1" }, mediaSourceId: "source-1", scans: [], onImported: () => undefined,
+  }));
+  await waitFor(() => expect(workspace.result.current.selected?.id).toBe("review-1"));
+  await act(() => workspace.result.current.previewFilter({ ...community, edit_action: "skip" }));
+
+  expect(bodies).toEqual([expect.objectContaining({ review_id: "review-1", source: "audio", edit_action: "skip" })]);
+  expect(workspace.result.current.preview?.filterId).toBe("community-filter");
+});

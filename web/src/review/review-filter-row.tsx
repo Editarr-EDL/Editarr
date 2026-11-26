@@ -5,6 +5,7 @@ import { formatTime } from "../shared/display";
 import { MoreMenu } from "../ui/MoreMenu";
 import { CommunityFilterFlags, CommunityFilterSource } from "./review-community-badges";
 import { isCommunityFilter } from "./review-community";
+import { previewsAudio } from "./review-preview";
 import { ReviewFilterEditor } from "./review-filter-editor";
 import { CensoredAudioWord, censorAudioWord, filterSourceOrigin, savedReviewFilterDescription, severityText, type TieredReviewResult } from "./review-results";
 import { ReviewScanInfo, reviewScanSourceLabel } from "./review-scan-source";
@@ -70,7 +71,7 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
   const showScanSource = sourceScans.length > 0 || !result.filters.some(isCommunityFilter);
   const linkedIndicator = item.linked && <span className="linked-result-indicator" role="img" aria-label="Linked result repeated in another category"> 🔗</span>;
   const word = (description: string) => <>“<CensoredAudioWord word={description} context={descriptionFilters.get(description)?.details} />”</>;
-  const previewing = preview && result.filters.some((filter) => filter.id === preview.filterId);
+  const previewed = preview && result.filters.find((filter) => filter.id === preview.filterId);
 
   return <Fragment>
     <tr className={`review-filter-row${rowSelected || rowMixed ? "" : " is-off"}`}>
@@ -96,7 +97,7 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
           <CommunityFilterFlags filters={result.filters} />
           {result.filters.some((filter) => requiredIds.has(filter.id)) && <small>Required by instance policy</small>}
         </div>
-        {previewing && (source === "audio"
+        {preview && previewed && (previewsAudio(previewed)
           ? <audio aria-label={`Mute preview for ${rowName} at ${time}`} controls src={preview.url}>Your browser does not support audio previews.</audio>
           : <video aria-label={`Video preview for ${rowName} at ${time}`} controls src={preview.url}>Your browser does not support video previews.</video>)}
       </td>

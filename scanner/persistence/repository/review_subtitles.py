@@ -22,7 +22,7 @@ from scanner.modeling.model_subtitles import (
     SubtitleSources,
     SubtitleSourcesRequest,
 )
-from scanner.models import EditAction, McfCategoryFamily, McfChannel
+from scanner.models import McfCategoryFamily, McfChannel
 from scanner.runtime.subtitle_inputs import read_subtitle
 from scanner.runtime.subtitle_sidecars import discover_publications, file_fingerprint, media_slot
 from scanner.runtime.subtitle_transcript import (
@@ -99,8 +99,10 @@ def _require_unambiguous_name(db, target, actual: Path) -> None:
 def subtitle_mutes(policy, duration_seconds=None) -> tuple[SubtitleMute, ...]:
     """The words filtered subtitles redact: one rule for every filter, whatever its source.
 
-    Each enabled audio-channel language mute with a word or phrase (its label) redacts
-    that expression; a mute without one changes nothing.
+    Each enabled audio-channel language filter with a word or phrase (its label) redacts
+    that expression, whether it mutes or skips: subtitles keep the original timeline, so
+    a cue overlapping a skipped range is still shown. A filter without a word changes
+    nothing.
     """
     return tuple(
         SubtitleMute(item.start_seconds, item.end_seconds, item.label)
@@ -108,7 +110,6 @@ def subtitle_mutes(policy, duration_seconds=None) -> tuple[SubtitleMute, ...]:
         if item.selected
         and item.source == "audio"
         and item.category == McfCategoryFamily.LANGUAGE
-        and item.edit_action == EditAction.MUTE
         and item.mcf_channel != McfChannel.VIDEO
         and item.end_seconds is not None
         and item.end_seconds > item.start_seconds

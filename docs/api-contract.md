@@ -953,9 +953,13 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
   or refreshing a snapshot needs `community.search` and evidence-edit permission, and
   only the review owner may take a snapshot of their own link; see
   [review community filters](community-local-api.md#saved-review-community-filters).
-- Filtered subtitles redact the words of every enabled audio-channel language mute
-  that has a word or phrase (its label), whatever the filter's source; a mute without
-  one, such as an unlabeled community filter, changes no subtitle.
+- Filtered subtitles redact the words of every enabled audio-channel language filter
+  that has a word or phrase (its label), whatever the filter's source or action (mute
+  or skip); a filter without one, such as an unlabeled community filter, changes no
+  subtitle.
+- Filter previews follow the filter's action, whatever its source: the draft preview
+  renders a mute as `audio/mpeg` and a skip as `video/mp4`, and a saved filter's
+  `mute-preview` or `video-preview` is available for a mute or a skip respectively.
 - Manual filters: `new_manual_filters` in saved-review create/save requests stages
   human-authored audio mute and visual skip filters with required MCF classification. The successful transaction creates
   or reuses the target version's Manual evidence scan and returns assigned provenance;

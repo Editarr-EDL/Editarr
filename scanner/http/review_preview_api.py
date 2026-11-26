@@ -63,9 +63,6 @@ class DraftFilterPreview(ReviewWriteModel):
             raise ValueError("A finding preview requires its source scan")
         if self.end_seconds is not None and self.end_seconds <= self.start_seconds:
             raise ValueError("End time must be after start time")
-        expected_action = EditAction.MUTE if self.source == "audio" else EditAction.SKIP
-        if self.edit_action != expected_action:
-            raise ValueError("Only audio mute and video skip filters can be previewed")
         return self
 
 
@@ -299,7 +296,8 @@ def api_draft_filter_preview(
     except ValueError as exc:
         raise root._review_mutation_error(exc) from exc
 
-    # FFmpeg runs after releasing the authority transaction's SQLite write lock.
+    # FFmpeg runs after releasing the authority transaction's SQLite write lock. The clip
+    # shows what the filter's action does, whatever its source: a mute or a skip.
     mute = request.edit_action == EditAction.MUTE
     render = repository.render_mute_preview if mute else repository.render_video_preview
     try:

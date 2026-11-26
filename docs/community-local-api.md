@@ -363,7 +363,8 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   target; a link awaiting alignment is refused. These are `422 invalid_membership`
   errors (or `403 capability_denied`).
 - **Subtitles** (U5) use one rule for every filter: an enabled audio-channel
-  language mute with a word or phrase (its label) redacts that expression. A
+  language filter with a word or phrase (its label) redacts that expression,
+  whether it mutes or skips. A
   community language filter's label is its master expression, so it redacts like
   a scan filter; one without an expression redacts nothing unless the user gives
   it a label, exactly like any wordless filter. There is no community-specific

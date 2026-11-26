@@ -8,6 +8,12 @@ import { useReviewLifetime } from "./review-access";
 export type PreviewFilter = Pick<ReviewFilter, "id" | "source" | "edit_action" | "start_seconds" | "end_seconds">
   & Partial<Pick<ReviewFilter, "source_scan_id" | "source_finding_id">>;
 
+/** The clip a filter previews follows its action, whatever its source: a mute renders the
+ * muted audio, a skip the skipped video. */
+export function previewsAudio(filter: Pick<ReviewFilter, "edit_action">): boolean {
+  return filter.edit_action === "mute";
+}
+
 /** Whether a saved filter's clip can be rendered from its saved values. Community filters have
  * no source scan, so they always preview from the review's own media file through the draft
  * endpoint; the server accepts an unchanged saved community clip with the preview grant alone. */
@@ -67,7 +73,7 @@ export function useReviewPreview({ target, selected, draft, setBusy, setError, d
     try {
       const saved = selected?.filters.find((candidate) => candidate.id === filter.id);
       const blob = selected && saved && sameClip(saved, filter)
-        ? await (filter.edit_action === "mute"
+        ? await (previewsAudio(filter)
           ? fetchSavedReviewMutePreview(selected.id, filter.id)
           : fetchSavedReviewVideoPreview(selected.id, filter.id))
         : await fetchDraftFilterPreview(target, {

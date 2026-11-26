@@ -161,7 +161,8 @@ request; they are numbered U1–U7 here to keep D1–D22 unambiguous).
   community-specific branch except provenance. They are stored as `review_filters`
   rows (migration 0040).
 - **U5 One subtitle rule.** Subtitle redaction uses enabled review filters that are
-  audio-channel language mutes with a word or phrase, whatever their source.
+  audio-channel language filters with a word or phrase, whatever their source
+  or action (a skip redacts too, because a cue overlapping it is still shown).
   Since W1 a community filter's label is its master expression, so a community
   language mute with one redacts like a scan filter; one without an expression
   doesn't, like any wordless filter. The community-specific subtitle alignment,
