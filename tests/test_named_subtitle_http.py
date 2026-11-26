@@ -111,16 +111,12 @@ def test_account_rename_requires_new_preview_and_retires_only_prior_name(app):
     assert source.read_bytes() == SUBTITLE_TEXT
 
 
-@pytest.mark.parametrize("case", ["unlinked", "reserved", "unknown language", "collision"])
+@pytest.mark.parametrize("case", ["unlinked", "reserved", "collision"])
 def test_preview_remains_available_without_an_exact_writable_name(app, case):
     review, source = seed_subtitle_review(app, linked=case != "unlinked")
     conflict = None
     if case == "reserved":
         link_publisher(app, USER, "Forced Name")
-    elif case == "unknown language":
-        with app.accounts.factory() as db:
-            item = db.get(SavedReviewRow, review.id).media_item
-            app.items[item.jellyfin_id].versions[1].subtitle_streams[0]["Language"] = "zz"
     elif case == "collision":
         stem = source.name.removesuffix(".en.forced.srt")
         conflict = source.with_name(f"{stem}.Sam - Subtitle review.en.forced.srt")
@@ -138,6 +134,43 @@ def test_preview_remains_available_without_an_exact_writable_name(app, case):
     assert denied.json()["detail"]["message"] == result["publication_block_reason"]
     if conflict is not None:
         assert conflict.read_bytes() == b"unmanaged"
+
+
+@pytest.mark.parametrize("language", ["wel", "zz"])
+def test_publication_uses_language_aliases_from_jellyfin_cultures(app, language):
+    review, source = seed_subtitle_review(app)
+    with app.accounts.factory() as db:
+        item = db.get(SavedReviewRow, review.id).media_item
+        app.items[item.jellyfin_id].versions[1].subtitle_streams[0]["Language"] = language
+
+    selected = selected_source(app, review)
+    preview = subtitle_request(app, review, "preview", selected)
+    assert preview.status_code == 200, preview.text
+    result = preview.json()
+    assert result["source"]["language"] == language
+    assert result["changed_cues"] == 1
+    assert result["cues"][0]["filtered"] == "close the gate."
+    if language == "zz":
+        assert result["preview_token"] is result["filename"] is None
+        files_before = set(source.parent.iterdir())
+        denied = subtitle_request(app, review, "publish", selected | {"preview_token": "a" * 64})
+        assert denied.status_code == 409, denied.text
+        assert denied.json()["detail"]["code"] == "subtitle_language_unavailable"
+        assert denied.json()["detail"]["message"] == result["publication_block_reason"]
+        assert set(source.parent.iterdir()) == files_before
+    else:
+        stem = source.name.removesuffix(".en.forced.srt")
+        filename = f"{stem}.Sam - Subtitle review.wel.forced.srt"
+        assert result["filename"] == filename
+        assert result["track_title"] == "Sam - Subtitle review"
+        assert result["publication_block_reason"] is None
+        published = subtitle_request(
+            app, review, "publish", selected | {"preview_token": result["preview_token"]}
+        )
+        assert published.status_code == 200, published.text
+        assert published.json()["filename"] == filename
+        assert source.with_name(filename).read_bytes() == _FILTERED
+    assert source.read_bytes() == SUBTITLE_TEXT
 
 
 def test_jellyfin_catalog_keeps_published_file_out_of_source_picker(app):

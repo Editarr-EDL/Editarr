@@ -3,11 +3,13 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import pytest
 
 import scanner.api as root
 from scanner.db import SavedReviewRow, ScanFindingRow, ScanRow
 from scanner.http import review_subtitle_api
+from scanner.integrations.jellyfin import JellyfinClient
 from scanner.integrations.jellyfin_catalog import parse_catalog
 from scanner.integrations.jellyfin_library_folders import parse_library_folders
 from scanner.integrations.jellyfin_user_snapshot import (
@@ -32,12 +34,30 @@ from scanner.security.access.identity import JellyfinServerId, ProviderIdentity
 from scanner.security.jellyfin_accounts.evidence import evidence_cache
 from tests.media_access_support import listing
 from tests.multi_user_access_support import USER, stand_in_identity
+from tests.scan_access_http import JELLYFIN
 from tests.test_review_access_http import app as app
 
 SUBTITLE_TEXT = (
     b"1\n00:00:01,000 --> 00:00:03,000\nDamn, close the gate.\n\n"
     b"2\n00:00:03,000 --> 00:00:06,000\nThis stays.\n"
 )
+
+# Jellyfin v10.11.11's Localization/Cultures DTOs for these rows of iso6392.txt.
+_SUBTITLE_CULTURES = [
+    {
+        "Name": name,
+        "DisplayName": name,
+        "TwoLetterISOLanguageName": short,
+        "ThreeLetterISOLanguageName": aliases[0],
+        "ThreeLetterISOLanguageNames": aliases,
+    }
+    for name, short, aliases in (
+        ("English", "en", ["eng"]),
+        ("French", "fr", ["fra", "fre"]),
+        ("Hindi", "hi", ["hin"]),
+        ("Welsh", "cy", ["cym", "wel"]),
+    )
+]
 
 
 @pytest.fixture(autouse=True)
@@ -74,11 +94,19 @@ def subtitle_publishing_dependencies(app, monkeypatch):
     monkeypatch.setattr(evidence_cache, "adapters", lambda _db: Provider())
     monkeypatch.setattr(evidence_cache, "_copies", {})
     monkeypatch.setattr(evidence_cache, "_items", {})
-    monkeypatch.setattr(
-        review_subtitle_api.JellyfinClient,
-        "subtitle_language_tokens",
-        lambda _: frozenset({"en", "eng", "fr", "fra", "hi", "hin"}),
-    )
+
+    def localization(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert str(request.url) == f"{JELLYFIN}/Localization/Cultures"
+        return httpx.Response(200, json=_SUBTITLE_CULTURES)
+
+    with httpx.Client(transport=httpx.MockTransport(localization)) as client:
+        monkeypatch.setattr(
+            review_subtitle_api,
+            "JellyfinClient",
+            lambda server_url, api_key: JellyfinClient(server_url, api_key, client),
+        )
+        yield
 
 
 def link_publisher(app, user, name):
