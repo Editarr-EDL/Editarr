@@ -7,11 +7,15 @@ from .db_core import Base
 
 
 class ReviewCommunitySourceRow(Base):
-    """A snapshot of one master link's active filters that a saved review includes.
+    """A snapshot of one master link's served filters that a saved review includes.
 
-    Reviews, exports and sidecars read only `filters_json`. `link_id` names the link
-    the snapshot was taken from, for refresh and change detection, and is null once
-    that link is deleted. `filters_digest` identifies the snapshot's filter values.
+    Since 0040 the review's community filters are ordinary `review_filters` rows that
+    the user enables, disables and edits; results, exports and sidecars use those rows,
+    edits and on/off state included. `filters_json` holds the master values and
+    starting state of each filter, so Refresh and sharing can tell what the user
+    edited. `link_id` names the link the snapshot was taken from, for refresh and
+    change detection, and is null once that link is deleted. `filters_digest`
+    identifies the snapshot's served master values.
     """
 
     __tablename__ = "review_community_sources"

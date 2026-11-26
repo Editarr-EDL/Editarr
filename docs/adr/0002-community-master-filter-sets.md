@@ -121,8 +121,9 @@ users and must keep their data.
 - Local adjustments become attestations on the next share (D22, made precise
   by U6).
 - A saved review includes a master set as a snapshot of the link's served
-  filters, taken when it is included or refreshed. Later master-set changes only
-  flag the review as changed until the user refreshes and saves it.
+  filters, taken when it is included or refreshed, and adds each filter as an
+  editable review filter (U2, U4). Later master-set changes only flag the review
+  as changed until the user refreshes and saves it.
 
 **Community filters in reviews (owner-delegated decisions U1–U7)**
 

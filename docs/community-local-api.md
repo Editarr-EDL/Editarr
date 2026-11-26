@@ -797,6 +797,11 @@ rows, and the upgrade test recovers them from it.
 | --- | --- | --- |
 | `review_community_sources` | **review_id** → saved_reviews (CASCADE), **id**, link_id → community_master_links (nullable), position, community_version_id, label, tier, match_percent, master_revision, alignment_json, filters_json, filters_digest, captured_at | Index on `link_id`. Checks: `position >= 0`, `master_revision >= 1` |
 
+Since 0040 (§10.5) a review's community filters are editable `review_filters` rows,
+and exports use them with the user's edits and on/off choices. `filters_json` keeps
+each filter's master values and starting state, which Refresh and sharing compare
+against to tell what the user edited.
+
 The migration also adds `community_master_preferences.hide_downvoted`
 (default false). It changes no existing row, runs only after the verified,
 recoverable backup, and its downgrade refuses while any snapshot or hide preference

@@ -9,6 +9,9 @@
 
 No existing row changes. The adoption path runs this only after its verified,
 recoverable backup.
+
+(0040 later made each snapshot filter an editable `review_filters` row; since then
+the snapshot only records master values and starting states for Refresh and sharing.)
 """
 
 import sqlalchemy as sa
