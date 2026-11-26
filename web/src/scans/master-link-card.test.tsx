@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { fetchCommunityMaster, fetchVersionAliases, findCommunityVersions, MasterApiError } from "../api/api-community-masters";
+import { fetchCommunityMaster, fetchVersionAliases, findCommunityVersions, MasterApiError, previewMasterAlignment } from "../api/api-community-masters";
+import { fetchDraftFilterPreview } from "../api/api-reviews";
 import { checkMasterUpdates } from "../api/api-community-updates";
 import { masterFilter, masterLink, masterView } from "./community-master-test-fixtures";
 import { COMMUNITY_FILTERS_CHANGED_EVENT, notifyCommunityMastersChanged } from "./community-master-events";
@@ -12,6 +13,7 @@ vi.mock("../api/api-community-masters", async (original) => ({
   findCommunityVersions: vi.fn(), fetchVersionAliases: vi.fn(),
   previewMasterAlignment: vi.fn(), approveMasterAlignment: vi.fn() }));
 vi.mock("../api/api-community-updates", () => ({ checkMasterUpdates: vi.fn() }));
+vi.mock("../api/api-reviews", () => ({ fetchDraftFilterPreview: vi.fn() }));
 vi.mock("../auth/auth-gate", async (original) => ({ ...await original<typeof import("../auth/auth-gate")>(), useCan: () => true }));
 vi.mock("./use-audio-tracks", () => ({ useAudioTracks: () => ({ inventory: null, selection: null, loading: false, error: null,
   ready: false, onChange: vi.fn(), onRetry: vi.fn() }) }));
@@ -45,6 +47,19 @@ it("reports when a check finds nothing new and gates a fuzzy link behind alignme
   expect(await screen.findByRole("heading", { name: "Align before applying" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Check for filter updates" }));
   expect(await screen.findByText("These community filters are up to date.")).toBeInTheDocument();
+});
+
+it("plays aligned clips only from the local version the link is aligned to", async () => {
+  vi.mocked(fetchCommunityMaster).mockResolvedValue(masterView([masterFilter()], { alignmentState: "required", tier: "4" }));
+  vi.mocked(previewMasterAlignment).mockResolvedValue({ version: 1, token: "t",
+    alignment: { offsetMs: 1000, scale: 1, anchors: 0 }, rows: [{ filterId: "f1", alignedStartMs: 601_000, alignedEndMs: 606_050 }] });
+  vi.mocked(fetchDraftFilterPreview).mockResolvedValue(new Blob(["clip"]));
+  URL.createObjectURL = vi.fn(() => "blob:clip");
+  render(<MasterLinkCard summary={masterLink({ alignmentState: "required" })} target={target} onChanged={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Preview alignment" }));
+  fireEvent.click(await screen.findByRole("button", { name: /Play clip at/ }));
+  await waitFor(() => expect(fetchDraftFilterPreview).toHaveBeenCalledExactlyOnceWith(target, {
+    start_seconds: 601, end_seconds: 606.05, source: "visual", edit_action: "skip", stable_version_id: "mv_1" }, expect.any(AbortSignal)));
 });
 
 it("reloads its filters when the daily sync settles", async () => {

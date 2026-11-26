@@ -1,18 +1,39 @@
 """Previewing a saved community filter needs the preview permission, not cue editing."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from scanner import repository
-from scanner.db import ReviewFilterRow
+from scanner.db import ReviewFilterRow, SavedReviewRow, ScanRow
+from scanner.persistence.repository import media_identity_store as identity
 from scanner.persistence.rows.db_review_community import ReviewCommunitySourceRow
+from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
 from tests.multi_user_access_support import USER
 from tests.test_review_access_http import app, seeded_review  # noqa: F401
 
 
-def add_community_filter(served, review_id):
+def observe_review_file(db, review_id: str) -> tuple[str, Path]:
+    """Record the review's current file as a sampled local version."""
+    row = db.get(SavedReviewRow, review_id)
+    scan = db.get(ScanRow, row.memberships[0].scan_id)
+    version = identity.observe_sampled_version(
+        db,
+        media=row.media_item,
+        media_source_id=None,
+        source_path=scan.source_path,
+        fingerprint=sampled_media_fingerprint(scan.source_path),
+    )
+    return version, Path(scan.source_path)
+
+
+def add_community_filter(served, review_id, *, pin_review=True):
+    """Add a saved community filter; `pin_review` binds the review to its current file,
+    which places the snapshot's times on that file's timeline."""
     with served.accounts.factory() as db:
+        if pin_review:
+            identity.bind_review_version(db, review_id, observe_review_file(db, review_id)[0])
         db.add(
             ReviewCommunitySourceRow(
                 review_id=review_id,

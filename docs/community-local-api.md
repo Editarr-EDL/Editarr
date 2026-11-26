@@ -377,8 +377,11 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   for policy regeneration. Its runtime comes from the shortest completed scan of
   its local versions, or else from probing its media file. Retained snapshots from
   before 0040 keep regenerating with their stored community filters.
-- **Previews** of a community filter render the review target's file directly,
-  as for an unsaved draft filter.
+- **Previews** of a community filter render the review target's file through the
+  draft preview, only while that file is still the local version the snapshot's
+  times belong to: the snapshot link's `localVersionId` (or, for a detached
+  snapshot, the review's bound version) and the review's bound version. Otherwise,
+  or when no such version is known, the preview returns `409 target_changed`.
 - **Votes.** Each community filter in the review's results shows the account's
   vote and votes through the snapshot's `link_id` with §6, immediately; a vote is
   not part of the review and never changes its revision. The web app reads the
@@ -438,7 +441,8 @@ Response:
 
 `rows` lists every served filter in aligned start order. There is no clip token: clips play through the existing
 review draft-filter preview of the target file at `alignedStartMs` to
-`alignedEndMs`.
+`alignedEndMs`, with `stable_version_id` set to the link's `localVersionId`, so a
+replaced file returns `409 target_changed` instead of a clip at stale times.
 
 ### `POST /api/community/masters/{link_id}/alignment/approve`
 

@@ -960,6 +960,9 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
 - Filter previews follow the filter's action, whatever its source: the draft preview
   renders a mute as `audio/mpeg` and a skip as `video/mp4`, and a saved filter's
   `mute-preview` or `video-preview` is available for a mute or a skip respectively.
+  A saved review's draft preview without a source scan plays only while the target
+  file is the review's bound version and, for an unchanged community filter, the
+  local version its snapshot was aligned to; otherwise it returns `409 target_changed`.
 - Manual filters: `new_manual_filters` in saved-review create/save requests stages
   human-authored audio mute and visual skip filters with required MCF classification. The successful transaction creates
   or reuses the target version's Manual evidence scan and returns assigned provenance;

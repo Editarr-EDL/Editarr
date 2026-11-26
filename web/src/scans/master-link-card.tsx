@@ -83,7 +83,7 @@ export function MasterLinkCard({ summary, target, onChanged }: {
     {linkStale(link.linkState) && <MasterLinkStateNotice link={link} target={target} />}
     {master.error && <p className="form-error" role="alert">{master.error}{" "}
       <button type="button" className="btn-secondary compact-button" onClick={() => void master.reload()}>Retry</button></p>}
-    {mayDownload && link.alignmentState === "required" && master.view && <MasterAlignment linkId={link.linkId} target={target}
+    {mayDownload && link.alignmentState === "required" && master.view && <MasterAlignment linkId={link.linkId} localVersionId={link.localVersionId} target={target}
       filters={alignable} forRevision={link.appliedRevision} prefill={link.alignment} onApproved={settled} />}
     <div id={listId} hidden={!expanded}>
       {expanded && master.view && preferences.displayed && <>

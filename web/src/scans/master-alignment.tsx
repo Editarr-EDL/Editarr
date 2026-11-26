@@ -14,10 +14,11 @@ const MAX_ANCHORS = 50;
 /**
  * Fuzzy-tier alignment gate (tier 4 and below). The user shifts every filter by an offset or places
  * anchors, previews the aligned times with clips, then approves the transform for `forRevision`.
- * `prefill` seeds the offset from the link's stored transform.
+ * `prefill` seeds the offset from the link's stored transform. Clips play only while the target
+ * file is still `localVersionId`, the version the aligned times are placed on.
  */
-export function MasterAlignment({ linkId, target, filters, forRevision, prefill, onApproved }: {
-  linkId: string; target: MasterTarget; filters: AlignableFilter[]; forRevision: number;
+export function MasterAlignment({ linkId, localVersionId, target, filters, forRevision, prefill, onApproved }: {
+  linkId: string; localVersionId: string; target: MasterTarget; filters: AlignableFilter[]; forRevision: number;
   prefill: Alignment | null; onApproved: () => void;
 }) {
   const heading = useId();
@@ -99,7 +100,8 @@ export function MasterAlignment({ linkId, target, filters, forRevision, prefill,
           <span className="master-aligned-time">{formatRange(range)}</span>
           <button type="button" className="btn-secondary compact-button" disabled={clips.loading !== null}
             aria-label={`Play clip at ${formatMs(row.alignedStartMs)}`}
-            onClick={() => void clips.play(row.filterId, rangePreview({ ...range, action: filter?.action ?? "skip" }))}>
+            onClick={() => void clips.play(row.filterId,
+              { ...rangePreview({ ...range, action: filter?.action ?? "skip" }), stable_version_id: localVersionId })}>
             {clips.loading === row.filterId ? "Loading…" : "▶ Play"}</button></li>;
       })}</ol>
       <FilterClipPlayer clip={clips.clip} error={clips.error} />

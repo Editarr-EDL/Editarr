@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 
 from scanner import api as root
 from scanner import repository
-from scanner.db import MediaItemRow, SavedReviewRow, ScanFindingRow, ScanRow
+from scanner.db import (
+    MediaItemRow,
+    ReviewCommunitySourceRow,
+    SavedReviewRow,
+    ScanFindingRow,
+    ScanRow,
+)
 from scanner.modeling.model_core import MAX_PERSISTED_INTEGER, ReviewWriteModel
 from scanner.models import EditAction, ReviewTargetRequest
 from scanner.persistence.repository.community_import_targets import (
@@ -20,7 +26,11 @@ from scanner.persistence.repository.community_import_targets import (
     validate_target_role,
     verified_target,
 )
-from scanner.persistence.repository.media_identity_store import find_title_id, get_version
+from scanner.persistence.repository.media_identity_store import (
+    find_title_id,
+    get_version,
+    review_version_id,
+)
 from scanner.persistence.repository.review_access import PREVIEW, ReviewAccess, not_found
 from scanner.persistence.repository.review_version_evidence import (
     ReviewMediaProof,
@@ -72,7 +82,7 @@ class PreviewClip:
     source_path: str
     start: float
     end: float
-    version_id: str | None = None
+    version_ids: tuple[str, ...] = ()
     generation: tuple[int, ...] | None = None
 
 
@@ -106,20 +116,48 @@ def _matches_finding(finding: ScanFindingRow | None, request: DraftFilterPreview
     )
 
 
+def _saved_community_sources(
+    db: Session, request: DraftFilterPreview
+) -> list[ReviewCommunitySourceRow]:
+    """The snapshots of the review's saved community filters that exactly match the clip."""
+    if request.source_scan_id is not None:
+        return []
+    row = db.get(SavedReviewRow, request.review_id)
+    clip = (request.source, request.edit_action, request.start_seconds, request.end_seconds)
+    return [
+        db.get(ReviewCommunitySourceRow, (row.id, saved.community_source_id))
+        for saved in row.filters
+        if saved.community_source_id is not None
+        and (saved.source, saved.edit_action, saved.start_seconds, saved.end_seconds) == clip
+    ]
+
+
 def _matches_saved_community_filter(db: Session, request: DraftFilterPreview) -> bool:
     """Whether the clip is exactly one of the review's saved community filters.
 
     Community filters have no source scan, so they preview from the review's media
     file; an unchanged one is saved evidence, like an unchanged scan finding."""
-    if request.source_scan_id is not None:
-        return False
-    row = db.get(SavedReviewRow, request.review_id)
-    clip = (request.source, request.edit_action, request.start_seconds, request.end_seconds)
-    return any(
-        saved.community_source_id is not None
-        and (saved.source, saved.edit_action, saved.start_seconds, saved.end_seconds) == clip
-        for saved in row.filters
-    )
+    return bool(_saved_community_sources(db, request))
+
+
+def _timeline_versions(db: Session, request: DraftFilterPreview, review_id: str) -> set[str]:
+    """The local versions whose timeline a saved review's scan-less clip is placed on.
+
+    The review's bound version pins every filter; a saved community filter's times are
+    on the local version its master link was aligned to. A matched community filter
+    whose version is unknown (detached link, unbound review) cannot be verified."""
+    bound = review_version_id(db, review_id)
+    versions = {bound} if bound is not None else set()
+    for source in _saved_community_sources(db, request):
+        version = source.link.media_version_id if source.link is not None else bound
+        if version is None:
+            raise _target_changed()
+        versions.add(version)
+    return versions
+
+
+def _target_changed():
+    return root._review_http_error("target_changed", "The selected version has changed", 409)
 
 
 def _authorize_saved_draft(
@@ -170,6 +208,10 @@ def _preview_clip(
         )
 
     path = _target_path(db, target)
+    versions = {request.stable_version_id} if request.stable_version_id is not None else set()
+    if review_id is not None and request.source_scan_id is None:
+        # Without a source scan, nothing else ties the current file to the filter's timeline.
+        versions |= _timeline_versions(db, request, review_id)
     if request.stable_version_id is not None:
         version = get_version(db, request.stable_version_id)
         if (
@@ -227,7 +269,7 @@ def _preview_clip(
     if end <= request.start_seconds:
         raise ValueError("The filter does not have a range within the media")
     return PreviewClip(
-        path, source.path, request.start_seconds, end, request.stable_version_id, generation
+        path, source.path, request.start_seconds, end, tuple(sorted(versions)), generation
     )
 
 
@@ -239,22 +281,18 @@ def _verify_preview_file(
         try:
             require_media_generation(db, clip.source_path, clip.path, clip.generation)
         except ScanVersionChanged as exc:
-            raise root._review_http_error(
-                "target_changed", "The selected version has changed", 409
-            ) from exc
+            raise _target_changed() from exc
     if target_generation:
         try:
             matches = generation_token(file_generation(str(clip.path))) == target_generation
         except ScanVersionChanged:
             matches = False
         if not matches:
-            raise root._review_http_error("target_changed", "The selected version has changed", 409)
-    if clip.version_id:
-        with use_review_media_proof(db, proof):
-            if not version_file_matches(get_version(db, clip.version_id), clip.path, db=db):
-                raise root._review_http_error(
-                    "target_changed", "The selected version has changed", 409
-                )
+            raise _target_changed()
+    with use_review_media_proof(db, proof):
+        for version_id in clip.version_ids:
+            if not version_file_matches(get_version(db, version_id), clip.path, db=db):
+                raise _target_changed()
 
 
 @router.post("/api/library-items/{item_id}/reviews/preview")
@@ -301,7 +339,7 @@ def api_draft_filter_preview(
     mute = request.edit_action == EditAction.MUTE
     render = repository.render_mute_preview if mute else repository.render_video_preview
     try:
-        proof = capture_media_proof(clip.path) if clip.version_id else None
+        proof = capture_media_proof(clip.path) if clip.version_ids else None
         _verify_preview_file(caller.db, clip, request.target_generation, proof)
         if request.audio_track_index is None:
             content = render(clip.path, clip.start, clip.end)
