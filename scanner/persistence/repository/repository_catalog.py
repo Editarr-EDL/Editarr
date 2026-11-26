@@ -68,10 +68,19 @@ def find_filter_candidates(
     media_format: str | None,
     media_provider_id: str | None,
     source_path: str,
+    candidates: list[ScanRow] | None = None,
 ) -> list[tuple[Scan, str]]:
-    """Find completed scans of likely matching, but not yet linked, media files."""
-    rows = possible_candidate_scans(
-        db, resolved_local_path=resolved_local_path, media_provider_id=media_provider_id
+    """Find completed scans of likely matching, but not yet linked, media files.
+
+    ``candidates`` reuses rows already read by ``possible_candidate_scans``. Media is hashed
+    only when some candidate is left unmatched by metadata.
+    """
+    rows = (
+        candidates
+        if candidates is not None
+        else possible_candidate_scans(
+            db, resolved_local_path=resolved_local_path, media_provider_id=media_provider_id
+        )
     )
     normalized_scene_name = _normalized_media_name(scene_name) if scene_name else None
     normalized_release_group = _normalized_media_name(release_group) if release_group else None
@@ -103,6 +112,8 @@ def find_filter_candidates(
         else:
             unmatched_rows.append(row)
 
+    if not unmatched_rows:
+        return list(matches.values())
     target_path = Path(resolved_local_path)
     try:
         target_hash = compute_video_md5(str(target_path)) if target_path.is_file() else None

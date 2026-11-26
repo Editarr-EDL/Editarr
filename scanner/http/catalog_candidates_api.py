@@ -58,20 +58,28 @@ def api_find_filter_candidates(
         path=found.path,
     )
     associated_scan_ids = associated_scan_ids_for_media_item(db, media_item_id=media_item.id)
-    try:
-        video_duration_seconds = root.get_video_duration(resolution.local_path)
-    except (OSError, RuntimeError, ValueError):
-        video_duration_seconds = found.duration_seconds
-    matches = find_filter_candidates(
-        db,
-        resolved_local_path=str(Path(resolution.local_path).resolve()),
-        duration_seconds=video_duration_seconds,
-        scene_name=found.scene_name,
-        release_group=found.release_group,
-        media_format=found.media_format,
-        media_provider_id=found.media_provider_id,
-        source_path=found.path,
+    resolved_local_path = str(Path(resolution.local_path).resolve())
+    candidates = possible_candidate_scans(
+        db, resolved_local_path=resolved_local_path, media_provider_id=found.media_provider_id
     )
+    matches = []
+    # Without candidate scans nothing can match, so the media file is never probed or hashed.
+    if candidates:
+        try:
+            video_duration_seconds = root.get_video_duration(resolution.local_path)
+        except (OSError, RuntimeError, ValueError):
+            video_duration_seconds = found.duration_seconds
+        matches = find_filter_candidates(
+            db,
+            resolved_local_path=resolved_local_path,
+            duration_seconds=video_duration_seconds,
+            scene_name=found.scene_name,
+            release_group=found.release_group,
+            media_format=found.media_format,
+            media_provider_id=found.media_provider_id,
+            source_path=found.path,
+            candidates=candidates,
+        )
     if not viewer.is_owner:
         stored = catalog_files.stored_scans(db, [scan.id for scan, _reason in matches])
         scan_ids = list(stored)
