@@ -9,7 +9,8 @@ cannot submit work without naming its initiator's gate or a `SystemWork` reason.
 Only calls on the imported `scanner.http.background` module are the helper; a
 local variable that happens to share its name is not. Request-scoped asyncio
 tasks are awaited and drained before the response, so they run with the
-request's own principal.
+request's own principal. The standalone Qwen replay CLI serves a separate
+loopback app, with shutdown handling for its two named background sites.
 
 `SYSTEM_WORK_CALLERS` names the one place each `SystemWork` reason may be used,
 so a handler cannot borrow a system reason for work a user started.
@@ -30,10 +31,19 @@ HELPER = "helper: binds the initiator's gate or a named SystemWork"
 REQUEST_SCOPED = "request-scoped: awaited and drained inside the request"
 SYSTEM = "system: schedule, startup, or launcher with no initiating user"
 WORKER = "worker process: runs under the scan's JobGate"
+LOCAL_REPLAY = "standalone replay CLI: owned and reaped by the loopback app"
 PRIMITIVES = frozenset(
     {"Thread", "Timer", "Process", "Popen", "create_task", "ensure_future", "run_in_executor"}
     | {"add_task", "start_soon", "submit", "BackgroundTask"}
 )
+
+LOCAL_REPLAY_SITES = {
+    ("scanner/http/qwen_language_replay_process.py", "ReplayProcess._start", "Popen"): (
+        1,
+        LOCAL_REPLAY,
+    ),
+    ("scanner/http/qwen_language_replay_web.py", "create_app.run", "Thread"): (1, LOCAL_REPLAY),
+}
 
 SITES: dict[tuple[str, str, str], tuple[int, str]] = {
     ("scanner/http/background.py", "start_thread", "Thread"): (1, HELPER),
@@ -68,7 +78,7 @@ SITES: dict[tuple[str, str, str], tuple[int, str]] = {
     ("scanner/pipeline/processes.py", "run_command", "Thread"): (1, WORKER),
     ("scanner/pipeline/runner_workers.py", "_scan_audio_isolated", "Process"): (1, WORKER),
     ("scanner/pipeline/runner_workers.py", "_scan_visual_isolated", "Process"): (1, WORKER),
-}
+} | LOCAL_REPLAY_SITES
 
 SYSTEM_WORK_CALLERS: dict[SystemWork, set[tuple[str, str]]] = {
     SystemWork.SCAN_DISPATCH: {("scanner/http/api_queue.py", "_start_scan_queue_worker_if_needed")},
@@ -196,7 +206,11 @@ def violations(found: Counter, sites=SITES) -> list[str]:
         registered = sites.get(site)
         if registered is None or registered[0] != count:
             problems.append(f"unclassified background work: {site} x{count}")
-        elif site[0].startswith(HTTP) and registered[1] not in {HELPER, REQUEST_SCOPED}:
+        elif (
+            site[0].startswith(HTTP)
+            and registered[1] not in {HELPER, REQUEST_SCOPED}
+            and registered != LOCAL_REPLAY_SITES.get(site)
+        ):
             problems.append(f"request path starts background work outside the helper: {site}")
     problems.extend(f"stale classification: {site}" for site in sites.keys() - found.keys())
     return problems
@@ -246,6 +260,14 @@ def test_a_handler_site_cannot_be_waved_through_as_system_work():
     site = ("scanner/http/fabricated_api.py", "api_start", "Thread")
     found = scanned() + Counter({site: 1})
     assert violations(found, SITES | {site: (1, SYSTEM)}) == [
+        f"request path starts background work outside the helper: {site}"
+    ]
+
+
+def test_local_replay_classification_is_limited_to_its_two_sites():
+    site = ("scanner/http/fabricated_api.py", "api_start", "Thread")
+    found = scanned() + Counter({site: 1})
+    assert violations(found, SITES | {site: (1, LOCAL_REPLAY)}) == [
         f"request path starts background work outside the helper: {site}"
     ]
 
