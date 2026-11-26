@@ -7,14 +7,38 @@ import { installProductionApi, json, mediaItem } from "./app-test-fixtures";
 
 const words = ["Arrival", "Blue", "Comet", "Dune", "Echo", "Falcon", "Glass", "Harbor", "Island", "Jade", "Kingdom", "Lantern",
   "Meadow", "North", "Ocean", "Paper", "Quiet", "River", "Silver", "Tide", "Union", "Valley", "Winter", "Xenon", "Yellow", "Zephyr"];
-/** `size` titles spread evenly over the letters A to Y, sorted by title ("Arrival 00", "Arrival 01", …). */
+/**
+ * `size` titles spread evenly over the letters A to Y, sorted by title ("Arrival 00", "Arrival 01", …), from
+ * 1985 to 2024 with every 25th title from the fourth on missing a year.
+ */
 function generatedLibrary(size: number) {
   const perLetter = size / 25;
   const width = Math.max(2, String(perLetter - 1).length);
   return Array.from({ length: size }, (_, index) => {
     const name = `${words[Math.floor(index / perLetter)]} ${String(index % perLetter).padStart(width, "0")}`;
-    return { ...mediaItem, id: `movie-${index}`, name, sort_name: name, year: 2000 + (index % 20) };
+    return { ...mediaItem, id: `movie-${index}`, name, sort_name: name, year: index % 25 === 3 ? null : 1985 + (index % 40) };
   });
+}
+type Movie = ReturnType<typeof generatedLibrary>[number];
+
+/** The listing in the server's order: by title, or by year with titles missing one last; then its jump groups. */
+function ordered(library: Movie[], sortBy: string | null, direction: string | null) {
+  const year = (item: Movie) => item.year ?? Number.POSITIVE_INFINITY;
+  const sorted = sortBy === "year" ? [...library].sort((left, right) => year(left) - year(right) || left.name.localeCompare(right.name)) : library;
+  return direction === "desc" ? [...sorted].reverse() : sorted;
+}
+function jumpGroups(items: Movie[], sortBy: string | null) {
+  const groupOf = (item: Movie) => {
+    if (sortBy === "title") return { key: item.name[0], label: item.name[0] };
+    if (item.year === null) return { key: ":none", label: "No year" };
+    const decade = Math.floor(item.year / 10) * 10;
+    return { key: String(decade), label: `${decade}s` };
+  };
+  if (sortBy !== "title" && sortBy !== "year") return [];
+  return items.reduce<Array<{ key: string; label: string; offset: number }>>((groups, item, offset) => {
+    const group = groupOf(item);
+    return groups.at(-1)?.key === group.key ? groups : [...groups, { ...group, offset }];
+  }, []);
 }
 
 function installCatalog(size = 250) {
@@ -34,15 +58,15 @@ function installCatalog(size = 250) {
     requests.push(`${sortBy}:${url.searchParams.get("edl_filter")}:${start}:${limit}`);
     if (hold) await new Promise<void>((resolve) => pending.push(resolve));
     if (failNext || failStarts.has(start)) { failNext = false; failStarts.delete(start); return json({ detail: "Jellyfin is unavailable" }, 502); }
-    const matching = url.searchParams.get("edl_filter") === "exported" ? library.slice(0, 30) : library;
-    const offsets: Record<string, number> = {};
-    if (sortBy === "title") matching.forEach((item, index) => { offsets[item.name[0]] ??= index; });
+    const matching = ordered(url.searchParams.get("edl_filter") === "exported" ? library.slice(0, 30) : library,
+      sortBy, url.searchParams.get("sort_direction"));
     return json({
       items: matching.slice(start, start + limit), total_count: matching.length,
-      rating_values: ["PG-13"], resolution_values: ["4K"], title_letter_offsets: offsets,
+      rating_values: ["PG-13"], resolution_values: ["4K"], jump_groups: jumpGroups(matching, sortBy),
     });
   }));
   return {
+    library,
     requests,
     hold: () => { hold = true; },
     failOnce: (start: number) => failStarts.add(start),
@@ -117,7 +141,35 @@ describe("continuous library browsing", () => {
     expect(api.requests).toEqual(["title:all:0:100", "title:all:100:100", "title:all:200:100"]);
   });
 
-  it("sorts from one menu and hides the rail outside title order", async () => {
+  it("jumps to a decade beyond the loaded titles and marks it current", async () => {
+    const api = installCatalog();
+    renderLibrary();
+    await status("Showing 100 of 250");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Title, ascending" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Year" }));
+    const rail = await screen.findByRole("toolbar", { name: "Jump to decade" });
+    const listing = ordered(api.library, "year", "asc");
+    const target = jumpGroups(listing, "year").find((group) => group.key === "2010")!;
+    expect(target.offset).toBeGreaterThan(100);
+
+    api.hold();
+    fireEvent.click(within(rail).getByRole("button", { name: "Jump to 2010s" }));
+    await status("Loading titles for 2010s…");
+    api.release();
+    await waitFor(() => expect(screen.getByRole("button", { name: `Open ${listing[target.offset].name}` })).toHaveFocus());
+    expect(api.requests.slice(-2)).toEqual(["year:all:0:100", "year:all:100:100"]);
+    // The jumped-to title is the first one in view, so its decade is current.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const index = Number((this as HTMLElement).dataset?.catalogIndex ?? -1);
+      const top = (index - target.offset) * 100;
+      return { top, bottom: top + 90, height: 90, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(within(rail).getByRole("button", { name: "Jump to 2010s" })).toHaveAttribute("aria-current", "true"));
+    expect(within(rail).getByRole("button", { name: "Jump to 2000s" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("sorts from one menu and shows the rail of the sort's groups in its direction", async () => {
     const api = installCatalog();
     renderLibrary();
     await status("Showing 100 of 250");
@@ -134,11 +186,18 @@ describe("continuous library browsing", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sort by Year, ascending" })).toHaveFocus();
     await waitFor(() => expect(api.requests).toContain("year:all:0:100"));
-    await waitFor(() => expect(screen.queryByRole("toolbar", { name: "Jump to letter" })).not.toBeInTheDocument());
+    const decades = await screen.findByRole("toolbar", { name: "Jump to decade" });
+    expect(screen.queryByRole("toolbar", { name: "Jump to letter" })).not.toBeInTheDocument();
+    expect(within(decades).getAllByRole("button").map((button) => [button.textContent, button.getAttribute("aria-label")])).toEqual([
+      ["1980s", "Jump to 1980s"], ["1990s", "Jump to 1990s"], ["2000s", "Jump to 2000s"], ["2010s", "Jump to 2010s"],
+      ["2020s", "Jump to 2020s"], ["—", "Jump to No year"],
+    ]);
 
     fireEvent.click(screen.getByRole("button", { name: "Sort by Year, ascending" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Descending" }));
     await status("Showing 100 of 250");
+    expect(within(screen.getByRole("toolbar", { name: "Jump to decade" })).getAllByRole("button").map((button) => button.textContent))
+      .toEqual(["—", "2020s", "2010s", "2000s", "1990s", "1980s"]);
     expect(screen.getByRole("button", { name: "Sort by Year, descending" })).toHaveTextContent("Year ↓");
     fireEvent.click(screen.getByRole("button", { name: "List" }));
     expect(screen.getByRole("columnheader", { name: /Year/ })).toHaveAttribute("aria-sort", "descending");

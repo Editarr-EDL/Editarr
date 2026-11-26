@@ -86,10 +86,69 @@ for (const width of [390, 1440]) {
     await menu.getByRole("menuitemradio", { name: "Year" }).click();
     await expect(page.getByRole("button", { name: "Sort by Year, ascending" })).toBeFocused();
     await expect(page.getByRole("toolbar", { name: "Jump to letter" })).toHaveCount(0);
+    await expect(page.getByRole("toolbar", { name: "Jump to decade" })).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "Showing 100 of 250" })).toBeVisible();
 
     await page.getByRole("button", { name: "List" }).click();
     await expect(page.getByRole("columnheader", { name: "Year" })).toHaveAttribute("aria-sort", "ascending");
+    await expectNoHorizontalPageOverflow(page);
+    await expectNoAccessibilityViolations(page);
+  });
+}
+
+/** Choose a sort and direction from the sort menu. */
+async function sortBy(page: Page, label: string, direction: "Ascending" | "Descending" = "Ascending") {
+  await page.getByRole("button", { name: /^Sort by / }).click();
+  await page.getByRole("menuitemradio", { name: label, exact: true }).click();
+  await page.getByRole("button", { name: /^Sort by / }).click();
+  await page.getByRole("menuitemradio", { name: direction }).click();
+}
+
+/** Every rail button keeps its label inside it, and on phones is at least 24px tall. */
+async function expectRailFits(page: Page, width: number) {
+  const sizes = await page.locator(".jump-rail button").evaluateAll((buttons) => buttons.map((button) => ({
+    overflows: button.scrollWidth > button.clientWidth, height: button.getBoundingClientRect().height,
+  })));
+  expect(sizes.length).toBeGreaterThan(1);
+  expect(sizes.filter((size) => size.overflows)).toEqual([]);
+  if (width < 640) expect(Math.min(...sizes.map((size) => size.height))).toBeGreaterThanOrEqual(24);
+}
+
+const normalized = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+
+for (const width of [320, 390, 1440]) {
+  test(`changes the rail with the sort and jumps within it at ${width}px`, async ({ page }) => {
+    await openLibrary(page, width);
+    const rails = {
+      Year: ["Jump to decade", ["1970s", "1980s", "1990s", "2000s", "2010s", "2020s", "—"]],
+      Rating: ["Jump to rating", ["G", "PG", "PG-13", "R"]],
+      Length: ["Jump to length", ["<90m", "90m", "2h"]],
+      Type: ["Jump to type", ["Movie", "Series"]],
+    } as const;
+    for (const [label, [name, entries]] of Object.entries(rails)) {
+      await sortBy(page, label);
+      const rail = page.getByRole("toolbar", { name });
+      await expect(rail.getByRole("button")).toHaveText([...entries]);
+      await expect(page.getByRole("toolbar", { name: "Jump to letter" })).toHaveCount(0);
+      await expectRailFits(page, width);
+      await expectNoHorizontalPageOverflow(page);
+      if (label === "Length") await expect(rail.getByRole("button", { name: "Jump to 2 hours" })).toBeVisible();
+    }
+
+    await sortBy(page, "Year", "Descending");
+    const decades = page.getByRole("toolbar", { name: "Jump to decade" });
+    await expect(decades.getByRole("button")).toHaveText(["—", "2020s", "2010s", "2000s", "1990s", "1980s", "1970s"]);
+    await expect(decades.getByRole("button", { name: "Jump to No year" })).toHaveAttribute("aria-current", "true");
+    await expectNoAccessibilityViolations(page);
+
+    await sortBy(page, "Year");
+    const firstOf1990s = library.filter((item) => item.year !== null && item.year >= 1990 && item.year < 2000)
+      .sort((left, right) => left.year! - right.year! || normalized(left.name).localeCompare(normalized(right.name)))[0];
+    const before = requests.length;
+    await decades.getByRole("button", { name: "Jump to 1990s" }).click();
+    await expect(page.getByRole("button", { name: `Open ${firstOf1990s.name}`, exact: true })).toBeFocused();
+    await expect(decades.getByRole("button", { name: "Jump to 1990s" })).toHaveAttribute("aria-current", "true");
+    expect(requests.slice(before).length).toBeLessThanOrEqual(1);
     await expectNoHorizontalPageOverflow(page);
     await expectNoAccessibilityViolations(page);
   });

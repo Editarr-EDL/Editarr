@@ -1,7 +1,6 @@
 """Jellyfin library browsing and catalog-item routes."""
 
 import logging
-import unicodedata
 from collections.abc import Callable
 from urllib.parse import quote
 
@@ -37,6 +36,7 @@ from .catalog_access import (
     library_record,
     not_found,
 )
+from .catalog_library_order import normalized_title, sort_library
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -102,30 +102,6 @@ def authorized_jellyfin_item(
     return item, target.source.source_id if target and target.source else None
 
 
-def _library_sort_value(item: JellyfinMediaItem, sort_by: str) -> tuple[object, ...]:
-    """Produce a stable sort key for a library item and requested ordering."""
-    if sort_by == "rating":
-        return (
-            item.official_rating is None,
-            _normalized_title(item.official_rating or ""),
-            _normalized_title(item.name),
-            item.id,
-        )
-    if sort_by == "duration":
-        return (
-            item.duration_seconds is None,
-            item.duration_seconds or 0,
-            _normalized_title(item.name),
-            item.id,
-        )
-    if sort_by == "year":
-        return (item.year is None, item.year or 0, _normalized_title(item.name), item.id)
-    if sort_by == "type":
-        return (item.item_type.casefold(), _normalized_title(item.sort_name or item.name), item.id)
-    # Titles outside A–Z (digits, symbols, other scripts) form one "#" group before A.
-    return (_title_letter(item) != "#", _normalized_title(item.sort_name or item.name), item.id)
-
-
 def _edl_filter_matches(edl, edl_filter: str) -> bool:
     """Match an item's EDL export state.
 
@@ -136,32 +112,6 @@ def _edl_filter_matches(edl, edl_filter: str) -> bool:
     if edl_filter == "outdated":
         return edl.present and edl.outdated
     return edl.present == (edl_filter == "exported")
-
-
-def _normalized_title(value: str) -> str:
-    """Fold a title for matching and ordering: accents removed, case folded, dotless ı read as i."""
-    return "".join(
-        character
-        for character in unicodedata.normalize("NFKD", value).casefold().replace("ı", "i")
-        if not unicodedata.combining(character)
-    )
-
-
-def _title_letter(item: JellyfinMediaItem) -> str:
-    """Return the A–Z initial a title sorts under, or "#" for anything else.
-
-    Accents are removed and case folded first, so "Élan" is "E" and "ß" is "S" ("ss").
-    """
-    initial = _normalized_title(item.sort_name or item.name)[:1].upper()
-    return initial if "A" <= initial <= "Z" else "#"
-
-
-def _title_letter_offsets(items: list[JellyfinMediaItem]) -> dict[str, int]:
-    """Map each initial to the index of its first item in an already sorted list."""
-    offsets: dict[str, int] = {}
-    for index, item in enumerate(items):
-        offsets.setdefault(_title_letter(item), index)
-    return offsets
 
 
 def _library_browse_items(
@@ -330,7 +280,7 @@ def api_list_jellyfin_library_items(
     if not viewer.library_visible(library_id):
         raise not_found()
     title_query = (search or "").strip()
-    search_value = _normalized_title(title_query)
+    search_value = normalized_title(title_query)
     try:
         items = _cached_library_items(library_id, credentials, refresh=refresh)
         if search_value:
@@ -364,7 +314,7 @@ def api_list_jellyfin_library_items(
     )
     rating_values = sorted(
         {item.official_rating for item in decorated if item.official_rating},
-        key=_normalized_title,
+        key=normalized_title,
     )
     resolution_order = {"4K": 0, "1440p": 1, "1080p": 2, "720p": 3, "480p": 4, "SD": 5}
     resolution_values = sorted(
@@ -374,15 +324,12 @@ def api_list_jellyfin_library_items(
     filtered = [
         item
         for item in decorated
-        if (not search_value or search_value in _normalized_title(item.name))
+        if (not search_value or search_value in normalized_title(item.name))
         and _edl_filter_matches(item.exports.exports[ExportFormat.EDL], edl_filter)
         and (rating_filter == "all" or item.official_rating == rating_filter)
         and (resolution_filter == "all" or item.resolution == resolution_filter)
     ]
-    filtered.sort(
-        key=lambda item: _library_sort_value(item, sort_by),
-        reverse=sort_direction == "desc",
-    )
+    filtered, jump_groups = sort_library(filtered, sort_by, descending=sort_direction == "desc")
     return JellyfinMediaPage(
         items=[
             jellyfin_record(item, viewer) for item in filtered[start_index : start_index + limit]
@@ -390,7 +337,7 @@ def api_list_jellyfin_library_items(
         total_count=len(filtered),
         rating_values=rating_values,
         resolution_values=resolution_values,
-        title_letter_offsets=_title_letter_offsets(filtered) if sort_by == "title" else {},
+        jump_groups=jump_groups,
     )
 
 

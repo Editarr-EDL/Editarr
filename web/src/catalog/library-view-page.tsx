@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { JellyfinLibrary, JellyfinMediaItem, JellyfinMediaPage } from "../api/api-media-types";
+import type { JellyfinLibrary, JellyfinMediaItem, JellyfinMediaPage, LibraryJumpGroup } from "../api/api-media-types";
 import { navigate } from "../routes";
 import { usePageTitle } from "../shared/display";
 import { readUserValue, writeUserValue } from "../shared/user-storage";
 import { EmptyPage } from "../ui/EmptyPage";
 import { LoadEarlierHeader, LoadMoreFooter } from "../ui/LoadMoreFooter";
-import { AlphabetRail, useCurrentLetter } from "./alphabet-rail";
 import { librarySortLabels, type LibraryDisplayPreferences, type LibraryView, type SortDirection, type SortKey } from "./catalog-types";
 import { PosterSizeControl, RefreshButton, SortMenu, ViewToggle, usePosterSize, useStickyToolbar } from "./library-controls";
 import { LibrarySearch } from "./library-search";
 import { activeTokens, searchSuggestions, type LibraryFilters, type SearchSuggestion } from "./library-search-suggestions";
 import { LibraryTable } from "./library-table";
+import { groupAt, hasRail, jumpStatus } from "./jump-groups";
+import { JumpRail, useVisibleIndex, type JumpAnchor } from "./jump-rail";
 import { MediaCard, PosterGrid } from "./media-card";
-import { letterName } from "./title-letters";
 import { useLibraryItems } from "./use-library-items";
 
 const defaultLibraryDisplayPreferences: LibraryDisplayPreferences = {
@@ -53,7 +53,8 @@ function earlierAnchor(container: HTMLElement | null, stickyHeight: number, star
 
 /**
  * Browse a Jellyfin library as one continuously loading poster grid or table. A single search box takes title
- * text and filter tokens, one menu sets the sort, and under title sorting an A–Z rail jumps between letters.
+ * text and filter tokens, one menu sets the sort, and a rail jumps between the sort's groups (letters, decades,
+ * ratings, length bands or types).
  */
 export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; cache: Map<string, JellyfinMediaPage> }) {
   usePageTitle(library.name);
@@ -67,14 +68,14 @@ export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; 
   const [sort, setSort] = useState<SortKey>(preferences.sort);
   const [direction, setDirection] = useState<SortDirection>(preferences.direction);
   const [posterSize, setPosterSize] = usePosterSize();
-  const [jumpLetter, setJumpLetter] = useState<string | null>(null);
+  const [jumpGroup, setJumpGroup] = useState<LibraryJumpGroup | null>(null);
   const [scrollTarget, setScrollTarget] = useState<number | null>(null);
-  const [anchorId, setAnchorId] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<JumpAnchor | null>(null);
   const toolbar = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const resultsTop = useRef<HTMLDivElement>(null);
   const beforeEarlier = useRef<EarlierAnchor | null>(null);
-  const [failedJump, setFailedJump] = useState<string | null>(null);
+  const [failedJump, setFailedJump] = useState<LibraryJumpGroup | null>(null);
   const { height: stickyHeight, style: stickyStyle } = useStickyToolbar(toolbar);
   const stickyRef = useRef(stickyHeight);
   stickyRef.current = stickyHeight;
@@ -93,9 +94,10 @@ export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; 
     onBeforePrepend: () => { beforeEarlier.current = earlierAnchor(content.current, stickyRef.current, startIndexRef.current); },
   });
   startIndexRef.current = listing.startIndex;
-  const { items, startIndex, totalCount, letterOffsets } = listing;
-  const railVisible = sort === "title" && !listing.loading && items.length > 0 && Object.keys(letterOffsets).length > 0;
-  const currentLetter = useCurrentLetter(content, items, startIndex, railVisible, stickyHeight, anchorId);
+  const { items, startIndex, totalCount, jumpGroups } = listing;
+  const railVisible = !listing.loading && items.length > 0 && hasRail(sort, jumpGroups);
+  const visibleIndex = useVisibleIndex(content, items, startIndex, railVisible, stickyHeight, anchor);
+  const currentGroup = railVisible ? groupAt(jumpGroups, visibleIndex)?.key ?? null : null;
 
   // New results start at the top: once the toolbar is stuck, scroll back to the start of the results.
   // Focus stays where it is, such as in the search box.
@@ -137,22 +139,22 @@ export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; 
   const changeSort = (nextSort: SortKey, nextDirection: SortDirection) => { setSort(nextSort); setDirection(nextDirection); };
   const toggleSort = (nextSort: SortKey) => changeSort(nextSort, sort === nextSort && direction === "asc" ? "desc" : "asc");
 
-  const jump = async (letter: string) => {
-    const offset = letterOffsets[letter];
-    if (offset === undefined) return;
-    setJumpLetter(letter);
+  const jump = async (group: LibraryJumpGroup) => {
+    setJumpGroup(group);
     setFailedJump(null);
-    const outcome = await listing.reveal(offset);
-    setJumpLetter(null);
-    if (outcome === "loaded") setScrollTarget(offset);
-    else if (outcome === "failed") setFailedJump(letter);
+    const outcome = await listing.reveal(group.offset);
+    setJumpGroup(null);
+    if (outcome === "loaded") setScrollTarget(group.offset);
+    else if (outcome === "failed") setFailedJump(group);
   };
   useEffect(() => {
     if (scrollTarget === null) return;
     const target = content.current?.querySelector<HTMLElement>(`[data-catalog-index="${scrollTarget}"]`);
     if (!target) return;
-    setAnchorId(items[scrollTarget - startIndex]?.id ?? null);
     target.scrollIntoView?.({ block: "start" });
+    const id = items[scrollTarget - startIndex]?.id;
+    // A new anchor per jump, so jumping to the same title again records where this jump left the page.
+    setAnchor(id ? { id, scrollY: window.scrollY } : null);
     target.focus({ preventScroll: true });
     setScrollTarget(null);
   }, [items, scrollTarget, startIndex]);
@@ -188,11 +190,12 @@ export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; 
         {view === "icon"
           ? <PosterGrid size={posterSize} label={library.name} startIndex={startIndex}>{items.map((item, index) => <MediaCard key={item.id} item={item} index={startIndex + index} onOpen={() => openItem(item)} />)}</PosterGrid>
           : <LibraryTable items={items} startIndex={startIndex} sort={sort} direction={direction} onSort={toggleSort} onOpen={openItem} />}
-        <LoadMoreFooter start={startIndex} loaded={items.length} total={totalCount} loading={listing.loadingMore || jumpLetter !== null}
+        <LoadMoreFooter start={startIndex} loaded={items.length} total={totalCount} loading={listing.loadingMore || jumpGroup !== null}
           complete={listing.complete} onLoadMore={listing.loadMore}
-          status={jumpLetter ? `Loading titles starting with ${letterName(jumpLetter)}…` : null} />
+          status={jumpGroup ? jumpStatus(sort, jumpGroup) : null} />
       </div>
-      {railVisible && <AlphabetRail offsets={letterOffsets} direction={direction} current={currentLetter} pending={jumpLetter} onJump={(letter) => void jump(letter)} />}
+      {railVisible && <JumpRail sort={sort} groups={jumpGroups} direction={direction} current={currentGroup} pending={jumpGroup?.key ?? null}
+        onJump={(group) => void jump(group)} />}
     </div>}
   </div>;
 }

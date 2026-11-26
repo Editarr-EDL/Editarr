@@ -16,6 +16,7 @@ from scanner.modeling.model_catalog import (
     JellyfinMediaVersion,
     JellyfinSettings,
     JellyfinSettingsUpdate,
+    LibraryJumpGroup,
     ManagedModelArtifact,
     McfSeverityDefault,
     ModelActionResult,
