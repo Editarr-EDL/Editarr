@@ -127,9 +127,10 @@ def _library_sort_value(item: JellyfinMediaItem, sort_by: str) -> tuple[object, 
 
 
 def _normalized_title(value: str) -> str:
+    """Fold a title for matching and ordering: accents removed, case folded, dotless ı read as i."""
     return "".join(
         character
-        for character in unicodedata.normalize("NFKD", value).casefold()
+        for character in unicodedata.normalize("NFKD", value).casefold().replace("ı", "i")
         if not unicodedata.combining(character)
     )
 

@@ -627,3 +627,16 @@ def test_title_order_groups_non_letters_first_with_matching_letter_offsets():
         "S": 7,
         "Z": 9,
     }
+
+
+def test_dotless_i_titles_sort_and_group_with_i():
+    from scanner.http import catalog_library_api as catalog
+
+    items = [
+        JellyfinMediaItem(id=f"item-{index}", item_type="Movie", name=name)
+        for index, name in enumerate(["Jade", "ıhlara", "Iris", "Hotel"])
+    ]
+    ordered = sorted(items, key=lambda item: catalog._library_sort_value(item, "title"))
+
+    assert [item.name for item in ordered] == ["Hotel", "ıhlara", "Iris", "Jade"]
+    assert catalog._title_letter_offsets(ordered) == {"H": 0, "I": 1, "J": 3}

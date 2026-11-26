@@ -28,12 +28,13 @@ export interface LibraryListing {
   loadEarlier: () => void;
   /**
    * Make `index` part of the window with one request: by extending the window when it is within one
-   * request's reach, otherwise by starting a new window at its page. Resolves whether it is now loaded.
+   * request's reach, otherwise by replacing the window with its page. Resolves "loaded", "failed" (the
+   * window is unchanged and `retry` repeats the request) or "cancelled" when the query changed meanwhile.
    */
-  reveal: (index: number) => Promise<boolean>;
+  reveal: (index: number) => Promise<"loaded" | "failed" | "cancelled">;
   /** Reload from the first page, asking the server to refresh its catalog. */
   refresh: () => void;
-  /** Retry the request that failed. */
+  /** Retry the request that failed: the first page, a page after or before the window, or a jump. */
   retry: () => void;
 }
 
@@ -48,6 +49,8 @@ interface Progress {
   complete: boolean;
   failed: boolean;
   busy: Promise<void> | null;
+  /** Repeats the request that failed. */
+  retryTask: (() => Promise<void>) | null;
   /** A next or previous page is already queued. */
   moreQueued: boolean;
   earlierQueued: boolean;
@@ -64,7 +67,8 @@ const emptyState = {
 /** Start the window over at `start`, so responses for the old window are dropped. */
 function resetWindow(current: Progress, start: number): void {
   Object.assign(current, {
-    generation: current.generation + 1, items: [], start, end: start, complete: false, failed: false, moreQueued: false, earlierQueued: false,
+    generation: current.generation + 1, items: [], start, end: start, complete: false, failed: false, retryTask: null,
+    moreQueued: false, earlierQueued: false,
   });
 }
 
@@ -79,7 +83,8 @@ export function useLibraryItems(libraryId: string, query: LibraryListingQuery, c
   { onBeforePrepend }: { onBeforePrepend?: () => void } = {}): LibraryListing {
   const [state, setState] = useState(emptyState);
   const progress = useRef<Progress>({
-    query: 0, generation: 0, items: [], start: 0, end: 0, complete: false, failed: false, busy: null, moreQueued: false, earlierQueued: false,
+    query: 0, generation: 0, items: [], start: 0, end: 0, complete: false, failed: false, retryTask: null, busy: null,
+    moreQueued: false, earlierQueued: false,
   });
   const beforePrepend = useRef(onBeforePrepend);
   beforePrepend.current = onBeforePrepend;
@@ -114,10 +119,13 @@ export function useLibraryItems(libraryId: string, query: LibraryListingQuery, c
   const loadRange = useCallback(async (from: number, limit: number, mode: Mode, refresh = false) => {
     const current = progress.current;
     const generation = current.generation;
-    setState((previous) => ({ ...previous, loadingMore: mode === "append", loadingEarlier: mode === "prepend", error: null }));
+    setState((previous) => ({
+      ...previous, loading: mode === "replace" && !current.items.length, loadingMore: mode === "append", loadingEarlier: mode === "prepend", error: null,
+    }));
     try {
       const page = await fetchChunk(from, limit, refresh);
       if (generation !== current.generation) return;
+      current.retryTask = null;
       const known = new Set(mode === "replace" ? [] : current.items.map((item) => item.id));
       const fresh = page.items.filter((item) => !known.has(item.id));
       if (mode === "replace") Object.assign(current, { items: fresh, start: from, end: from + page.items.length });
@@ -141,6 +149,7 @@ export function useLibraryItems(libraryId: string, query: LibraryListingQuery, c
     } catch (reason) {
       if (generation !== current.generation) return;
       current.failed = true;
+      current.retryTask = () => loadRange(from, limit, mode, refresh);
       setState((previous) => ({
         ...previous, loading: false, loadingMore: false, loadingEarlier: false,
         error: reason instanceof Error ? reason.message : "Unable to load library items.",
@@ -186,7 +195,9 @@ export function useLibraryItems(libraryId: string, query: LibraryListingQuery, c
     const queryAtStart = current.query;
     const loaded = () => queryAtStart === current.query && index >= current.start && index < current.end;
     await enqueue(() => {
-      if (loaded() || current.failed || queryAtStart !== current.query) return;
+      if (loaded() || queryAtStart !== current.query) return;
+      // Choosing a letter is a fresh request, even after a failure.
+      Object.assign(current, { failed: false, retryTask: null });
       if (index >= current.end && index < current.end + catalogMaxRequestSize && !current.complete) {
         const limit = Math.min(catalogMaxRequestSize, Math.ceil((index + 1 - current.end) / catalogPageSize) * catalogPageSize);
         return loadRange(current.end, limit, "append");
@@ -195,21 +206,23 @@ export function useLibraryItems(libraryId: string, query: LibraryListingQuery, c
         const from = Math.max(0, Math.floor(index / catalogPageSize) * catalogPageSize, current.start - catalogMaxRequestSize);
         return loadRange(from, current.start - from, "prepend");
       }
-      // Too far to extend with one request: start a new window at the target's page. This task stays the
-      // running request, so nothing else starts until its page arrives.
-      const from = Math.floor(index / catalogPageSize) * catalogPageSize;
-      resetWindow(current, from);
-      return loadRange(from, catalogPageSize, "replace");
+      // Too far to extend with one request: replace the window with the target's page once it arrives. Until
+      // then (or if it fails) the current window stays, and requests queued for it are dropped. This task stays
+      // the running request, so nothing else starts before the page arrives.
+      Object.assign(current, { generation: current.generation + 1, moreQueued: false, earlierQueued: false });
+      return loadRange(Math.floor(index / catalogPageSize) * catalogPageSize, catalogPageSize, "replace");
     });
-    return loaded();
+    if (loaded()) return "loaded";
+    return queryAtStart === current.query && current.failed ? "failed" : "cancelled";
   }, [enqueue, loadRange]);
 
   const retry = useCallback(() => {
     const current = progress.current;
-    if (!current.items.length) { restart(false); return; }
-    current.failed = false;
-    void enqueue(() => loadRange(current.end, catalogPageSize, "append"));
-  }, [enqueue, loadRange, restart]);
+    const task = current.retryTask;
+    if (!task) return;
+    Object.assign(current, { failed: false, retryTask: null });
+    void enqueue(task);
+  }, [enqueue]);
 
   const refresh = useCallback(() => restart(true), [restart]);
   return { ...state, loadMore, loadEarlier, reveal, refresh, retry };

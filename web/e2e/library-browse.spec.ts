@@ -95,35 +95,71 @@ for (const width of [390, 1440]) {
   });
 }
 
-test("jumps across a 10,000-title library with few requests and a bounded window", async ({ page }) => {
+async function openLargeLibrary(page: Page, width: number) {
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockApi(page);
-  const requests = await mockLibraryCatalog(page, generatedLibrary(10_000));
-  await page.setViewportSize({ width: 1440, height: 900 });
+  const largeRequests = await mockLibraryCatalog(page, generatedLibrary(10_000));
+  await page.setViewportSize({ width, height: 900 });
   await page.goto("/#/library/movies");
   await expect(page.getByText("10000 titles")).toBeVisible();
+  return largeRequests;
+}
+
+/** The accessible name and top of the first poster in view below the sticky toolbar. */
+async function visiblePoster(page: Page) {
+  return page.evaluate(() => {
+    const toolbar = document.querySelector(".catalog-toolbar")!.getBoundingClientRect().bottom;
+    const card = [...document.querySelectorAll<HTMLElement>(".media-card")].find((element) => element.getBoundingClientRect().top >= toolbar);
+    return { name: card?.getAttribute("aria-label") ?? "", top: card?.getBoundingClientRect().top ?? -1 };
+  });
+}
+
+test("jumps across a 10,000-title library with few requests and a bounded window", async ({ page }) => {
+  const largeRequests = await openLargeLibrary(page, 1440);
   const posters = page.getByRole("list", { name: "Movies" }).getByRole("listitem");
   await expect(posters.first()).toHaveCSS("content-visibility", "auto");
-
   const rail = page.getByRole("toolbar", { name: "Jump to letter" });
   await rail.getByRole("button", { name: "Jump to M" }).click();
-  const target = page.locator(":focus");
-  await expect(target).toHaveAccessibleName(/^Open Meadow/);
+  await expect(page.locator(":focus")).toHaveAccessibleName(/^Open Meadow/);
   await expect(rail.getByRole("button", { name: "Jump to M" })).toHaveAttribute("aria-current", "true");
-  expect(requests).toEqual(["0:100", "4600:100"]);
+  expect(largeRequests).toEqual(["0:100", "4600:100"]);
   await expect(posters).toHaveCount(100);
   await expect(page.getByRole("status")).toHaveText("Showing 4601–4700 of 10000");
   await expectNoAccessibilityViolations(page);
+});
 
-  // Scrolling up loads the previous page above without moving the titles in view.
-  await page.route(/start_index=4500/, async (route) => { await new Promise((resolve) => setTimeout(resolve, 400)); await route.fallback(); });
-  await page.getByRole("button", { name: "Load earlier" }).scrollIntoViewIfNeeded();
-  const first = posters.first().getByRole("button");
-  const firstName = await first.getAttribute("aria-label");
-  const anchor = page.getByRole("button", { name: firstName ?? "" });
-  const before = (await anchor.boundingBox())?.y ?? 0;
-  await expect(page.getByRole("status")).toHaveText("Showing 4501–4700 of 10000");
-  expect(Math.abs(((await anchor.boundingBox())?.y ?? 0) - before)).toBeLessThan(3);
-  expect(requests).toEqual(["0:100", "4600:100", "4500:100"]);
-  await expect(posters).toHaveCount(200);
+for (const [width, columns] of [[1100, 3], [390, 2]]) {
+  test(`keeps titles in place while earlier pages load at ${width}px (${columns} columns)`, async ({ page }) => {
+    const largeRequests = await openLargeLibrary(page, width);
+    const grid = page.getByRole("list", { name: "Movies" });
+    expect(await grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(columns);
+    await page.getByRole("toolbar", { name: "Jump to letter" }).getByRole("button", { name: "Jump to M" }).click();
+    await expect(page.locator(":focus")).toHaveAccessibleName(/^Open Meadow/);
+    await page.route(/start_index=4500/, async (route) => { await new Promise((resolve) => setTimeout(resolve, 500)); await route.fallback(); });
+    await page.getByRole("button", { name: "Load earlier" }).scrollIntoViewIfNeeded();
+    const before = await visiblePoster(page);
+    expect(before.top).toBeGreaterThan(0);
+    await expect(page.getByRole("status")).toHaveText("Showing 4501–4700 of 10000");
+    const after = await page.getByRole("button", { name: before.name, exact: true }).boundingBox();
+    expect(Math.abs((after?.y ?? 0) - before.top)).toBeLessThan(4);
+    expect(largeRequests).toEqual(["0:100", "4600:100", "4500:100"]);
+    await expectNoHorizontalPageOverflow(page);
+  });
+}
+
+test("scrolls back to the first title after a jump at 1440px", async ({ page }) => {
+  const largeRequests = await openLargeLibrary(page, 1440);
+  await page.getByRole("toolbar", { name: "Jump to letter" }).getByRole("button", { name: "Jump to D" }).click();
+  await expect(page.locator(":focus")).toHaveAccessibleName(/^Open Dune/);
+  const earlier = page.getByRole("button", { name: "Load earlier" });
+  for (let step = 0; step < 20 && await earlier.count(); step += 1) {
+    const shown = await page.getByRole("status").textContent();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page.getByRole("status")).not.toHaveText(shown ?? "");
+  }
+  await expect(earlier).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveText(/^Showing \d+ of 10000$/);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.getByRole("button", { name: "Open 2001 Odyssey 1" })).toBeInViewport();
+  expect(new Set(largeRequests).size).toBe(largeRequests.length);
 });

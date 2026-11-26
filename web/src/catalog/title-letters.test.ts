@@ -9,5 +9,6 @@ describe("titleLetter", () => {
       Zèbra: "Z", Ωmega: "#", straße: "S", ßeta: "S", 2001: "#", Élan: "E", Ägypten: "A", Ярость: "#", "!Bang": "#", Beta: "B",
     });
     expect(titleLetter({ name: "The Thing", sort_name: "thing" })).toBe("T");
+    expect(titleLetter({ name: "ıhlara", sort_name: null })).toBe("I");
   });
 });

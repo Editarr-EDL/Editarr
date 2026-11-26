@@ -5,6 +5,7 @@
 .catalog-refresh[aria-disabled="true"] { cursor: progress; opacity: .56; }
 .catalog-icon-button { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 8px; font-size: 17px; }
 .catalog-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; padding: 10px var(--catalog-toolbar-clearance, 0px) 10px 0; }
+.catalog-toolbar .load-error { flex-basis: 100%; padding: 8px 12px; }
 .catalog-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
 
 .library-search { position: relative; flex: 1 1 320px; min-width: 0; }
@@ -49,7 +50,7 @@
 .catalog-page .media-title { height: 18px; line-height: 18px; }
 .catalog-page .media-meta { overflow: hidden; height: 16px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 /* The page keeps titles in place itself when earlier ones load above them. */
-html:has(.catalog-page) { overflow-anchor: none; }
+.catalog-content { overflow-anchor: none; }
 .media-card { width: 100%; scroll-margin-top: calc(var(--catalog-sticky-offset, 0px) + 12px); }
 .catalog-page .poster-frame { border-radius: 10px; transition: transform .15s, border-color .15s; }
 .catalog-page .poster-frame.wide { aspect-ratio: 16 / 9; }

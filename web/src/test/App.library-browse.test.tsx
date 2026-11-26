@@ -20,6 +20,7 @@ function generatedLibrary(size: number) {
 function installCatalog(size = 250) {
   const library = generatedLibrary(size);
   let failNext = false;
+  const failStarts = new Set<number>();
   const requests: string[] = [];
   const pending: Array<() => void> = [];
   let hold = false;
@@ -32,7 +33,7 @@ function installCatalog(size = 250) {
     const sortBy = url.searchParams.get("sort_by");
     requests.push(`${sortBy}:${url.searchParams.get("edl_filter")}:${start}:${limit}`);
     if (hold) await new Promise<void>((resolve) => pending.push(resolve));
-    if (failNext) { failNext = false; return json({ detail: "Jellyfin is unavailable" }, 502); }
+    if (failNext || failStarts.has(start)) { failNext = false; failStarts.delete(start); return json({ detail: "Jellyfin is unavailable" }, 502); }
     const matching = url.searchParams.get("edl_filter") === "exported" ? library.slice(0, 30) : library;
     const offsets: Record<string, number> = {};
     if (sortBy === "title") matching.forEach((item, index) => { offsets[item.name[0]] ??= index; });
@@ -44,6 +45,7 @@ function installCatalog(size = 250) {
   return {
     requests,
     hold: () => { hold = true; },
+    failOnce: (start: number) => failStarts.add(start),
     release: (fail = false) => { hold = false; failNext = fail; pending.splice(0).forEach((resolve) => resolve()); },
   };
 }
@@ -99,7 +101,7 @@ describe("continuous library browsing", () => {
 
     api.hold();
     fireEvent.click(within(rail).getByRole("button", { name: "Jump to T" }));
-    await status("Loading titles up to T…");
+    await status("Loading titles starting with T…");
     expect(rail).toHaveAttribute("aria-busy", "true");
     api.release();
     await waitFor(() => expect(screen.getByRole("button", { name: "Open Tide 00" })).toHaveFocus());
@@ -205,6 +207,59 @@ describe("continuous library browsing", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Open Xenon 000" })).toHaveFocus());
     await status("Showing 9201–9700 of 10000");
     expect(api.requests.slice(2)).toEqual(["title:all:9500:100", "title:all:9200:300"]);
+  });
+
+  it("retries the request that failed, keeping the window shown when a jump fails", async () => {
+    const api = installCatalog(10_000);
+    renderLibrary();
+    await status("Showing 100 of 10000");
+    api.failOnce(100);
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Jellyfin is unavailable");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await status("Showing 200 of 10000");
+    expect(api.requests.slice(1)).toEqual(["title:all:100:100", "title:all:100:100"]);
+
+    api.failOnce(9600);
+    const rail = screen.getByRole("toolbar", { name: "Jump to letter" });
+    fireEvent.click(within(rail).getByRole("button", { name: "Jump to Y" }));
+    await status("Loading titles starting with Y…");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Jellyfin is unavailable");
+    await status("Showing 200 of 10000");
+    expect(screen.getByRole("button", { name: "Open Arrival 000" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open Yellow 000" })).toHaveFocus());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await status("Showing 9601–9700 of 10000");
+
+    api.failOnce(9500);
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier" }));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await status("Showing 9501–9700 of 10000");
+    expect(api.requests.slice(-2)).toEqual(["title:all:9500:100", "title:all:9500:100"]);
+  });
+
+  it("moves focus to the first title when Load earlier reaches the start", async () => {
+    installCatalog(10_000);
+    renderLibrary();
+    await status("Showing 100 of 10000");
+    const rail = () => screen.getByRole("toolbar", { name: "Jump to letter" });
+    fireEvent.click(within(rail()).getByRole("button", { name: "Jump to Y" }));
+    await status("Showing 9601–9700 of 10000");
+    fireEvent.click(within(rail()).getByRole("button", { name: "Jump to B" }));
+    await status("Showing 401–500 of 10000");
+    for (const shown of ["301–500", "201–500", "101–500"]) {
+      const earlier = screen.getByRole("button", { name: "Load earlier" });
+      earlier.focus();
+      fireEvent.click(earlier);
+      await status(`Showing ${shown} of 10000`);
+      expect(screen.getByRole("button", { name: "Load earlier" })).toHaveFocus();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier" }));
+    await status("Showing 500 of 10000");
+    expect(screen.queryByRole("button", { name: "Load earlier" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Arrival 000" })).toHaveFocus();
   });
 });
 
