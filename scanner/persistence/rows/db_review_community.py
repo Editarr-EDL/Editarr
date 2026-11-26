@@ -11,10 +11,13 @@ class ReviewCommunitySourceRow(Base):
 
     Since 0040 the review's community filters are ordinary `review_filters` rows that
     the user enables, disables and edits; results, exports and sidecars use those rows,
-    edits and on/off state included. `filters_json` holds the master values and
-    starting state of each filter, so Refresh and sharing can tell what the user
-    edited. `link_id` names the link the snapshot was taken from, for refresh and
-    change detection, and is null once that link is deleted. `filters_digest`
+    edits and on/off state included; `review_filters.community_edited` records user
+    edits. `filters_json` holds each filter's master values and starting state:
+    Refresh uses it to map filters to the new snapshot, update filters the user did
+    not edit, keep and flag filters no longer served, and find filters the user
+    deleted; sharing uses it to skip filters no longer served and to count
+    adjustments. `link_id` names the link the snapshot was taken from, for refresh
+    and change detection, and is null once that link is deleted. `filters_digest`
     identifies the snapshot's served master values.
     """
 
