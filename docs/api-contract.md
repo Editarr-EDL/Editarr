@@ -877,7 +877,10 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
 - Catalog: `GET /api/libraries`, `GET /api/libraries/{library_id}/items`,
   `GET /api/library-items/{item_id}`, and `/children`/`image` variants.
   Library paging uses `start_index` and `limit`; sorting, EDL filtering, and
-  title search compose in the same request.
+  title search compose in the same request. Under `sort_by=title`,
+  `title_letter_offsets` maps each initial (`A`–`Z` after removing accents and
+  case folding, with dotless `ı` read as `i`; `#` for digits, symbols and other scripts, which sort first) to
+  the index of its first matching item, so a client can page straight to a letter.
 - Scans: `POST /api/scans` accepts a Jellyfin item ID and options. It rejects
   non-video or unreadable mapped items. Repeated scans for the same media item
   receive new per-item scan IDs and enter the serial queue.
