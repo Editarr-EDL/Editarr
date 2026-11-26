@@ -127,10 +127,15 @@ def test_owned_name_survives_incomplete_rename_and_retires_on_retry(tmp_path, mo
     assert not (media.parent / old).exists()
 
 
-def test_case_only_rename_keeps_previous_file_and_explains_conflict(tmp_path):
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [("Sam - Dialogue", "SAM - DIALOGUE"), ("Sam - ΐ", "Sam - Ι\u0308\u0301")],
+)
+def test_case_only_rename_keeps_previous_file_and_explains_conflict(tmp_path, before, after):
     media, slot, source, publication = _named_output(tmp_path)
+    publication = replace(publication, title=before)
     original, _ = _write_named(media, slot, source, publication, b"own version")
-    publication = replace(publication, title=publication.title.upper())
+    publication = replace(publication, title=after)
     with pytest.raises(sidecars.SubtitleConflict, match="case-insensitive match"):
         _write_named(media, slot, source, publication, b"new version")
     assert (media.parent / original).read_bytes() == b"own version"
@@ -239,3 +244,37 @@ def test_named_writer_rechecks_prior_ownership_after_successful_preflight(tmp_pa
         _write_named(media, slot, source, renamed, b"updated rendering")
     assert not destination.exists()
     assert (tmp_path / old).read_bytes() == b"another tool's edit"
+
+
+def test_pending_unowned_retirement_prevents_overwriting_active_subtitle(tmp_path, monkeypatch):
+    media, slot, source, publication = _named_output(tmp_path)
+    old_name, _ = _write_named(media, slot, source, publication, b"old rendering")
+    old = tmp_path / old_name
+    renamed = replace(publication, title="Sam - Updated Dialogue")
+    destination = named_publication_path(media, source, renamed, frozenset({"en"}))
+    rename = sidecars.os.rename
+
+    def stop_after_move(path, target):
+        rename(path, target)
+        if path == old:
+            raise KeyboardInterrupt
+
+    with monkeypatch.context() as patch:
+        patch.setattr(sidecars.os, "rename", stop_after_move)
+        with pytest.raises(KeyboardInterrupt):
+            _write_named(media, slot, source, renamed, b"active rendering")
+
+    (held,) = tmp_path.glob(".editarr-subtitle-retirement-*/subtitle.held")
+    held.write_bytes(b"changed by another writer")
+    active = sidecars.file_fingerprint(destination)
+    for action in (
+        lambda: sidecars.check_named_sidecar(media, destination, slot, renamed, source.id),
+        lambda: _write_named(media, slot, source, renamed, b"replacement rendering"),
+    ):
+        with pytest.raises(sidecars.SubtitleConflict, match="Recover subtitle.held") as error:
+            action()
+        assert held.parent.name in str(error.value)
+        assert held.read_bytes() == b"changed by another writer"
+        assert sidecars.file_fingerprint(destination) == active
+        assert destination.read_bytes() == b"active rendering"
+        assert not old.exists()

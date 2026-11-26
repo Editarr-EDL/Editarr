@@ -8,6 +8,7 @@ import scanner.api  # noqa: F401 - initialize the API before importing its route
 from scanner.db import SavedReviewRow, ScanRow
 from scanner.http import review_subtitle_api, subtitle_publications_api
 from scanner.modeling.model_subtitles import SubtitleSource
+from scanner.runtime import subtitle_sidecars
 from scanner.runtime.subtitle_sidecars import media_slot, publish_sidecar
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.overrides import OverrideEffect
@@ -268,7 +269,8 @@ def test_publish_rechecks_sibling_after_preparing_to_write(app, monkeypatch):
     assert not source.with_name(f"{media_stem}.Sam - Subtitle review.en.forced.srt").exists()
 
 
-def test_review_rename_preview_blocks_when_previous_sidecar_was_modified(app):
+@pytest.mark.parametrize("pending_retirement", [False, True])
+def test_review_rename_preview_blocks_when_previous_sidecar_was_modified(app, pending_retirement):
     review, source = seed_subtitle_review(app)
     initial = subtitle_request(app, review, "publish", preview_for_publication(app, review))
     assert initial.status_code == 200, initial.text
@@ -283,8 +285,12 @@ def test_review_rename_preview_blocks_when_previous_sidecar_was_modified(app):
     review = review.model_copy(update={"revision": renamed.json()["revision"]})
     usable = preview_for_publication(app, review)
 
+    changed = previous
+    if pending_retirement:
+        ownership = subtitle_sidecars._record_path(previous).read_bytes()
+        changed = subtitle_sidecars.quarantine_subtitle(previous, ownership).held
     edited = b"changed by another subtitle editor"
-    previous.write_bytes(edited)
+    changed.write_bytes(edited)
     names = {path.name for path in source.parent.iterdir()}
     selected = selected_source(app, review)
     preview = subtitle_request(app, review, "preview", selected)
@@ -293,10 +299,14 @@ def test_review_rename_preview_blocks_when_previous_sidecar_was_modified(app):
     assert result["track_title"] == "Sam - Revised subtitle review"
     assert result["cues"][0]["filtered"] == "close the gate."
     assert result["preview_token"] is result["filename"] is None
-    assert "previous named subtitle changed" in result["publication_block_reason"].lower()
+    reason = result["publication_block_reason"]
+    if pending_retirement:
+        assert "Recover subtitle.held" in reason and changed.parent.name in reason
+    else:
+        assert "previous named subtitle changed" in reason.lower()
 
     blocked = subtitle_request(app, review, "publish", usable)
     assert blocked.status_code == 409, blocked.text
     assert blocked.json()["detail"]["code"] == "subtitle_publication_conflict"
     assert {path.name for path in source.parent.iterdir()} == names
-    assert previous.read_bytes() == edited
+    assert changed.read_bytes() == edited

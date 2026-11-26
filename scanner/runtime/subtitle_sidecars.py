@@ -319,7 +319,19 @@ def publish_sidecar(media: Path, slot: str, source: SubtitleSource, content: byt
 
 
 def _name_key(name: str) -> str:
-    return unicodedata.normalize("NFC", name).casefold()
+    canonical = unicodedata.normalize("NFC", name)
+    return unicodedata.normalize("NFC", canonical.casefold())
+
+
+def _matches_recorded_input(path: Path, record: dict) -> bool:
+    try:
+        return _existing_file(path)[1] in record["inputs"]
+    except (OSError, ValueError):
+        return False
+
+
+def _retirement_recovery_hint(held: SubtitleQuarantine) -> str:
+    return f"Recover {held.held.name} from the {held.directory.name} folder beside the video."
 
 
 def _pending_retirements(media: Path, slot: str, identity: list[str]):
@@ -378,16 +390,21 @@ def check_named_sidecar(
 
     identity = publication.identity(source_id)
     pending = list(_pending_retirements(media, slot, identity))
-    pending_paths = {path for path, _record, held in pending if os.path.lexists(held.held)}
+    pending_paths = set()
+    for path, record, held in pending:
+        if not os.path.lexists(held.held):
+            continue
+        if not _matches_recorded_input(held.held, record):
+            raise SubtitleConflict(
+                "Editarr could not verify a subtitle held after an interrupted retirement. "
+                + _retirement_recovery_hint(held)
+            )
+        pending_paths.add(path)
     previous = []
     for path, record in _publication_records(media, slot):
         if path == destination or path in pending_paths or record.get("publication") != identity:
             continue
-        try:
-            owned = _existing_file(path)[1] in record["inputs"]
-        except (OSError, ValueError):
-            owned = False
-        if not owned:
+        if not _matches_recorded_input(path, record):
             raise SubtitleConflict(
                 "The previous named subtitle changed. Move the changed file to a distinct "
                 "name before trying again."
@@ -399,11 +416,7 @@ def check_named_sidecar(
 def _finish_retirement(
     path: Path, record: dict, held: SubtitleQuarantine, slot: str, keep_record: bool
 ) -> None:
-    try:
-        verified = _existing_file(held.held)[1] in record["inputs"]
-    except (OSError, ValueError):
-        verified = False
-    if not verified:
+    if not _matches_recorded_input(held.held, record):
         if held.restore(path):
             held.discard()
             raise SubtitleConflict(
@@ -412,7 +425,7 @@ def _finish_retirement(
             )
         raise SubtitleConflict(
             "The previous subtitle changed during publication and could not be restored safely. "
-            f"Recover subtitle.held from the {held.directory.name} folder beside the video."
+            + _retirement_recovery_hint(held)
         )
 
     # The proof travels with the moved file, so a stop between these deletions is recoverable.
