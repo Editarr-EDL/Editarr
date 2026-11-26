@@ -5,26 +5,40 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from scanner import repository
-from scanner.db import SavedReviewRow
+from scanner.db import JellyfinAccountSyncRow, SavedReviewRow
 from scanner.formats.subtitle_redaction import SubtitleMute, SubtitleRedaction, redact_subtitles
 from scanner.integrations.jellyfin_subtitles import (
     JellyfinSubtitle,
     discover_jellyfin_subtitles,
+    jellyfin_sibling_stems,
     subtitle_id,
 )
 from scanner.modeling.model_subtitles import (
-    PublishedSubtitle,
     SubtitleSource,
     SubtitleSources,
     SubtitleSourcesRequest,
 )
 from scanner.models import McfCategoryFamily, McfChannel
 from scanner.runtime.subtitle_inputs import read_subtitle
-from scanner.runtime.subtitle_sidecars import discover_publications, file_fingerprint, media_slot
+from scanner.runtime.subtitle_publication_names import (
+    NamedSubtitlePublication,
+    SubtitleNameError,
+    named_publication_path,
+    named_track_title,
+    subtitle_publisher_id,
+)
+from scanner.runtime.subtitle_sidecars import (
+    SubtitleConflict,
+    check_named_sidecar,
+    discover_publications_and_owned_sources,
+    file_fingerprint,
+    media_slot,
+)
 from scanner.runtime.subtitle_transcript import (
     ReviewedAudio,
     cached_segments,
@@ -32,7 +46,7 @@ from scanner.runtime.subtitle_transcript import (
     transcript_document,
 )
 
-from .repository_paths import resolve_local_path
+from .media_identity_store import review_version_id
 from .review_export_target import _review_export_scans
 from .review_policy import prepare_review_policy, require_policy_evidence, require_policy_revision
 from .review_policy_evidence import policy_export_filters
@@ -53,6 +67,8 @@ class ReviewSubtitleEvidence:
     fingerprint: tuple[int, ...]
     mutes: tuple[SubtitleMute, ...]
     audio: tuple[ReviewedAudio, ...]
+    stable_version: str | None
+    sibling_stems: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -62,6 +78,8 @@ class SubtitleCatalog:
     audio: ReviewedAudio | None
     transcript: list[dict] | None
     response: SubtitleSources
+    publication: NamedSubtitlePublication | None
+    publication_error: SubtitleNameError | None
 
 
 @dataclass(frozen=True)
@@ -69,31 +87,11 @@ class RenderedSubtitle:
     source: SubtitleSource
     redaction: SubtitleRedaction
     content: bytes
-    token: str
+    token: str | None
     input_path: Path | None
     input_fingerprint: tuple[int, ...] | None
-
-
-def _require_unambiguous_name(db, target, actual: Path) -> None:
-    # The selected sidecar also attaches to a shorter sibling stem ending at a dot.
-    item = target.source.catalog_item
-    for value in item.versions:
-        if value.id == target.source.media_source_id or not value.path:
-            continue
-        try:
-            other = Path(resolve_local_path(db, value.path).local_path).resolve()
-        except (OSError, ValueError, RuntimeError):
-            continue
-        stem, other_stem = actual.stem.casefold(), other.stem.casefold()
-        if (
-            other != actual
-            and other.parent == actual.parent
-            and (stem == other_stem or stem.startswith(other_stem + "."))
-        ):
-            raise SubtitleError(
-                "subtitle_version_ambiguous",
-                "Jellyfin would attach the subtitle to more than one version in this folder",
-            )
+    destination: Path | None
+    publication_error: SubtitleNameError | SubtitleConflict | None
 
 
 def subtitle_mutes(policy, duration_seconds=None) -> tuple[SubtitleMute, ...]:
@@ -142,7 +140,6 @@ def review_subtitle_evidence(
         memberships, scans, media = (), {}, target_media
     if review.media_source_id != (target.source.media_source_id or ""):
         raise SubtitleError("subtitle_media_changed", "The selected media version changed")
-    _require_unambiguous_name(db, target, media)
     mutes = subtitle_mutes(policy, target.source.duration_seconds)
     return ReviewSubtitleEvidence(
         target.source.media_source_id or "",
@@ -150,16 +147,41 @@ def review_subtitle_evidence(
         file_fingerprint(media),
         mutes,
         tuple(reviewed_audio_sources(db, memberships, scans, media)),
+        review_version_id(db, review.id),
+        jellyfin_sibling_stems(db, target.source.catalog_item, media),
+    )
+
+
+def subtitle_publication_intent(
+    db, review_id: str, account, evidence: ReviewSubtitleEvidence
+) -> NamedSubtitlePublication:
+    """Bind a publishable name to the linked caller and exact review version."""
+    user = db.get(JellyfinAccountSyncRow, account.user_id)
+    if user is None or account.provider is None:
+        raise SubtitleNameError(
+            "subtitle_title_unavailable",
+            "A saved Jellyfin username is required to publish subtitles. "
+            "Sign in with Jellyfin and try again.",
+        )
+    title = named_track_title(user.jellyfin_name, db.get(SavedReviewRow, review_id).name)
+    version = (
+        evidence.stable_version
+        or hashlib.sha256(
+            json.dumps([evidence.version, str(evidence.media), evidence.fingerprint]).encode()
+        ).hexdigest()
+    )
+    return NamedSubtitlePublication(
+        subtitle_publisher_id(account.local_export_id.value),
+        review_id,
+        version,
+        title,
     )
 
 
 def _transcript_source(
     evidence: ReviewSubtitleEvidence,
     audio: ReviewedAudio,
-    published: list[PublishedSubtitle],
 ) -> JellyfinSubtitle:
-    from scanner.runtime.subtitle_sidecars import publication_path
-
     source = SubtitleSource(
         id=subtitle_id(evidence.version, "transcript", str(audio.selection.track.stream_index)),
         label=f"Audio transcript · {audio.source.label}",
@@ -167,14 +189,17 @@ def _transcript_source(
         format="srt",
         kind="transcript",
     )
-    filename = publication_path(evidence.media, source).name
-    if any(row.filename == filename for row in published):
-        source = source.model_copy(update={"published_filename": filename})
     return JellyfinSubtitle(source)
 
 
 def subtitle_catalog(
-    db, evidence: ReviewSubtitleEvidence, target, requested_audio
+    db,
+    evidence: ReviewSubtitleEvidence,
+    target,
+    requested_audio,
+    *,
+    review_id: str,
+    account,
 ) -> SubtitleCatalog:
     """Find supported tracks and expose transcript fallback only when none are suitable."""
     audio = (
@@ -189,7 +214,22 @@ def subtitle_catalog(
             "subtitle_audio_changed", "The reviewed audio tracks changed. Choose a track again."
         )
     media = evidence.media
-    published = discover_publications(media, media_slot(media, evidence.version))
+    publication, publication_error = None, None
+    try:
+        publication = subtitle_publication_intent(
+            db,
+            review_id,
+            account,
+            evidence,
+        )
+    except SubtitleNameError as exc:
+        publication_error = exc
+    published, own_sources = discover_publications_and_owned_sources(
+        media,
+        media_slot(media, evidence.version),
+        viewer=subtitle_publisher_id(account.local_export_id.value),
+        publication=publication,
+    )
     tracks = discover_jellyfin_subtitles(
         db,
         item=target.source.catalog_item,
@@ -198,6 +238,7 @@ def subtitle_catalog(
         media=media,
         audio_language=audio.source.language if audio else None,
         published={row.filename for row in published},
+        catalog_sibling_stems=evidence.sibling_stems,
     )
     fallback, transcript = None, None
     if not any(track.source.supported for track in tracks):
@@ -207,15 +248,36 @@ def subtitle_catalog(
             transcript = cached_segments(audio) if audio else None
             fallback = "available" if transcript is not None else "scan_required"
             if transcript is not None and audio is not None:
-                tracks.append(_transcript_source(evidence, audio, published))
+                tracks.append(_transcript_source(evidence, audio))
+    tracks = [
+        replace(
+            track,
+            source=track.source.model_copy(
+                update={
+                    "published_filename": own_sources.get(track.source.id),
+                }
+            ),
+        )
+        for track in tracks
+    ]
     response = SubtitleSources(
         sources=[item.source for item in tracks],
         fallback=fallback,
         audio_sources=[entry.source for entry in evidence.audio],
         audio_source_id=audio.source.id if audio else None,
         published_subtitles=published,
+        track_title=publication.title if publication else None,
+        publication_block_reason=str(publication_error) if publication_error else None,
     )
-    return SubtitleCatalog(evidence, tuple(tracks), audio, transcript, response)
+    return SubtitleCatalog(
+        evidence,
+        tuple(tracks),
+        audio,
+        transcript,
+        response,
+        publication,
+        publication_error,
+    )
 
 
 def _stable_input(path: Path | None) -> tuple[int, ...] | None:
@@ -227,6 +289,7 @@ def render_subtitle(
     request: SubtitleSourcesRequest,
     catalog: SubtitleCatalog,
     source_id: str,
+    get_language_tokens: Callable[[], frozenset[str]],
 ) -> RenderedSubtitle:
     """Render outside SQLite's writer lock and bind the preview to exact inputs."""
     evidence = catalog.evidence
@@ -255,6 +318,45 @@ def render_subtitle(
             "subtitle_source_unavailable", "The subtitle source could not be read safely"
         ) from exc
 
+    publication = catalog.publication
+    if publication is None:
+        return RenderedSubtitle(
+            track.source,
+            redaction,
+            content,
+            None,
+            input_path,
+            before,
+            None,
+            catalog.publication_error,
+        )
+    try:
+        language_tokens = (
+            get_language_tokens()
+            if track.source.language or "." in publication.title
+            else frozenset()
+        )
+        destination = named_publication_path(
+            evidence.media, track.source, publication, language_tokens
+        )
+        check_named_sidecar(
+            evidence.media,
+            destination,
+            media_slot(evidence.media, evidence.version),
+            publication,
+            source_id,
+            catalog_sibling_stems=evidence.sibling_stems,
+        )
+    except (SubtitleNameError, SubtitleConflict) as exc:
+        return RenderedSubtitle(
+            track.source, redaction, content, None, input_path, before, None, exc
+        )
+    except OSError:
+        error = SubtitleConflict("Could not verify the subtitle destination")
+        return RenderedSubtitle(
+            track.source, redaction, content, None, input_path, before, None, error
+        )
+
     metadata = json.dumps(
         {
             "review": review_id,
@@ -263,6 +365,9 @@ def render_subtitle(
             "owner": request.policy_owner_id,
             "version": evidence.version,
             "file": evidence.fingerprint,
+            "publication": publication.identity(source_id),
+            "track_title": publication.title,
+            "filename": destination.name,
             "audio": catalog.response.audio_source_id,
             "source": track.source.model_dump(exclude={"published_filename", "recommended"}),
         },
@@ -274,7 +379,14 @@ def render_subtitle(
     digest.update(document.text.encode(document.encoding))
     digest.update(content)
     return RenderedSubtitle(
-        track.source, redaction, content, digest.hexdigest(), input_path, before
+        track.source,
+        redaction,
+        content,
+        digest.hexdigest(),
+        input_path,
+        before,
+        destination,
+        None,
     )
 
 

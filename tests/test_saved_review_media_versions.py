@@ -14,15 +14,15 @@ from scanner.persistence.repository.media_identity_store import (
 )
 from scanner.runtime import media_fingerprints
 from tests.multi_user_access_support import PEER_USER, USER
+from tests.subtitle_review_http_support import seed_subtitle_review
 from tests.test_review_access_http import app as app
-from tests.test_review_subtitle_http import _seed
 
 
 def test_saved_empty_reviews_and_duplicates_keep_original_file_generation(app):
     from scanner.http import review_subtitle_api
 
     app.client.app.include_router(review_subtitle_api.router)
-    old_unpinned, _subtitle = _seed(app)
+    old_unpinned, _subtitle = seed_subtitle_review(app, linked=False)
     item_id = old_unpinned.target.item_id
     media = Path(app.items[item_id].versions[1].path)
     route = f"/api/library-items/{item_id}/reviews"
@@ -90,7 +90,7 @@ def test_saved_empty_reviews_and_duplicates_keep_original_file_generation(app):
 
 
 def _pinned_list_target(app, *, bind, sampled=False):
-    review, _ = _seed(app)
+    review, _ = seed_subtitle_review(app, linked=False)
     item_id = review.target.item_id
     media = Path(app.items[item_id].versions[1].path)
     with app.accounts.factory() as db:

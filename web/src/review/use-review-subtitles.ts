@@ -13,6 +13,7 @@ type LoadState<T> =
   | { key: string; kind: "error"; message: string };
 
 const errorText = (reason: unknown, fallback: string) => reason instanceof Error ? reason.message : fallback;
+const missingTitle = "This track needs a valid Jellyfin title before publishing.";
 
 function isReviewConflict(reason: unknown): boolean {
   return reason instanceof ApiError && ["stale_review_revision", "stale_review_policy"].includes(reason.code ?? "");
@@ -55,8 +56,10 @@ export function useReviewSubtitles(
   const source = sources?.sources.find((candidate) => candidate.supported && candidate.id === selection?.id && selection.key === inventoryKey)
     ?? sources?.sources.find((candidate) => candidate.supported && candidate.recommended)
     ?? sources?.sources.find((candidate) => candidate.supported && candidate.kind === "transcript");
+  const trackTitle = sources?.track_title;
+  const catalogBlockReason = sources?.publication_block_reason || (source && !trackTitle ? missingTitle : undefined);
   const confirmedAudio = sources?.audio_source_id ?? audioId;
-  const sourceKey = JSON.stringify([inventoryKey, confirmedAudio, source?.id]);
+  const sourceKey = JSON.stringify([inventoryKey, confirmedAudio, source?.id, trackTitle, catalogBlockReason]);
   const activeSourceKey = useRef(sourceKey);
   activeSourceKey.current = sourceKey;
   const targetSource = target?.source;
@@ -96,6 +99,10 @@ export function useReviewSubtitles(
   useEffect(() => () => { previewRequest.current?.abort(); }, [sourceKey]);
 
   const preview = previewState?.key === sourceKey ? previewState : undefined;
+  const previewValue = preview?.kind === "ready" ? preview.value : undefined;
+  const publicationBlockReason = previewValue?.publication_block_reason || catalogBlockReason
+    || (previewValue && (!previewValue.track_title || !previewValue.preview_token) ? missingTitle : undefined);
+  const publishablePreview = publicationBlockReason ? undefined : previewValue;
   const request = source && review && id ? {
     revision: review.revision, ...reviewPolicyToken(review), source_id: source.id,
     ...(confirmedAudio ? { audio_source_id: confirmedAudio } : {}),
@@ -112,6 +119,11 @@ export function useReviewSubtitles(
     try {
       const result = await previewReviewSubtitles(id, request, controller.signal);
       if (!controller.signal.aborted && current() && activeSourceKey.current === sourceKey) {
+        if (result.preview_token && result.track_title !== trackTitle) {
+          setPreviewState({ key: sourceKey, kind: "error", message: "The Jellyfin track title changed. Review the new title and try again." });
+          setReload((value) => value + 1);
+          return;
+        }
         setPreviewState({ key: sourceKey, kind: "ready", value: result });
       }
     } catch (reason) {
@@ -127,16 +139,20 @@ export function useReviewSubtitles(
   }
 
   async function publish() {
-    if (!request || !id || preparedKey !== sourceKey || preview?.kind !== "ready" || runningPublication.current) return;
+    if (!request || !id || !publishablePreview?.track_title || !publishablePreview.preview_token
+      || preparedKey !== sourceKey || runningPublication.current) return;
+    const { track_title: title, preview_token: token } = publishablePreview;
     runningPublication.current = true;
     setPublishing(true);
     setPublicationStatus(undefined);
     try {
-      const result = await publishReviewSubtitles(id, { ...request, preview_token: preview.value.preview_token });
+      const result = await publishReviewSubtitles(id, { ...request, preview_token: token });
       if (!current()) return;
+      const previousFilename = result.replaced ? publishablePreview.source.published_filename : undefined;
       setPublished((previous) => [
-        ...previous.filter((track) => track.filename !== result.filename),
-        { filename: result.filename, label: `${result.source.label} · Filtered`, format: result.source.format, forced: result.source.forced },
+        ...previous.filter((track) => track.filename !== result.filename
+          && !(track.owned_by_viewer && track.filename === previousFilename)),
+        { filename: result.filename, label: title, format: result.source.format, forced: result.source.forced, owned_by_viewer: true },
       ]);
       setReload((value) => value + 1);
       const message = result.refresh_pending
@@ -147,7 +163,9 @@ export function useReviewSubtitles(
     } catch (reason) {
       if (!current() || activeSourceKey.current !== sourceKey) return;
       setPublicationStatus({ key: sourceKey, error: true, message: errorText(reason, "Unable to publish filtered subtitles.") });
-      if (reason instanceof ApiError && ["subtitle_source_changed", "subtitle_media_changed"].includes(reason.code ?? "")) {
+      if (reason instanceof ApiError && [
+        "subtitle_source_changed", "subtitle_media_changed", "invalid_subtitle_title", "subtitle_title_unavailable",
+      ].includes(reason.code ?? "")) {
         setPreparedKey(undefined);
         setPreviewState(undefined);
         setReload((value) => value + 1);
@@ -161,6 +179,7 @@ export function useReviewSubtitles(
 
   return {
     sources,
+    publicationBlockReason,
     inventoryError: inventoryState?.kind === "error" ? inventoryState.message : undefined,
     reload: () => { setInventory(undefined); setReload((value) => value + 1); },
     audioId: confirmedAudio,
@@ -170,8 +189,8 @@ export function useReviewSubtitles(
     preview,
     previewing: previewing === sourceKey,
     requestPreview,
-    prepare: () => { if (preview?.kind === "ready") setPreparedKey(sourceKey); },
-    prepared: preparedKey === sourceKey ? source : undefined,
+    prepare: () => { if (publishablePreview) setPreparedKey(sourceKey); },
+    prepared: preparedKey === sourceKey ? publishablePreview : undefined,
     published,
     publishing,
     publish,

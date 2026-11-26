@@ -48,7 +48,9 @@ it("rehydrates a pending handoff without completing until explicit approval", as
   rendered.unmount();
   render(<CommunitySettings />);
   await screen.findByText(/Pending enrollment reference/);
-  fireEvent.click(screen.getByRole("button", { name: "Retry confirmation" }));
+  const retry = screen.getByRole("button", { name: "Retry confirmation" });
+  await waitFor(() => expect(retry).toBeEnabled());
+  fireEvent.click(retry);
   expect(api.completeCommunityEnrollment).not.toHaveBeenCalled();
   await screen.findByRole("dialog");
   fireEvent.click(screen.getByRole("button", { name: "Confirm connection" }));

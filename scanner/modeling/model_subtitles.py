@@ -43,6 +43,7 @@ class PublishedSubtitle(BaseModel):
     label: str
     format: str
     forced: bool
+    owned_by_viewer: bool = False
 
 
 class SubtitleSources(BaseModel):
@@ -51,6 +52,8 @@ class SubtitleSources(BaseModel):
     audio_sources: list[ReviewAudioSource]
     audio_source_id: str | None
     published_subtitles: list[PublishedSubtitle]
+    track_title: str | None = None
+    publication_block_reason: str | None = None
 
 
 class SubtitlePreviewCue(BaseModel):
@@ -61,11 +64,14 @@ class SubtitlePreviewCue(BaseModel):
 
 
 class SubtitlePreview(BaseModel):
-    preview_token: str
+    preview_token: str | None = None
     source: SubtitleSource
     cues: list[SubtitlePreviewCue]
     changed_cues: int
     unchanged_cues: int
+    track_title: str | None = None
+    filename: str | None = None
+    publication_block_reason: str | None = None
 
 
 class SubtitlePublication(BaseModel):

@@ -1,4 +1,4 @@
-"""Authorized discovery, preview, and publication of shared subtitle exports."""
+"""Authorized discovery, preview, and publication of named subtitle exports."""
 
 import hmac
 from uuid import UUID
@@ -24,12 +24,13 @@ from scanner.persistence.repository.review_subtitles import (
     require_same_subtitle_input,
     review_subtitle_evidence,
     subtitle_catalog,
+    subtitle_publication_intent,
 )
+from scanner.runtime.subtitle_publication_names import SubtitleNameError
 from scanner.runtime.subtitle_sidecars import (
     SubtitleConflict,
     media_slot,
-    publication_path,
-    publish_sidecar,
+    publish_named_sidecar,
 )
 from scanner.security.access.authorization import require
 from scanner.security.access.capability_ids import Capability as C
@@ -96,7 +97,14 @@ def _run(caller: ReviewAccess, review_id: str, target, operation):
 def _catalog(caller, review_id, target, request):
     def operation(db, source_id):
         evidence = review_subtitle_evidence(db, source_id, target, request)
-        return subtitle_catalog(db, evidence, target, request.audio_source_id)
+        return subtitle_catalog(
+            db,
+            evidence,
+            target,
+            request.audio_source_id,
+            review_id=source_id,
+            account=caller.access.principal.account,
+        )
 
     return _run(caller, review_id, target, operation)
 
@@ -104,6 +112,8 @@ def _catalog(caller, review_id, target, request):
 def _mapped_error(exc):
     if isinstance(exc, SubtitleError):
         return _review_http_error(exc.code, str(exc), exc.status)
+    if isinstance(exc, SubtitleNameError):
+        return _review_http_error(exc.code, str(exc), 409)
     if isinstance(exc, SubtitleConflict):
         return _review_http_error("subtitle_publication_conflict", str(exc), 409)
     if isinstance(exc, OSError):
@@ -142,7 +152,13 @@ def subtitle_preview(
     try:
         target = _capture(caller, review_id)
         catalog = _catalog(caller, review_id, target, request)
-        output = render_subtitle(review_id, request, catalog, request.source_id)
+        output = render_subtitle(
+            review_id,
+            request,
+            catalog,
+            request.source_id,
+            lambda: _language_tokens(caller.db, target.source.server_id),
+        )
         changed = len(output.redaction.replacements)
         return SubtitlePreview(
             preview_token=output.token,
@@ -150,6 +166,11 @@ def subtitle_preview(
             cues=output.redaction.preview(),
             changed_cues=changed,
             unchanged_cues=len(output.redaction.document.cues) - changed,
+            track_title=catalog.response.track_title,
+            filename=output.destination.name if output.destination else None,
+            publication_block_reason=(
+                str(output.publication_error) if output.publication_error else None
+            ),
         )
     except ReviewPolicyConflict:
         raise
@@ -169,7 +190,16 @@ def subtitle_publish(
     try:
         target = _capture(caller, review_id)
         catalog = _catalog(caller, review_id, target, request)
-        output = render_subtitle(review_id, request, catalog, request.source_id)
+        output = render_subtitle(
+            review_id,
+            request,
+            catalog,
+            request.source_id,
+            lambda: _language_tokens(caller.db, target.source.server_id),
+        )
+        if output.publication_error is not None:
+            raise output.publication_error
+        assert output.token is not None and output.destination is not None
         if not hmac.compare_digest(output.token, request.preview_token):
             raise SubtitleError(
                 "subtitle_source_changed", "The subtitle source changed. Preview it again."
@@ -178,13 +208,26 @@ def subtitle_publish(
         def operation(db, source_id):
             current = review_subtitle_evidence(db, source_id, target, request)
             require_same_subtitle_input(catalog.evidence, current, output)
-            replaced = publish_sidecar(
+            publication = subtitle_publication_intent(
+                db,
+                source_id,
+                caller.access.principal.account,
+                current,
+            )
+            if publication != catalog.publication:
+                raise SubtitleError(
+                    "subtitle_source_changed",
+                    "The subtitle publication changed. Preview it before publishing.",
+                )
+            return publish_named_sidecar(
                 current.media,
                 media_slot(current.media, current.version),
                 output.source,
                 output.content,
+                publication,
+                output.destination,
+                catalog_sibling_stems=current.sibling_stems,
             )
-            return publication_path(current.media, output.source).name, replaced
 
         with publication_lock(caller.db):
             filename, replaced = _run(caller, review_id, target, operation)
@@ -201,6 +244,21 @@ def subtitle_publish(
         raise
     except (ValueError, OSError) as exc:
         raise _mapped_error(exc) from exc
+
+
+def _language_tokens(db, server_id: str) -> frozenset[str]:
+    credentials = repository.get_jellyfin_credentials(db)
+    if credentials is not None and credentials[0] == server_id:
+        try:
+            with JellyfinClient(*credentials) as client:
+                return client.subtitle_language_tokens()
+        except JellyfinError:
+            pass
+    raise SubtitleNameError(
+        "subtitle_language_unavailable",
+        "Editarr could not check which subtitle language tags Jellyfin recognizes. "
+        "Check the Jellyfin connection and try again.",
+    )
 
 
 def _refresh(db, item_id: str, server_id: str, media_source_id: str | None) -> bool:

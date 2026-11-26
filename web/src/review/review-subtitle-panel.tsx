@@ -11,17 +11,28 @@ export function subtitleSourceDetails(source: SubtitleSource) {
   ].filter(Boolean).join(" · ");
 }
 
+export function SubtitlePlaybackNotice({ forced }: { forced: boolean }) {
+  return <p className="muted-copy">
+    Everyone who can play this version in Jellyfin can see this track.
+    {forced && " Jellyfin may automatically select this forced track for other viewers."}
+  </p>;
+}
+
 export function ReviewSubtitlePanel({ subtitles, onContinue, onStartAudioScan }: {
   subtitles: ReviewSubtitles;
   onContinue: () => void;
   onStartAudioScan?: () => void;
 }) {
-  const { sources, source, preview, previewing } = subtitles;
+  const { sources, source, preview, previewing, publicationBlockReason } = subtitles;
   if (subtitles.inventoryError) return <section className="workflow-release-panel" aria-label="Filtered subtitles">
     <p className="load-error" role="alert">{subtitles.inventoryError}</p>
     <button type="button" className="btn-secondary" onClick={subtitles.reload}>Retry</button>
   </section>;
   if (!sources) return <p className="muted-copy" role="status">Finding subtitle tracks…</p>;
+  const trackTitle = preview?.kind === "ready" ? preview.value.track_title : sources.track_title;
+  const canContinue = preview?.kind === "ready" && !publicationBlockReason;
+  const previewLabel = previewing ? "Preparing preview…"
+    : preview?.kind === "ready" ? "Retry cue preview" : "Preview cue changes";
 
   return <div className="workflow-release-grid">
     <section className="workflow-release-panel" aria-labelledby="subtitle-source-heading">
@@ -51,6 +62,9 @@ export function ReviewSubtitlePanel({ subtitles, onContinue, onStartAudioScan }:
     </section>
     <section className="workflow-release-panel" aria-labelledby="subtitle-preview-heading">
       <h3 id="subtitle-preview-heading">Cue preview</h3>
+      {publicationBlockReason && <p className="load-error" role="alert">{publicationBlockReason}</p>}
+      {source && trackTitle && <p className="workflow-subtitle-title">Jellyfin track title <strong>{trackTitle}</strong></p>}
+      {source && !publicationBlockReason && <SubtitlePlaybackNotice forced={source.forced} />}
       {!source && <p className="muted-copy">Cue previews appear when you choose a subtitle source.</p>}
       {source && !preview && <p className="muted-copy">Preview how this saved review changes the selected track.</p>}
       {preview?.kind === "error" && <p className="load-error" role="alert">{preview.message}</p>}
@@ -63,14 +77,11 @@ export function ReviewSubtitlePanel({ subtitles, onContinue, onStartAudioScan }:
             <td>{cue.filtered || <i>Cue removed</i>}</td>
           </tr>)}</tbody>
         </table>}
-        {preview.value.source.forced && <p className="muted-copy">Keeps the forced flag in Jellyfin.</p>}
       </>}
       {source && <div className="button-row">
-        {preview?.kind !== "ready"
-          ? <button type="button" className="btn-primary" disabled={previewing} onClick={() => void subtitles.requestPreview()}>
-            {previewing ? "Preparing preview…" : "Preview cue changes"}
-          </button>
-          : <button type="button" className="btn-primary" onClick={onContinue}>Continue to Publish</button>}
+        {canContinue
+          ? <button type="button" className="btn-primary" onClick={onContinue}>Continue to Publish</button>
+          : <button type="button" className="btn-primary" disabled={previewing} onClick={() => void subtitles.requestPreview()}>{previewLabel}</button>}
       </div>}
     </section>
   </div>;

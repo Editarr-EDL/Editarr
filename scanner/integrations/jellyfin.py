@@ -57,6 +57,29 @@ class JellyfinClient:
         """Use an authenticated endpoint so an invalid key cannot look healthy."""
         self._get_json("/Library/VirtualFolders")
 
+    def subtitle_language_tokens(self) -> frozenset[str]:
+        """Read the language names and tags this server can consume from a sidecar filename."""
+        payload = self._get_json("/Localization/Cultures")
+        if not isinstance(payload, list):
+            raise JellyfinError("Jellyfin returned an invalid cultures response")
+        tags = set()
+        for culture in payload:
+            if not isinstance(culture, dict):
+                continue
+            names = [
+                culture.get("Name"),
+                culture.get("DisplayName"),
+                culture.get("TwoLetterISOLanguageName"),
+                culture.get("ThreeLetterISOLanguageName"),
+            ]
+            variants = culture.get("ThreeLetterISOLanguageNames")
+            if isinstance(variants, list):
+                names.extend(variants)
+            tags.update(name.casefold() for name in names if isinstance(name, str) and name)
+        if not tags:
+            raise JellyfinError("Jellyfin returned no subtitle language tags")
+        return frozenset(tags)
+
     def libraries(self) -> list[JellyfinLibrary]:
         """Fetch available Jellyfin libraries and normalize their public metadata."""
         payload = self._get_json("/Library/VirtualFolders")

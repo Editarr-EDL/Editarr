@@ -173,8 +173,12 @@ def test_cached_transcript_rebinds_only_verified_generation_and_track(monkeypatc
 
 
 def test_dot_delimited_overlapping_stems_refuse_shared_attach(tmp_path, monkeypatch):
+    from scanner.integrations import jellyfin_subtitles
     from scanner.modeling.model_catalog import JellyfinMediaItem, JellyfinMediaVersion
-    from scanner.persistence.repository import review_subtitles
+    from scanner.runtime.subtitle_publication_names import (
+        SubtitleNameError,
+        require_unique_video_match,
+    )
 
     short = tmp_path / "Movie.mkv"
     edition = tmp_path / "Movie.Alternate.mkv"
@@ -182,18 +186,19 @@ def test_dot_delimited_overlapping_stems_refuse_shared_attach(tmp_path, monkeypa
         id="movie",
         item_type="Movie",
         name="Movie",
-        versions=[
-            JellyfinMediaVersion(id="main", path=str(short)),
-            JellyfinMediaVersion(id="edition", path=str(edition)),
-        ],
+        path=str(short),
+        versions=[JellyfinMediaVersion(id="edition", path=str(edition))],
     )
     monkeypatch.setattr(
-        review_subtitles, "resolve_local_path", lambda _db, value: SimpleNamespace(local_path=value)
+        jellyfin_subtitles,
+        "resolve_local_path",
+        lambda _db, value: SimpleNamespace(local_path=value),
     )
-    for current, version in [(short, "main"), (edition, "edition")]:
-        target = SimpleNamespace(source=SimpleNamespace(catalog_item=item, media_source_id=version))
-        if current == short:
-            review_subtitles._require_unambiguous_name(None, target, current)
-        else:
-            with pytest.raises(review_subtitles.SubtitleError, match="more than one version"):
-                review_subtitles._require_unambiguous_name(None, target, current)
+    short_destination = tmp_path / "Movie.Sam - Family Review.en.srt"
+    long_destination = tmp_path / "Movie.Alternate.Sam - Family Review.en.srt"
+    short_siblings = jellyfin_subtitles.jellyfin_sibling_stems(None, item, short)
+    long_siblings = jellyfin_subtitles.jellyfin_sibling_stems(None, item, edition)
+
+    require_unique_video_match(short, short_destination, [], short_siblings)
+    with pytest.raises(SubtitleNameError, match="more than one video"):
+        require_unique_video_match(edition, long_destination, [], long_siblings)
