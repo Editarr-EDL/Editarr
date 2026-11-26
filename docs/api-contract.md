@@ -877,7 +877,9 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
 - Catalog: `GET /api/libraries`, `GET /api/libraries/{library_id}/items`,
   `GET /api/library-items/{item_id}`, and `/children`/`image` variants.
   Library paging uses `start_index` and `limit`; sorting, EDL filtering, and
-  title search compose in the same request. Under `sort_by=title`,
+  title search compose in the same request. `edl_filter` is `all`, `exported`,
+  `not_exported`, or `outdated` (an EDL exported before its review last changed).
+  Under `sort_by=title`,
   `title_letter_offsets` maps each initial (`A`–`Z` after removing accents and
   case folding, with dotless `ı` read as `i`; `#` for digits, symbols and other scripts, which sort first) to
   the index of its first matching item, so a client can page straight to a letter.

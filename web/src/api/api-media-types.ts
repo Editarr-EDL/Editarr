@@ -82,7 +82,7 @@ export interface LibraryItemQuery {
   limit?: number;
   sortBy?: "title" | "year" | "rating" | "duration" | "type";
   sortDirection?: "asc" | "desc";
-  edlFilter?: "all" | "exported" | "not_exported";
+  edlFilter?: "all" | "exported" | "not_exported" | "outdated";
   ratingFilter?: string;
   resolutionFilter?: string;
   refresh?: boolean;

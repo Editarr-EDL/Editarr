@@ -5,7 +5,7 @@ export const catalogMaxRequestSize = 500;
 export type LibraryView = "icon" | "list";
 export type SortKey = "title" | "year" | "rating" | "duration" | "type";
 export type SortDirection = "asc" | "desc";
-export type EdlFilter = "all" | "exported" | "not_exported";
+export type EdlFilter = "all" | "exported" | "not_exported" | "outdated";
 export type RatingFilter = string;
 export type ResolutionFilter = string;
 

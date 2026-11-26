@@ -1,11 +1,16 @@
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+
 from scanner import api, repository
 from scanner.db import (
     ScanRow,
 )
+from scanner.http.catalog_library_api import _edl_filter_matches
 from scanner.models import (
     ExportFormat,
+    ExportSummary,
     JellyfinMediaItem,
     JellyfinMediaVersion,
     JellyfinSettingsUpdate,
@@ -640,3 +645,28 @@ def test_dotless_i_titles_sort_and_group_with_i():
 
     assert [item.name for item in ordered] == ["Hotel", "ıhlara", "Iris", "Jade"]
     assert catalog._title_letter_offsets(ordered) == {"H": 0, "I": 1, "J": 3}
+
+
+def test_edl_filter_matches_outdated_exports_only():
+    missing = ExportSummary(format=ExportFormat.EDL)
+    current = ExportSummary(format=ExportFormat.EDL, present=True, current=True)
+    outdated = ExportSummary(format=ExportFormat.EDL, present=True, outdated=True)
+    matches = {
+        edl_filter: [_edl_filter_matches(edl, edl_filter) for edl in (missing, current, outdated)]
+        for edl_filter in ("all", "exported", "not_exported", "outdated")
+    }
+    assert matches == {
+        "all": [True, True, True],
+        "exported": [False, True, True],
+        "not_exported": [True, False, False],
+        "outdated": [False, False, True],
+    }
+
+
+def test_library_items_reject_unknown_edl_filter(db):
+    with pytest.raises(HTTPException) as caught:
+        api.api_list_jellyfin_library_items(
+            "movies", edl_filter="stale", db=db, viewer=owner_viewer(db)
+        )
+    assert caught.value.status_code == 400
+    assert "outdated" in caught.value.detail

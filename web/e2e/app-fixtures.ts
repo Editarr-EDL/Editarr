@@ -281,7 +281,8 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/libraries/movies/items") {
       const filteredItems = items.filter((item) =>
         url.searchParams.get("search") !== "missing"
-        && (url.searchParams.get("edl_filter") !== "not_exported" || !item.exports.exports.edl.present),
+        && (url.searchParams.get("edl_filter") !== "not_exported" || !item.exports.exports.edl.present)
+        && (url.searchParams.get("edl_filter") !== "outdated" || (item.exports.exports.edl.present && item.exports.exports.edl.outdated)),
       );
       await json(route, { items: filteredItems, total_count: filteredItems.length, rating_values: ["PG-13"], resolution_values: ["4K"] }); return;
     }

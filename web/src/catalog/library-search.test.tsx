@@ -16,7 +16,7 @@ describe("searchSuggestions", () => {
     expect(labels(searchSuggestions("pg", noFilters, values, []))).toEqual(["Rating: PG", "Rating: PG-13"]);
     expect(labels(searchSuggestions("rat", noFilters, values, []))).toEqual(["Rating: G", "Rating: PG", "Rating: PG-13", "Rating: R"]);
     expect(labels(searchSuggestions("no edl", noFilters, values, []))).toEqual(["EDL: Not exported"]);
-    expect(labels(searchSuggestions("edl", { ...noFilters, filter: "exported" }, values, []))).toEqual(["EDL: Not exported"]);
+    expect(labels(searchSuggestions("edl", { ...noFilters, filter: "exported" }, values, []))).toEqual(["EDL: Not exported", "EDL: Outdated"]);
     expect(labels(searchSuggestions("4k", { ...noFilters, resolutionFilter: "4K" }, values, []))).toEqual([]);
   });
 
@@ -26,8 +26,15 @@ describe("searchSuggestions", () => {
     expect(suggestions.filter((suggestion) => suggestion.kind === "title")).toHaveLength(5);
     expect(suggestions[0]).toMatchObject({ kind: "title", label: "Paddington" });
     expect(labels(searchSuggestions("", noFilters, values, titles))).toEqual([
-      "EDL: Exported", "EDL: Not exported", "Rating: G", "Rating: PG", "Rating: PG-13", "Rating: R", "Resolution: 4K", "Resolution: 1080p",
+      "EDL: Exported", "EDL: Not exported", "EDL: Outdated", "Rating: G", "Rating: PG", "Rating: PG-13", "Rating: R", "Resolution: 4K",
     ]);
+  });
+
+  it("suggests the outdated EDL filter and names its token", () => {
+    expect(labels(searchSuggestions("outdated", noFilters, values, []))).toEqual(["EDL: Outdated"]);
+    expect(labels(searchSuggestions("stale", noFilters, values, []))).toEqual(["EDL: Outdated"]);
+    expect(labels(searchSuggestions("edl", { ...noFilters, filter: "outdated" }, values, []))).toEqual(["EDL: Exported", "EDL: Not exported"]);
+    expect(activeTokens({ filter: "outdated", ratingFilter: "all", resolutionFilter: "all" }).map((token) => token.label)).toEqual(["EDL outdated"]);
   });
 
   it("names active filters as tokens", () => {

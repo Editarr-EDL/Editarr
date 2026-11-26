@@ -23,6 +23,7 @@ export type SearchSuggestion =
 const edlLabels: Record<Exclude<EdlFilter, "all">, { token: string; option: string; terms: string }> = {
   exported: { token: "EDL exported", option: "EDL: Exported", terms: "edl exported has edl with edl" },
   not_exported: { token: "No EDL", option: "EDL: Not exported", terms: "no edl not exported without edl missing edl" },
+  outdated: { token: "EDL outdated", option: "EDL: Outdated", terms: "edl outdated stale old edl out of date needs export" },
 };
 
 const maxFilterSuggestions = 8;
@@ -58,10 +59,10 @@ export function searchSuggestions(
   const query = normalized(text);
   const matches = (value: string, facetTerms: string) => !query || normalized(value).includes(query) || normalized(facetTerms).startsWith(query);
   const filterSuggestions: SearchSuggestion[] = [];
-  for (const value of ["exported", "not_exported"] as const) {
+  for (const value of ["exported", "not_exported", "outdated"] as const) {
     const labels = edlLabels[value];
     if (filters.filter !== value && (matches(labels.option, "edl") || normalized(labels.terms).includes(query))) {
-      // "edl" alone, "no edl", "not exported" and "exported" all find the matching state.
+      // "edl" alone, "no edl", "not exported", "exported" and "outdated" all find the matching state.
       filterSuggestions.push({ kind: "filter", id: `edl-${value}`, label: labels.option, token: { facet: "filter", value, label: labels.token } });
     }
   }
