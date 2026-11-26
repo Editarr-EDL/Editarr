@@ -2,7 +2,10 @@ import type { SqlDatabase } from '../runtime/contracts';
 import { transientStatement } from './transient';
 import { SNAPSHOT_RETENTION } from '../master/recompute';
 
-/** Prune expired fixed-window request counters and sync runs; `now` is milliseconds. */
+/**
+ * Prune expired fixed-window request counters and sync runs by `idx_rate_counters_expiry` and
+ * `idx_sync_runs_expiry` (migration 0004); `now` is milliseconds.
+ */
 export async function pruneRateWindows(db: SqlDatabase, now: number, limit: number) {
   await db.batch([transientStatement(db, 'rateCounters', now, limit, 'prune'),
     transientStatement(db, 'syncRuns', now, limit, 'prune')]);
@@ -10,7 +13,9 @@ export async function pruneRateWindows(db: SqlDatabase, now: number, limit: numb
 
 /**
  * Clear the bytes of superseded snapshots whose receipts all predate the cutoff (seconds), at most
- * `limit` rows; the receipt check uses `idx_download_receipts_version` (migration 0003).
+ * `limit` rows. The scan reads `idx_master_revisions_retained_bytes` (migration 0004), so it visits
+ * only revisions that still hold bytes and never rescans pruned history; the receipt check uses
+ * `idx_download_receipts_version` (migration 0003).
  */
 export const PRUNE_SNAPSHOT_BYTES_SQL = `UPDATE master_revisions SET snapshot_bytes = NULL WHERE rowid IN (SELECT m.rowid FROM master_revisions m
     WHERE m.snapshot_bytes IS NOT NULL

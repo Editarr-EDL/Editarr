@@ -9,7 +9,7 @@ import { issueMasterReceipt, receiptIdentity, receiptSigningBytes, signSnapshot,
   verifyServiceSignature } from '../src/master/signing';
 import { loadReceiptSigner, type ReceiptSigner } from '../src/security/service-signer';
 import { contributorSubmission } from '../src/http/submissions';
-import { SNAPSHOT_RETENTION, supersededSnapshots } from '../src/master/recompute';
+import { SNAPSHOT_RETENTION, SUPERSEDED_SNAPSHOTS_SQL, supersededSnapshots } from '../src/master/recompute';
 import { PRUNE_SNAPSHOT_BYTES_SQL, pruneSnapshotBytes } from '../src/retention/windows';
 import { artifact, contributor, encode, nonce, submitRequest, type Contributor } from './helpers/submissions';
 import { signedRead } from './helpers/key-lifecycle';
@@ -162,11 +162,36 @@ describe('retained snapshot bytes (§8)', () => {
     expect(await kept()).toEqual([12]);
   });
 
+  const queryPlan = async (sql: string, ...values: unknown[]) =>
+    (await db.prepare(`EXPLAIN QUERY PLAN ${sql}`).bind(...values).all<{ detail: string }>()).results.map(row => row.detail);
+
   it('checks receipts through the version index instead of scanning download_receipts', async () => {
-    const plan = (await db.prepare(`EXPLAIN QUERY PLAN ${PRUNE_SNAPSHOT_BYTES_SQL}`).bind(0, 1).all<{ detail: string }>())
-      .results.map(row => row.detail);
+    const plan = await queryPlan(PRUNE_SNAPSHOT_BYTES_SQL, 0, 1);
     expect(plan.some(detail => detail.includes('idx_download_receipts_version'))).toBe(true);
     expect(plan.some(detail => /^SCAN r\b/.test(detail))).toBe(false);
+  });
+
+  it('visits only revisions that still hold bytes, so pruned history is never rescanned', async () => {
+    const versionId = (await submit(alice, '211')).versionId;
+    const bytes = new TextEncoder().encode('{}');
+    await db.batch(Array.from({ length: 200 }, (_, index) => db.prepare(`INSERT INTO master_revisions (version_id, revision,
+        snapshot_digest, generated_at, snapshot_bytes) VALUES (?, ?, ?, ?, ?)`).bind(versionId, index + 2, 'd'.repeat(64), now, bytes)));
+    const later = (now + SNAPSHOT_RETENTION.receiptSeconds + 1) * 1000;
+    await pruneSnapshotBytes(db, later, 1000);
+    await db.exec('ANALYZE');
+    // The retention scan reads this partial index, which pruned revisions have left.
+    const retained = async () => (await db.prepare(`SELECT revision FROM master_revisions
+      INDEXED BY idx_master_revisions_retained_bytes WHERE version_id = ? AND snapshot_bytes IS NOT NULL`)
+      .bind(versionId).all<{ revision: number }>()).results.map(row => row.revision);
+    expect(await retained()).toEqual([201]);
+    const prune = await queryPlan(PRUNE_SNAPSHOT_BYTES_SQL, 0, 1);
+    expect(prune).toContain('SCAN m USING INDEX idx_master_revisions_retained_bytes');
+    expect(prune.some(detail => /^SCAN m$/.test(detail))).toBe(false);
+    const superseded = await queryPlan(SUPERSEDED_SNAPSHOTS_SQL, versionId, 201, now, 8);
+    expect(superseded.some(detail => detail.startsWith('SEARCH master_revisions USING INDEX idx_master_revisions_retained_bytes')))
+      .toBe(true);
+    await pruneSnapshotBytes(db, later, 1000);
+    expect(await retained()).toEqual([201]);
   });
 });
 

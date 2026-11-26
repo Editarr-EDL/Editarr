@@ -33,13 +33,20 @@ const json = (value: unknown) => JSON.stringify(value);
  */
 export const SNAPSHOT_RETENTION = Object.freeze({ olderRevisions: 8, receiptSeconds: 7 * 86_400 });
 
-/** Drop superseded snapshot bytes outside `SNAPSHOT_RETENTION`; `latest` is the newest stored revision. */
-export function supersededSnapshots(db: SqlDatabase, versionId: string, latest: number, now: number) {
-  return db.prepare(`UPDATE master_revisions SET snapshot_bytes = NULL WHERE version_id = ?1 AND revision < ?2
+/**
+ * Bound `supersededSnapshots`: the update reads `idx_master_revisions_retained_bytes` (migration 0004),
+ * so it visits only the version's revisions that still hold bytes, not its whole history.
+ */
+export const SUPERSEDED_SNAPSHOTS_SQL = `UPDATE master_revisions SET snapshot_bytes = NULL WHERE version_id = ?1 AND revision < ?2
     AND snapshot_bytes IS NOT NULL AND (NOT EXISTS (SELECT 1 FROM download_receipts r WHERE r.version_id = ?1
       AND r.revision = master_revisions.revision AND r.issued_at > ?3)
     OR revision NOT IN (SELECT revision FROM master_revisions WHERE version_id = ?1 AND revision < ?2
-      ORDER BY revision DESC LIMIT ?4))`).bind(versionId, latest, now - SNAPSHOT_RETENTION.receiptSeconds, SNAPSHOT_RETENTION.olderRevisions);
+      ORDER BY revision DESC LIMIT ?4))`;
+
+/** Drop superseded snapshot bytes outside `SNAPSHOT_RETENTION`; `latest` is the newest stored revision. */
+export function supersededSnapshots(db: SqlDatabase, versionId: string, latest: number, now: number) {
+  return db.prepare(SUPERSEDED_SNAPSHOTS_SQL)
+    .bind(versionId, latest, now - SNAPSHOT_RETENTION.receiptSeconds, SNAPSHOT_RETENTION.olderRevisions);
 }
 
 /**

@@ -1322,7 +1322,8 @@ The service migrations are **rebased** to a new baseline,
   one.
 - Later migrations return to verified-backup-first upgrades. The first,
   `0002_filter_expressions.sql`, adds the nullable expression columns below;
-  existing rows keep their values.
+  existing rows keep their values. `0003` and `0004` add only the retention
+  indexes below.
 
 **Kept tables (adapted from 0001–0008 and 0014):**
 
@@ -1354,10 +1355,10 @@ The service migrations are **rebased** to a new baseline,
 | `master_filters` | **filter_id**, version_id, category, subcategory, severity, action, expression, start_ms, end_ms, spread_start_ms, spread_end_ms, confidence, contributor_count, attestations, upvotes, downvotes, disputes, coverage_negatives, low_confidence, served, subcategory_tally_json, severity_tally_json, action_tally_json | Index on `(version_id, served)` |
 | `filter_attestations` | **submission_id**, **entry_id**, filter_id, contributor_id, kind (`support`\|`dispute`\|`coverage_negative`), implicit (0/1), counted (0/1), prior_filter_id | Index on `(filter_id, contributor_id)`. Implicit rows have `entry_id = "cov:" + filterId` |
 | `filter_votes` | **filter_id**, **contributor_id**, vote (`up`\|`down`), receipt_id, excluded, updated_at | Index on `contributor_id` |
-| `master_revisions` | **version_id**, **revision**, snapshot_digest, generated_at, snapshot_bytes (nullable after supersession, if no receipt) | — |
+| `master_revisions` | **version_id**, **revision**, snapshot_digest, generated_at, snapshot_bytes (nullable after supersession, if no receipt) | Partial index on `(version_id, revision)` where `snapshot_bytes` is not null |
 | `master_revision_filters` | **version_id**, **revision**, **filter_id** | Kept for every revision with an issued receipt. Used for vote and report eligibility |
 | `download_receipts` | **receipt_id**, contributor_id, version_id, revision, snapshot_digest, service_key_id, issued_at | Index on `(contributor_id, version_id)` and `(version_id, revision, issued_at)` |
-| `sync_runs` | **run_id**, installation_id, started_at, batches | Index on `(installation_id, started_at)` |
+| `sync_runs` | **run_id**, installation_id, started_at, batches | Index on `(installation_id, started_at)` and `started_at` |
 
 Each raw submission is stored exactly once, as BLOBs, with no expanded copies
 except `submission_entries`. Those rows are derived from the artifact and can
@@ -1401,6 +1402,12 @@ conservatively; none changes a wire format:
   them; others keep their digest, receipts and `master_revision_filters` but drop the
   bytes. The check runs when a revision is stored and in the hourly maintenance. Old
   snapshots are never served, so this bounds storage without changing any response.
+  Both checks read the `snapshot_bytes IS NOT NULL` partial index (migration 0004),
+  so they visit only revisions that still hold bytes: a pruned revision leaves the
+  index and is never rescanned, and each run's cost follows the retained snapshots,
+  not the revision history.
+- **Expiry scans:** maintenance finds expired `rate_counters` and `sync_runs` rows
+  through their `window_start` and `started_at` indexes, a bounded batch per run.
 
 ### 8.1 Operator configuration
 

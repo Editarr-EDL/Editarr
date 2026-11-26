@@ -222,6 +222,44 @@ test('0003 upgrades a version 2 store to index receipts by version after a verif
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('0004 upgrades a version 3 store to index retention scans after a verified backup', async () => {
+  const directory = workspace('community-retention-index-');
+  const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
+  try {
+    initializeDatabase(path, migrationsRoot(directory, 3));
+    const source = new DatabaseSync(path);
+    source.exec(`INSERT INTO works (work_id, kind, created_at) VALUES ('work', 'movie', 1);
+      INSERT INTO versions (version_id, work_id, status, trust, revision, created_seq, created_at)
+        VALUES ('version', 'work', 'confirmed', 0.5, 2, 1, 1);`);
+    const insert = source.prepare(`INSERT INTO master_revisions (version_id, revision, snapshot_digest, generated_at, snapshot_bytes)
+      VALUES ('version', ?, ?, 1, ?)`);
+    insert.run(1, 'a'.repeat(64), null);
+    insert.run(2, 'b'.repeat(64), new Uint8Array([1, 2]));
+    source.close();
+    assert.throws(() => openDatabase(path), /database_upgrade_required/);
+    await upgradeDatabase(path, snapshot);
+    const { database, version } = openDatabase(path);
+    try {
+      assert.equal(version, CURRENT);
+      const db = database.connection;
+      const columns = name => db.prepare(`SELECT name FROM pragma_index_info('${name}') ORDER BY seqno`).all().map(row => row.name);
+      assert.deepEqual(columns('idx_master_revisions_retained_bytes'), ['version_id', 'revision']);
+      assert.deepEqual(columns('idx_sync_runs_expiry'), ['started_at']);
+      assert.deepEqual(db.prepare(`SELECT revision, snapshot_digest, length(snapshot_bytes) AS size FROM master_revisions
+        ORDER BY revision`).all().map(row => ({ ...row })), [
+        { revision: 1, snapshot_digest: 'a'.repeat(64), size: null }, { revision: 2, snapshot_digest: 'b'.repeat(64), size: 2 }]);
+      // Only revisions that still hold bytes are in the partial index the retention scan reads.
+      assert.deepEqual(db.prepare(`SELECT revision FROM master_revisions INDEXED BY idx_master_revisions_retained_bytes
+        WHERE snapshot_bytes IS NOT NULL`).all().map(row => row.revision), [2]);
+    } finally { database.close(); }
+    const restored = new DatabaseSync(snapshot, { readOnly: true });
+    try {
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 3);
+      assert.equal(restored.prepare('SELECT count(*) AS count FROM master_revisions').get().count, 2);
+    } finally { restored.close(); }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('expressions are stored only on language supports and hold 1–64 characters', () => {
   const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   try {
