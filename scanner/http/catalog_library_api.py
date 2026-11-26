@@ -36,7 +36,7 @@ from .catalog_access import (
     library_record,
     not_found,
 )
-from .catalog_library_order import library_jump_groups, library_sort_value, normalized_title
+from .catalog_library_order import normalized_title, sort_library
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -329,10 +329,7 @@ def api_list_jellyfin_library_items(
         and (rating_filter == "all" or item.official_rating == rating_filter)
         and (resolution_filter == "all" or item.resolution == resolution_filter)
     ]
-    filtered.sort(
-        key=lambda item: library_sort_value(item, sort_by),
-        reverse=sort_direction == "desc",
-    )
+    filtered, jump_groups = sort_library(filtered, sort_by, descending=sort_direction == "desc")
     return JellyfinMediaPage(
         items=[
             jellyfin_record(item, viewer) for item in filtered[start_index : start_index + limit]
@@ -340,7 +337,7 @@ def api_list_jellyfin_library_items(
         total_count=len(filtered),
         rating_values=rating_values,
         resolution_values=resolution_values,
-        jump_groups=library_jump_groups(filtered, sort_by),
+        jump_groups=jump_groups,
     )
 
 

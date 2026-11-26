@@ -5,8 +5,9 @@ from collections.abc import Callable
 
 from scanner.models import JellyfinMediaItem, LibraryJumpGroup
 
-# Key of the group holding items without a value for the sort (no year, rating, or length).
-MISSING_GROUP_KEY = "none"
+# Key of the group of items without a value for the sort (no year, rating, or length).
+# Rating keys starting with ":" are escaped with another, so no rating can take this key.
+MISSING_GROUP_KEY = ":none"
 # Lower bounds, in minutes, of the length bands and their labels.
 _LENGTH_BANDS = ((180, "3h+"), (150, "2h30"), (120, "2h"), (90, "90m"), (0, "<90m"))
 _TYPE_LABELS = {"MusicVideo": "Music video"}
@@ -26,7 +27,11 @@ def title_letter(item: JellyfinMediaItem) -> str:
 
     Accents are removed and case folded first, so "Élan" is "E" and "ß" is "S" ("ss").
     """
-    initial = normalized_title(item.sort_name or item.name)[:1].upper()
+    return _initial(normalized_title(item.sort_name or item.name))
+
+
+def _initial(folded: str) -> str:
+    initial = folded[:1].upper()
     return initial if "A" <= initial <= "Z" else "#"
 
 
@@ -54,23 +59,25 @@ def library_sort_value(item: JellyfinMediaItem, sort_by: str) -> tuple[object, .
     if sort_by == "type":
         return (item.item_type.casefold(), normalized_title(item.sort_name or item.name), item.id)
     # Titles outside A–Z (digits, symbols, other scripts) form one "#" group before A.
-    return (title_letter(item) != "#", normalized_title(item.sort_name or item.name), item.id)
+    folded = normalized_title(item.sort_name or item.name)
+    return (_initial(folded) != "#", folded, item.id)
 
 
-def _year_group(item: JellyfinMediaItem) -> tuple[str, str]:
+def _year_group(item: JellyfinMediaItem, _value: tuple[object, ...]) -> tuple[str, str]:
     if item.year is None:
         return MISSING_GROUP_KEY, "No year"
     decade = item.year // 10 * 10
     return str(decade), f"{decade}s"
 
 
-def _rating_group(item: JellyfinMediaItem) -> tuple[str, str]:
+def _rating_group(item: JellyfinMediaItem, value: tuple[object, ...]) -> tuple[str, str]:
     if item.official_rating is None:
         return MISSING_GROUP_KEY, "No rating"
-    return normalized_title(item.official_rating), item.official_rating
+    folded = str(value[1])
+    return (f":{folded}" if folded.startswith(":") else folded), item.official_rating
 
 
-def _length_group(item: JellyfinMediaItem) -> tuple[str, str]:
+def _length_group(item: JellyfinMediaItem, _value: tuple[object, ...]) -> tuple[str, str]:
     if item.duration_seconds is None:
         return MISSING_GROUP_KEY, "No length"
     minutes = item.duration_seconds / 60
@@ -78,16 +85,17 @@ def _length_group(item: JellyfinMediaItem) -> tuple[str, str]:
     return str(bound), label
 
 
-def _type_group(item: JellyfinMediaItem) -> tuple[str, str]:
-    return item.item_type.casefold(), _TYPE_LABELS.get(item.item_type, item.item_type)
+def _type_group(item: JellyfinMediaItem, value: tuple[object, ...]) -> tuple[str, str]:
+    return str(value[0]), _TYPE_LABELS.get(item.item_type, item.item_type)
 
 
-def _title_group(item: JellyfinMediaItem) -> tuple[str, str]:
-    letter = title_letter(item)
+def _title_group(_item: JellyfinMediaItem, value: tuple[object, ...]) -> tuple[str, str]:
+    # The sort value holds the folded title, so it isn't folded again.
+    letter = _initial(str(value[1])) if value[0] else "#"
     return letter, letter
 
 
-_GROUPS: dict[str, Callable[[JellyfinMediaItem], tuple[str, str]]] = {
+_GROUPS: dict[str, Callable[[JellyfinMediaItem, tuple[object, ...]], tuple[str, str]]] = {
     "title": _title_group,
     "year": _year_group,
     "rating": _rating_group,
@@ -96,16 +104,34 @@ _GROUPS: dict[str, Callable[[JellyfinMediaItem], tuple[str, str]]] = {
 }
 
 
+def sort_library(
+    items: list[JellyfinMediaItem], sort_by: str, *, descending: bool
+) -> tuple[list[JellyfinMediaItem], list[LibraryJumpGroup]]:
+    """Sort a listing and divide it into jump groups, computing each item's sort value once."""
+    keyed = sorted(
+        ((library_sort_value(item, sort_by), item) for item in items),
+        key=lambda pair: pair[0],
+        reverse=descending,
+    )
+    return [item for _value, item in keyed], _jump_groups(keyed, sort_by)
+
+
+def _jump_groups(
+    keyed: list[tuple[tuple[object, ...], JellyfinMediaItem]], sort_by: str
+) -> list[LibraryJumpGroup]:
+    group_of = _GROUPS[sort_by]
+    groups: list[LibraryJumpGroup] = []
+    for index, (value, item) in enumerate(keyed):
+        key, label = group_of(item, value)
+        if not groups or groups[-1].key != key:
+            groups.append(LibraryJumpGroup(key=key, label=label, offset=index))
+    return groups
+
+
 def library_jump_groups(items: list[JellyfinMediaItem], sort_by: str) -> list[LibraryJumpGroup]:
     """List the groups of an already sorted listing in order, each with the index of its first item.
 
     Titles group by initial, years by decade, ratings by value, lengths by band, and types by type;
     items missing the sorted value form one group where the sort places them.
     """
-    group_of = _GROUPS[sort_by]
-    groups: list[LibraryJumpGroup] = []
-    for index, item in enumerate(items):
-        key, label = group_of(item)
-        if not groups or groups[-1].key != key:
-            groups.append(LibraryJumpGroup(key=key, label=label, offset=index))
-    return groups
+    return _jump_groups([(library_sort_value(item, sort_by), item) for item in items], sort_by)

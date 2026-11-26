@@ -184,12 +184,12 @@ def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
         "movies", edl_filter="not_exported", sort_by="year", db=db, viewer=owner_viewer(db)
     )
     assert [item.id for item in not_exported.items] == ["movie-1", "movie-3"]
-    assert _groups(not_exported) == [("2020", "2020s", 0), ("none", "No year", 1)]
+    assert _groups(not_exported) == [("2020", "2020s", 0), (":none", "No year", 1)]
     oldest_last = api.api_list_jellyfin_library_items(
         "movies", sort_by="year", sort_direction="desc", db=db, viewer=owner_viewer(db)
     )
     assert [item.id for item in oldest_last.items] == ["movie-3", "movie-1", "movie-2"]
-    assert _groups(oldest_last) == [("none", "No year", 0), ("2020", "2020s", 1)]
+    assert _groups(oldest_last) == [(":none", "No year", 0), ("2020", "2020s", 1)]
     longest = api.api_list_jellyfin_library_items(
         "movies", sort_by="duration", sort_direction="desc", db=db, viewer=owner_viewer(db)
     )

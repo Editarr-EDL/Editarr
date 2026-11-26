@@ -30,7 +30,7 @@ function ordered(library: Movie[], sortBy: string | null, direction: string | nu
 function jumpGroups(items: Movie[], sortBy: string | null) {
   const groupOf = (item: Movie) => {
     if (sortBy === "title") return { key: item.name[0], label: item.name[0] };
-    if (item.year === null) return { key: "none", label: "No year" };
+    if (item.year === null) return { key: ":none", label: "No year" };
     const decade = Math.floor(item.year / 10) * 10;
     return { key: String(decade), label: `${decade}s` };
   };

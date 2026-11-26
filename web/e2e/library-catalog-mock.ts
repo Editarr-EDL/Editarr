@@ -49,9 +49,9 @@ function jumpGroup(item: Item, sortBy: SortBy): { key: string; label: string } {
   }
   if (sortBy === "type") return { key: item.item_type.toLowerCase(), label: item.item_type === "MusicVideo" ? "Music video" : item.item_type };
   const missing = { year: "No year", rating: "No rating", duration: "No length" }[sortBy];
-  if (sortBy === "year") return item.year === null ? { key: "none", label: missing } : { key: String(Math.floor(item.year / 10) * 10), label: `${Math.floor(item.year / 10) * 10}s` };
-  if (sortBy === "rating") return item.official_rating === null ? { key: "none", label: missing } : { key: normalized(item.official_rating), label: item.official_rating };
-  if (item.duration_seconds === null) return { key: "none", label: missing };
+  if (sortBy === "year") return item.year === null ? { key: ":none", label: missing } : { key: String(Math.floor(item.year / 10) * 10), label: `${Math.floor(item.year / 10) * 10}s` };
+  if (sortBy === "rating") return item.official_rating === null ? { key: ":none", label: missing } : { key: normalized(item.official_rating), label: item.official_rating };
+  if (item.duration_seconds === null) return { key: ":none", label: missing };
   const [bound, label] = lengthBands.find(([minimum]) => item.duration_seconds! / 60 >= minimum)!;
   return { key: String(bound), label };
 }

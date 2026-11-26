@@ -79,7 +79,7 @@ export interface JellyfinMediaPage {
 
 /** A run of a sorted listing to jump to: an initial ("#" for non-letters), decade, rating, length band or type. */
 export interface LibraryJumpGroup {
-  /** Stable identity within the sort; "none" collects items without a year, rating or length. */
+  /** Stable identity within the sort; ":none" collects items without a year, rating or length. */
   key: string;
   label: string;
   offset: number;

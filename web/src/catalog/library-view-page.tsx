@@ -11,7 +11,7 @@ import { LibrarySearch } from "./library-search";
 import { activeTokens, searchSuggestions, type LibraryFilters, type SearchSuggestion } from "./library-search-suggestions";
 import { LibraryTable } from "./library-table";
 import { groupAt, hasRail, jumpStatus } from "./jump-groups";
-import { JumpRail, useVisibleIndex } from "./jump-rail";
+import { JumpRail, useVisibleIndex, type JumpAnchor } from "./jump-rail";
 import { MediaCard, PosterGrid } from "./media-card";
 import { useLibraryItems } from "./use-library-items";
 
@@ -70,7 +70,7 @@ export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; 
   const [posterSize, setPosterSize] = usePosterSize();
   const [jumpGroup, setJumpGroup] = useState<LibraryJumpGroup | null>(null);
   const [scrollTarget, setScrollTarget] = useState<number | null>(null);
-  const [anchorId, setAnchorId] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<JumpAnchor | null>(null);
   const toolbar = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const resultsTop = useRef<HTMLDivElement>(null);
@@ -96,7 +96,7 @@ export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; 
   startIndexRef.current = listing.startIndex;
   const { items, startIndex, totalCount, jumpGroups } = listing;
   const railVisible = !listing.loading && items.length > 0 && hasRail(sort, jumpGroups);
-  const visibleIndex = useVisibleIndex(content, items, startIndex, railVisible, stickyHeight, anchorId);
+  const visibleIndex = useVisibleIndex(content, items, startIndex, railVisible, stickyHeight, anchor);
   const currentGroup = railVisible ? groupAt(jumpGroups, visibleIndex)?.key ?? null : null;
 
   // New results start at the top: once the toolbar is stuck, scroll back to the start of the results.
@@ -151,8 +151,10 @@ export function LibraryViewPage({ library, cache }: { library: JellyfinLibrary; 
     if (scrollTarget === null) return;
     const target = content.current?.querySelector<HTMLElement>(`[data-catalog-index="${scrollTarget}"]`);
     if (!target) return;
-    setAnchorId(items[scrollTarget - startIndex]?.id ?? null);
     target.scrollIntoView?.({ block: "start" });
+    const id = items[scrollTarget - startIndex]?.id;
+    // A new anchor per jump, so jumping to the same title again records where this jump left the page.
+    setAnchor(id ? { id, scrollY: window.scrollY } : null);
     target.focus({ preventScroll: true });
     setScrollTarget(null);
   }, [items, scrollTarget, startIndex]);

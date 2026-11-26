@@ -886,11 +886,12 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
   `title` groups by initial (`A`–`Z` after removing accents and case folding,
   with dotless `ı` read as `i`; `#` for digits, symbols and other scripts,
   which sort first); `year` by decade (key `2010`, label `2010s`); `rating` by
-  case-folded rating (labelled as its first item's rating); `duration` by
+  case-folded rating (labelled as its first item's rating; a leading `:` is
+  doubled so no rating takes the missing-value key); `duration` by
   length band (keys `0`, `90`, `120`, `150`, `180` minutes, labelled `<90m`,
   `90m`, `2h`, `2h30`, `3h+`); and `type` by case-folded item type (label such
   as `Movie`, `Series` or `Music video`). Items without a year, rating or
-  length form one group with key `none` (label `No year`, `No rating` or
+  length form one group with key `:none` (label `No year`, `No rating` or
   `No length`), placed where the sort puts them: last ascending, first
   descending.
 - Scans: `POST /api/scans` accepts a Jellyfin item ID and options. It rejects

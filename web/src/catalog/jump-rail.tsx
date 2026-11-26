@@ -48,20 +48,25 @@ export function JumpRail({ sort, groups, direction, current, pending, onJump }: 
   </div>;
 }
 
+/** The item a jump scrolled to, with the window's scroll position right after the jump. */
+export interface JumpAnchor {
+  id: string;
+  scrollY: number;
+}
+
 /**
  * Track the listing index of the first title visible below the sticky toolbar while the page scrolls.
  * @param container Element holding the cards or rows marked with `data-catalog-index`.
  * @param startIndex Listing index of `items[0]`.
  * @param topOffset Height covered by the sticky toolbar, in pixels.
- * @param anchorId The item last jumped to. Its index is reported while it is in the first visible row, or while it
- *   is in view and the page hasn't scrolled since the jump (as when the page ends before it reaches the top).
+ * @param anchor The item last jumped to and the page's scroll position right after that jump (a new object per
+ *   jump). Its index is reported while it is in the first visible row, or while it is in view and the page hasn't
+ *   scrolled since the jump (as when the page ends before it reaches the top).
  */
 export function useVisibleIndex(container: RefObject<HTMLElement | null>, items: JellyfinMediaItem[], startIndex: number,
-  enabled: boolean, topOffset: number, anchorId: string | null): number | null {
+  enabled: boolean, topOffset: number, anchor: JumpAnchor | null): number | null {
   const [visible, setVisible] = useState<number | null>(null);
-  const jumpedAt = useRef<{ id: string; scrollY: number } | null>(null);
   useEffect(() => {
-    if (anchorId && jumpedAt.current?.id !== anchorId) jumpedAt.current = { id: anchorId, scrollY: window.scrollY };
     if (!enabled) { setVisible(null); return; }
     let frame = 0;
     const update = () => {
@@ -81,13 +86,13 @@ export function useVisibleIndex(container: RefObject<HTMLElement | null>, items:
       if (found < 0) found = entries.length - 1;
       const indexOf = (position: number) => Number(entries[position].dataset.catalogIndex);
       let index = indexOf(found);
-      if (anchorId) {
-        const anchorIndex = startIndex + items.findIndex((item) => item.id === anchorId);
-        const anchor = container.current?.querySelector<HTMLElement>(`[data-catalog-index="${anchorIndex}"]`);
-        const bounds = anchor?.getBoundingClientRect();
+      const anchorPosition = anchor ? items.findIndex((item) => item.id === anchor.id) : -1;
+      if (anchor && anchorPosition >= 0) {
+        const anchorIndex = startIndex + anchorPosition;
+        const bounds = container.current?.querySelector<HTMLElement>(`[data-catalog-index="${anchorIndex}"]`)?.getBoundingClientRect();
         const rowTop = entries[found].getBoundingClientRect().top;
         const inFirstRow = bounds && Math.abs(bounds.top - rowTop) < 2;
-        const unscrolledInView = bounds && Math.abs(window.scrollY - (jumpedAt.current?.scrollY ?? Number.NaN)) < 2
+        const unscrolledInView = bounds && Math.abs(window.scrollY - anchor.scrollY) < 2
           && bounds.bottom > topOffset && bounds.top < window.innerHeight;
         if (inFirstRow || unscrolledInView) index = anchorIndex;
       }
@@ -102,6 +107,6 @@ export function useVisibleIndex(container: RefObject<HTMLElement | null>, items:
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };
-  }, [anchorId, container, enabled, items, startIndex, topOffset]);
+  }, [anchor, container, enabled, items, startIndex, topOffset]);
   return visible;
 }

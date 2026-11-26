@@ -3,7 +3,7 @@ import type { SortDirection, SortKey } from "./catalog-types";
 
 /** The title rail's letters in ascending order; "#" collects titles that don't start with A–Z. */
 const railLetters = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
-const missingKey = "none";
+const missingKey = ":none";
 const lengthNames: Record<string, string> = {
   0: "under 90 minutes", 90: "90 minutes", 120: "2 hours", 150: "2 hours 30 minutes", 180: "3 hours or more",
 };

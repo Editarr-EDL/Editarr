@@ -14,10 +14,13 @@ describe("jump rail entries", () => {
   });
 
   it("lists only the server's groups for other sorts, in its order, with missing values shown as a dash", () => {
-    const ratings = railEntries("rating", [group("none", "No rating", 0), group("pg-13", "PG-13", 3), group("g", "G", 8)], "desc");
+    const ratings = railEntries("rating", [group(":none", "No rating", 0), group("pg-13", "PG-13", 3), group("g", "G", 8)], "desc");
     expect(ratings.map(({ text, name }) => [text, name])).toEqual([["—", "No rating"], ["PG-13", "PG-13"], ["G", "G"]]);
-    const lengths = railEntries("duration", ["0:<90m", "90:90m", "120:2h", "150:2h30", "180:3h+", "none:No length"]
-      .map((entry, offset) => group(entry.split(":")[0], entry.split(":")[1], offset)), "asc");
+    // A rating actually named "None" is a rating, not the unrated group.
+    expect(railEntries("rating", [group("none", "None", 0), group(":none", "No rating", 2)], "asc").map(({ text, name }) => [text, name]))
+      .toEqual([["None", "None"], ["—", "No rating"]]);
+    const lengths = railEntries("duration", [["0", "<90m"], ["90", "90m"], ["120", "2h"], ["150", "2h30"], ["180", "3h+"], [":none", "No length"]]
+      .map(([key, label], offset) => group(key, label, offset)), "asc");
     expect(lengths.map(({ text, name }) => `${text}=${name}`)).toEqual([
       "<90m=under 90 minutes", "90m=90 minutes", "2h=2 hours", "2h30=2 hours 30 minutes", "3h+=3 hours or more", "—=No length",
     ]);
@@ -28,9 +31,9 @@ describe("jump rail entries", () => {
   });
 
   it("finds the group holding a listing index from the offsets", () => {
-    const groups = [group("2020", "2020s", 0), group("2010", "2010s", 12), group("none", "No year", 40)];
+    const groups = [group("2020", "2020s", 0), group("2010", "2010s", 12), group(":none", "No year", 40)];
     expect([null, 0, 11, 12, 39, 40, 500].map((index) => groupAt(groups, index)?.key ?? null))
-      .toEqual([null, "2020", "2020", "2010", "2010", "none", "none"]);
+      .toEqual([null, "2020", "2020", "2010", "2010", ":none", ":none"]);
     expect(groupAt([], 3)).toBeNull();
   });
 

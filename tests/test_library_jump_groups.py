@@ -1,6 +1,6 @@
 import pytest
 
-from scanner.http.catalog_library_order import library_jump_groups, library_sort_value
+from scanner.http.catalog_library_order import library_jump_groups, library_sort_value, sort_library
 from scanner.models import JellyfinMediaItem
 
 ITEMS = [
@@ -94,7 +94,7 @@ def _groups(sort_by: str, direction: str) -> list[tuple[str, str, int]]:
                 ("2000", "2000s", 1),
                 ("2010", "2010s", 2),
                 ("2020", "2020s", 5),
-                ("none", "No year", 6),
+                (":none", "No year", 6),
             ],
         ),
         # Ratings group by folded value, labelled as first listed; unrated items sort last.
@@ -105,7 +105,7 @@ def _groups(sort_by: str, direction: str) -> list[tuple[str, str, int]]:
                 ("pg", "PG", 1),
                 ("pg-13", "PG-13", 2),
                 ("tv-ma", "TV-MA", 4),
-                ("none", "No rating", 5),
+                (":none", "No rating", 5),
             ],
         ),
         (
@@ -116,7 +116,7 @@ def _groups(sort_by: str, direction: str) -> list[tuple[str, str, int]]:
                 ("120", "2h", 3),
                 ("150", "2h30", 4),
                 ("180", "3h+", 5),
-                ("none", "No length", 6),
+                (":none", "No length", 6),
             ],
         ),
         (
@@ -142,3 +142,29 @@ def test_jump_groups_follow_each_sort_in_both_directions(sort_by, ascending):
 
 def test_jump_groups_of_an_empty_listing_are_empty():
     assert library_jump_groups([], "year") == []
+
+
+def test_ratings_named_none_stay_apart_from_unrated_items():
+    items = [
+        JellyfinMediaItem(id=str(index), item_type="Movie", name=name, official_rating=rating)
+        for index, (name, rating) in enumerate(
+            [("A", "None"), ("B", None), ("C", "NONE"), ("D", ":none"), ("E", "G")]
+        )
+    ]
+    ordered, groups = sort_library(items, "rating", descending=False)
+    assert [item.id for item in ordered] == ["3", "4", "0", "2", "1"]
+    assert [(group.key, group.label, group.offset) for group in groups] == [
+        ("::none", ":none", 0),
+        ("g", "G", 1),
+        ("none", "None", 2),
+        (":none", "No rating", 4),
+    ]
+
+
+@pytest.mark.parametrize("sort_by", ["title", "year", "rating", "duration", "type"])
+@pytest.mark.parametrize("descending", [False, True])
+def test_sort_library_matches_sorting_then_grouping(sort_by, descending):
+    expected = sorted(ITEMS, key=lambda item: library_sort_value(item, sort_by), reverse=descending)
+    ordered, groups = sort_library(ITEMS, sort_by, descending=descending)
+    assert ordered == expected
+    assert groups == library_jump_groups(expected, sort_by)
