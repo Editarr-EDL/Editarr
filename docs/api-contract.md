@@ -1198,8 +1198,10 @@ version, subtitle inputs, track title, and destination filename.
 
 A later publish replaces one owned subtitle for the same publisher, review,
 media version, and source. If the title changed, Editarr writes the new file
-before retiring the prior owned filename. Existing shared sidecars remain
-available. Filename conflicts, including case-only or Unicode-equivalent
+before retiring the prior owned filename. If another writer changes that file
+during retirement, Editarr restores the moved file or identifies its hidden
+recovery location when the filename is occupied. Existing shared sidecars
+remain available. Filename conflicts, including case-only or Unicode-equivalent
 matches, require a distinct saved review title. A sidecar filename must match
 only the selected video in that directory. Publication listings include
 `owned_by_viewer` so Editarr can identify the signed-in user's tracks.

@@ -18,6 +18,11 @@ from scanner.modeling.model_subtitles import PublishedSubtitle, SubtitleSource
 from .durability import atomic_write_bytes, sync_directory
 from .maintenance import _lock, _unlock
 from .subtitle_publication_names import NamedSubtitlePublication, require_unique_video_match
+from .subtitle_retirement import (
+    SubtitleQuarantine,
+    pending_subtitle_quarantines,
+    quarantine_subtitle,
+)
 
 _PUBLISHED = "Editarr Filtered"
 _HASH = re.compile(r"[0-9a-f]{64}")
@@ -112,6 +117,10 @@ def _read_record(destination: Path, slot: str):
         return None
     except (ValueError, OSError) as exc:
         raise SubtitleConflict("Subtitle publication ownership could not be verified") from exc
+    return _validate_record(record, destination, slot)
+
+
+def _validate_record(record, destination: Path, slot: str) -> dict:
     if (
         not isinstance(record, dict)
         or record.get("filename") != destination.name
@@ -350,6 +359,57 @@ def check_named_destination(
         )
 
 
+def _pending_retirements(media: Path, slot: str, identity: list[str]):
+    """Read self-contained retirement proofs for this exact publication."""
+    for held in pending_subtitle_quarantines(media.parent):
+        try:
+            record = json.loads(read_local_bytes(held.proof, 8192))
+            name = record.get("filename") if isinstance(record, dict) else None
+            if not isinstance(name, str) or Path(name).name != name:
+                continue
+            path = media.with_name(name)
+            if not name.startswith(f"{media.stem}.") or record.get("publication") != identity:
+                continue
+            record = _validate_record(record, path, slot)
+        except (OSError, ValueError):
+            continue
+        if os.path.lexists(held.held):
+            yield path, record, held
+        else:
+            held.discard()
+
+
+def _finish_retirement(
+    path: Path, record: dict, held: SubtitleQuarantine, slot: str, keep_record: bool
+) -> None:
+    try:
+        verified = _existing_file(held.held)[1] in record["inputs"]
+    except (OSError, ValueError):
+        verified = False
+    if not verified:
+        if held.restore(path):
+            held.discard()
+            raise SubtitleConflict(
+                "The previous subtitle changed during publication. Editarr restored the other "
+                "file. Move it to a distinct name before retrying."
+            )
+        raise SubtitleConflict(
+            "The previous subtitle changed during publication and could not be restored safely. "
+            f"Recover subtitle.held from the {held.directory.name} folder beside the video."
+        )
+
+    # The proof travels with the moved file, so a stop between these deletions is recoverable.
+    if not keep_record:
+        try:
+            current = _read_record(path, slot)
+        except SubtitleConflict:
+            current = None
+        if current == record:
+            _record_path(path).unlink(missing_ok=True)
+            sync_directory(path.parent)
+    held.discard()
+
+
 def publish_named_sidecar(
     media: Path,
     slot: str,
@@ -377,20 +437,24 @@ def publish_named_sidecar(
             source.id,
             catalog_sibling_stems=catalog_sibling_stems,
         )
+        pending = list(_pending_retirements(media, slot, identity))
+        pending_paths = {path for path, _record, _held in pending}
         previous_names = []
         for path, record in _publication_records(media, slot):
-            if path == destination or record.get("publication") != identity:
+            if (
+                path == destination
+                or path in pending_paths
+                or record.get("publication") != identity
+            ):
                 continue
-            before, actual = _existing_file(path)
-            if actual not in record["inputs"]:
+            if _existing_file(path)[1] not in record["inputs"]:
                 raise SubtitleConflict("The previous named subtitle changed before replacement")
-            previous_names.append((path, before))
+            previous_names.append((path, record))
         with _destination_lock(_record_path(destination)):
             replaced = _publish_locked(destination, slot, source, content, publication)
-        for path, before in previous_names:
-            if file_fingerprint(path) != before:
-                raise SubtitleConflict("The previous named subtitle changed before replacement")
-            path.unlink()
-            _record_path(path).unlink(missing_ok=True)
-            sync_directory(path.parent)
-    return destination.name, replaced or bool(previous_names)
+        for path, record, held in pending:
+            _finish_retirement(path, record, held, slot, keep_record=path == destination)
+        for path, record in previous_names:
+            held = quarantine_subtitle(path, json.dumps(record).encode())
+            _finish_retirement(path, record, held, slot, keep_record=False)
+    return destination.name, replaced or bool(previous_names or pending)

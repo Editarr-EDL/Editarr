@@ -146,3 +146,73 @@ def test_only_real_language_tokens_conflict_with_dots(tmp_path, language):
     publication = replace(publication, title="Sam.English - Version.en")
     with pytest.raises(SubtitleNameError, match="period-separated parts as a language"):
         named_publication_path(media, source, publication, tokens)
+
+
+@pytest.mark.parametrize("reoccupied", [False, True])
+def test_unowned_file_at_previous_name_is_preserved(tmp_path, monkeypatch, reoccupied):
+    media, slot, source, publication = _named_output(tmp_path)
+    old_name, _ = _write_named(media, slot, source, publication, b"first version")
+    old = tmp_path / old_name
+    changed = tmp_path / "external replacement"
+    changed.write_bytes(b"another tool's subtitle")
+    renamed = replace(publication, title="Sam - Updated Dialogue")
+    rename = sidecars.os.rename
+
+    def change_original_just_before_move(path, target):
+        if path != old:
+            return rename(path, target)
+        sidecars.os.replace(changed, old)
+        rename(path, target)
+        if reoccupied:
+            old.write_bytes(b"another writer after the move")
+
+    monkeypatch.setattr(sidecars.os, "rename", change_original_just_before_move)
+    with pytest.raises(sidecars.SubtitleConflict, match="previous subtitle changed") as error:
+        _write_named(media, slot, source, renamed, b"new rendering")
+
+    assert named_publication_path(media, source, renamed, frozenset({"en"})).read_bytes() == (
+        b"new rendering"
+    )
+    held = list(tmp_path.glob(".editarr-subtitle-retirement-*/subtitle.held"))
+    if reoccupied:
+        assert old.read_bytes() == b"another writer after the move"
+        assert len(held) == 1 and held[0].read_bytes() == b"another tool's subtitle"
+        assert held[0].parent.name in str(error.value)
+    else:
+        assert old.read_bytes() == b"another tool's subtitle"
+        assert held == []
+
+
+@pytest.mark.parametrize("interrupted", ["after_move", "after_original_journal_removed"])
+def test_interrupted_old_title_retirement_can_finish_on_retry(tmp_path, monkeypatch, interrupted):
+    media, slot, source, publication = _named_output(tmp_path)
+    old_name, _ = _write_named(media, slot, source, publication, b"first version")
+    old = tmp_path / old_name
+    renamed = replace(publication, title="Sam - Updated Dialogue")
+    rename = sidecars.os.rename
+
+    def stop_after_move(path, target):
+        rename(path, target)
+        if path == old:
+            raise KeyboardInterrupt
+
+    def stop_before_discard(quarantine):
+        assert not sidecars._record_path(old).exists()
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as patch:
+        if interrupted == "after_move":
+            patch.setattr(sidecars.os, "rename", stop_after_move)
+        else:
+            patch.setattr(sidecars.SubtitleQuarantine, "discard", stop_before_discard)
+        with pytest.raises(KeyboardInterrupt):
+            _write_named(media, slot, source, renamed, b"updated")
+    assert not old.exists()
+    assert len(list(tmp_path.glob(".editarr-subtitle-retirement-*/subtitle.held"))) == 1
+
+    active, replaced = _write_named(media, slot, source, renamed, b"updated")
+    assert replaced is True
+    assert (tmp_path / active).read_bytes() == b"updated"
+    assert not old.exists()
+    assert not sidecars._record_path(old).exists()
+    assert not list(tmp_path.glob(".editarr-subtitle-retirement-*"))
