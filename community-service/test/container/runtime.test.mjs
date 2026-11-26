@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const image = process.env.COMMUNITY_TEST_IMAGE ?? 'editarr-community:local';
+const migrationCount = readdirSync(new URL('../../migrations/', import.meta.url)).filter(name => /^\d{4}_.+\.sql$/.test(name)).length;
 const docker = (...arguments_) => execFileSync('docker', arguments_, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 }).trim();
 
 async function healthy(origin) {
@@ -45,7 +46,7 @@ test('native image safely initializes, survives hard restart and verifies an off
     assert.equal(plan.policy.version, 'community-retain-first-1');
     assert.equal(plan.policy.durableRecords, 'indefinite');
     assert.equal(plan.mode, 'read_only');
-    assert.equal(plan.schemaVersion, 1);
+    assert.equal(plan.schemaVersion, migrationCount);
     assert.equal(plan.payloadBytesReclaimed, 0);
     assert.equal(plan.categories.length, 10);
     assert.equal(plan.categories.find(category => category.category === 'requestNonces').eligible, 1);
@@ -83,7 +84,7 @@ test('native image safely initializes, survives hard restart and verifies an off
       const restored = new DatabaseSync('/backups/verified.sqlite', { readOnly: true });
       assert.deepEqual(restored.prepare('SELECT public_key FROM installation_keys').get().public_key, new Uint8Array([0,255,1,128]));
       assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM request_nonces WHERE nonce = 'expired-preview'").get().count, 1);
-      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 1);
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, ${migrationCount});
       assert.equal(restored.prepare('SELECT lineage FROM schema_lineage').get().lineage, 'community-master-1');
       restored.close(); console.log('snapshot_verified');`);
     assert.equal(result, 'snapshot_verified');
@@ -178,7 +179,7 @@ test('real Compose isolates mounts and preserves populated data across image rep
       import assert from 'node:assert/strict'; import { DatabaseSync } from 'node:sqlite';
       for (const path of ['/data/community.sqlite', '/backups/before-replacement.sqlite']) {
         const database = new DatabaseSync(path, { readOnly: true });
-        assert.equal(database.prepare('PRAGMA user_version').get().user_version, 1);
+        assert.equal(database.prepare('PRAGMA user_version').get().user_version, ${migrationCount});
         const key = database.prepare('SELECT * FROM installation_keys WHERE key_id = ?').get('key');
         assert.equal(key.state, 'revoked'); assert.equal(key.retired_at, 2);
         assert.deepEqual(key.public_key, new Uint8Array([0,255,1,128]));

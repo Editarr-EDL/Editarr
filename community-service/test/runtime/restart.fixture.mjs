@@ -126,7 +126,6 @@ export async function exercise(database, runtime) {
       assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM operations WHERE operation_id = ?').get(interruptedOperation).n, 1);
       assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM operations WHERE operation_id = ?').get(concurrentOperation).n, 1);
       assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM profile_name_changes WHERE operation_id = ?').get(interruptedOperation).n, 1);
-      stored.prepare("UPDATE quota_caps SET cap = 1 WHERE resource = 'worker_requests'").run();
     } finally { stored.close(); }
     child = await start(runtime.serverPath, directory, port);
     expectStatus(await read(alice));
