@@ -69,6 +69,16 @@ for (const width of [390, 1440]) {
     await expect(page.getByRole("button", { name: "Remove PG filter" })).toHaveCount(0);
     await expect(page.getByText("250 titles")).toBeVisible();
 
+    await page.mouse.wheel(0, 2500);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(1000);
+    await search.fill("edl exp");
+    await page.getByRole("option", { name: "EDL: Exported" }).click();
+    await expect(search).toBeFocused();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(400);
+    await expect(page.getByRole("status").filter({ hasText: /^Showing \d+ of \d+$/ })).toBeVisible();
+    await page.getByRole("button", { name: "Remove EDL exported filter" }).click();
+    await expect(page.getByText("250 titles")).toBeVisible();
+
     await page.getByRole("button", { name: "Sort by Title, ascending" }).click();
     const menu = page.getByRole("menu", { name: "Sort by Title, ascending" });
     await expect(menu.getByRole("menuitemradio", { name: "Title" })).toBeFocused();
@@ -84,3 +94,36 @@ for (const width of [390, 1440]) {
     await expectNoAccessibilityViolations(page);
   });
 }
+
+test("jumps across a 10,000-title library with few requests and a bounded window", async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await mockApi(page);
+  const requests = await mockLibraryCatalog(page, generatedLibrary(10_000));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/library/movies");
+  await expect(page.getByText("10000 titles")).toBeVisible();
+  const posters = page.getByRole("list", { name: "Movies" }).getByRole("listitem");
+  await expect(posters.first()).toHaveCSS("content-visibility", "auto");
+
+  const rail = page.getByRole("toolbar", { name: "Jump to letter" });
+  await rail.getByRole("button", { name: "Jump to M" }).click();
+  const target = page.locator(":focus");
+  await expect(target).toHaveAccessibleName(/^Open Meadow/);
+  await expect(rail.getByRole("button", { name: "Jump to M" })).toHaveAttribute("aria-current", "true");
+  expect(requests).toEqual(["0:100", "4600:100"]);
+  await expect(posters).toHaveCount(100);
+  await expect(page.getByRole("status")).toHaveText("Showing 4601–4700 of 10000");
+  await expectNoAccessibilityViolations(page);
+
+  // Scrolling up loads the previous page above without moving the titles in view.
+  await page.route(/start_index=4500/, async (route) => { await new Promise((resolve) => setTimeout(resolve, 400)); await route.fallback(); });
+  await page.getByRole("button", { name: "Load earlier" }).scrollIntoViewIfNeeded();
+  const first = posters.first().getByRole("button");
+  const firstName = await first.getAttribute("aria-label");
+  const anchor = page.getByRole("button", { name: firstName ?? "" });
+  const before = (await anchor.boundingBox())?.y ?? 0;
+  await expect(page.getByRole("status")).toHaveText("Showing 4501–4700 of 10000");
+  expect(Math.abs(((await anchor.boundingBox())?.y ?? 0) - before)).toBeLessThan(3);
+  expect(requests).toEqual(["0:100", "4600:100", "4500:100"]);
+  await expect(posters).toHaveCount(200);
+});

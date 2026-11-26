@@ -106,4 +106,16 @@ describe("LibrarySearch", () => {
     expect(screen.queryByRole("button", { name: /^Remove/ })).not.toBeInTheDocument();
     expect(input).toHaveValue("");
   });
+
+  it("gives options valid ids whatever their values contain", () => {
+    render(<LibrarySearch text="rating" onTextChange={vi.fn()} tokens={[]} onRemoveToken={vi.fn()} onChoose={vi.fn()} onClear={vi.fn()}
+      suggestions={searchSuggestions("rating", noFilters, { ratings: ["Not Rated", "TV-MA #1"], resolutions: [] }, [])} />);
+    const input = screen.getByRole("combobox", { name: "Search titles or filters" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const id = input.getAttribute("aria-activedescendant") ?? "";
+    expect(id).toMatch(/^[^\s#]+$/);
+    expect(document.getElementById(id)).toHaveTextContent("Rating: TV-MA #1");
+  });
 });
+

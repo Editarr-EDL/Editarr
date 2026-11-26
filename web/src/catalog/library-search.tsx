@@ -22,7 +22,8 @@ export function LibrarySearch({ text, onTextChange, tokens, onRemoveToken, sugge
   const listId = useId();
   const expanded = open && suggestions.length > 0;
   const activeSuggestion = expanded && active >= 0 ? suggestions[active] : undefined;
-  const optionId = (suggestion: SearchSuggestion) => `${listId}-${suggestion.id}`;
+  // Index-based, so ids stay valid whatever a rating or title contains.
+  const optionId = (suggestion: SearchSuggestion) => `${listId}-option-${suggestions.indexOf(suggestion)}`;
 
   useEffect(() => { setActive((index) => Math.min(index, suggestions.length - 1)); }, [suggestions.length]);
 
@@ -73,8 +74,8 @@ export function LibrarySearch({ text, onTextChange, tokens, onRemoveToken, sugge
         title="Clear search and filters" onClick={() => { onClear(); input.current?.focus(); }}><span aria-hidden="true">✕</span></button>}
     </div>
     <div id={listId} role="listbox" aria-label="Search suggestions" className="library-search-suggestions" hidden={!expanded}>
-      {expanded && groups.map((group) => <div role="group" key={group.label} aria-labelledby={`${listId}-${group.label}`}>
-        <div role="presentation" id={`${listId}-${group.label}`} className="library-search-group">{group.label}</div>
+      {expanded && groups.map((group) => <div role="group" key={group.label} aria-labelledby={`${listId}-group-${group.label}`}>
+        <div role="presentation" id={`${listId}-group-${group.label}`} className="library-search-group">{group.label}</div>
         {group.options.map((suggestion) => {
           const index = suggestions.indexOf(suggestion);
           return <div role="option" key={suggestion.id} id={optionId(suggestion)} aria-selected={index === active}

@@ -122,7 +122,8 @@ def _library_sort_value(item: JellyfinMediaItem, sort_by: str) -> tuple[object, 
         return (item.year is None, item.year or 0, _normalized_title(item.name), item.id)
     if sort_by == "type":
         return (item.item_type.casefold(), _normalized_title(item.sort_name or item.name), item.id)
-    return (_normalized_title(item.sort_name or item.name), item.id)
+    # Titles outside A–Z (digits, symbols, other scripts) form one "#" group before A.
+    return (_title_letter(item) != "#", _normalized_title(item.sort_name or item.name), item.id)
 
 
 def _normalized_title(value: str) -> str:
@@ -134,7 +135,10 @@ def _normalized_title(value: str) -> str:
 
 
 def _title_letter(item: JellyfinMediaItem) -> str:
-    """Return the A–Z initial a title sorts under, or "#" for anything else."""
+    """Return the A–Z initial a title sorts under, or "#" for anything else.
+
+    Accents are removed and case folded first, so "Élan" is "E" and "ß" is "S" ("ss").
+    """
     initial = _normalized_title(item.sort_name or item.name)[:1].upper()
     return initial if "A" <= initial <= "Z" else "#"
 

@@ -2,6 +2,7 @@
 .catalog-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .catalog-header-actions { display: flex; align-items: center; gap: 10px; }
 .catalog-count { color: #a4adbb; font-size: 13px; white-space: nowrap; }
+.catalog-refresh[aria-disabled="true"] { cursor: progress; opacity: .56; }
 .catalog-icon-button { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 8px; font-size: 17px; }
 .catalog-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; padding: 10px var(--catalog-toolbar-clearance, 0px) 10px 0; }
 .catalog-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
@@ -41,7 +42,14 @@
 .catalog-content.with-rail { display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 10px; }
 .catalog-results { min-width: 0; }
 .catalog-poster-grid { grid-template-columns: repeat(auto-fill, minmax(min(var(--poster-size, 170px), 100%), 1fr)); gap: 22px 16px; }
-.media-card-item { min-width: 0; }
+/* Off-screen cards skip layout and paint; their last rendered height (or an estimate) holds their place. */
+.media-card-item { min-width: 0; content-visibility: auto; contain-intrinsic-size: auto var(--poster-size, 170px) auto var(--card-block-size, calc(var(--poster-size, 170px) * 1.5 + 48px)); }
+/* Fixed text lines keep every card's height predictable for the estimate above (cardTextHeight). */
+.catalog-page .media-card { gap: 7px; }
+.catalog-page .media-title { height: 18px; line-height: 18px; }
+.catalog-page .media-meta { overflow: hidden; height: 16px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+/* The page keeps titles in place itself when earlier ones load above them. */
+html:has(.catalog-page) { overflow-anchor: none; }
 .media-card { width: 100%; scroll-margin-top: calc(var(--catalog-sticky-offset, 0px) + 12px); }
 .catalog-page .poster-frame { border-radius: 10px; transition: transform .15s, border-color .15s; }
 .catalog-page .poster-frame.wide { aspect-ratio: 16 / 9; }
@@ -64,6 +72,7 @@
 .load-more-footer { display: grid; justify-items: center; gap: 8px; margin: 26px 0 8px; color: #a4adbb; font-size: 12.5px; }
 .load-more-footer p { margin: 0; }
 .load-more-sentinel { width: 100%; height: 1px; }
+.load-earlier-header { display: grid; justify-items: center; gap: 8px; margin: 0 0 18px; }
 
 @media (prefers-reduced-motion: reduce) {
   .catalog-page .poster-frame { transition: none; }
@@ -75,8 +84,10 @@
   .poster-size-control { display: none; }
   .catalog-poster-grid { --poster-size: 108px !important; gap: 16px 10px; }
   .catalog-poster-grid.wide-posters { --poster-size: 150px !important; }
-  .catalog-content.with-rail { grid-template-columns: minmax(0, 1fr) 20px; gap: 6px; }
-  .alphabet-rail button { min-height: 15px; font-size: 10px; }
+  .catalog-content.with-rail { grid-template-columns: minmax(0, 1fr) 24px; gap: 4px; }
+  /* 24px touch targets; a short screen scrolls the rail rather than the page sideways. */
+  .alphabet-rail { gap: 0; }
+  .alphabet-rail button { min-height: 24px; font-size: 11px; }
   .poster-edl { width: 12px; height: 12px; padding: 0; border-radius: 50%; box-shadow: 0 0 0 2px #000a; }
   .poster-edl.current { background: #7ce5bd; }
   .poster-edl.outdated { background: #f3c77a; }

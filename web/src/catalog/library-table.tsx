@@ -9,8 +9,10 @@ export function SortableHeader({ label, active, direction, onClick }: { label: s
 }
 
 /** The library listing as a sortable table; each row's title opens its item. */
-export function LibraryTable({ items, sort, direction, onSort, onOpen }: {
+export function LibraryTable({ items, startIndex, sort, direction, onSort, onOpen }: {
   items: JellyfinMediaItem[];
+  /** Listing index of `items[0]`. */
+  startIndex: number;
   sort: SortKey;
   direction: SortDirection;
   onSort: (sort: SortKey) => void;
@@ -20,7 +22,7 @@ export function LibraryTable({ items, sort, direction, onSort, onOpen }: {
   return <div className="library-table-wrap"><table className="library-table">
     <thead><tr>{header("Title", "title")}{header("Year", "year")}<th>Resolution</th>{header("Length", "duration")}{header("Rating", "rating")}{header("Type", "type")}<th>Exports</th></tr></thead>
     <tbody>{items.map((item, index) => <tr key={item.id}>
-      <td><button className="item-link" data-catalog-index={index} onClick={() => onOpen(item)}>{item.name}</button></td>
+      <td><button className="item-link" data-catalog-index={startIndex + index} onClick={() => onOpen(item)}>{item.name}</button></td>
       <td>{item.year || "—"}</td><td>{item.resolution || "—"}</td><td><MediaDuration seconds={item.duration_seconds} /></td>
       <td>{formatRating(item)}</td><td>{item.item_type}</td><td><ExportBadges status={normalizedExportStatus(item)} /></td>
     </tr>)}</tbody>

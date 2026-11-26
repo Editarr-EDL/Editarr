@@ -49,7 +49,7 @@ export function useStickyToolbar(toolbar: RefObject<HTMLElement | null>): { heig
 /** "⟳" button reloading a catalog listing. */
 export function RefreshButton({ label, busy, onRefresh }: { label: string; busy: boolean; onRefresh: () => void }) {
   return <button type="button" className="icon-button catalog-icon-button catalog-refresh" aria-label={label} title={label}
-    disabled={busy} aria-busy={busy} onClick={onRefresh}><span aria-hidden="true">⟳</span></button>;
+    aria-disabled={busy} aria-busy={busy} onClick={() => { if (!busy) onRefresh(); }}><span aria-hidden="true">⟳</span></button>;
 }
 
 /** Poster and list view buttons. */

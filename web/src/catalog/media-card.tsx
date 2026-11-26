@@ -1,4 +1,4 @@
-import { useId, type CSSProperties, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { primaryImageUrl } from "../api/api-service";
 import type { JellyfinMediaItem } from "../api/api-media-types";
 import { exportProvenance, normalizedExportStatus } from "../review/export-status";
@@ -13,9 +13,30 @@ export function posterMeta(item: JellyfinMediaItem): string {
   ].filter(Boolean).join(" · ") || item.item_type;
 }
 
-/** Responsive poster grid; `size` is the narrowest column width in pixels. */
+/** Height of a card's title and details below its poster: two fixed lines and their gaps (see library.css). */
+const cardTextHeight = 48;
+
+/**
+ * Responsive poster grid; `size` is the narrowest column width in pixels. Cards skip rendering off screen
+ * (`content-visibility: auto`), so the grid sets their exact height, `--card-block-size`, from its column
+ * width; scroll positions and jumps then stay accurate before those cards render.
+ */
 export function PosterGrid({ size, wide = false, children, label }: { size: number; wide?: boolean; children: ReactNode; label: string }) {
-  return <div className={`poster-grid catalog-poster-grid${wide ? " wide-posters" : ""}`} role="list" aria-label={label}
+  const grid = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = grid.current;
+    if (!element) return;
+    const measure = () => {
+      const column = parseFloat(getComputedStyle(element).gridTemplateColumns);
+      if (column > 0) element.style.setProperty("--card-block-size", `${column * (wide ? 9 / 16 : 3 / 2) + cardTextHeight}px`);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [size, wide]);
+  return <div ref={grid} className={`poster-grid catalog-poster-grid${wide ? " wide-posters" : ""}`} role="list" aria-label={label}
     style={{ "--poster-size": `${wide ? Math.round(size * 1.6) : size}px` } as CSSProperties}>{children}</div>;
 }
 

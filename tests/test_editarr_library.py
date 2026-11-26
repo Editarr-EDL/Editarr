@@ -582,3 +582,48 @@ def test_primary_image_api_proxies_artwork_without_exposing_credentials(monkeypa
     assert response.media_type == "image/png"
     assert response.headers["cache-control"] == "private, no-store"
     assert calls == [("movie-1", "poster-tag")]
+
+
+def test_title_order_groups_non_letters_first_with_matching_letter_offsets():
+    from scanner.http import catalog_library_api as catalog
+
+    names = [
+        "Zèbra",
+        "Ωmega",
+        "straße",
+        "ßeta",
+        "2001",
+        "Élan",
+        "Ägypten",
+        "Ярость",
+        "!Bang",
+        "Beta",
+    ]
+    items = [
+        JellyfinMediaItem(id=f"item-{index}", item_type="Movie", name=name)
+        for index, name in enumerate(names)
+    ]
+    ordered = sorted(items, key=lambda item: catalog._library_sort_value(item, "title"))
+
+    assert [item.name for item in ordered] == [
+        "!Bang",
+        "2001",
+        "Ωmega",
+        "Ярость",
+        "Ägypten",
+        "Beta",
+        "Élan",
+        "ßeta",
+        "straße",
+        "Zèbra",
+    ]
+    assert [catalog._title_letter(item) for item in ordered[:4]] == ["#"] * 4
+    assert catalog._title_letter(items[3]) == "S"  # "ßeta" folds to "sseta"
+    assert catalog._title_letter_offsets(ordered) == {
+        "#": 0,
+        "A": 4,
+        "B": 5,
+        "E": 6,
+        "S": 7,
+        "Z": 9,
+    }

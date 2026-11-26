@@ -49,11 +49,12 @@ export function AlphabetRail({ offsets, direction, current, pending, onJump }: {
 /**
  * Track the letter of the first title visible below the sticky toolbar while the page scrolls.
  * @param container Element holding the cards or rows marked with `data-catalog-index`.
+ * @param startIndex Listing index of `items[0]`.
  * @param topOffset Height covered by the sticky toolbar, in pixels.
  * @param anchorId The item last jumped to; while it is in the first visible row, its letter is current.
  */
-export function useCurrentLetter(container: RefObject<HTMLElement | null>, items: JellyfinMediaItem[], enabled: boolean,
-  topOffset: number, anchorId: string | null): string | null {
+export function useCurrentLetter(container: RefObject<HTMLElement | null>, items: JellyfinMediaItem[], startIndex: number,
+  enabled: boolean, topOffset: number, anchorId: string | null): string | null {
   const [letter, setLetter] = useState<string | null>(null);
   useEffect(() => {
     if (!enabled) { setLetter(null); return; }
@@ -70,7 +71,7 @@ export function useCurrentLetter(container: RefObject<HTMLElement | null>, items
         if (entries[middle].getBoundingClientRect().bottom > topOffset) { found = middle; high = middle - 1; }
         else low = middle + 1;
       }
-      const at = (index: number) => items[Number(entries[index].dataset.catalogIndex)];
+      const at = (index: number) => items[Number(entries[index].dataset.catalogIndex) - startIndex];
       // Past the last entry (scrolled into the footer), the last one is current.
       if (found < 0) found = entries.length - 1;
       let item = found >= 0 ? at(found) : items[0];
@@ -91,6 +92,6 @@ export function useCurrentLetter(container: RefObject<HTMLElement | null>, items
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };
-  }, [anchorId, container, enabled, items, topOffset]);
+  }, [anchorId, container, enabled, items, startIndex, topOffset]);
   return letter;
 }
