@@ -1,6 +1,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import type { ReviewFilter } from "../api/api-review-types";
 import { json, reviewFilter, savedReview } from "../test/app-test-fixtures";
 import { useSavedReviewWorkspace } from "./review-workspace-state";
 
@@ -49,4 +50,41 @@ it.each(["before-response", "after-response", "before-commit"] as const)("releas
     workspace.unmount();
   }
   expect([...liveUrls]).toEqual([]);
+});
+it("previews a saved community filter's unchanged clip against its saved review", async () => {
+  const scanFilter = reviewFilter("scan-filter", "audio");
+  const community: ReviewFilter = { ...reviewFilter("community-filter", "audio"), source_scan_id: null, source_finding_id: null,
+    community_source_id: "src-1", community_filter_id: "master-1", start_seconds: 30, end_seconds: 34 };
+  const review = savedReview({ filters: [scanFilter, community] });
+  vi.stubGlobal("URL", class extends URL {
+    static createObjectURL = vi.fn(() => "blob:preview");
+    static revokeObjectURL = vi.fn();
+  });
+  const requests: { method: string; pathname: string; body: unknown }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const pathname = new URL(String(input), "http://editarr.test").pathname;
+    if (pathname.endsWith("preview")) {
+      requests.push({ method: init?.method ?? "GET", pathname, body: init?.body ? JSON.parse(String(init.body)) : null });
+      return new Response(new Blob(["clip"]));
+    }
+    if (pathname.endsWith("/mcf-registry")) return json({ families: [] });
+    if (pathname === "/api/reviews/review-1") return json(review);
+    if (pathname.endsWith("/reviews")) return json([review]);
+    return json({});
+  }));
+  const workspace = renderHook(() => useSavedReviewWorkspace({
+    item: { id: "movie-1" }, mediaSourceId: "source-1", scans: [], onImported: () => undefined,
+  }));
+  await waitFor(() => expect(workspace.result.current.selected?.id).toBe("review-1"));
+  await act(() => workspace.result.current.previewFilter(scanFilter));
+  await act(() => workspace.result.current.previewFilter(community));
+
+  // The server allows an unchanged saved community clip with the review's preview grant;
+  // only an edited clip also needs permission to edit cues.
+  expect(requests).toEqual([
+    { method: "GET", pathname: "/api/reviews/review-1/filters/scan-filter/mute-preview", body: null },
+    { method: "POST", pathname: "/api/library-items/movie-1/reviews/preview", body: expect.objectContaining({
+      review_id: "review-1", source: "audio", edit_action: "mute", start_seconds: 30, end_seconds: 34 }) },
+  ]);
+  expect(workspace.result.current.preview?.filterId).toBe("community-filter");
 });

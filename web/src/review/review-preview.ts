@@ -9,7 +9,8 @@ export type PreviewFilter = Pick<ReviewFilter, "id" | "source" | "edit_action" |
   & Partial<Pick<ReviewFilter, "source_scan_id" | "source_finding_id">>;
 
 /** Whether a saved filter's clip can be rendered from its saved values. Community filters have
- * no source scan, so they always preview from the review's own media file. */
+ * no source scan, so they always preview from the review's own media file through the draft
+ * endpoint; the server accepts an unchanged saved community clip with the preview grant alone. */
 function sameClip(saved: ReviewFilter, draft: PreviewFilter): boolean {
   return !!saved.source_scan_id && saved.source_scan_id === draft.source_scan_id && saved.source_finding_id === draft.source_finding_id
     && saved.source === draft.source && saved.edit_action === draft.edit_action

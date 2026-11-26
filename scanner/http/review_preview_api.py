@@ -109,19 +109,38 @@ def _matches_finding(finding: ScanFindingRow | None, request: DraftFilterPreview
     )
 
 
+def _matches_saved_community_filter(db: Session, request: DraftFilterPreview) -> bool:
+    """Whether the clip is exactly one of the review's saved community filters.
+
+    Community filters have no source scan, so they preview from the review's media
+    file; an unchanged one is saved evidence, like an unchanged scan finding."""
+    if request.source_scan_id is not None:
+        return False
+    row = db.get(SavedReviewRow, request.review_id)
+    clip = (request.source, request.edit_action, request.start_seconds, request.end_seconds)
+    return any(
+        saved.community_source_id is not None
+        and (saved.source, saved.edit_action, saved.start_seconds, saved.end_seconds) == clip
+        for saved in row.filters
+    )
+
+
 def _authorize_saved_draft(
     caller: ReviewAccess,
     request: DraftFilterPreview,
     target: ReviewTarget,
     resource: ResourceRef,
 ) -> None:
+    """Allow saved evidence with the review's preview grant; other clips need cue editing."""
     _saved_preview_media(caller.db, request.review_id, target)
     finding = (
         caller.db.get(ScanFindingRow, request.source_finding_id)
         if (request.source_finding_id is not None)
         else None
     )
-    if not _matches_finding(finding, request):
+    if not _matches_finding(finding, request) and not _matches_saved_community_filter(
+        caller.db, request
+    ):
         require(caller.access, CUES, resource)
 
 
@@ -200,7 +219,8 @@ def _preview_clip(
             duration = min(duration, source_duration) if duration is not None else source_duration
 
     # Own preview grants access to evidence as-is. Previewing an arbitrary range
-    # also needs the same capability as authoring a cue on that media.
+    # also needs the same capability as authoring a cue on that media; saved reviews
+    # apply the same rule in _authorize_saved_draft.
     if review_id is None and edited and C.REVIEWS_CUES_EDIT_OWN not in caller.access.capabilities:
         raise AccessDenied(AccessErrorCode.CAPABILITY_DENIED)
 
