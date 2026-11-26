@@ -180,7 +180,7 @@ test('0002 upgrades a baseline store to filter expressions after a verified back
     await upgradeDatabase(path, snapshot);
     const { database, version } = openDatabase(path);
     try {
-      assert.equal(version, 2);
+      assert.equal(version, CURRENT);
       assert.equal(database.connection.prepare('SELECT display_name FROM contributors').get().display_name, 'One Two Three');
       const columns = table => database.connection.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().map(row => row.name);
       assert.ok(columns('submission_entries').includes('expression'));
@@ -190,6 +190,33 @@ test('0002 upgrades a baseline store to filter expressions after a verified back
     const restored = new DatabaseSync(snapshot, { readOnly: true });
     try {
       assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 1);
+      assert.equal(restored.prepare('SELECT count(*) AS count FROM contributors').get().count, 1);
+    } finally { restored.close(); }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('0003 upgrades a version 2 store to index receipts by version after a verified backup', async () => {
+  const directory = workspace('community-receipt-index-');
+  const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
+  try {
+    initializeDatabase(path, migrationsRoot(directory, 2));
+    const source = new DatabaseSync(path);
+    source.exec(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, display_name_key, created_at)
+        VALUES ('contributor', '12345678901234567', 'One Two Three', 'one two three', 1);`);
+    source.close();
+    assert.throws(() => openDatabase(path), /database_upgrade_required/);
+    await upgradeDatabase(path, snapshot);
+    const { database, version } = openDatabase(path);
+    try {
+      assert.equal(version, CURRENT);
+      assert.equal(database.connection.prepare('SELECT display_name FROM contributors').get().display_name, 'One Two Three');
+      const columns = database.connection.prepare("SELECT name FROM pragma_index_info('idx_download_receipts_version') ORDER BY seqno")
+        .all().map(row => row.name);
+      assert.deepEqual(columns, ['version_id', 'revision', 'issued_at']);
+    } finally { database.close(); }
+    const restored = new DatabaseSync(snapshot, { readOnly: true });
+    try {
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 2);
       assert.equal(restored.prepare('SELECT count(*) AS count FROM contributors').get().count, 1);
     } finally { restored.close(); }
   } finally { rmSync(directory, { recursive: true, force: true }); }

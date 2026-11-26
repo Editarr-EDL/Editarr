@@ -9,13 +9,20 @@ export async function pruneRateWindows(db: SqlDatabase, now: number, limit: numb
 }
 
 /**
+ * Clear the bytes of superseded snapshots whose receipts all predate the cutoff (seconds), at most
+ * `limit` rows; the receipt check uses `idx_download_receipts_version` (migration 0003).
+ */
+export const PRUNE_SNAPSHOT_BYTES_SQL = `UPDATE master_revisions SET snapshot_bytes = NULL WHERE rowid IN (SELECT m.rowid FROM master_revisions m
+    WHERE m.snapshot_bytes IS NOT NULL
+      AND m.revision < (SELECT max(revision) FROM master_revisions l WHERE l.version_id = m.version_id)
+      AND NOT EXISTS (SELECT 1 FROM download_receipts r WHERE r.version_id = m.version_id AND r.revision = m.revision
+        AND r.issued_at > ?) LIMIT ?)`;
+
+/**
  * Drop superseded snapshot bytes whose receipts left the retention window (§8); a bounded batch
  * per run. The latest stored revision of each version always keeps its bytes. `now` is milliseconds.
  */
 export async function pruneSnapshotBytes(db: SqlDatabase, now: number, limit: number) {
-  await db.prepare(`UPDATE master_revisions SET snapshot_bytes = NULL WHERE rowid IN (SELECT m.rowid FROM master_revisions m
-    WHERE m.snapshot_bytes IS NOT NULL
-      AND m.revision < (SELECT max(revision) FROM master_revisions l WHERE l.version_id = m.version_id)
-      AND NOT EXISTS (SELECT 1 FROM download_receipts r WHERE r.version_id = m.version_id AND r.revision = m.revision
-        AND r.issued_at > ?) LIMIT ?)`).bind(Math.floor(now / 1000) - SNAPSHOT_RETENTION.receiptSeconds, limit).run();
+  await db.prepare(PRUNE_SNAPSHOT_BYTES_SQL)
+    .bind(Math.floor(now / 1000) - SNAPSHOT_RETENTION.receiptSeconds, limit).run();
 }

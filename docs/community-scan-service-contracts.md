@@ -1356,7 +1356,7 @@ The service migrations are **rebased** to a new baseline,
 | `filter_votes` | **filter_id**, **contributor_id**, vote (`up`\|`down`), receipt_id, excluded, updated_at | Index on `contributor_id` |
 | `master_revisions` | **version_id**, **revision**, snapshot_digest, generated_at, snapshot_bytes (nullable after supersession, if no receipt) | — |
 | `master_revision_filters` | **version_id**, **revision**, **filter_id** | Kept for every revision with an issued receipt. Used for vote and report eligibility |
-| `download_receipts` | **receipt_id**, contributor_id, version_id, revision, snapshot_digest, service_key_id, issued_at | Index on `(contributor_id, version_id)` |
+| `download_receipts` | **receipt_id**, contributor_id, version_id, revision, snapshot_digest, service_key_id, issued_at | Index on `(contributor_id, version_id)` and `(version_id, revision, issued_at)` |
 | `sync_runs` | **run_id**, installation_id, started_at, batches | Index on `(installation_id, started_at)` |
 
 Each raw submission is stored exactly once, as BLOBs, with no expanded copies

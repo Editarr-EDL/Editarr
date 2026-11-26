@@ -10,7 +10,7 @@ import { issueMasterReceipt, receiptIdentity, receiptSigningBytes, signSnapshot,
 import { loadReceiptSigner, type ReceiptSigner } from '../src/security/service-signer';
 import { contributorSubmission } from '../src/http/submissions';
 import { SNAPSHOT_RETENTION, supersededSnapshots } from '../src/master/recompute';
-import { pruneSnapshotBytes } from '../src/retention/windows';
+import { PRUNE_SNAPSHOT_BYTES_SQL, pruneSnapshotBytes } from '../src/retention/windows';
 import { artifact, contributor, encode, nonce, submitRequest, type Contributor } from './helpers/submissions';
 import { signedRead } from './helpers/key-lifecycle';
 import { db, now, policy, setupVersionCatalog } from './helpers/versions';
@@ -160,6 +160,13 @@ describe('retained snapshot bytes (§8)', () => {
     expect(await kept()).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12]);
     await pruneSnapshotBytes(db, (now + SNAPSHOT_RETENTION.receiptSeconds + 1) * 1000, 1000);
     expect(await kept()).toEqual([12]);
+  });
+
+  it('checks receipts through the version index instead of scanning download_receipts', async () => {
+    const plan = (await db.prepare(`EXPLAIN QUERY PLAN ${PRUNE_SNAPSHOT_BYTES_SQL}`).bind(0, 1).all<{ detail: string }>())
+      .results.map(row => row.detail);
+    expect(plan.some(detail => detail.includes('idx_download_receipts_version'))).toBe(true);
+    expect(plan.some(detail => /^SCAN r\b/.test(detail))).toBe(false);
   });
 });
 
