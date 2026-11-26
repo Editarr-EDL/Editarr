@@ -11,7 +11,8 @@ from scanner.modeling.model_subtitles import SubtitleSource
 
 _PLAYBACK_FLAGS = ("forced", "foreign", "default")
 _ACCESSIBILITY_FLAGS = {"cc", "hi", "sdh"}
-_LEGACY_LANGUAGE_ALIASES = {"pob", "pb", "pop", "es-mx"}
+_PORTUGUESE_LANGUAGE_TAGS = {"pob": "pt-br", "pb": "pt-br", "pop": "pt-pt"}
+_LEGACY_LANGUAGE_ALIASES = {*_PORTUGUESE_LANGUAGE_TAGS, "es-mx"}
 _ILLEGAL_FILENAME = frozenset('<>:"/\\|?*')
 _LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[a-z0-9]{2,8})?")
 _OUTPUT_FORMATS = {"srt", "ass", "ssa", "vtt"}
@@ -92,6 +93,10 @@ def named_publication_path(
             "subtitle_source_unavailable", "Choose a supported subtitle source."
         )
     language = source.language
+    if language:
+        preferred = _PORTUGUESE_LANGUAGE_TAGS.get(language, language)
+        if preferred in language_tokens:
+            language = preferred
     if language and (not _LANGUAGE.fullmatch(language) or language not in language_tokens):
         raise SubtitleNameError(
             "subtitle_language_unavailable",

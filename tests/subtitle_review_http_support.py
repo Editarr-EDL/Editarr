@@ -42,10 +42,10 @@ SUBTITLE_TEXT = (
     b"2\n00:00:03,000 --> 00:00:06,000\nThis stays.\n"
 )
 
-# Jellyfin v10.11.11's Localization/Cultures DTOs for these rows of iso6392.txt.
+# Representative Jellyfin Localization/Cultures rows with ISO aliases.
 _SUBTITLE_CULTURES = [
     {
-        "Name": name,
+        "Name": short if "-" in short else name,
         "DisplayName": name,
         "TwoLetterISOLanguageName": short,
         "ThreeLetterISOLanguageName": aliases[0],
@@ -56,6 +56,8 @@ _SUBTITLE_CULTURES = [
         ("French", "fr", ["fra", "fre"]),
         ("Hindi", "hi", ["hin"]),
         ("Welsh", "cy", ["cym", "wel"]),
+        ("Portuguese (Brazil)", "pt-br", ["por"]),
+        ("Portuguese (Portugal)", "pt-pt", ["por"]),
     )
 ]
 

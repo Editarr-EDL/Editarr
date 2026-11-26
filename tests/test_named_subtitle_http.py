@@ -136,21 +136,26 @@ def test_preview_remains_available_without_an_exact_writable_name(app, case):
         assert conflict.read_bytes() == b"unmanaged"
 
 
-@pytest.mark.parametrize("language", ["wel", "zz"])
-def test_publication_uses_language_aliases_from_jellyfin_cultures(app, language):
+@pytest.mark.parametrize(
+    ("language", "expected_suffix"),
+    [("wel", "wel"), ("zz", None), ("pob", "pt-br"), ("pb", "pt-br"), ("pop", "pt-pt")],
+)
+def test_publication_uses_language_aliases_from_jellyfin_cultures(app, language, expected_suffix):
     review, source = seed_subtitle_review(app)
     with app.accounts.factory() as db:
         item = db.get(SavedReviewRow, review.id).media_item
-        app.items[item.jellyfin_id].versions[1].subtitle_streams[0]["Language"] = language
+        stream = app.items[item.jellyfin_id].versions[1].subtitle_streams[0]
+        stream.update(Language=language, IsHearingImpaired=True)
 
     selected = selected_source(app, review)
     preview = subtitle_request(app, review, "preview", selected)
     assert preview.status_code == 200, preview.text
     result = preview.json()
     assert result["source"]["language"] == language
+    assert result["source"]["forced"] and result["source"]["sdh"]
     assert result["changed_cues"] == 1
     assert result["cues"][0]["filtered"] == "close the gate."
-    if language == "zz":
+    if expected_suffix is None:
         assert result["preview_token"] is result["filename"] is None
         files_before = set(source.parent.iterdir())
         denied = subtitle_request(app, review, "publish", selected | {"preview_token": "a" * 64})
@@ -160,7 +165,7 @@ def test_publication_uses_language_aliases_from_jellyfin_cultures(app, language)
         assert set(source.parent.iterdir()) == files_before
     else:
         stem = source.name.removesuffix(".en.forced.srt")
-        filename = f"{stem}.Sam - Subtitle review.wel.forced.srt"
+        filename = f"{stem}.Sam - Subtitle review.{expected_suffix}.forced.sdh.srt"
         assert result["filename"] == filename
         assert result["track_title"] == "Sam - Subtitle review"
         assert result["publication_block_reason"] is None
@@ -169,6 +174,7 @@ def test_publication_uses_language_aliases_from_jellyfin_cultures(app, language)
         )
         assert published.status_code == 200, published.text
         assert published.json()["filename"] == filename
+        assert published.json()["source"]["forced"] and published.json()["source"]["sdh"]
         assert source.with_name(filename).read_bytes() == _FILTERED
     assert source.read_bytes() == SUBTITLE_TEXT
 
