@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { handleMenuKeyDown } from "./menu-keyboard";
 import { popupHost, useAnchoredPopup } from "./use-anchored-popup";
 
 export interface MoreMenuItem {
@@ -46,15 +47,7 @@ export function MoreMenu({ label, items, disabled = false }: { label: string; it
     if (open) (enabledItems()[0] ?? menu.current)?.focus({ preventScroll: true });
   }, [open]);
 
-  const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const list = enabledItems();
-    const index = list.indexOf(document.activeElement as HTMLElement);
-    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
-    if (event.key === "Escape") { event.preventDefault(); close(); }
-    else if (event.key === "Tab") close();
-    else if (step) { event.preventDefault(); list[(index + step + list.length) % list.length]?.focus(); }
-    else if (event.key === "Home" || event.key === "End") { event.preventDefault(); list[event.key === "Home" ? 0 : list.length - 1]?.focus(); }
-  };
+  const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => handleMenuKeyDown(event, enabledItems(), close);
 
   return <>
     <button ref={trigger} type="button" className="icon-button more-menu-button" aria-label={label} title={label}

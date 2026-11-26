@@ -73,6 +73,8 @@ export interface JellyfinMediaPage {
   total_count: number;
   rating_values: string[];
   resolution_values: string[];
+  /** Under title sorting, the index of each initial's first item ("#" for non-letters). */
+  title_letter_offsets?: Record<string, number>;
 }
 
 export interface LibraryItemQuery {

@@ -47,8 +47,8 @@ export function exportStatusForReview(status: ExportStatus, reviewId: string): E
   } };
 }
 
-export function ExportBadges({ status, poster = false }: { status: ExportStatus; poster?: boolean }) {
+export function ExportBadges({ status }: { status: ExportStatus }) {
   const active = (["edl", "mcf"] as const).map((format) => status.exports[format]).filter((item) => item.present);
   if (!active.length) return null;
-  return <span className={`export-badges${poster ? " poster-export-badges" : ""}`}>{active.map((item) => <span className={`export-badge ${item.outdated ? "outdated" : "current"}`} key={item.format} title={`${item.format.toUpperCase()} ${item.outdated ? "outdated" : "current"}${item.exported_at ? ` · ${new Date(item.exported_at).toLocaleString()}` : ""} · ${exportProvenance(item.exported_scans)}`}>{item.format.toUpperCase()} · {item.outdated ? "Outdated" : "Current"}</span>)}</span>;
+  return <span className="export-badges">{active.map((item) => <span className={`export-badge ${item.outdated ? "outdated" : "current"}`} key={item.format} title={`${item.format.toUpperCase()} ${item.outdated ? "outdated" : "current"}${item.exported_at ? ` · ${new Date(item.exported_at).toLocaleString()}` : ""} · ${exportProvenance(item.exported_scans)}`}>{item.format.toUpperCase()} · {item.outdated ? "Outdated" : "Current"}</span>)}</span>;
 }

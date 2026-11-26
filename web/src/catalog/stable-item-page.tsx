@@ -8,7 +8,8 @@ import { CatalogItemBoundary } from "./catalog-item-boundary";
 import { editarrItemRoute, type Route } from "../routes";
 import { scanLabel, usePageTitle } from "../shared/display";
 import { writeUserValue } from "../shared/user-storage";
-import { MediaDetailPage, SeriesSeasonsPage } from "./library-pages";
+import { MediaDetailPage } from "./media-detail-page";
+import { SeriesSeasonsPage } from "./series-pages";
 import { LibraryBreadcrumbs, MediaDetail } from "./media-detail";
 
 type ItemRoute = Extract<Route, { kind: "library" | "title" }>;

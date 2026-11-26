@@ -133,6 +133,20 @@ def _normalized_title(value: str) -> str:
     )
 
 
+def _title_letter(item: JellyfinMediaItem) -> str:
+    """Return the A–Z initial a title sorts under, or "#" for anything else."""
+    initial = _normalized_title(item.sort_name or item.name)[:1].upper()
+    return initial if "A" <= initial <= "Z" else "#"
+
+
+def _title_letter_offsets(items: list[JellyfinMediaItem]) -> dict[str, int]:
+    """Map each initial to the index of its first item in an already sorted list."""
+    offsets: dict[str, int] = {}
+    for index, item in enumerate(items):
+        offsets.setdefault(_title_letter(item), index)
+    return offsets
+
+
 def _library_browse_items(
     library_id: str, items: list[JellyfinMediaItem]
 ) -> list[JellyfinMediaItem]:
@@ -362,6 +376,7 @@ def api_list_jellyfin_library_items(
         total_count=len(filtered),
         rating_values=rating_values,
         resolution_values=resolution_values,
+        title_letter_offsets=_title_letter_offsets(filtered) if sort_by == "title" else {},
     )
 
 

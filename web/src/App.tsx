@@ -19,7 +19,8 @@ import type {
 import { usePageTitle } from "./shared/display";
 import { settingsSectionTitle } from "./settings/settings-sections";
 import { ScansFloatingPanel } from "./scans/scans-floating-panel";
-import { LibraryViewPage, SeasonEpisodesPage } from "./catalog/library-pages";
+import { LibraryViewPage } from "./catalog/library-view-page";
+import { SeasonEpisodesPage } from "./catalog/series-pages";
 import { AppSidebar } from "./ui/AppSidebar";
 import { EmptyPage } from "./ui/EmptyPage";
 import { navigate, parseRoute, isRootRoute, type Route } from "./routes";

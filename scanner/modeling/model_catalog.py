@@ -351,3 +351,5 @@ class JellyfinMediaPage(BaseModel):
     total_count: int
     rating_values: list[str] = Field(default_factory=list)
     resolution_values: list[str] = Field(default_factory=list)
+    # Under title sorting, the offset of each initial's first item ("#" for non-letters).
+    title_letter_offsets: dict[str, int] = Field(default_factory=dict)

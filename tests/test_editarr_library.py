@@ -154,6 +154,7 @@ def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
     assert [item.name for item in page.items] == ["Beta"]
     assert page.items[0].image_url == "/api/library-items/movie-3/image?principal=owner-test"
     assert page.resolution_values == ["4K", "1080p", "720p"]
+    assert page.title_letter_offsets == {"A": 0, "B": 1, "Z": 2}
 
     exported = api.api_list_jellyfin_library_items(
         "movies", edl_filter="exported", search="alpha", db=db, viewer=owner_viewer(db)
@@ -174,6 +175,11 @@ def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
         "movies", edl_filter="not_exported", sort_by="year", db=db, viewer=owner_viewer(db)
     )
     assert [item.id for item in not_exported.items] == ["movie-1", "movie-3"]
+    assert not_exported.title_letter_offsets == {}
+    newest = api.api_list_jellyfin_library_items(
+        "movies", sort_direction="desc", db=db, viewer=owner_viewer(db)
+    )
+    assert newest.title_letter_offsets == {"Z": 0, "B": 1, "A": 2}
     refreshed = api.api_list_jellyfin_library_items(
         "movies", refresh=True, db=db, viewer=owner_viewer(db)
     )

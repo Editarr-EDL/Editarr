@@ -326,17 +326,23 @@ test("browses a library in both views and opens item metadata", async ({ page })
   await page.getByRole("button", { name: "Movies" }).click();
   await expect(page.getByRole("heading", { name: "Movies" })).toBeVisible();
   await expect(page.getByText("EDL · Current").first()).toBeVisible();
-  await page.getByLabel("EDL filter").selectOption("not_exported");
+  const search = page.getByRole("combobox", { name: "Search titles or filters" });
+  await search.fill("no edl");
+  await page.getByRole("option", { name: "EDL: Not exported" }).click();
+  await expect(search).toHaveValue("");
   await expect(page.getByRole("heading", { name: "No matching items" })).toBeVisible();
-  await page.getByLabel("EDL filter").selectOption("all");
+  await page.getByRole("button", { name: "Remove No EDL filter" }).click();
   await expect(page.getByRole("button", { name: "Open Example Movie" })).toBeVisible();
   await page.getByRole("button", { name: "List" }).click();
   await expect(page.getByRole("cell", { name: "PG-13" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "4K" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show exact length: 01:35:00.000" }).first()).toBeVisible();
-  await page.getByLabel("Rating filter").selectOption("PG-13");
-  await page.getByLabel("Resolution filter").selectOption("4K");
-  await page.getByRole("button", { name: "Example Movie" }).click();
+  await search.fill("PG-13");
+  await page.getByRole("option", { name: "Rating: PG-13" }).click();
+  await search.fill("4k");
+  await page.getByRole("option", { name: "Resolution: 4K" }).click();
+  await expect(page.getByRole("button", { name: /^Remove (PG-13|4K) filter$/ })).toHaveCount(2);
+  await page.getByRole("button", { name: "Example Movie", exact: true }).click();
   await page.getByRole("button", { name: "Show Details", exact: true }).click();
   await expect(page.getByText("A test movie.")).toBeVisible();
   await expect(page).toHaveTitle("Editarr — Media Editing — Example Movie");
@@ -361,7 +367,7 @@ test("browses a library in both views and opens item metadata", async ({ page })
   await chooseWorkflowStep(page, "Scans");
   await expect(page.getByRole("list", { name: "Scan history" })).toContainText("#2");
   await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("button", { name: "Movies" }).click();
-  await page.getByPlaceholder("Search titles").fill("missing");
+  await page.getByRole("combobox", { name: "Search titles or filters" }).fill("missing");
   await expect(page.getByRole("heading", { name: "No matching items" })).toBeVisible();
 });
 
