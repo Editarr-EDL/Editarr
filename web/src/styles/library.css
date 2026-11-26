@@ -40,7 +40,7 @@
 .poster-size-control { display: inline-flex; align-items: center; gap: 7px; color: #a6afbd; font-size: 12px; white-space: nowrap; }
 .poster-size-control input { width: 110px; padding: 0; accent-color: #86aafd; }
 
-.catalog-content.with-rail { display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 10px; }
+.catalog-content.with-rail { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
 .catalog-results { min-width: 0; }
 .catalog-poster-grid { grid-template-columns: repeat(auto-fill, minmax(min(var(--poster-size, 170px), 100%), 1fr)); gap: 22px 16px; }
 /* Off-screen cards skip layout and paint; their last rendered height (or an estimate) holds their place. */
@@ -63,12 +63,13 @@
 .poster-type { right: 8px; bottom: 8px; color: #e3e8f1; background: #0b0d12; }
 .library-table-wrap [data-catalog-index] { scroll-margin-top: calc(var(--catalog-sticky-offset, 0px) + 56px); }
 
-.alphabet-rail { position: sticky; top: calc(var(--catalog-sticky-offset, 0px) + 8px); align-self: start; display: grid; gap: 1px; max-height: calc(100vh - var(--catalog-sticky-offset, 0px) - 16px); overflow-y: auto; scrollbar-width: none; }
-.alphabet-rail button { min-height: 17px; padding: 1px 0; border: 0; border-radius: 4px; color: #a4adbb; background: transparent; font-size: 11px; font-weight: 700; line-height: 1.3; }
-.alphabet-rail button:hover:not(:disabled), .alphabet-rail button.current { color: #fff; background: #23304a; }
-.alphabet-rail button:disabled { opacity: .35; }
-.alphabet-rail button:focus-visible { outline-width: 2px; outline-offset: -2px; }
-.alphabet-rail[aria-busy="true"] { cursor: progress; }
+/* The rail is as wide as its longest label ("2010s", "PG-13"), from a letter's 26px up to 64px; longer labels wrap. */
+.jump-rail { position: sticky; top: calc(var(--catalog-sticky-offset, 0px) + 8px); align-self: start; display: grid; gap: 1px; width: max-content; min-width: 26px; max-width: 64px; max-height: calc(100vh - var(--catalog-sticky-offset, 0px) - 16px); overflow-y: auto; scrollbar-width: none; }
+.jump-rail button { min-height: 17px; padding: 1px 3px; border: 0; border-radius: 4px; color: #a4adbb; background: transparent; font-size: 11px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.jump-rail button:hover:not(:disabled), .jump-rail button.current { color: #fff; background: #23304a; }
+.jump-rail button:disabled { opacity: .35; }
+.jump-rail button:focus-visible { outline-width: 2px; outline-offset: -2px; }
+.jump-rail[aria-busy="true"] { cursor: progress; }
 
 .load-more-footer { display: grid; justify-items: center; gap: 8px; margin: 26px 0 8px; color: #a4adbb; font-size: 12.5px; }
 .load-more-footer p { margin: 0; }
@@ -85,10 +86,10 @@
   .poster-size-control { display: none; }
   .catalog-poster-grid { --poster-size: 108px !important; gap: 16px 10px; }
   .catalog-poster-grid.wide-posters { --poster-size: 150px !important; }
-  .catalog-content.with-rail { grid-template-columns: minmax(0, 1fr) 24px; gap: 4px; }
+  .catalog-content.with-rail { gap: 4px; }
   /* 24px touch targets; a short screen scrolls the rail rather than the page sideways. */
-  .alphabet-rail { gap: 0; }
-  .alphabet-rail button { min-height: 24px; font-size: 11px; }
+  .jump-rail { gap: 0; min-width: 24px; max-width: 48px; }
+  .jump-rail button { min-height: 24px; padding: 1px 2px; font-size: 11px; line-height: 1.15; }
   .poster-edl { width: 12px; height: 12px; padding: 0; border-radius: 50%; box-shadow: 0 0 0 2px #000a; }
   .poster-edl.current { background: #7ce5bd; }
   .poster-edl.outdated { background: #f3c77a; }

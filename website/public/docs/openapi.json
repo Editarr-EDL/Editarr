@@ -17892,12 +17892,12 @@
             "type": "array",
             "title": "Resolution Values"
           },
-          "title_letter_offsets": {
-            "additionalProperties": {
-              "type": "integer"
+          "jump_groups": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryJumpGroup"
             },
-            "type": "object",
-            "title": "Title Letter Offsets"
+            "type": "array",
+            "title": "Jump Groups"
           }
         },
         "type": "object",
@@ -18173,6 +18173,30 @@
         ],
         "title": "JellyfinSignIn",
         "description": "The Jellyfin credentials of the identity to link. Never stored or audited."
+      },
+      "LibraryJumpGroup": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "offset"
+        ],
+        "title": "LibraryJumpGroup",
+        "description": "A run of a sorted library listing a client can jump to, such as a letter or decade."
       },
       "LibraryReviewCreate": {
         "properties": {

@@ -22,6 +22,10 @@ from tests.editarr_support import record_edl_export
 from tests.scan_access_support import owner_caller
 
 
+def _groups(page) -> list[tuple[str, str, int]]:
+    return [(group.key, group.label, group.offset) for group in page.jump_groups]
+
+
 def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
     repository.update_jellyfin_settings(
         db,
@@ -159,7 +163,7 @@ def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
     assert [item.name for item in page.items] == ["Beta"]
     assert page.items[0].image_url == "/api/library-items/movie-3/image?principal=owner-test"
     assert page.resolution_values == ["4K", "1080p", "720p"]
-    assert page.title_letter_offsets == {"A": 0, "B": 1, "Z": 2}
+    assert _groups(page) == [("A", "A", 0), ("B", "B", 1), ("Z", "Z", 2)]
 
     exported = api.api_list_jellyfin_library_items(
         "movies", edl_filter="exported", search="alpha", db=db, viewer=owner_viewer(db)
@@ -180,11 +184,21 @@ def test_library_apis_use_the_saved_server_side_credentials(monkeypatch, db):
         "movies", edl_filter="not_exported", sort_by="year", db=db, viewer=owner_viewer(db)
     )
     assert [item.id for item in not_exported.items] == ["movie-1", "movie-3"]
-    assert not_exported.title_letter_offsets == {}
+    assert _groups(not_exported) == [("2020", "2020s", 0), ("none", "No year", 1)]
+    oldest_last = api.api_list_jellyfin_library_items(
+        "movies", sort_by="year", sort_direction="desc", db=db, viewer=owner_viewer(db)
+    )
+    assert [item.id for item in oldest_last.items] == ["movie-3", "movie-1", "movie-2"]
+    assert _groups(oldest_last) == [("none", "No year", 0), ("2020", "2020s", 1)]
+    longest = api.api_list_jellyfin_library_items(
+        "movies", sort_by="duration", sort_direction="desc", db=db, viewer=owner_viewer(db)
+    )
+    assert _groups(longest) == [("120", "2h", 0), ("90", "90m", 1), ("0", "<90m", 2)]
+    assert _groups(four_k) == [("90", "90m", 0)]
     newest = api.api_list_jellyfin_library_items(
         "movies", sort_direction="desc", db=db, viewer=owner_viewer(db)
     )
-    assert newest.title_letter_offsets == {"Z": 0, "B": 1, "A": 2}
+    assert _groups(newest) == [("Z", "Z", 0), ("B", "B", 1), ("A", "A", 2)]
     refreshed = api.api_list_jellyfin_library_items(
         "movies", refresh=True, db=db, viewer=owner_viewer(db)
     )
@@ -589,8 +603,12 @@ def test_primary_image_api_proxies_artwork_without_exposing_credentials(monkeypa
     assert calls == [("movie-1", "poster-tag")]
 
 
+def _offsets(groups) -> dict[str, int]:
+    return {group.key: group.offset for group in groups}
+
+
 def test_title_order_groups_non_letters_first_with_matching_letter_offsets():
-    from scanner.http import catalog_library_api as catalog
+    from scanner.http import catalog_library_order as catalog
 
     names = [
         "Zèbra",
@@ -608,7 +626,7 @@ def test_title_order_groups_non_letters_first_with_matching_letter_offsets():
         JellyfinMediaItem(id=f"item-{index}", item_type="Movie", name=name)
         for index, name in enumerate(names)
     ]
-    ordered = sorted(items, key=lambda item: catalog._library_sort_value(item, "title"))
+    ordered = sorted(items, key=lambda item: catalog.library_sort_value(item, "title"))
 
     assert [item.name for item in ordered] == [
         "!Bang",
@@ -622,9 +640,9 @@ def test_title_order_groups_non_letters_first_with_matching_letter_offsets():
         "straße",
         "Zèbra",
     ]
-    assert [catalog._title_letter(item) for item in ordered[:4]] == ["#"] * 4
-    assert catalog._title_letter(items[3]) == "S"  # "ßeta" folds to "sseta"
-    assert catalog._title_letter_offsets(ordered) == {
+    assert [catalog.title_letter(item) for item in ordered[:4]] == ["#"] * 4
+    assert catalog.title_letter(items[3]) == "S"  # "ßeta" folds to "sseta"
+    assert _offsets(catalog.library_jump_groups(ordered, "title")) == {
         "#": 0,
         "A": 4,
         "B": 5,
@@ -635,16 +653,16 @@ def test_title_order_groups_non_letters_first_with_matching_letter_offsets():
 
 
 def test_dotless_i_titles_sort_and_group_with_i():
-    from scanner.http import catalog_library_api as catalog
+    from scanner.http import catalog_library_order as catalog
 
     items = [
         JellyfinMediaItem(id=f"item-{index}", item_type="Movie", name=name)
         for index, name in enumerate(["Jade", "ıhlara", "Iris", "Hotel"])
     ]
-    ordered = sorted(items, key=lambda item: catalog._library_sort_value(item, "title"))
+    ordered = sorted(items, key=lambda item: catalog.library_sort_value(item, "title"))
 
     assert [item.name for item in ordered] == ["Hotel", "ıhlara", "Iris", "Jade"]
-    assert catalog._title_letter_offsets(ordered) == {"H": 0, "I": 1, "J": 3}
+    assert _offsets(catalog.library_jump_groups(ordered, "title")) == {"H": 0, "I": 1, "J": 3}
 
 
 def test_edl_filter_matches_outdated_exports_only():

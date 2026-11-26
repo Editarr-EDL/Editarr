@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLibraryItems } from "../api/api-service";
-import type { JellyfinMediaItem, JellyfinMediaPage, LibraryItemQuery } from "../api/api-media-types";
+import type { JellyfinMediaItem, JellyfinMediaPage, LibraryItemQuery, LibraryJumpGroup } from "../api/api-media-types";
 import { catalogMaxRequestSize, catalogPageSize, type LibraryListingQuery } from "./catalog-types";
 import { cachedPage, forgetLibraryPages, listingCacheKey, rememberPage } from "./library-page-cache";
 
@@ -11,8 +11,8 @@ export interface LibraryListing {
   totalCount: number;
   ratingValues: string[];
   resolutionValues: string[];
-  /** Index of each initial's first item under title sorting. */
-  letterOffsets: Record<string, number>;
+  /** The listing's groups for the jump rail, in list order with each one's first index. */
+  jumpGroups: LibraryJumpGroup[];
   /** The first page for the current query is loading; earlier results are cleared. */
   loading: boolean;
   /** A page after the window is loading. */
@@ -60,7 +60,7 @@ type Mode = "replace" | "append" | "prepend";
 
 const emptyState = {
   items: [] as JellyfinMediaItem[], startIndex: 0, totalCount: 0, ratingValues: [] as string[], resolutionValues: [] as string[],
-  letterOffsets: {} as Record<string, number>, loading: true, loadingMore: false, loadingEarlier: false,
+  jumpGroups: [] as LibraryJumpGroup[], loading: true, loadingMore: false, loadingEarlier: false,
   error: null as string | null, complete: false,
 };
 
@@ -139,7 +139,7 @@ export function useLibraryItems(libraryId: string, query: LibraryListingQuery, c
         totalCount: page.total_count,
         ratingValues: page.rating_values || [],
         resolutionValues: page.resolution_values || [],
-        letterOffsets: page.title_letter_offsets || {},
+        jumpGroups: page.jump_groups || [],
         loading: false,
         loadingMore: false,
         loadingEarlier: false,
@@ -196,7 +196,7 @@ export function useLibraryItems(libraryId: string, query: LibraryListingQuery, c
     const loaded = () => queryAtStart === current.query && index >= current.start && index < current.end;
     await enqueue(() => {
       if (loaded() || queryAtStart !== current.query) return;
-      // Choosing a letter is a fresh request, even after a failure.
+      // Choosing a group is a fresh request, even after a failure.
       Object.assign(current, { failed: false, retryTask: null });
       if (index >= current.end && index < current.end + catalogMaxRequestSize && !current.complete) {
         const limit = Math.min(catalogMaxRequestSize, Math.ceil((index + 1 - current.end) / catalogPageSize) * catalogPageSize);

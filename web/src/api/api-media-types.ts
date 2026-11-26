@@ -73,8 +73,16 @@ export interface JellyfinMediaPage {
   total_count: number;
   rating_values: string[];
   resolution_values: string[];
-  /** Under title sorting, the index of each initial's first item ("#" for non-letters). */
-  title_letter_offsets?: Record<string, number>;
+  /** The groups of the whole filtered, sorted listing in list order, with each group's first index. */
+  jump_groups?: LibraryJumpGroup[];
+}
+
+/** A run of a sorted listing to jump to: an initial ("#" for non-letters), decade, rating, length band or type. */
+export interface LibraryJumpGroup {
+  /** Stable identity within the sort; "none" collects items without a year, rating or length. */
+  key: string;
+  label: string;
+  offset: number;
 }
 
 export interface LibraryItemQuery {

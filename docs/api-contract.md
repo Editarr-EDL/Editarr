@@ -879,10 +879,20 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
   Library paging uses `start_index` and `limit`; sorting, EDL filtering, and
   title search compose in the same request. `edl_filter` is `all`, `exported`,
   `not_exported`, or `outdated` (an EDL exported before its review last changed).
-  Under `sort_by=title`,
-  `title_letter_offsets` maps each initial (`A`–`Z` after removing accents and
-  case folding, with dotless `ı` read as `i`; `#` for digits, symbols and other scripts, which sort first) to
-  the index of its first matching item, so a client can page straight to a letter.
+  `jump_groups` lists the groups of the whole filtered, sorted listing in list
+  order as `{key, label, offset}`, where `offset` is the index of the group's
+  first item, so a client can page straight to a group. Groups come from the
+  same key the listing is sorted by, so each is contiguous in either direction:
+  `title` groups by initial (`A`–`Z` after removing accents and case folding,
+  with dotless `ı` read as `i`; `#` for digits, symbols and other scripts,
+  which sort first); `year` by decade (key `2010`, label `2010s`); `rating` by
+  case-folded rating (labelled as its first item's rating); `duration` by
+  length band (keys `0`, `90`, `120`, `150`, `180` minutes, labelled `<90m`,
+  `90m`, `2h`, `2h30`, `3h+`); and `type` by case-folded item type (label such
+  as `Movie`, `Series` or `Music video`). Items without a year, rating or
+  length form one group with key `none` (label `No year`, `No rating` or
+  `No length`), placed where the sort puts them: last ascending, first
+  descending.
 - Scans: `POST /api/scans` accepts a Jellyfin item ID and options. It rejects
   non-video or unreadable mapped items. Repeated scans for the same media item
   receive new per-item scan IDs and enter the serial queue.
