@@ -322,7 +322,24 @@ def _name_key(name: str) -> str:
     return unicodedata.normalize("NFC", name).casefold()
 
 
-def check_named_destination(
+def _pending_retirements(media: Path, slot: str, identity: list[str]):
+    """Read self-contained retirement proofs for this exact publication."""
+    for held in pending_subtitle_quarantines(media.parent):
+        try:
+            record = json.loads(read_local_bytes(held.proof, 8192))
+            name = record.get("filename") if isinstance(record, dict) else None
+            if not isinstance(name, str) or Path(name).name != name:
+                continue
+            path = media.with_name(name)
+            if not name.startswith(f"{media.stem}.") or record.get("publication") != identity:
+                continue
+            record = _validate_record(record, path, slot)
+        except (OSError, ValueError):
+            continue
+        yield path, record, held
+
+
+def check_named_sidecar(
     media: Path,
     destination: Path,
     slot: str,
@@ -330,8 +347,8 @@ def check_named_destination(
     source_id: str,
     *,
     catalog_sibling_stems: frozenset[str] = frozenset(),
-) -> None:
-    """Refuse a name shared with another video or an existing file owned by someone else."""
+) -> tuple[list[tuple[Path, dict]], list[tuple[Path, dict, SubtitleQuarantine]]]:
+    """Preflight the proposed name and ownership of previous copies without changing files."""
     key = _name_key(destination.name)
     entries = tuple(destination.parent.iterdir())
     require_unique_video_match(media, destination, entries, catalog_sibling_stems)
@@ -349,34 +366,34 @@ def check_named_destination(
     try:
         _state, current = _existing_file(destination)
     except FileNotFoundError:
-        return
+        pass
     except (ValueError, OSError) as exc:
         raise SubtitleConflict("The existing subtitle destination could not be verified") from exc
-    if previous is None or current not in previous["inputs"]:
-        raise SubtitleConflict(
-            "A different subtitle file already exists at the destination. "
-            "Choose a distinct saved review title."
-        )
+    else:
+        if previous is None or current not in previous["inputs"]:
+            raise SubtitleConflict(
+                "A different subtitle file already exists at the destination. "
+                "Choose a distinct saved review title."
+            )
 
-
-def _pending_retirements(media: Path, slot: str, identity: list[str]):
-    """Read self-contained retirement proofs for this exact publication."""
-    for held in pending_subtitle_quarantines(media.parent):
-        try:
-            record = json.loads(read_local_bytes(held.proof, 8192))
-            name = record.get("filename") if isinstance(record, dict) else None
-            if not isinstance(name, str) or Path(name).name != name:
-                continue
-            path = media.with_name(name)
-            if not name.startswith(f"{media.stem}.") or record.get("publication") != identity:
-                continue
-            record = _validate_record(record, path, slot)
-        except (OSError, ValueError):
+    identity = publication.identity(source_id)
+    pending = list(_pending_retirements(media, slot, identity))
+    pending_paths = {path for path, _record, held in pending if os.path.lexists(held.held)}
+    previous = []
+    for path, record in _publication_records(media, slot):
+        if path == destination or path in pending_paths or record.get("publication") != identity:
             continue
-        if os.path.lexists(held.held):
-            yield path, record, held
-        else:
-            held.discard()
+        try:
+            owned = _existing_file(path)[1] in record["inputs"]
+        except (OSError, ValueError):
+            owned = False
+        if not owned:
+            raise SubtitleConflict(
+                "The previous named subtitle changed. Move the changed file to a distinct "
+                "name before trying again."
+            )
+        previous.append((path, record))
+    return previous, pending
 
 
 def _finish_retirement(
@@ -425,11 +442,10 @@ def publish_named_sidecar(
         raise ValueError("The resulting subtitle is too large")
     if destination.parent != media.parent or not destination.name.startswith(media.stem + "."):
         raise ValueError("The subtitle destination does not belong to the selected media file")
-    identity = publication.identity(source.id)
     # Serialize logical replacements as well as title collisions across Editarr processes
     # using the same media directory, including different instances with separate databases.
     with _destination_lock(media.parent / ".editarr-subtitle-publications.json"):
-        check_named_destination(
+        previous_names, pending = check_named_sidecar(
             media,
             destination,
             slot,
@@ -437,24 +453,15 @@ def publish_named_sidecar(
             source.id,
             catalog_sibling_stems=catalog_sibling_stems,
         )
-        pending = list(_pending_retirements(media, slot, identity))
-        pending_paths = {path for path, _record, _held in pending}
-        previous_names = []
-        for path, record in _publication_records(media, slot):
-            if (
-                path == destination
-                or path in pending_paths
-                or record.get("publication") != identity
-            ):
-                continue
-            if _existing_file(path)[1] not in record["inputs"]:
-                raise SubtitleConflict("The previous named subtitle changed before replacement")
-            previous_names.append((path, record))
         with _destination_lock(_record_path(destination)):
             replaced = _publish_locked(destination, slot, source, content, publication)
         for path, record, held in pending:
-            _finish_retirement(path, record, held, slot, keep_record=path == destination)
+            if os.path.lexists(held.held):
+                _finish_retirement(path, record, held, slot, keep_record=path == destination)
+                replaced = True
+            else:
+                held.discard()
         for path, record in previous_names:
             held = quarantine_subtitle(path, json.dumps(record).encode())
             _finish_retirement(path, record, held, slot, keep_record=False)
-    return destination.name, replaced or bool(previous_names or pending)
+    return destination.name, replaced or bool(previous_names)

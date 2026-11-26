@@ -183,7 +183,9 @@ def test_unowned_file_at_previous_name_is_preserved(tmp_path, monkeypatch, reocc
         assert held == []
 
 
-@pytest.mark.parametrize("interrupted", ["after_move", "after_original_journal_removed"])
+@pytest.mark.parametrize(
+    "interrupted", ["before_move", "after_move", "after_original_journal_removed"]
+)
 def test_interrupted_old_title_retirement_can_finish_on_retry(tmp_path, monkeypatch, interrupted):
     media, slot, source, publication = _named_output(tmp_path)
     old_name, _ = _write_named(media, slot, source, publication, b"first version")
@@ -191,8 +193,9 @@ def test_interrupted_old_title_retirement_can_finish_on_retry(tmp_path, monkeypa
     renamed = replace(publication, title="Sam - Updated Dialogue")
     rename = sidecars.os.rename
 
-    def stop_after_move(path, target):
-        rename(path, target)
+    def stop_at_move(path, target):
+        if path != old or interrupted == "after_move":
+            rename(path, target)
         if path == old:
             raise KeyboardInterrupt
 
@@ -201,14 +204,20 @@ def test_interrupted_old_title_retirement_can_finish_on_retry(tmp_path, monkeypa
         raise KeyboardInterrupt
 
     with monkeypatch.context() as patch:
-        if interrupted == "after_move":
-            patch.setattr(sidecars.os, "rename", stop_after_move)
+        if interrupted != "after_original_journal_removed":
+            patch.setattr(sidecars.os, "rename", stop_at_move)
         else:
             patch.setattr(sidecars.SubtitleQuarantine, "discard", stop_before_discard)
         with pytest.raises(KeyboardInterrupt):
             _write_named(media, slot, source, renamed, b"updated")
-    assert not old.exists()
-    assert len(list(tmp_path.glob(".editarr-subtitle-retirement-*/subtitle.held"))) == 1
+    (proof,) = tmp_path.glob(".editarr-subtitle-retirement-*/ownership.json")
+    assert old.exists() == (interrupted == "before_move")
+    assert proof.with_name("subtitle.held").exists() == (interrupted != "before_move")
+    pending_before = {path.name: path.read_bytes() for path in proof.parent.iterdir()}
+
+    destination = named_publication_path(media, source, renamed, frozenset({"en"}))
+    sidecars.check_named_sidecar(media, destination, slot, renamed, source.id)
+    assert pending_before == {path.name: path.read_bytes() for path in proof.parent.iterdir()}
 
     active, replaced = _write_named(media, slot, source, renamed, b"updated")
     assert replaced is True
@@ -216,3 +225,17 @@ def test_interrupted_old_title_retirement_can_finish_on_retry(tmp_path, monkeypa
     assert not old.exists()
     assert not sidecars._record_path(old).exists()
     assert not list(tmp_path.glob(".editarr-subtitle-retirement-*"))
+
+
+def test_named_writer_rechecks_prior_ownership_after_successful_preflight(tmp_path):
+    media, slot, source, publication = _named_output(tmp_path)
+    old, _ = _write_named(media, slot, source, publication, b"original rendering")
+    renamed = replace(publication, title="Sam - Updated Dialogue")
+    destination = named_publication_path(media, source, renamed, frozenset({"en"}))
+    sidecars.check_named_sidecar(media, destination, slot, renamed, source.id)
+
+    (tmp_path / old).write_bytes(b"another tool's edit")
+    with pytest.raises(sidecars.SubtitleConflict, match="previous named subtitle changed"):
+        _write_named(media, slot, source, renamed, b"updated rendering")
+    assert not destination.exists()
+    assert (tmp_path / old).read_bytes() == b"another tool's edit"

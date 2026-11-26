@@ -34,7 +34,7 @@ from scanner.runtime.subtitle_publication_names import (
 )
 from scanner.runtime.subtitle_sidecars import (
     SubtitleConflict,
-    check_named_destination,
+    check_named_sidecar,
     discover_publications_and_owned_sources,
     file_fingerprint,
     media_slot,
@@ -339,7 +339,7 @@ def render_subtitle(
         destination = named_publication_path(
             evidence.media, track.source, publication, language_tokens
         )
-        check_named_destination(
+        check_named_sidecar(
             evidence.media,
             destination,
             media_slot(evidence.media, evidence.version),

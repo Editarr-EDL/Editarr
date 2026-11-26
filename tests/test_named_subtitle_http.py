@@ -266,3 +266,37 @@ def test_publish_rechecks_sibling_after_preparing_to_write(app, monkeypatch):
     assert refused.status_code == 409, refused.text
     assert refused.json()["detail"]["code"] == "subtitle_version_ambiguous"
     assert not source.with_name(f"{media_stem}.Sam - Subtitle review.en.forced.srt").exists()
+
+
+def test_review_rename_preview_blocks_when_previous_sidecar_was_modified(app):
+    review, source = seed_subtitle_review(app)
+    initial = subtitle_request(app, review, "publish", preview_for_publication(app, review))
+    assert initial.status_code == 200, initial.text
+    previous = source.with_name(initial.json()["filename"])
+    renamed = app.send(
+        "PATCH",
+        f"/api/reviews/{review.id}",
+        app.accounts.unsafe_cookie(USER),
+        {"revision": review.revision, "name": "Revised subtitle review"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    review = review.model_copy(update={"revision": renamed.json()["revision"]})
+    usable = preview_for_publication(app, review)
+
+    edited = b"changed by another subtitle editor"
+    previous.write_bytes(edited)
+    names = {path.name for path in source.parent.iterdir()}
+    selected = selected_source(app, review)
+    preview = subtitle_request(app, review, "preview", selected)
+    assert preview.status_code == 200, preview.text
+    result = preview.json()
+    assert result["track_title"] == "Sam - Revised subtitle review"
+    assert result["cues"][0]["filtered"] == "close the gate."
+    assert result["preview_token"] is result["filename"] is None
+    assert "previous named subtitle changed" in result["publication_block_reason"].lower()
+
+    blocked = subtitle_request(app, review, "publish", usable)
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["detail"]["code"] == "subtitle_publication_conflict"
+    assert {path.name for path in source.parent.iterdir()} == names
+    assert previous.read_bytes() == edited
