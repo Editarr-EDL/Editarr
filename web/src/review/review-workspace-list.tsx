@@ -99,7 +99,8 @@ export function ReviewWorkspaceList({ workspace, onResolve, showImport = true }:
               onClick={() => void selectReview(review.id)}
               disabled={busy || Boolean(review.repair)}
             ><strong>{review.name}</strong></button></td>
-            <td><time dateTime={review.updated_at}>{new Date(review.updated_at).toLocaleString()}</time></td>
+            <td><time dateTime={review.updated_at} title={new Date(review.updated_at).toLocaleString()}>
+              {new Date(review.updated_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</time></td>
             <td><ExportBadges status={rowExportStatus(review)} /></td>
           </tr>{review.repair && <tr className="saved-review-repair-row"><td colSpan={3}>
             <div className="saved-review-repair-message">

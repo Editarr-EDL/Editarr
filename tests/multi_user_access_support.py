@@ -170,7 +170,6 @@ def valid_target(capability: Capability, access: PrincipalAccess, media=ALLOWED_
         TargetKind.OWN_RESOURCE: ResourceRef(me, media),
         TargetKind.OTHER_RESOURCE: ResourceRef(other, media),
         TargetKind.OTHER_ACCOUNT: other,
-        TargetKind.OTHER_ACCOUNT_RESOURCE: ResourceRef(other, media),
         TargetKind.SCOPED_RECORDS: ResourceRef(other, media),
     }[CAPABILITIES[capability].target]
 

@@ -8,7 +8,8 @@ import { CatalogItemBoundary } from "./catalog-item-boundary";
 import { editarrItemRoute, type Route } from "../routes";
 import { scanLabel, usePageTitle } from "../shared/display";
 import { writeUserValue } from "../shared/user-storage";
-import { MediaDetailPage, SeriesSeasonsPage } from "./library-pages";
+import { MediaDetailPage } from "./media-detail-page";
+import { SeriesSeasonsPage } from "./series-pages";
 import { LibraryBreadcrumbs, MediaDetail } from "./media-detail";
 
 type ItemRoute = Extract<Route, { kind: "library" | "title" }>;
@@ -82,7 +83,9 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
   const requestedVersion = route.kind === "title" ? route.versionId : undefined;
   const titleId = route.kind === "title" ? route.titleId : null;
   const itemId = route.itemId || (route.kind === "library" ? route.seriesId : undefined);
-  const routeKey = JSON.stringify([titleId, itemId, legacyLibrary, requestedVersion]);
+  const sourceId = route.kind === "library" ? route.sourceId : undefined;
+  const step = route.step;
+  const routeKey = JSON.stringify([titleId, itemId, legacyLibrary, requestedVersion, sourceId]);
   const [state, setState] = useState<{
     routeKey: string; identity?: EditarrItem; exactVersion?: ExplicitVersion | null; failed?: boolean;
   }>();
@@ -104,20 +107,23 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
       if (library) writeUserValue(`library-last-route.${library}`, editarrItemRoute(
         result.title_id, requestedVersion || result.selected_version_id || undefined,
       ));
-      if (!titleId && !result.choose_version) {
+      // A library route naming a media source (from a notification) opens that exact version.
+      const sourceVersion = sourceId ? result.current_versions?.find((version) =>
+        version.item_id === itemId && version.media_source_id === sourceId)?.version_id : undefined;
+      if (!titleId && (sourceVersion || !result.choose_version)) {
         const liveItem = result.active_items.length > 1 ? result.active_item?.id : undefined;
-        onReplace(editarrItemRoute(result.title_id, result.selected_version_id || undefined, liveItem));
+        onReplace(editarrItemRoute(result.title_id, sourceVersion || result.selected_version_id || undefined, liveItem, step));
       }
     }).catch(() => { if (active) setState({ routeKey, failed: true }); });
     return () => { active = false; };
-  }, [titleId, itemId, legacyLibrary, requestedVersion, routeKey, onReplace]);
+  }, [titleId, itemId, legacyLibrary, requestedVersion, sourceId, step, routeKey, onReplace]);
 
   if (failed && route.kind === "library" && itemId) {
     const library = libraries.find((entry) => entry.id === legacyLibrary);
     if (library && !route.itemId && route.seriesId) return <SeriesSeasonsPage library={library} seriesId={route.seriesId} />;
     if (library) return <CatalogItemBoundary source="jellyfin" itemId={itemId} onUnavailable={onUnavailable}>
       <MediaDetailPage library={library} itemId={itemId} seasonId={route.seasonId}
-        seriesId={route.seriesId} onNavigate={onNavigate} onDirtyChange={onDirtyChange} />
+        seriesId={route.seriesId} onNavigate={onNavigate} onDirtyChange={onDirtyChange} initialStep={step} />
     </CatalogItemBoundary>;
   }
   if (failed) return <div className="content-page"><p role="alert">This library item is unavailable.</p></div>;
@@ -142,7 +148,7 @@ export function StableItemPage({ route, libraries, onNavigate, onReplace, onDirt
     return <CatalogItemBoundary source="jellyfin" itemId={activeItem.id} onUnavailable={onUnavailable}>
       <MediaDetail key={`${activeItem.id}:${initialSourceId || ""}`} item={activeItem} breadcrumbs={crumbs}
         seasonNumber={activeItem.season_number} onNavigate={onNavigate} onDirtyChange={onDirtyChange}
-        stableIdentity={identity} initialSourceId={initialSourceId} />
+        stableIdentity={identity} initialSourceId={initialSourceId} initialStep={step} />
     </CatalogItemBoundary>;
   }
   return <div className="content-page media-detail">

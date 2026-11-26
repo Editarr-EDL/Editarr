@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from tests.activity_migration_support import _clone
+from tests.community_master_migration_support import RETIRED_OPERATIONS as RETIRED_OPERATIONS_TABLE
+from tests.community_master_migration_support import RETIRED_TABLES
 
 _TIME = "2026-10-31 12:00:00.000000"
 _AVATAR = b"\x89PNG synthetic owner avatar"
@@ -29,6 +31,7 @@ _BLOCKED = "b" * 32
 _JOB = {"state": "queued", "policy_owner_id": 1, "policy_revision": 1, "attempts": 0}
 _SNAPSHOT = {"version": "editarr-export-snapshot-1", "publication_id": "mu45-personal"}
 _REGENERATION = ("queued", 0.0, 0, None, 1, None, None, 1)
+_RETIRED = "revision_protocol_removed"
 
 REVIEWS = (
     "SELECT id, name, revision, content_revision, edl_content_revision, mcf_content_revision "
@@ -48,6 +51,10 @@ EXPORT_SCANS = "SELECT media_item_export_id, scan_id, role FROM media_item_expor
 OPERATIONS = (
     "SELECT operation_id, kind, state, scan_id, consent_version, receipt, vote "
     "FROM community_operations ORDER BY operation_id"
+)
+RETIRED_OPERATIONS = (
+    "SELECT operation_id, kind, state, scan_id, consent_version, receipt, vote, retired_reason "
+    "FROM retired_community_operations ORDER BY operation_id"
 )
 PUBLICATIONS = (
     "SELECT operation_id, artifact_bytes, manifest_bytes, signature_bytes, source_kind, "
@@ -192,6 +199,14 @@ class State:
         return reached and (self.until is None or source is None or source < self.until)
 
 
+_RETIRED_STATE = {
+    OPERATIONS: [("op-publish", "publish", "failed", "legacy-scan-001", "consent-1", None, None)],
+    RETIRED_OPERATIONS: [
+        ("op-receipt", "receipt", "acknowledged", None, None, "receipt-1", None, _RETIRED),
+        ("op-vote", "vote", "submitted", None, None, None, "like", _RETIRED),
+    ],
+}
+
 STATES = (
     State(
         None,
@@ -234,6 +249,7 @@ STATES = (
             EXPORT_SCANS: [(1, "legacy-scan-001", "audio"), (2, "imported-scan-003", "both")],
         },
     ),
+    # 0037 retires the receipt and vote and ends the unsent publication.
     State(
         "0003_local_community",
         {
@@ -243,7 +259,10 @@ STATES = (
                 ("op-vote", "vote", "submitted", None, None, None, "like"),
             ]
         },
+        after=_RETIRED_STATE,
+        until="0037_community_master_sets",
     ),
+    State("0037_community_master_sets", _RETIRED_STATE),
     State(
         "0007_community_publications",
         {
@@ -377,6 +396,10 @@ PERMITTED = {
     **{("admin_users", name): None for name in ("updated_at", "username", "normalized_username")},
     **{("user_profiles", name): None for name in ("display_name", "updated_at")},
     ("media_item_exports", "snapshot_json"): (_without_jobs, _canonical),
+    # 0037 ends unsent publications; RETIRED_OPERATIONS and OPERATIONS pin the result.
+    ("community_operations", "state"): None,
+    ("community_operations", "updated_at"): None,
+    ("community_publications", "error_code"): None,
 }
 # 0010 keeps the administrator's row as the owner in a renamed table.
 RENAMED = {"admin_users": "users"}
@@ -409,6 +432,18 @@ def content(path: Path):
             if name != "user_id" and ("user_profiles", name) not in PERMITTED
         ]
         result["user_profiles"] = (columns, [row for row in rows if any(row[at] for at in kept)])
+    # 0037 renames the import tables and moves receipts and votes; put them back.
+    for retired, source in RETIRED_TABLES.items():
+        if retired in result:
+            result[source] = result.pop(retired)
+    retired_operations = result.pop(RETIRED_OPERATIONS_TABLE, None)
+    if retired_operations is not None:
+        names, rows = result["community_operations"]
+        retired_names = retired_operations[0]
+        rows.extend(
+            tuple(dict(zip(retired_names, row)).get(name) for name in names)
+            for row in retired_operations[1]
+        )
     archived = result.pop("archived_media_access_rows", None)
     if archived is not None:
         result.setdefault("media_access_exceptions", (list(_EXCEPTION_COLUMNS), []))

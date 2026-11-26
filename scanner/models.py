@@ -16,6 +16,7 @@ from scanner.modeling.model_catalog import (
     JellyfinMediaVersion,
     JellyfinSettings,
     JellyfinSettingsUpdate,
+    LibraryJumpGroup,
     ManagedModelArtifact,
     McfSeverityDefault,
     ModelActionResult,
@@ -68,8 +69,13 @@ from scanner.modeling.model_core import (
     normalize_review_name,
     normalize_scan_name,
 )
+from scanner.modeling.model_review_community import (
+    ReviewCommunityMembership,
+    ReviewCommunitySource,
+    ReviewFilterCommunity,
+)
+from scanner.modeling.model_review_filters import PROVENANCE_FIELDS
 from scanner.modeling.model_review_repairs import (
-    ReviewCommunityRepair,
     ReviewRecoveryCounts,
     ReviewRepairSummary,
 )
@@ -131,6 +137,7 @@ from scanner.modeling.model_scans import (
     ExportScanReference,
     ExportStatus,
     ExportSummary,
+    FilterCandidateAvailability,
     FilterCandidateSearchResult,
     McfMetadata,
     ReviewMcfDocument,

@@ -12,6 +12,8 @@ import { SharingPreviewDetails } from "./sharing-preview";
 import { sharingAccessLost, sharingErrorCode, useSharingSummary } from "./use-sharing-summary";
 import { useCan, useOptionalAuthenticationGate, usePrincipal } from "../auth/auth-gate";
 import { useCommunityLifetime } from "../settings/community/community-access";
+import { versionChoice, type PickerValue } from "./community-master-format";
+import { VersionPicker } from "./version-picker";
 import "../styles/community-sharing.css";
 
 const messages: Record<string, string> = {
@@ -31,6 +33,8 @@ const messages: Record<string, string> = {
   sharing_consent_required: "The terms changed. Review the updated summary before sharing.",
   publication_limit: "The contribution exceeds configured upload bounds. Share a smaller revision.",
   operation_conflict: "The saved publication conflicts with service state. Check its outcome before proceeding.",
+  work_identity_required: "Add a TMDB or TVDB ID (with season and episode for TV) before sharing.",
+  link_unavailable: "The community filter set for this file changed. Close this dialog and try again.",
 };
 function errorText(code: string) {
   return messages[code] || failureMessage(code);
@@ -72,6 +76,7 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
   const [useSaved, setUseSaved] = useState(true);
   const [editing, setEditing] = useState(false);
   const [audioSource, setAudioSource] = useState("");
+  const [version, setVersion] = useState<PickerValue>({ selection: "", otherText: "" });
   const [job, setJob] = useState<PublicationJob | null>(null);
   const [busy, setBusy] = useState(true);
   const [activity, setActivity] = useState("Checking community access...");
@@ -142,21 +147,23 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
   const savedMedia = context?.mediaIdentity && !context.mediaIdentity.input_requirement ? context.mediaIdentity : null;
   const usingSaved = !!savedMedia && useSaved;
   const chosenAudio = context?.audioSources.find((item) => item.scanId === audioSource);
+  const choice = useMemo(() => versionChoice(version), [version]);
   const draft = useMemo<SharingDraft | null>(() => {
-    if (!context?.accessVerified || !mayPublish || job || !name.trim() ||
+    if (!context?.accessVerified || !mayPublish || job || !name.trim() || !choice ||
       (!usingSaved && !reference.trim()) || (context.audioSources.length > 0 && !chosenAudio)) return null;
     const airedEpisode = !usingSaved && entity === "episode" && (season !== "" || episode !== "");
     if (airedEpisode && ![season, episode].every((number) => /^[0-9]+$/.test(number) && Number.isSafeInteger(Number(number)))) return null;
     return {
       // This normalizes a candidate association for a private summary. Share approves the displayed artifact.
       name: name.trim(), identity_confirmed: true, audio_source_scan_id: chosenAudio?.scanId ?? null,
+      link_id: null, version_choice: choice,
       media: usingSaved ? null : {
         provider, entity_type: entity, reference: reference.trim(),
         ...(series.trim() ? { series_reference: series.trim() } : {}),
         ...(airedEpisode ? { episode_numbers: [{ scheme: "aired", season: Number(season), number: Number(episode) }] } : {}),
       },
     };
-  }, [context, mayPublish, job, name, usingSaved, reference, chosenAudio, entity, season, episode, provider, series]);
+  }, [context, mayPublish, job, name, choice, usingSaved, reference, chosenAudio, entity, season, episode, provider, series]);
   const { preview, error: summaryError, loading: loadingSummary, retry: retrySummary } =
     useSharingSummary(source, draft, accessLost, clearPrivate);
   const error = errorCode || summaryError || context?.accessError;
@@ -228,6 +235,7 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
           <label className="field"><span>Aired episode</span><input type="number" min={0} value={episode} disabled={busy} onChange={(event) => setEpisode(event.target.value)} /></label>
         </>}
       </div>}
+      <VersionPicker value={version} onChange={setVersion} disabled={busy} required label="Which version is this?" />
       {context.audioSources.length > 1 && <label className="field"><span>Contribution audio source</span>
         <select value={audioSource} disabled={busy} onChange={(event) => setAudioSource(event.target.value)}>
           <option value="">Choose one analyzed source</option>{context.audioSources.map((item) => <option key={item.scanId} value={item.scanId}>{item.track ? audioTrackLabel(item.track) : "Unknown analyzed track / Review required"}</option>)}
@@ -246,10 +254,10 @@ function SharingDialog({ source, initialName, onClose, returnFocusRef }: {
     </>}
       {context && !job && context.jobs.length > 0 && <section aria-label="Saved publications"><h3>Saved publications</h3>
         {context.jobs.map((saved) => <button type="button" className="btn-secondary" key={saved.operationId}
-          onClick={() => acceptJob(saved)} disabled={busy}>{saved.state} · {saved.revisionId.slice(0, 12)}</button>)}
+          onClick={() => acceptJob(saved)} disabled={busy}>{saved.state} · {saved.operationId.slice(0, 12)}</button>)}
       </section>}
     {job && <section aria-label="Publication status"><h3>{job.state === "published" ? "Published" : job.state.replace(/_/g, " ")}</h3>
-      <dl className="sharing-facts"><dt>Original contributor</dt><dd>{job.contributorId}</dd><dt>Revision</dt><dd>{job.revisionId}</dd><dt>Phase</dt><dd>{job.phase}</dd></dl>
+      <dl className="sharing-facts"><dt>Original contributor</dt><dd>{job.contributorId}</dd><dt>Operation</dt><dd>{job.operationId}</dd><dt>Phase</dt><dd>{job.phase}</dd></dl>
       {job.errorCode && (job.errorCode !== "not_connected" || jobHeld) && <p role="alert">{jobHeld
         ? "This contributor is disconnected. Saved publications are held until reconnect."
         : errorText(job.errorCode)}</p>}

@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const image = process.env.COMMUNITY_TEST_IMAGE ?? 'editarr-community:local';
+const migrationCount = readdirSync(new URL('../../migrations/', import.meta.url)).filter(name => /^\d{4}_.+\.sql$/.test(name)).length;
 const docker = (...arguments_) => execFileSync('docker', arguments_, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 }).trim();
 
 async function healthy(origin) {
@@ -45,9 +46,9 @@ test('native image safely initializes, survives hard restart and verifies an off
     assert.equal(plan.policy.version, 'community-retain-first-1');
     assert.equal(plan.policy.durableRecords, 'indefinite');
     assert.equal(plan.mode, 'read_only');
-    assert.equal(plan.schemaVersion, 17);
+    assert.equal(plan.schemaVersion, migrationCount);
     assert.equal(plan.payloadBytesReclaimed, 0);
-    assert.equal(plan.categories.length, 8);
+    assert.equal(plan.categories.length, 10);
     assert.equal(plan.categories.find(category => category.category === 'requestNonces').eligible, 1);
     const invalidRetention = spawnSync('docker', ['run', '--rm', '--network', 'none', ...hardened, ...mounts, image,
       'node', 'dist/runtime/manage.mjs', 'retention', '--confirm'], { encoding: 'utf8', timeout: 15000 });
@@ -83,7 +84,8 @@ test('native image safely initializes, survives hard restart and verifies an off
       const restored = new DatabaseSync('/backups/verified.sqlite', { readOnly: true });
       assert.deepEqual(restored.prepare('SELECT public_key FROM installation_keys').get().public_key, new Uint8Array([0,255,1,128]));
       assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM request_nonces WHERE nonce = 'expired-preview'").get().count, 1);
-      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 17);
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, ${migrationCount});
+      assert.equal(restored.prepare('SELECT lineage FROM schema_lineage').get().lineage, 'community-master-1');
       restored.close(); console.log('snapshot_verified');`);
     assert.equal(result, 'snapshot_verified');
     const inspection = JSON.parse(docker('image', 'inspect', image))[0];
@@ -177,11 +179,11 @@ test('real Compose isolates mounts and preserves populated data across image rep
       import assert from 'node:assert/strict'; import { DatabaseSync } from 'node:sqlite';
       for (const path of ['/data/community.sqlite', '/backups/before-replacement.sqlite']) {
         const database = new DatabaseSync(path, { readOnly: true });
-        assert.equal(database.prepare('PRAGMA user_version').get().user_version, 17);
+        assert.equal(database.prepare('PRAGMA user_version').get().user_version, ${migrationCount});
         const key = database.prepare('SELECT * FROM installation_keys WHERE key_id = ?').get('key');
         assert.equal(key.state, 'revoked'); assert.equal(key.retired_at, 2);
         assert.deepEqual(key.public_key, new Uint8Array([0,255,1,128]));
-        assert.equal(database.prepare('SELECT enabled FROM quota_policy').get().enabled, 0);
+        assert.equal(database.prepare('SELECT lineage FROM schema_lineage').get().lineage, 'community-master-1');
         database.close();
       }
       console.log('replacement_preserved');`), 'replacement_preserved');
@@ -195,7 +197,7 @@ test('real Compose isolates mounts and preserves populated data across image rep
   }
 });
 
-test('packaged migrations require verified snapshots and preserve failed upgrades and isolated restores', () => {
+test('packaged runtime refuses old-lineage and unknown stores and restores verified baseline snapshots', () => {
   const name = `editarr-upgrade-test-${randomUUID()}`;
   const data = `${name}-data`, backups = `${name}-backups`, restored = `${name}-restored`;
   const hardened = ['--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
@@ -205,68 +207,41 @@ test('packaged migrations require verified snapshots and preserve failed upgrade
     assert.equal(docker('run', '--rm', ...hardened, ...mounts, image, 'node', '--input-type=module', '-e', `
       import assert from 'node:assert/strict';
       import { DatabaseSync } from 'node:sqlite';
-      import { mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
-      import { openDatabase, upgradeDatabase, migrationsDirectory } from './dist/runtime/schema.mjs';
-      const migrations = readdirSync(migrationsDirectory).filter(name => name.endsWith('.sql')).sort();
-      function seed(path, version, collision = false) {
-        const database = new DatabaseSync(path);
-        for (const migration of migrations.slice(0, version)) database.exec(readFileSync(new URL(migration, migrationsDirectory), 'utf8'));
-        database.exec('PRAGMA user_version = ' + version);
-        const columns = version >= 8 ? ', display_name_key' : '';
-        const values = version >= 8 ? ", 'one two three'" : '';
-        database.exec("INSERT INTO contributors (contributor_id, discord_user_id, display_name, created_at" + columns + ") VALUES ('contributor', '12345678901234567', 'One Two Three', 1" + values + "); INSERT INTO installations VALUES ('installation', 'contributor', 1); INSERT INTO installation_keys VALUES ('key', 'installation', 'Ed25519', X'00FF0180', 'revoked', 1, 2)");
-        if (collision) database.exec("INSERT INTO contributors VALUES ('collision', 'another-discord', 'one two three', 'active', 1)");
-        database.close();
-      }
-      function verify(path, version, count = 1) {
-        const database = new DatabaseSync(path, { readOnly: true });
-        assert.equal(database.prepare('PRAGMA user_version').get().user_version, version);
-        assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
-        assert.equal(database.prepare('PRAGMA foreign_key_check').all().length, 0);
-        assert.equal(database.prepare('SELECT COUNT(*) AS count FROM contributors').get().count, count);
-        const key = database.prepare('SELECT * FROM installation_keys').get();
-        assert.equal(key.state, 'revoked'); assert.equal(key.retired_at, 2);
-        assert.deepEqual(key.public_key, new Uint8Array([0,255,1,128]));
-        database.close();
-      }
-      for (let version = 1; version < 17; version++) {
-        mkdirSync('/data/v' + version);
-        const path = '/data/v' + version + '/community.sqlite', snapshot = '/backups/v' + version + '.sqlite';
-        seed(path, version);
-        assert.throws(() => openDatabase(path), /database_upgrade_required/);
-        await assert.rejects(upgradeDatabase(path, path), /EEXIST/);
-        verify(path, version);
-        await upgradeDatabase(path, snapshot);
-        verify(path, 17); verify(snapshot, version);
-        assert.equal(statSync(snapshot).mode & 0o777, 0o600);
-      }
-      mkdirSync('/data/failed');
-      seed('/data/failed/community.sqlite', 7, true);
-      await assert.rejects(upgradeDatabase('/data/failed/community.sqlite', '/backups/failed.sqlite'));
-      verify('/data/failed/community.sqlite', 7, 2); verify('/backups/failed.sqlite', 7, 2);
+      import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+      import { initializeDatabase, openDatabase, upgradeDatabase, verifiedBackup } from './dist/runtime/schema.mjs';
+      mkdirSync('/data/old');
+      const old = new DatabaseSync('/data/old/community.sqlite');
+      old.exec("CREATE TABLE contributors (contributor_id TEXT PRIMARY KEY, display_name TEXT); CREATE TABLE contribution_revisions (revision_id TEXT); INSERT INTO contributors VALUES ('contributor', 'One'); PRAGMA user_version = 18");
+      old.close();
+      const before = readFileSync('/data/old/community.sqlite');
+      assert.throws(() => openDatabase('/data/old/community.sqlite'), /unsupported_database_lineage/);
+      await assert.rejects(upgradeDatabase('/data/old/community.sqlite', '/backups/old.sqlite'), /unsupported_database_lineage/);
+      assert.equal(existsSync('/backups/old.sqlite'), false);
+      assert.deepEqual(readFileSync('/data/old/community.sqlite'), before);
+      initializeDatabase('/data/community.sqlite');
+      await assert.rejects(upgradeDatabase('/data/community.sqlite', '/backups/current.sqlite'), /database_already_current/);
+      const { database, inventory } = openDatabase('/data/community.sqlite');
+      database.connection.exec("INSERT INTO contributors (contributor_id, discord_user_id, display_name, display_name_key, created_at) VALUES ('contributor', '12345678901234567', 'One Two Three', 'one two three', 1); INSERT INTO installations VALUES ('installation', 'contributor', 1); INSERT INTO installation_keys VALUES ('key', 'installation', 'Ed25519', X'00FF0180', 'revoked', 1, 2)");
+      await verifiedBackup(database, '/backups/baseline.sqlite', inventory);
+      database.close();
       const unknown = new DatabaseSync('/data/unknown.sqlite');
-      unknown.exec("PRAGMA user_version = 17; CREATE TABLE unknown (evidence BLOB); INSERT INTO unknown VALUES (X'00FF')"); unknown.close();
+      unknown.exec(readFileSync('./migrations/0001_master_baseline.sql', 'utf8') + "; PRAGMA user_version = 1; CREATE TABLE unknown (evidence BLOB)"); unknown.close();
       assert.throws(() => openDatabase('/data/unknown.sqlite'), /unknown_database_schema/);
-      console.log('supported_upgrades_and_rollback_verified');`), 'supported_upgrades_and_rollback_verified');
-    for (const path of ['/data/failed/community.sqlite', '/data/unknown.sqlite']) {
+      console.log('lineage_refusal_verified');`), 'lineage_refusal_verified');
+    for (const [path, reason] of [['/data/old/community.sqlite', 'unsupported_database_lineage'], ['/data/unknown.sqlite', 'unknown_database_schema']]) {
       const refusal = spawnSync('docker', ['run', '--rm', ...hardened, ...mounts, '--env', `COMMUNITY_DATABASE=${path}`, image], { encoding: 'utf8', timeout: 15000 });
       assert.equal(refusal.status, 1);
-      assert.match(refusal.stderr, /community_startup_refused/);
+      assert.match(refusal.stderr, new RegExp(`community_startup_refused reason=${reason}`));
     }
     assert.equal(docker('run', '--rm', ...hardened, '--volume', `${restored}:/data`, '--volume', `${backups}:/backups:ro`, image, 'node', '--input-type=module', '-e', `
       import assert from 'node:assert/strict'; import { copyFileSync, chmodSync, constants } from 'node:fs';
-      import { DatabaseSync } from 'node:sqlite';
-      import { openDatabase, upgradeDatabase } from './dist/runtime/schema.mjs';
-      copyFileSync('/backups/v13.sqlite', '/data/community.sqlite', constants.COPYFILE_EXCL);
+      import { openDatabase } from './dist/runtime/schema.mjs';
+      copyFileSync('/backups/baseline.sqlite', '/data/community.sqlite', constants.COPYFILE_EXCL);
       chmodSync('/data/community.sqlite', 0o600);
-      await upgradeDatabase('/data/community.sqlite', '/data/restore-pre-upgrade.sqlite');
       const { database } = openDatabase('/data/community.sqlite');
       assert.equal(database.connection.prepare('SELECT state FROM installation_keys').get().state, 'revoked');
       assert.deepEqual(database.connection.prepare('SELECT public_key FROM installation_keys').get().public_key, new Uint8Array([0,255,1,128]));
-      assert.equal(database.connection.prepare('SELECT enabled FROM quota_policy').get().enabled, 0);
       database.close();
-      const source = new DatabaseSync('/backups/v13.sqlite', { readOnly: true });
-      assert.equal(source.prepare('PRAGMA user_version').get().user_version, 13); source.close();
       console.log('isolated_restore_verified');`), 'isolated_restore_verified');
   } finally {
     spawnSync('docker', ['volume', 'rm', data, backups, restored], { stdio: 'ignore', timeout: 15000 });
@@ -281,7 +256,7 @@ test('Dockerfile-specific context allowlist excludes scanner, media and private 
   writeFileSync(dockerfile, 'FROM scratch\nCOPY . /context\n');
   writeFileSync(`${dockerfile}.dockerignore`, readFileSync(resolve(root, 'community-service/Dockerfile.dockerignore')));
   const included = ['community-service/package.json', 'community-service/src/runtime/schema.mjs',
-    'community-service/migrations/0014_moderation.sql', 'web/operator/index.html',
+    'community-service/migrations/0001_master_baseline.sql', 'web/operator/index.html',
     'web/src/settings/community-operator/runtime.tsx', 'web/public/favicon-32.png'];
   const excluded = ['scanner/api.py', 'native/fixture', 'data/community.sqlite', 'data/secrets/fixture.key',
     'input_images/fixture.png', 'media/fixture.mkv', '.env', 'community-service/container/service.json',

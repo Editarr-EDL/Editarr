@@ -191,7 +191,7 @@ def test_restore_brings_back_everything_and_pauses_the_queue(tmp_path, encrypted
     assert json.loads((target / REPORT).read_text()) == report
     assert not (target / JOURNAL).exists()
     assert (target / RECOVERY / "before" / "database.sqlite3").is_file()
-    assert inspect_schema(target / "scanner.db", target) == "0036_sampled_media_identity"
+    assert inspect_schema(target / "scanner.db", target) == "0040_review_community_filters"
 
 
 def test_restore_into_a_directory_without_a_database(tmp_path):
@@ -325,7 +325,7 @@ def test_every_accounts_identity_and_pending_operation_restore(tmp_path):
         database.execute(
             "INSERT INTO community_operations (operation_id, service_url, kind, state, "
             "contributor_id, installation_id, owner_id, actor_id, receipt, updated_at) "
-            "VALUES ('peer-pending', ?, 'receipt', 'pending', 'peer-contributor', ?, 2, 2, "
+            "VALUES ('peer-pending', ?, 'filter_vote', 'pending', 'peer-contributor', ?, 2, 2, "
             "'signed-receipt', '2026-10-23')",
             (service_url, peer.installation_id),
         )
@@ -548,7 +548,7 @@ def _empty_again(target, *, database):
     if database:
         with sqlite3.connect(target / "scanner.db") as connection:
             assert connection.execute("SELECT count(*) FROM users").fetchone() == (0,)
-        assert inspect_schema(target / "scanner.db", target) == "0036_sampled_media_identity"
+        assert inspect_schema(target / "scanner.db", target) == "0040_review_community_filters"
     else:
         assert not (target / "scanner.db").exists()
 

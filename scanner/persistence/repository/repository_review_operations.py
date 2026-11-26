@@ -209,14 +209,12 @@ def render_saved_review_filter_preview(
         generation = file_generation(str(scan_path))
     if review_file_matches(db, review_id, scan_path) is False:
         raise ReviewMembershipError("The original Editarr review version is unavailable")
-    if preview_kind == "mute":
-        if review_filter.source != "audio" or review_filter.edit_action != EditAction.MUTE.value:
-            raise ValueError("Only audio mute filters can be previewed")
-    elif preview_kind == "video":
-        if review_filter.source != "visual" or review_filter.edit_action != EditAction.SKIP.value:
-            raise ValueError("Only video skip filters can be previewed")
-    else:
+    # The preview shows the filter's action, whatever its source.
+    expected = {"mute": EditAction.MUTE.value, "video": EditAction.SKIP.value}.get(preview_kind)
+    if expected is None:
         raise ValueError("Unknown review preview kind")
+    if review_filter.edit_action != expected:
+        raise ValueError(f"Only {expected} filters have a {preview_kind} preview")
     start_seconds = max(0.0, review_filter.start_seconds)
     end_seconds = max(start_seconds, review_filter.end_seconds or (start_seconds + 1.0))
     if scan.duration_seconds is not None:

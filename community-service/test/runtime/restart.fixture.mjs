@@ -73,7 +73,7 @@ export async function exercise(database, runtime) {
       replay = await patch(alice, { displayName: 'Restart Preserved Name' }, crypto.randomUUID(), nonce);
       expectStatus(await localSend(replay.clone()));
       const inspected = expectStatus(await admin(`/admin/v1/moderation/contributor/${bob.contributorId}`));
-      expectStatus(await admin('/admin/v1/moderation', { version: 1, command: 'suspend', actionId: crypto.randomUUID(),
+      expectStatus(await admin('/admin/v1/moderation', { version: 1, command: 'suspend', resource: 'contributor', actionId: crypto.randomUUID(),
         targetId: bob.contributorId, expectedRevision: inspected.revision, reason: 'Synthetic persistent moderation' }));
       copyFileSync(configuration.configPath, join(directory, 'config.json'));
       copyFileSync(configuration.secretsPath, join(directory, 'secrets.json'));
@@ -126,7 +126,6 @@ export async function exercise(database, runtime) {
       assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM operations WHERE operation_id = ?').get(interruptedOperation).n, 1);
       assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM operations WHERE operation_id = ?').get(concurrentOperation).n, 1);
       assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM profile_name_changes WHERE operation_id = ?').get(interruptedOperation).n, 1);
-      stored.prepare("UPDATE quota_caps SET cap = 1 WHERE resource = 'worker_requests'").run();
     } finally { stored.close(); }
     child = await start(runtime.serverPath, directory, port);
     expectStatus(await read(alice));

@@ -346,8 +346,18 @@ class JellyfinMediaVersion(BaseModel):
     media_identity: MediaIdentity | None = None
 
 
+class LibraryJumpGroup(BaseModel):
+    """A run of a sorted library listing a client can jump to, such as a letter or decade."""
+
+    key: str
+    label: str
+    offset: int
+
+
 class JellyfinMediaPage(BaseModel):
     items: list[JellyfinMediaItem]
     total_count: int
     rating_values: list[str] = Field(default_factory=list)
     resolution_values: list[str] = Field(default_factory=list)
+    # The groups of the whole filtered, sorted listing in order, with each one's first index.
+    jump_groups: list[LibraryJumpGroup] = Field(default_factory=list)

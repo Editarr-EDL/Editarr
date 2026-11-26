@@ -18,7 +18,7 @@ async function setup(context) {
       ...args, '--origin', 'https://operator.example.test'], { encoding: 'utf8',
       env: { ...process.env, PATH: `${fixtures}:${process.env.PATH}`, CSS59_CALLS: calls, ...extra } }) };
 }
-const action = ['moderate', 'quarantine', 'revision-1', '--expected-revision', '2', '--reason', 'Reviewed evidence'];
+const action = ['moderate', 'quarantine', 'filter', 'filter-1', '--expected-revision', '2', '--reason', 'Reviewed evidence'];
 
 test('executable handles help, denies unsupported commands and redacts successful output', async context => {
   const fixture = await setup(context);
@@ -63,4 +63,23 @@ test('executable dry-run/stale confirmation never POSTs; interrupted retry keeps
   const posts = calls.filter(call => call.method === 'POST');
   assert.equal(posts.length, 2);
   assert.deepEqual(posts[0].body, posts[1].body);
+});
+test('executable parses catalog and recompute commands and confirms recompute batches', async context => {
+  const fixture = await setup(context);
+  const merge = fixture.run(['moderate', 'merge_version', 'version', 'version-1', '--into', 'version-2', '--expected-revision', '2',
+    '--reason', 'Duplicate cut']);
+  assert.equal(merge.status, 0, merge.stderr);
+  assert.equal(JSON.parse(merge.stdout).action.intoVersionId, 'version-2');
+  for (const args of [['recompute', '--reason', 'r'], ['recompute', 'all', 'version-1', '--reason', 'r'],
+    ['moderate', 'quarantine', 'filter', 'filter-1', '--into', 'version-2', '--expected-revision', '2', '--reason', 'r'],
+    ['recompute', 'all', '--reason', 'r', '--contributor', 'c']])
+    assert.equal(fixture.run(args).status, 1, args.join(' '));
+  const dry = fixture.run(['recompute', 'version-1', 'version-2', '--reason', 'Policy changed']);
+  assert.equal(JSON.parse(dry.stdout).action.versionIds.length, 2);
+  const applied = fixture.run(['recompute', 'all', '--after', 'version-1', '--reason', 'Policy changed', '--confirm',
+    '--checkpoint', fixture.checkpoint]);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(JSON.parse(applied.stdout).result.complete, true);
+  const posts = (await readFile(fixture.calls, 'utf8')).trim().split('\n').map(line => JSON.parse(line)).filter(call => call.method === 'POST');
+  assert.deepEqual(posts.map(call => [call.path, call.body.after]), [['/admin/v1/recompute', 'version-1']]);
 });

@@ -1,4 +1,4 @@
-import { chooseExportFormat, chooseWorkflowStep } from "./workflow-actions";
+import { chooseExportFormat, chooseWorkflowStep, openReviewSources } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { authenticationStatus, expectNoHorizontalPageOverflow as expectNoOverflow, json } from "./app-fixtures";
@@ -305,7 +305,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await mockApi(page);
     await page.goto("/#/library/movies/item/movie-1");
 
-    const membership = page.locator(".saved-review-memberships");
+    const membership = await openReviewSources(page);
     const choice = membership.getByRole("checkbox", { name: "Imported scan", exact: true });
     const info = membership.getByRole("button", { name: "Show scan details for Imported scan" });
     await expect(choice).toBeChecked();
@@ -314,9 +314,12 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await expect(page.getByRole("tooltip")).toContainText(/imported/i);
     await info.press("Escape");
     await expect(page.getByRole("tooltip")).toHaveCount(0);
+    // Escape closes the details first and leaves the Sources popover open.
+    await expect(membership).toBeVisible();
     await expect(choice).toBeChecked();
+    await membership.getByRole("button", { name: "Done" }).click();
 
-    await page.getByLabel("Sort", { exact: true }).selectOption("category");
+    await page.getByLabel("Group by", { exact: true }).selectOption("category");
     const video = page.getByRole("region", { name: "Video review filters" });
     const audio = page.getByRole("region", { name: "Audio review filters" });
     await expect(video.getByRole("button", { name: /Violence family/ })).toHaveAttribute("aria-expanded", "true");
@@ -347,19 +350,23 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await expect(linkedRows.first()).toBeChecked();
     await expect(linkedRows.last()).toBeChecked();
 
-    await expect(video.getByRole("columnheader", { name: "Time" })).toHaveAttribute("aria-sort", "ascending");
-    await expect(audio.getByRole("columnheader", { name: "Time" })).toHaveAttribute("aria-sort", "ascending");
-    await video.getByRole("button", { name: "Severity" }).click();
-    await expect(video.getByRole("columnheader", { name: "Severity" })).toHaveAttribute("aria-sort", "ascending");
-    await expect(audio.getByRole("columnheader", { name: "Time" })).toHaveAttribute("aria-sort", "ascending");
-    await video.getByRole("button", { name: "Severity" }).click();
-    await expect(video.getByRole("columnheader", { name: "Severity" })).toHaveAttribute("aria-sort", "descending");
-    await expect(video.getByRole("columnheader", { name: "Severity" })).toContainText("Severity ▼");
-    await expect(video.getByRole("button", { name: "Severity" })).toHaveCSS("display", "inline-flex");
-    await expect(video.getByRole("button", { name: "Severity" })).toHaveCSS("white-space", "nowrap");
-
-    await video.getByLabel("Video review filters table").evaluate((element) => { element.scrollLeft = 0; });
-    await audio.getByLabel("Audio review filters table").evaluate((element) => { element.scrollLeft = 0; });
+    const sort = (section: typeof video, label: string) => section.getByRole("group", { name: /^Order / }).getByRole("button", { name: new RegExp(`^${label}`) });
+    await expect(sort(video, "Time")).toHaveAccessibleName("Time, ascending");
+    await expect(sort(video, "Time")).toHaveAttribute("aria-pressed", "true");
+    await expect(sort(audio, "Time")).toHaveAccessibleName("Time, ascending");
+    await sort(video, "Severity").click();
+    await expect(sort(video, "Severity")).toHaveAccessibleName("Severity, ascending");
+    await expect(sort(video, "Time")).toHaveAttribute("aria-pressed", "false");
+    await expect(sort(audio, "Time")).toHaveAccessibleName("Time, ascending");
+    await sort(video, "Severity").click();
+    await expect(sort(video, "Severity")).toHaveAccessibleName("Severity, descending");
+    await expect(sort(video, "Severity")).toContainText("Severity ▼");
+    await expect(sort(video, "Severity")).toHaveCSS("display", /flex/);
+    await expect(sort(video, "Severity")).toHaveCSS("white-space", "nowrap");
+    // The tables fit their width: nothing scrolls sideways.
+    for (const table of [video.getByRole("table", { name: "Video review filters table" }), audio.getByRole("table", { name: "Audio review filters table" })]) {
+      expect(await table.evaluate((element) => element.parentElement!.scrollWidth - element.parentElement!.clientWidth)).toBe(0);
+    }
     await expectNoOverflow(page);
     await expectAxeClean(page);
     await page.screenshot({ path: `test-results/mcf13-review-${viewport.name}.png`, fullPage: true });

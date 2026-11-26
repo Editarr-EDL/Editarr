@@ -118,7 +118,6 @@ it.each([403, 404, 503])("handles initial signed connection failure %s", async s
     expect(screen.queryByText("private-target-key")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Disconnect community" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Lost-key recovery" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Recover import receipts" })).not.toBeInTheDocument();
     expect(auth.refresh).toHaveBeenCalledOnce();
   }
 });

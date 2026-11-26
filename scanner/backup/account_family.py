@@ -22,8 +22,12 @@ USER_REFERENCES = (
     ("audit_events", "target_user_id"),
     ("auth_sessions", "user_id"),
     ("community_identities", "user_id"),
+    ("community_master_links", "owner_id"),
+    ("community_master_preferences", "owner_id"),
     ("community_operations", "owner_id"),
     ("community_operations", "actor_id"),
+    ("community_sync_notifications", "owner_id"),
+    ("community_sync_state", "owner_id"),
     ("jellyfin_account_sync", "user_id"),
     ("jellyfin_user_blocks", "blocked_by"),
     ("media_access_scopes", "user_id"),
@@ -41,6 +45,8 @@ USER_REFERENCES = (
     ("user_provider_identities", "user_id"),
     ("media_item_exports", "intended_policy_owner_id"),
     ("media_item_export_regenerations", "policy_owner_id"),
+    ("retired_community_operations", "owner_id"),
+    ("retired_community_operations", "actor_id"),
 )
 
 OWNER_COUNT = "restore_owner_count"

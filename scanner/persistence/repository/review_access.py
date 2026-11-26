@@ -297,12 +297,14 @@ class ReviewAccess:
                 after = after.model_dump() if after else None
             if before != after:
                 require(self.access, ActionPair(own, other), target)
+        self._require_community_changes(stored, draft, target)
         from .review_policy import validate_policy_draft
 
         base_draft = validate_policy_draft(self.db, self.db.get(SavedReviewRow, review_id), draft)
         # Read-only provenance is not editable content and must not count as a change.
         before = {
-            value.id: value.model_dump(exclude={"label_edited"}) for value in stored.base_filters
+            value.id: value.model_dump(exclude={"label_edited", "community"})
+            for value in stored.base_filters
         }
         after = {value.id: value.model_dump() for value in base_draft}
         common = before.keys() & after.keys()
@@ -335,6 +337,23 @@ class ReviewAccess:
             require(
                 self.access, ActionPair(C.REVIEWS_CUES_EDIT_OWN, C.REVIEWS_CUES_EDIT_OTHER), target
             )
+
+    def _require_community_changes(self, stored, draft, target: ResourceRef) -> None:
+        """Changing included community filters is an evidence edit; taking a snapshot
+        (a new link or a refresh) also needs `community.search`."""
+        requested = getattr(draft, "community_memberships", None)
+        if requested is None:
+            return
+        captures = any(value.link_id or value.refresh for value in requested)
+        before = [value.source_id for value in stored.community_sources]
+        if captures or before != [value.source_id for value in requested]:
+            require(
+                self.access,
+                ActionPair(C.REVIEWS_EVIDENCE_EDIT_OWN, C.REVIEWS_EVIDENCE_EDIT_OTHER),
+                target,
+            )
+        if captures and C.COMMUNITY_SEARCH not in self.access.capabilities:
+            raise AccessDenied(AccessErrorCode.CAPABILITY_DENIED)
 
     def require_scan(self, item, media, *, allow_jobs=False):
         """Completed findings are shared; unfinished diagnostics remain job-scoped."""

@@ -1,0 +1,251 @@
+# ADR 0002: Community sharing uses one master filter set per work version
+
+## Status
+
+Accepted. Supersedes the revision-based catalog, artifact v1/v2, revision
+download, revision vote and revision ranking parts of the
+[community service contracts](../community-scan-service-contracts.md). Identity,
+enrollment, request authentication and Ed25519 manifest/envelope signing are
+unchanged.
+
+## Context
+
+Community sharing published each scan as an immutable signed revision. Users
+searched for revisions, ranked them by compatibility band and a Wilson score
+over revision votes, and imported one whole revision as a local scan. Several
+people covering the same release produced competing revisions instead of
+reinforcing each other. A filter's quality could not be judged on its own,
+and a downloaded scan could not be refreshed when others improved it.
+
+The community service has no users yet. The local Editarr database does have
+users and must keep their data.
+
+## Decision
+
+**Scope**
+
+- The community service database may be wiped, and its migrations are rebased
+  to a new baseline. The owner explicitly authorized this reset for the
+  community service only (D1). Old clients aren't supported. The v1/v2 upload,
+  search, download and revision-vote endpoints are removed (D2).
+- Every contributor's signed raw submission is retained. The master set can
+  always be re-derived from those submissions (D3).
+- The local database gets a versioned, data-preserving migration.
+  Community-imported scans stay as plain imported scans. Revision-link
+  metadata is archived after a verified backup.
+
+**Works and versions**
+
+- A **work** is a TMDB/TVDB ID, plus season and episode for TV. A **version**
+  is a release or cut of that work, and each version has one master set (D4).
+- A submission requires a TMDB or TVDB ID, plus season and episode for TV. A
+  query may use any subset of keys (D11).
+- Version names have aliases: a curated seed list (Theatrical, which also
+  means "no version"; Director's Cut; Extended Edition; Unrated), extended by
+  contributor suggestions that moderators approve. Admins can merge versions
+  (D12).
+- Version acceptance (D13):
+  1. A new label under a work creates a confirmed version.
+  2. An existing label that matches only on fuzzy tiers creates a candidate.
+  3. An existing label that matches on tiers 1–3 attaches to that version.
+  4. "Other" or no version creates a candidate.
+
+  A candidate is promoted automatically when at least 3 independent
+  contributors submit tier 1–3 evidence for it, or when a moderator confirms
+  it.
+
+**Matching**
+
+- Matching uses a tiered ladder that is shown as a Match % (D10):
+
+  | Tier | Evidence | Match % |
+  |---|---|---|
+  | 1 | Full-file SHA-256 | 100% |
+  | 2 | Sampled SHA-256 or MD5 quick hash | 80% |
+  | 3 | Audio or video stream fingerprint | 65% |
+  | 4 | TMDB/TVDB and alias, with runtime in tolerance | 30% |
+  | 5 | Title, year and alias, with runtime in tolerance | 15% |
+  | — | Tier 4 or 5 identity with runtime outside tolerance | 5% |
+
+- A runtime within ±2 s is the same cut, and one within ±30 s is a possible
+  cut. Hash and stream tiers ignore runtime.
+
+**Merging**
+
+- The client proposes how its cues correspond to master filters. These
+  proposals are hints only. The server fits its own offset and linear drift,
+  then merges deterministically from the stored submissions (D5).
+- Two cues are the same filter when they share a top-level category and both
+  their start and end are within ±N s after alignment. N defaults to 0.5 s and
+  is set only in the operator configuration (D6).
+- The subcategory follows a plurality of attestations, and ties keep the
+  current value. A language filter's word or phrase (`expression`) follows a
+  case-insensitive plurality the same way (W1).
+- Bounds are the median start and end, and their spread is exposed (D7).
+- Severity is a weighted vote with low = 1, medium = 1 and high = 3. Ties go to
+  the more severe value (D8).
+
+**Signals**
+
+- Attestations, receipt-bound per-filter 👍/👎 votes, disputes and coverage
+  negatives feed a Wilson lower bound (z = 1.96, with one positive and one
+  negative prior) (D9, D14, D17).
+- Coverage is per channel, not per model: a shared scan covers every audio
+  category for the ranges it analyzed audio, and every video category for the
+  ranges it analyzed the picture, except `commercial_content` and
+  `dispensable_scenes`, which no automated stage detects. A coverage negative
+  counts as a quarter of a downvote by default (`coverageNegativeWeight` 0.25,
+  operator-configurable); the owner briefly set 1.0 and then restored 0.25 (W2).
+  Local scans count toward nothing unless they are shared.
+- A filter is flagged **Low Confidence** when negatives exceed
+  attestations + upvotes.
+- One contributor counts once per filter. A re-shared downloaded filter counts
+  only if it was locally verified (D15).
+- Attribution is a count only, with no names (D16).
+- Moderators can quarantine filters, attestations, contributors or versions.
+  Each action recomputes from the raw submissions (D18).
+
+**Download and updates**
+
+- Clients download the whole service-signed master set for a version (D19).
+- A filter is served only if its confidence is at least 0.05. That floor is
+  set in the operator configuration.
+- Each version has a monotonic `revision`. Clients bulk-check revisions at
+  most once a day and can check one item on demand.
+- Updates never silently overwrite anything the user has touched (D20). Since
+  U3 the user's edits live in reviews, so a link follows its latest revision
+  and a review keeps its edits when it refreshes.
+- Fuzzy matches (tier 4 and below) must be aligned locally before they apply.
+  A "Locally verified" badge marks filters that overlap a local finding (D21,
+  narrowed by U7).
+- Local adjustments become attestations on the next share (D22, made precise
+  by U6).
+- A saved review includes a master set as a snapshot of the link's served
+  filters, taken when it is included or refreshed, and adds each filter as an
+  editable review filter (U2, U4). Later master-set changes only flag the review
+  as changed until the user refreshes and saves it.
+
+**Community filters in reviews (owner-delegated decisions U1–U7)**
+
+The owner set the rule: "A Review can include a source from Scan or Community but
+filters can be adjusted or enabled or disabled. The Subtitles redaction should only
+be applied to audio filters enabled in the Review, regardless of source. Subtitles
+shouldn't have special behavior for Community or Scan", with "one uniform subtitle
+rule and community filters as normal editable review filters". The owner delegated
+the details below, recorded here as taken on their behalf (they were D1–D7 in that
+request; they are numbered U1–U7 here to keep D1–D22 unambiguous).
+
+- **U1 Read-only Community tab.** The Community tab browses the linked master
+  set: votes, Check for filter updates, alignment for fuzzy links, Find Filters,
+  a "Hide downvoted filters" toggle, the threshold slider and Show Low Confidence.
+  Confirm, Reject, Reset and per-filter edits, and their route
+  (`PATCH …/masters/{link_id}/filters/{filter_id}`), are removed. Decisions stored
+  by earlier builds stay in the database and no longer affect anything.
+- **U2 Starting state.** Including a set adds every served filter to the review.
+  The threshold and Show Low Confidence decide which start enabled: below-threshold
+  and Low Confidence filters arrive disabled, both on inclusion and for new filters
+  on Refresh.
+- **U3 No update review.** The Community tab's update review (New, Changed, Removed,
+  Accept, Keep mine, Dismiss) and its banner are removed. Check for filter updates
+  and the daily sync only download and apply the latest verified snapshot to the
+  link. A review brings changes in with Refresh: filters are matched by stable
+  filter ID following merges; edited filters keep the user's values, unedited ones
+  take the new master values, new ones start per U2, and filters no longer served
+  stay flagged "Removed from community", disabled unless the user edited them.
+  Refresh is a new review revision. Notifications still link to the item, and the
+  review shows the Refresh indicator. Update and dismissal tables are kept but
+  unused.
+- **U4 Normal review filters.** Community filters appear in the same results and
+  timeline as scan filters (with a Community source label, confidence, contributor
+  count and version), are enabled, disabled and adjusted like them, and go through
+  the same policy, export, EDL, MCF, publication, sidecar and subtitle paths with no
+  community-specific branch except provenance. They are stored as `review_filters`
+  rows (migration 0040).
+- **U5 One subtitle rule.** Subtitle redaction uses enabled review filters that are
+  audio-channel language filters with a word or phrase, whatever their source
+  or action (a skip redacts too, because a cue overlapping it is still shown).
+  Since W1 a community filter's label is its master expression, so a community
+  language mute with one redacts like a scan filter; one without an expression
+  doesn't, like any wordless filter. The community-specific subtitle alignment,
+  notices and counters are removed.
+- **U6 Sharing** (amended by W3, W4). Sharing a review turns the user's review edits
+  into attestations: an edited community filter that is enabled is a `support` with
+  the user's bounds, subcategory, severity, action, expression (its label, for a
+  language filter) and its `proposedFilterId`. Disabled filters, edited or not, are
+  not sent, and Editarr never sends a `dispute`. Untouched filters, filters of a
+  snapshot of another community version than the submission's link, and filters no
+  longer served aren't sent. Scan filters behave as before, and the Community tab's
+  old local decisions are never shared.
+- **Only direct edits count** (amended by W4). A community filter is the user's edit
+  once the user directly changes its times, classification, severity, action or
+  label (`community_edited`). Turning it on or off, alone or by group, and bulk
+  changes such as Apply Filter Defaults don't count, so they are neither shared nor
+  kept over new master values on Refresh; the enabled state itself is kept.
+- **Policy.** The owner's instance filter policy applies to community filters like
+  any other source.
+- **Earlier decisions.** Migration 0040 measures each stored snapshot against its
+  link's master values, so filters the owner adjusted count as edited, and rejected
+  ones become disabled but unedited review filters (W4). Decisions on links no review
+  included no longer apply; their rows, and update and dismissal rows, are kept
+  unused.
+- The master-list toggle and its preference are named "Hide downvoted filters"
+  (`hide_downvoted`).
+- **U7 Locally verified.** A community filter is locally verified when it overlaps a
+  local scan finding of the same top-level category on the same media version,
+  after alignment. Confirming or adjusting no longer counts.
+
+**Owner decisions on words and sharing (W1–W4)**
+
+The owner decided these on 2026-11-25; they amend U5, U6 and the edit rule above.
+
+- **W1 Community filters carry the word or phrase.** A v3 artifact entry may carry an
+  `expression`: 1–64 code points after NFC and trimming, without control or format
+  characters, and only on `language` supports (otherwise `invalid_submission`).
+  Editarr sends a language cue's label, or a community review filter's label, as
+  its expression. The service merges a filter's expression as the plurality of the
+  case-insensitive groups among its counted supports, displayed in the group's
+  most common spelling, with ties keeping the incumbent, then the smallest value;
+  with none it is null. The expression is part of the snapshot and its served
+  content, so a change advances the revision; it names no contributor. In a review
+  a community filter's label is its expression: unedited filters take a new master
+  expression on Refresh, and a label the user edited is kept. The uniform subtitle
+  rule (U5) then applies unchanged.
+- **W2 Coverage negatives weigh a quarter.** `coverageNegativeWeight` defaults to
+  0.25 again, so the worked example's violence filter is `wilson(5, 1.25)` =
+  0.393857102.
+- **W3 No disputes from reviews.** Disabling a community filter never sends a
+  dispute; disabled community filters are simply not shared. The protocol keeps
+  the `dispute` kind for compatibility, but Editarr doesn't send it, and a 👎 vote
+  is the only negative a user casts.
+- **W4 Turning filters on or off is not an edit.** `community_edited` is set only by
+  direct changes to times, subcategory, severity, action or the expression (the label of
+  a language filter; a label elsewhere is not an expression).
+  Sharing sends a `support` only for enabled, edited community filters. On Refresh
+  unedited filters take the new master values and keep the enabled state the
+  review gave them; new filters start per the threshold and Low Confidence.
+  Migration 0040, still unreleased, was updated in place: rejected decisions become
+  disabled but unedited filters, and adjusted ones become edited.
+
+## Consequences
+
+- Contributions reinforce one shared set, and each filter carries its own
+  confidence and contributor count.
+- The service carries a deterministic merge engine. It needs golden and
+  order-independence tests, and every change recomputes the affected version.
+- Votes and moderation actions change served content, so they advance the
+  revision. A daily sync can therefore report changes that only affect
+  confidence, and the client applies those silently.
+- Accepting the first submission at face value lets an early bad submission
+  own a label. This is mitigated by allowing several versions with the same
+  label, ranked by trust.
+- Count-based confidence rewards Sybil accounts. This is mitigated by
+  Discord-bound identity, receipt-bound votes, per-contributor dedupe, the Low
+  Confidence rule and moderation recompute.
+- The local client gains master-set and sync state, and a migration that
+  archives old revision links without deleting them. Community filters in
+  reviews are ordinary review filters with community provenance; their snapshot
+  records each filter's master values and starting state so Refresh and sharing
+  can tell what the user edited.
+- The precise protocol is in
+  [community scan service contracts](../community-scan-service-contracts.md),
+  and the local routes are in the [local community API](../community-local-api.md).

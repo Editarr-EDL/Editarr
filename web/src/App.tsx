@@ -19,7 +19,8 @@ import type {
 import { usePageTitle } from "./shared/display";
 import { settingsSectionTitle } from "./settings/settings-sections";
 import { ScansFloatingPanel } from "./scans/scans-floating-panel";
-import { LibraryViewPage, SeasonEpisodesPage } from "./catalog/library-pages";
+import { LibraryViewPage } from "./catalog/library-view-page";
+import { SeasonEpisodesPage } from "./catalog/series-pages";
 import { AppSidebar } from "./ui/AppSidebar";
 import { EmptyPage } from "./ui/EmptyPage";
 import { navigate, parseRoute, isRootRoute, type Route } from "./routes";
@@ -28,6 +29,8 @@ import { usePrincipal } from "./auth/auth-gate";
 import { homeRoute, mayOpen } from "./auth/route-access";
 import { can } from "./auth/session";
 import { StableItemPage } from "./catalog/stable-item-page";
+import { useCommunitySync } from "./scans/use-community-sync";
+import { CommunityUpdatesEntry } from "./scans/community-updates-entry";
 
 const SettingsView = lazy(() => import("./settings/settings-view").then((module) => ({ default: module.SettingsView })));
 const UsersView = lazy(() => import("./settings/users/users-view").then((module) => ({ default: module.UsersView })));
@@ -39,6 +42,7 @@ function App() {
   const principal = usePrincipal();
   const mayBrowse = principal !== null && can(principal, "media.browse");
   const mayViewConnections = principal !== null && can(principal, "connections.view");
+  const communitySync = useCommunitySync(principal !== null && can(principal, "community.download"));
   const [route, setRoute] = useState<Route>(() => parseRoute());
   const [settings, setSettings] = useState<JellyfinSettings | null>(null);
   const [libraries, setLibraries] = useState<JellyfinLibrary[]>([]);
@@ -155,7 +159,8 @@ function App() {
 
   return <div className="editarr-shell">
     <AppSidebar principal={principal} route={route} libraries={libraries} settings={settings}
-      error={navigationError} onRetry={() => void refreshNavigation()} onNavigate={guardedNavigate} />
+      error={navigationError} onRetry={() => void refreshNavigation()} onNavigate={guardedNavigate}
+      notifications={<CommunityUpdatesEntry sync={communitySync} onNavigate={guardedNavigate} />} />
     <main className="app-main">
       {!allowed && <EmptyPage title="Page unavailable" body="Your account cannot open this page. Choose another page from the navigation." />}
       {allowed && <>

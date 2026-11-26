@@ -123,8 +123,8 @@ Browser, at 1440 and 320 pixels:
   route value is gone, and the same artwork URL from the same page is `404`.
   After a reload the page is still alice, with the same scope, none of the
   owner's values, and the artwork still `404` `not_found`.
-- With the Family listing held, the library shows `0 shown` and a disabled
-  Refresh Library button. With it aborted, an alert offers Retry. Neither
+- With the Family listing held, the library shows `Loading library…`, no
+  title count and a disabled `Refresh library` (⟳) button. With it aborted, an alert offers Retry. Neither
   shows another library's titles. The hold and abort happen in the browser's
   network layer; the server is not replaced.
 - bob's revoked state is checked in a page opened after the sync. His

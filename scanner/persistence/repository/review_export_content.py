@@ -21,6 +21,7 @@ from scanner.models import (
 )
 
 from .repository_mcf_preflight import _signature_value, filter_mcf_value
+from .review_community_sources import export_runtime
 from .review_export_target import _review_export_scans
 from .review_policy import (
     PreparedReviewPolicy,
@@ -29,6 +30,9 @@ from .review_policy import (
     require_policy_revision,
 )
 from .review_policy_evidence import policy_export_filters, policy_export_interval
+
+# The source scan EDL findings name for a filter from a community snapshot.
+COMMUNITY_SOURCE = "community"
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,9 @@ class PreparedReviewExport:
     format: ExportFormat
     format_revision: int
     content: bytes
+    # The runtime of the exported media; retained snapshots of a review without scans
+    # reuse it.
+    duration_seconds: float | None = None
 
 
 def prepare_review_export(
@@ -62,22 +69,29 @@ def prepare_review_export(
     require_policy_revision(policy, policy_revision, policy_owner_id)
     require_policy_evidence(policy)
     memberships, scans, media = _review_export_scans(db, review)
-    duration = min(
-        (scan.duration_seconds for scan in scans.values() if scan.duration_seconds is not None),
-        default=None,
-    )
+    duration = export_runtime(db, review, list(scans.values()), lambda: _probed_duration(media))
     if export_format == ExportFormat.MCF:
         preflight = preflight_saved_review_mcf(db, review_id, prepared=policy)
         if not preflight.eligible:
             raise root.IncompleteMcfReview(preflight)
     content, format_revision = render_review_export(review, policy, export_format, duration)
     return PreparedReviewExport(
-        review, policy, tuple(memberships), media, export_format, format_revision, content
+        review,
+        policy,
+        tuple(memberships),
+        media,
+        export_format,
+        format_revision,
+        content,
+        duration,
     )
 
 
 def render_review_export(review, policy, export_format, duration):
-    """Render prepared live or retained review values through the same format serializers."""
+    """Render prepared live or retained review values through the same format serializers.
+
+    Scan and community filters are review filters alike; only selected ones export.
+    """
     filters = policy_export_filters(policy, duration_seconds=duration)
     if export_format == ExportFormat.MCF:
         document = ReviewMcfDocument.model_validate(review.mcf_document, from_attributes=True)
@@ -112,7 +126,7 @@ def render_review_export(review, policy, export_format, duration):
         findings = [
             ScanFinding(
                 id=position,
-                scan_id=review_filter.source_scan_id,
+                scan_id=review_filter.source_scan_id or COMMUNITY_SOURCE,
                 **{
                     field: getattr(review_filter, field)
                     for field in (
@@ -140,3 +154,12 @@ def render_review_export(review, policy, export_format, duration):
         content = export_edl_content(findings).encode("utf-8")
         format_revision = review.edl_content_revision
     return content, format_revision
+
+
+def _probed_duration(media: Path) -> float | None:
+    """The runtime of a review's media file when no scan records one."""
+    try:
+        seconds = root.get_video_duration(str(media))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return seconds if seconds and seconds > 0 else None

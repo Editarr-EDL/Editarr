@@ -21,8 +21,8 @@ def wait_job(application, path, headers=None):
     raise AssertionError(f"Backup job never settled: {path}")
 
 
-def backup_roundtrips(configuration, reader, candidate, media, installation_type):
-    """Restore exact registered identity and full evidence, then sign against the live service."""
+def backup_roundtrips(configuration, reader, link, installation_type):
+    """Restore the exact registered identity and master links with their snapshot bytes."""
     source_profile = reader.request("GET", "/api/community/connection")
     for encrypted in (False, True):
         passphrase = "synthetic backup passphrase" if encrypted else None
@@ -76,14 +76,15 @@ def backup_roundtrips(configuration, reader, candidate, media, installation_type
             assert remote["identity"]["keyId"] == source_profile["identity"]["keyId"]
             assert remote["profile"]["contributorId"] == source_profile["profile"]["contributorId"]
             with sqlite3.connect(restored.directory / "scanner.db") as db:
-                imports = db.execute("SELECT COUNT(*) FROM community_imports").fetchone()[0]
-                assert imports == 1
+                sql = (
+                    "SELECT l.id, l.community_version_id, s.revision, s.snapshot_bytes, "
+                    "s.receipt_json FROM community_master_links l JOIN community_master_snapshots "
+                    "s ON s.link_id = l.id ORDER BY l.id, s.revision"
+                )
+                rows = db.execute(sql).fetchall()
+                assert [row[0] for row in rows] == [link["linkId"]]
                 with sqlite3.connect(reader.directory / "scanner.db") as original:
-                    sql = (
-                        "SELECT artifact_bytes, manifest_bytes, signature_bytes "
-                        "FROM community_imports"
-                    )
-                    assert db.execute(sql).fetchall() == original.execute(sql).fetchall()
+                    assert rows == original.execute(sql).fetchall()
             refused = restored.client.post(
                 "/api/setup-restore/flow", headers={"Origin": restored.origin}
             )

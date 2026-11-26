@@ -24,7 +24,8 @@ it.each([false, true])("masks audio editor text unless metadata is editable (%s)
     metadataEditable={metadataEditable} focusFilterId="audio-word"
     onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
     onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
-  await screen.findByRole("button", { name: "Edit filter audio-word" });
+  // The row's menu names the filter by its censored word.
+  await screen.findByRole("button", { name: "More actions for f*dg* at 0:01" });
   if (metadataEditable) {
     expect(screen.getByLabelText("Filter audio-word label")).toHaveValue("fudge");
     expect(screen.getByLabelText("Filter audio-word description")).toHaveValue("oh fudge it");
@@ -85,13 +86,18 @@ it("renders server-decided selection and severity locks without disabling permit
     requiredFilterIds={["required"]} lockedSeverities={{ required: "high" }}
     focusFilterId="required" onToggleFilters={vi.fn()} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
     onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
-  expect(await screen.findByRole("button", { name: "Edit filter required" })).toBeVisible();
+  fireEvent.click(await screen.findByRole("button", { name: "More actions for Fight at 0:01" }));
+  const menu = screen.getByRole("menu", { name: "More actions for Fight at 0:01" });
+  expect(within(menu).getByRole("menuitem", { name: "Edit Fight at 0:01" })).toBeEnabled();
+  expect(within(menu).getByRole("menuitem", { name: "Delete Fight at 0:01" })).toBeDisabled();
+  fireEvent.keyDown(menu, { key: "Escape" });
   expect(screen.getByRole("checkbox", { name: /Selected.*required by instance policy/ })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Delete filter required" })).toBeDisabled();
   expect(await screen.findByRole("radio", { name: "High" })).toBeChecked();
   expect(screen.getByRole("radio", { name: "Low" })).toBeDisabled();
   expect(screen.getByLabelText("Filter required label")).toBeEnabled();
-  expect(screen.getByRole("region", { name: "Video review filters table" })).toHaveAttribute("tabindex", "0");
+  // The rows fit their width, so the table isn't a sideways-scrolling region.
+  expect(screen.getByRole("table", { name: "Video review filters table" })).toBeVisible();
+  expect(screen.queryByRole("region", { name: "Video review filters table" })).not.toBeInTheDocument();
 });
 
 it("shows a registry load failure in the filter editor instead of loading forever", async () => {
@@ -224,10 +230,38 @@ it("sorts mixed review filters by time and restores the collapsible categories",
   expect(timeline).toHaveTextContent("2/2 results");
 
   fireEvent.change(show, { target: { value: "visual" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), { target: { value: "category" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Group by" }), { target: { value: "category" } });
   const category = await within(list).findByRole("button", { name: /Violence \(General\) subcategory/ });
   expect(category).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(category);
   expect(await within(list).findByRole("button", { name: /fight finding group/ })).toBeVisible();
   expect(within(list).queryByRole("region", { name: "Audio review filters" })).not.toBeInTheDocument();
+});
+
+it("lists community filters as normal results with their community source", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ families: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  const community = (id: string, start: number, edit_action: "skip" | "mute", selected = true) => ({
+    id: `row-${id}`, source_scan_id: null, source_finding_id: null, community_source_id: "src", community_filter_id: id,
+    source: edit_action === "mute" ? "audio" as const : "visual" as const, category: "violence" as const,
+    subcategory: "punching" as const, severity: "high" as const, mcf_channel: null, mcf_comment: null, label: null,
+    details: null, group_key: null, start_seconds: start, end_seconds: start + 10, confidence: 0.5, edit_action, selected,
+    community: { source_id: "src", filter_id: id, label: "Theatrical", master_revision: 1, confidence: 0.5,
+      contributor_count: 2, low_confidence: false, removed: id === "c2", locally_verified: false },
+  });
+  const onToggleFilters = vi.fn();
+  render(<SavedReviewOverview filters={[community("c1", 10, "skip"), community("c2", 30, "skip", false), community("c3", 60, "mute")]}
+    memberships={[]} scans={[]} busy={false} defaultSort="time"
+    onToggleFilters={onToggleFilters} onChangeFilter={vi.fn()} onDeleteFilter={vi.fn()}
+    onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />);
+  const summary = screen.getByRole("region", { name: "Timeline summary" });
+  expect(summary).toHaveTextContent("Combined results from 0 selected scans and 3 community filters.");
+  expect(summary).toHaveTextContent("2/3 results");
+  expect(summary).toHaveTextContent("Skipped Time 0:10");
+  const table = screen.getByRole("table", { name: "Review filters by time" });
+  expect(within(table).getAllByText("Community · Theatrical")).toHaveLength(3);
+  expect(within(table).getByText("Removed from community")).toBeInTheDocument();
+  fireEvent.click(within(table).getByRole("checkbox", { name: /at 0:30/ }));
+  expect(onToggleFilters).toHaveBeenCalledWith(["row-c2"], true);
+  fireEvent.click(within(table).getByRole("button", { name: "More actions for punching at 0:10" }));
+  expect(screen.getByRole("menuitem", { name: "Edit punching at 0:10" })).toBeEnabled();
 });

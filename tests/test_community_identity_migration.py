@@ -32,6 +32,11 @@ from tests.community_identity_migration_support import (
 )
 from tests.community_identity_migration_support import no_network as no_network
 from tests.community_identity_support import client_home
+from tests.community_master_migration_support import (
+    comparable,
+    legacy_rows,
+    retire_publications,
+)
 from tests.test_account_migration import _snapshot
 from tests.test_activity_migration import _assert_recoverable, _owner_setup
 
@@ -49,9 +54,9 @@ def _built(tmp_path, revision, *, administrator=True):
 
 
 def _rows(path, table, columns):
+    """Rows of a pre-0037 table, wherever 0037 keeps them; operations in ID order."""
     with sqlite3.connect(path) as database:
-        selected = ", ".join(f'"{name}"' for name in columns)
-        return database.execute(f'SELECT {selected} FROM "{table}" ORDER BY rowid').fetchall()
+        return legacy_rows(database, table, list(columns))
 
 
 def _resolve(path):
@@ -92,15 +97,20 @@ def test_every_supported_revision_gives_the_owner_its_identity_and_history(tmp_p
         assert len(reference) == 32 and set(reference) <= set("0123456789abcdef")
         assert database.execute("SELECT count(*) FROM audit_events").fetchone() == (0,)
     assert identity_files(path.parent / DIRECTORY) == files, "the migration moves no file"
-    for table in COMMUNITY_TABLES:
-        if table in original:
-            assert _rows(path, table, columns[table]) == original[table], table
+    tables = [table for table in COMMUNITY_TABLES if table in original]
+    actual = {table: _rows(path, table, columns[table]) for table in tables}
+    expected = retire_publications(
+        {table: comparable(table, columns[table], original[table]) for table in tables},
+        actual,
+        columns,
+    )
+    assert actual == expected
     if revision in _COMMUNITY_SOURCES:
         assert _rows(path, "community_connections", ["credential_ref"]) == [(reference,)]
         assert _rows(path, "community_operations", ["operation_id", "owner_id", "actor_id"]) == [
+            ("op-publish", 1, None),
             ("op-receipt", 1, None),
             ("op-vote", 1, None),
-            ("op-publish", 1, None),
         ]
 
     home, identity = _resolve(path)
@@ -137,7 +147,12 @@ def test_history_without_an_owner_waits_and_owner_setup_never_invents_an_actor(t
         assert database.execute(
             "SELECT credential_ref, user_id FROM community_identities"
         ).fetchall() == [(home.credential_ref, 1)]
-    assert _rows(path, "community_operations", ["owner_id", "actor_id"]) == [(1, None)] * 3
+    # Owner setup adopts live history; 0037's retired receipt and vote stay unattributed.
+    assert _rows(path, "community_operations", ["operation_id", "owner_id", "actor_id"]) == [
+        ("op-publish", 1, None),
+        ("op-receipt", None, None),
+        ("op-vote", None, None),
+    ]
     assert _resolve(path)[0] == home
 
 
@@ -241,9 +256,9 @@ def test_a_recovery_export_reupgrades_with_the_same_identity_and_history(tmp_pat
     assert identity.contributor_id == CONTRIBUTOR
     assert identity.recovery == json.loads(files["identity.json"])["recovery"]
     assert _rows(recovered, "community_operations", ["operation_id", "owner_id"]) == [
+        ("op-publish", 1),
         ("op-receipt", 1),
         ("op-vote", 1),
-        ("op-publish", 1),
     ]
     assert identity_files(active_root) == files
 

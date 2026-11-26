@@ -1,0 +1,31 @@
+/* The community vote pill and its 👍 👎 ‒ menu (scans/vote-menu-button.tsx). */
+.vote-menu-pill { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; min-width: 64px; height: 28px;
+  padding: 0 9px 0 10px; border: 1px dashed #5a6476; border-radius: 999px; color: #aeb8c9; background: transparent;
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.vote-menu-pill[data-vote="up"] { border: 1px solid #2f7a5b; color: #7ce5bd; background: #163c31; }
+.vote-menu-pill[data-vote="down"] { border: 1px solid #8a3343; color: #ff9aa9; background: #3c1820; }
+.vote-menu-pill:hover:not([aria-disabled="true"]) { filter: brightness(1.18); }
+.vote-menu-pill[aria-expanded="true"] { box-shadow: 0 0 0 1px #8dafef; }
+.vote-menu-pill[aria-disabled="true"] { cursor: not-allowed; opacity: 0.55; }
+.vote-menu-pill[aria-busy="true"] { cursor: progress; opacity: 0.8; }
+.vote-menu-pill [aria-hidden="true"]:first-child { font-size: 14px; }
+.vote-menu-pill[data-vote="none"] [aria-hidden="true"]:first-child { font-size: 12px; }
+.vote-menu-caret { font-size: 10px; opacity: 0.8; }
+.vote-menu-spinner { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: vote-menu-spin 0.8s linear infinite; }
+@keyframes vote-menu-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .vote-menu-spinner { animation-duration: 2.4s; } }
+
+/* Hidden until placed beside its pill. */
+.vote-menu { position: fixed; z-index: 40; visibility: hidden; display: flex; gap: 4px; padding: 6px; border: 1px solid #4d5c73; border-radius: 9px;
+  background: #1b2029; box-shadow: 0 10px 28px rgb(0 0 0 / 62%); }
+.vote-menu [role="menuitemradio"] { display: grid; place-items: center; width: 38px; height: 34px; padding: 0; border: 1px solid #3c4350;
+  border-radius: 7px; color: #dce3ef; background: #222731; font-size: 16px; line-height: 1; cursor: pointer; }
+.vote-menu [role="menuitemradio"]:hover { background: #2b3240; }
+.vote-menu [role="menuitemradio"][aria-checked="true"] { border-color: #8dafef; background: #23304a; }
+.vote-menu [role="menuitemradio"]:focus-visible { outline: 2px solid #8dafef; outline-offset: 1px; }
+
+@media (pointer: coarse) {
+  .vote-menu-pill { min-height: 44px; }
+  .vote-menu [role="menuitemradio"] { width: 44px; height: 44px; }
+}

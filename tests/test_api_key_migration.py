@@ -29,9 +29,10 @@ from scanner.security.api_keys import (
 )
 from tests.activity_migration_support import _upgrade
 from tests.community_identity_migration_support import no_network as no_network
+from tests.community_master_migration_support import retire_publications
 from tests.explicit_filter_modes_support import drop_0031_additions
-from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.jellyfin_sync_migration_support import drop_0018_additions
+from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_activity_migration import _assert_recoverable
 from tests.test_backup_activation import _fixture, _restore
@@ -105,7 +106,7 @@ def test_every_supported_revision_keeps_its_key_and_sealing_removes_plaintext(tm
             assert upgraded.pop(table) == []
         drop_0018_additions(upgraded)
         drop_0031_additions(upgraded, original)
-        assert without_stable_media_identity(upgraded) == original
+        assert without_stable_media_identity(upgraded) == retire_publications(original, upgraded)
     if "api_keys" in original:
         assert _keys(path) == [(DIGEST, KEY if readable else None, None)]
         assert _seal(path) == (1 if readable else 0)

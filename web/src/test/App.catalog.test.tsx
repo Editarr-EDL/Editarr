@@ -23,12 +23,12 @@ describe("production saved-review UI authority", () => {
     const published = screen.getByRole("region", { name: "Published files" });
     expect(mediaHeading.compareDocumentPosition(published) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(published.compareDocumentPosition(workflow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(workflow).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Scans", "Review", "Subtitles", "Publish"]);
+    expect(within(workflow).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Community", "Scans", "Review", "Subtitles", "Publish"]);
     expect(screen.getByRole("heading", { name: "Saved reviews" })).toBeVisible();
     expect(screen.getByRole("table", { name: "Saved reviews" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /^Import$/ })).not.toBeInTheDocument();
     await openWorkflowStep("Scans");
-    const scanTools = screen.getByRole("button", { name: /^Find Filters$/ }).parentElement!;
+    const scanTools = screen.getByRole("button", { name: /^Recover Scans$/ }).closest(".workflow-scan-actions") as HTMLElement;
     expect(within(scanTools).getByRole("button", { name: /^Import$/ })).toBeVisible();
     await openWorkflowStep("Review");
     const newReviewButton = screen.getByRole("button", { name: "New Review" });

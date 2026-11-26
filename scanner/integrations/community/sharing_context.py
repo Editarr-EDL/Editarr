@@ -10,7 +10,6 @@ from scanner.db import CommunityImportRow
 from scanner.formats.community.codec import ArtifactError, ResourceBounds, parse_artifact
 from scanner.modeling.media_identity import MediaIdentity
 
-from .donation_projection import audio_source_ids
 from .donation_sources import SourceRef, capture_source
 from .transport import CommunityFailure
 
@@ -21,6 +20,28 @@ TERMS_TEXT = (
     "you have permission to share. Authors cannot withdraw contributions; operators "
     "may moderate availability. Media files and third-party rights are not included."
 )
+
+
+def audio_source_ids(data: dict, reference: SourceRef) -> set[str]:
+    """Return the exact source candidates used by the public audio projection."""
+    generated = reference.kind == "scan" and data["root"]["origin"] == "generated"
+    scans = {item["id"]: item for item in data["scans"]}
+    identifiers = {
+        item.get("source_scan_id", item.get("scan_id"))
+        for item in data["findings"]
+        if not item.get("community_source_id")
+        and (
+            item["mcf_channel"]
+            or ("both" if not generated else "audio" if item["source"] == "audio" else "video")
+        )
+        in {"audio", "both"}
+    }
+    if reference.kind == "scan" and data["root"]["scan_audio"]:
+        identifiers.add(data["root"]["id"])
+    for membership in data["memberships"]:
+        if membership["role"] in {"audio", "both"} and scans[membership["scan_id"]]["scan_audio"]:
+            identifiers.add(membership["scan_id"])
+    return identifiers
 
 
 @dataclass(frozen=True)
@@ -50,7 +71,6 @@ class SharingSource:
                 terms.append(
                     {
                         "authorId": row.author_id,
-                        "revisionId": row.revision_id,
                         "termsVersion": original.artifact.sharing_terms,
                     }
                 )

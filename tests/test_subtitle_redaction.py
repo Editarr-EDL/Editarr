@@ -64,3 +64,4 @@ def test_phrase_does_not_cross_punctuation_or_speaker_break():
     document = parse_subtitles(original, "srt")
     output = redact_subtitles(document, (SubtitleMute(1, 6, "hell you"),))
     assert output.document.render(output.replacements) == original
+

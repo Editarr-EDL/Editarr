@@ -146,7 +146,7 @@ def test_migration_resources_work_from_an_isolated_wheel(tmp_path):
             "import sqlite3; "
             "assert sqlite3.connect('fresh.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0036_sampled_media_identity'",
+            "'0040_review_community_filters'",
         ],
         cwd=tmp_path,
         env=environment,
@@ -216,10 +216,12 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
             "scanner/security/community_signatures.py",
             "scanner/security/community_key_rotation.py",
             "scanner/security/community_key_recovery.py",
-            "scanner/integrations/community/donations.py",
+            "scanner/integrations/community/submissions.py",
             "scanner/integrations/community/publications.py",
-            "scanner/integrations/community/receipts.py",
-            "scanner/integrations/community/votes.py",
+            "scanner/integrations/community/masters.py",
+            "scanner/integrations/community/master_votes.py",
+            "scanner/integrations/community/master_sync.py",
+            "scanner/integrations/community/find.py",
             "scanner/backup/age_passphrase.exp",
             "scanner/backup/schedule.py",
             "scanner/backup/schedule_store.py",
@@ -244,9 +246,8 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
             "import_mcf",
             "import_metadata",
             "import_transaction",
-            "community_imports",
-            "community_import_projection",
             "community_import_targets",
+            "community_master_links",
             "community_publications",
         ):
             assert f"scanner/persistence/repository/{module}.py" in package.namelist()
@@ -271,17 +272,16 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
             "assert repository_imports.import_mcf_as_saved_review "
             "is repository.import_mcf_as_saved_review; "
             "assert callable(stage_imported_scan); "
-            "from scanner.integrations.community.downloads import download_and_import; "
-            "from scanner.persistence.repository.community_imports "
-            "import import_verified_download; "
-            "assert callable(download_and_import) and callable(import_verified_download); "
+            "from scanner.integrations.community.masters import MasterSets; "
+            "from scanner.persistence.repository.community_master_links import apply_master; "
+            "assert callable(MasterSets) and callable(apply_master); "
             "from scanner.http.api_lifecycle import startup; startup(); "
             "from scanner.settings.version_info import version_information; "
             "assert version_information().build_revision is None; "
             "import sqlite3; "
             "assert sqlite3.connect('data/scanner.db').execute("
             "'SELECT version_num FROM alembic_version').fetchone()[0] == "
-            "'0036_sampled_media_identity'",
+            "'0040_review_community_filters'",
         ],
         cwd=tmp_path,
         env=environment,
@@ -307,7 +307,7 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
         "community_schema_support.py",
         "jellyfin_setup_fake.py",
         "jellyfin_user_boundary.py",
-        "test_community_verified_import.py",
+        "test_community_submission_projection.py",
     ):
         shutil.copyfile(root / "tests" / name, support / name)
     users = support / "fixtures" / "multi-user" / "jellyfin-users-v1"
@@ -317,8 +317,8 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
     )
     vectors = support / "fixtures" / "community"
     vectors.mkdir(parents=True)
-    for name in ("donation-artifacts-v2.json", "download-receipt-v1.json"):
-        shutil.copyfile(root / "tests/fixtures/community" / name, vectors / name)
+    name = "donation-artifacts-v2.json"
+    shutil.copyfile(root / "tests/fixtures/community" / name, vectors / name)
     result = subprocess.run(
         [
             sys.executable,
@@ -328,7 +328,7 @@ def test_installed_app_startup_uses_packaged_migrations(tmp_path):
             "assert shutil.which('node') is None; import pytest; "
             "sys.exit(pytest.main(['-q', '--import-mode=importlib', "
             f"{str(restore_tests)!r}, "
-            f"{str(support / 'test_community_verified_import.py')!r}]))",
+            f"{str(support / 'test_community_submission_projection.py')!r}]))",
         ],
         cwd=tmp_path,
         env=environment,

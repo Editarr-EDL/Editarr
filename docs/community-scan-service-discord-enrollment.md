@@ -1,7 +1,7 @@
 # Discord enrollment and signing keys
 
 Discord OAuth2 and membership in the configured Editarr Discord server establish
-eligibility for community lookup, downloads, sharing and feedback. Local scans
+eligibility for finding, downloading, sharing and voting on community filters. Local scans
 and saved filters work independently of Discord. An installation signs community
 API requests and contributions with its Ed25519 key.
 

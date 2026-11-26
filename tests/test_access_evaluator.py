@@ -14,10 +14,8 @@ from scanner.security.access.fresh import FreshAuthentication
 from scanner.security.access.identity import AccountStatus, CredentialKind
 from scanner.security.access.overrides import OverrideEffect as O
 from scanner.security.access.targets import (
-    NO_MEDIA,
     ActionPair,
     MediaRef,
-    ResourceRef,
     TargetMismatch,
 )
 from scanner.security.access.vocabulary import TARGET_RULES, Authentication, Role
@@ -42,7 +40,7 @@ from tests.test_multi_user_capabilities import MATRIX, ROLE_COLUMNS, _grants
 API = CredentialKind.API_KEY
 SESSION = CredentialKind.SESSION
 OWNER_ONLY = sorted(c for c, row in CAPABILITIES.items() if row.owner_power is not None)
-OTHERS = {Kind.OTHER_ACCOUNT, Kind.OTHER_RESOURCE, Kind.OTHER_ACCOUNT_RESOURCE, Kind.SCOPED_RECORDS}
+OTHERS = {Kind.OTHER_ACCOUNT, Kind.OTHER_RESOURCE, Kind.SCOPED_RECORDS}
 
 
 def _code(decision):
@@ -215,7 +213,6 @@ def test_users_cannot_list_accounts_and_admins_cannot_assign_roles():
 
 
 DELETE_REVIEW = ActionPair(C.REVIEWS_DELETE_OWN, C.REVIEWS_DELETE_OTHER)
-RECEIPTS = ActionPair(C.COMMUNITY_RECEIPTS_RECOVER_OWN, C.COMMUNITY_RECEIPTS_RECOVER_OTHER)
 
 
 @pytest.mark.parametrize(
@@ -239,22 +236,6 @@ RECEIPTS = ActionPair(C.COMMUNITY_RECEIPTS_RECOVER_OWN, C.COMMUNITY_RECEIPTS_REC
         (Role.ADMIN, {}, DELETE_REVIEW, OWNER, ALLOWED_MEDIA, False, C.REVIEWS_DELETE_OTHER),
         (Role.ADMIN, {}, DELETE_REVIEW, USER, DENIED_MEDIA, False, E.NOT_FOUND),
         (Role.OWNER, {}, DELETE_REVIEW, USER, DENIED_MEDIA, False, C.REVIEWS_DELETE_OTHER),
-        (Role.USER, {}, RECEIPTS, USER, NO_MEDIA, False, C.COMMUNITY_RECEIPTS_RECOVER_OWN),
-        (Role.USER, {}, RECEIPTS, PEER_USER, NO_MEDIA, False, E.NOT_FOUND),
-        (Role.ADMIN, {}, RECEIPTS, USER, ALLOWED_MEDIA, False, C.COMMUNITY_RECEIPTS_RECOVER_OTHER),
-        (Role.ADMIN, {}, RECEIPTS, USER, DENIED_MEDIA, False, E.NOT_FOUND),
-        (Role.ADMIN, {}, RECEIPTS, PEER_ADMIN, ALLOWED_MEDIA, False, E.NOT_FOUND),
-        (Role.ADMIN, {}, RECEIPTS, PEER_ADMIN, ALLOWED_MEDIA, True, E.PROTECTED_ACCOUNT),
-        (Role.ADMIN, {}, RECEIPTS, OWNER, ALLOWED_MEDIA, True, E.PROTECTED_ACCOUNT),
-        (
-            Role.OWNER,
-            {},
-            RECEIPTS,
-            PEER_ADMIN,
-            DENIED_MEDIA,
-            False,
-            C.COMMUNITY_RECEIPTS_RECOVER_OTHER,
-        ),
     ],
 )
 def test_own_and_other_resources_by_current_owner_media_and_visibility(
@@ -328,8 +309,6 @@ def test_a_target_the_capability_cannot_act_on_is_a_caller_defect():
         decide(user, C.MODELS_DOWNLOAD, account_ref(USER))
     with pytest.raises(TargetMismatch):
         decide(user, C.PROFILE_VIEW_OWN, account_ref(PEER_USER))
-    with pytest.raises(TargetMismatch):
-        decide(user, C.COMMUNITY_RECEIPTS_RECOVER_OTHER, ResourceRef(None, NO_MEDIA))
     with pytest.raises(ValueError):
         ActionPair(C.REVIEWS_DELETE_OTHER, C.REVIEWS_DELETE_OWN)
 
@@ -342,8 +321,6 @@ def test_a_target_the_capability_cannot_act_on_is_a_caller_defect():
         (C.MODELS_INVENTORY_VIEW, (E.CAPABILITY_DENIED, "allowed", "allowed")),
         (C.MODELS_DOWNLOAD_CANCEL, (E.CAPABILITY_DENIED, "allowed", "allowed")),
         (C.MODELS_DELETE, (E.CAPABILITY_DENIED, "allowed", "allowed")),
-        (C.COMMUNITY_RECEIPTS_RECOVER_OWN, ("allowed", "allowed", "allowed")),
-        (C.COMMUNITY_RECEIPTS_RECOVER_OTHER, (E.NOT_FOUND, "allowed", "allowed")),
         (C.BACKUPS_CREATE, (E.CAPABILITY_DENIED, "allowed", "allowed")),
         (C.BACKUPS_SCHEDULE_EDIT, (E.CAPABILITY_DENIED, "allowed", "allowed")),
         (C.BACKUPS_STATUS_VIEW, (E.CAPABILITY_DENIED, "allowed", "allowed")),
@@ -351,7 +328,7 @@ def test_a_target_the_capability_cannot_act_on_is_a_caller_defect():
         (C.BACKUPS_DELETE, (E.CAPABILITY_DENIED, E.CAPABILITY_DENIED, "allowed")),
     ],
 )
-def test_model_receipt_and_backup_rows_by_default(capability, results):
+def test_model_and_backup_rows_by_default(capability, results):
     for role, expected in zip((Role.USER, Role.ADMIN, Role.OWNER), results, strict=True):
         access = build_access(role)
         target = valid_target(capability, access)
@@ -361,7 +338,7 @@ def test_model_receipt_and_backup_rows_by_default(capability, results):
 def test_capability_payload_lists_only_what_this_principal_may_attempt():
     session = build_access(Role.USER, revision=7)
     payload = capability_payload(session)
-    assert payload.version == "editarr-capabilities-9"
+    assert payload.version == "editarr-capabilities-10"
     assert payload.permission_revision == 7
     assert payload.principal.user_id == USER and payload.principal.credential is SESSION
     assert C.API_KEYS_ROTATE_OWN in payload.capabilities

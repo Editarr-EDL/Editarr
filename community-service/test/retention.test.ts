@@ -60,7 +60,7 @@ it('previews only bounded counts without executing mutations or exposing private
     { category: 'recoveryAuthorizations', eligible: 1, moreEligible: false },
     { category: 'requestNonces', eligible: 1, moreEligible: false },
   ]);
-  expect(prepare).toHaveBeenCalledTimes(8);
+  expect(prepare).toHaveBeenCalledTimes(10);
   expect(batch).not.toHaveBeenCalled();
   expect(JSON.stringify(plan)).not.toMatch(/private-|retention-person|retention-key|used-authority|retained-digest/);
   expect((await db.prepare('SELECT * FROM operations ORDER BY operation_id').all()).results).toEqual(before);
@@ -115,4 +115,13 @@ it('rejects invalid bounds/time and unavailable query metadata instead of fabric
   for (const time of [-1, NaN, 8_640_000_000_000_001]) await expect(previewRetention(db, time)).rejects.toThrow('invalid_time');
   const unavailable = { prepare: () => ({ bind() { return this; }, first: async () => null }) } as unknown as SqlDatabase;
   await expect(previewRetention(unavailable, now)).rejects.toThrow('retention_preview_unavailable');
+});
+it('finds expired rate windows and sync runs by their expiry index without a scan or sort', async () => {
+  const explain = { prepare: (sql: string) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`), batch: db.batch.bind(db) };
+  for (const [category, index] of [['rateCounters', 'idx_rate_counters_expiry'], ['syncRuns', 'idx_sync_runs_expiry']] as const) {
+    const plan = (await transientStatement(explain, category, now, 1, 'prune').all<{ detail: string }>()).results
+      .map(row => row.detail);
+    expect(plan.some(detail => detail.includes(`USING COVERING INDEX ${index} (`))).toBe(true);
+    expect(plan.some(detail => /^SCAN |TEMP B-TREE/.test(detail))).toBe(false);
+  }
 });

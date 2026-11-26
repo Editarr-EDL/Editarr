@@ -18,6 +18,11 @@ from sqlalchemy import create_engine
 
 from scanner.persistence.migrations import adoption
 from tests.account_migration_support import assert_preserved_after_account_migration
+from tests.community_master_migration_support import (
+    comparable,
+    legacy_rows,
+    retire_publications,
+)
 from tests.test_account_migration import _legacy_database
 
 ACCOUNTS = "0010_user_accounts"
@@ -244,6 +249,7 @@ def assert_assigned(path, original, columns, owner, *, source_revision, after_se
     if source_revision not in _ACCOUNT_MIGRATED and not after_setup:
         assert_preserved_after_account_migration(path, original, columns)
     with sqlite3.connect(path) as database:
+        selected, actual, expected = {}, {}, {}
         for name, names in columns.items():
             if name in _ACCOUNT_TABLES and (
                 after_setup or source_revision not in _ACCOUNT_MIGRATED
@@ -252,10 +258,13 @@ def assert_assigned(path, original, columns, owner, *, source_revision, after_se
             if (after_setup and name in _SETUP_TABLES) or name == "user_filter_preferences":
                 continue
             kept = [index for index, column in enumerate(names) if column not in _ASSIGNED]
-            selected = ", ".join(f'"{names[index]}"' for index in kept)
-            rows = database.execute(f'SELECT {selected} FROM "{name}" ORDER BY rowid')
-            expected = [tuple(row[index] for index in kept) for row in original[name]]
-            assert rows.fetchall() == expected, name
+            selected[name] = [names[index] for index in kept]
+            rows = [tuple(row[index] for index in kept) for row in original[name]]
+            expected[name] = comparable(name, selected[name], rows)
+            actual[name] = legacy_rows(database, name, selected[name])
+        expected = retire_publications(expected, actual, selected)
+        for name in selected:
+            assert actual[name] == expected[name], name
     revision = 1 if owner is not None else None
     with sqlite3.connect(path) as database:
         assert database.execute(

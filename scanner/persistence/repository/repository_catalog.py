@@ -35,6 +35,29 @@ from .repository_rows import (
 from .scan_verification_coverage import verification_coverage_by_scan
 
 
+def possible_candidate_scans(
+    db: Session, *, resolved_local_path: str, media_provider_id: str | None
+) -> list[ScanRow]:
+    """Completed scans of other files of the same work (TMDB/TVDB provider ID), newest first.
+
+    These are every scan `find_filter_candidates` may match; reading them needs no hashing,
+    so Recover Scans uses them to tell whether anything could be recovered.
+    """
+    if not media_provider_id:
+        return []
+    return (
+        db.query(ScanRow)
+        .join(MediaItemRow)
+        .filter(
+            ScanRow.status == "complete",
+            ScanRow.resolved_local_path != resolved_local_path,
+            ScanRow.media_provider_id == media_provider_id,
+        )
+        .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
+        .all()
+    )
+
+
 def find_filter_candidates(
     db: Session,
     *,
@@ -45,20 +68,19 @@ def find_filter_candidates(
     media_format: str | None,
     media_provider_id: str | None,
     source_path: str,
+    candidates: list[ScanRow] | None = None,
 ) -> list[tuple[Scan, str]]:
-    """Find completed scans of likely matching, but not yet linked, media files."""
-    if not media_provider_id:
-        return []
+    """Find completed scans of likely matching, but not yet linked, media files.
+
+    ``candidates`` reuses rows already read by ``possible_candidate_scans``. Media is hashed
+    only when some candidate is left unmatched by metadata.
+    """
     rows = (
-        db.query(ScanRow)
-        .join(MediaItemRow)
-        .filter(
-            ScanRow.status == "complete",
-            ScanRow.resolved_local_path != resolved_local_path,
-            ScanRow.media_provider_id == media_provider_id,
+        candidates
+        if candidates is not None
+        else possible_candidate_scans(
+            db, resolved_local_path=resolved_local_path, media_provider_id=media_provider_id
         )
-        .order_by(ScanRow.updated_at.desc(), ScanRow.created_at.desc())
-        .all()
     )
     normalized_scene_name = _normalized_media_name(scene_name) if scene_name else None
     normalized_release_group = _normalized_media_name(release_group) if release_group else None
@@ -90,6 +112,8 @@ def find_filter_candidates(
         else:
             unmatched_rows.append(row)
 
+    if not unmatched_rows:
+        return list(matches.values())
     target_path = Path(resolved_local_path)
     try:
         target_hash = compute_video_md5(str(target_path)) if target_path.is_file() else None

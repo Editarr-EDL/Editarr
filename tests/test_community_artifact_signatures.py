@@ -16,176 +16,17 @@ from scanner.security.community_artifact_signatures import (
     signature_base,
     verify_artifact_signature,
 )
-from tests.community_identity_support import only_identity_ref
-from tests.test_community_verified_import import import_database as import_database
-
-
-def test_v1_verified_bytes_import_without_inventing_stream_compatibility(import_database, tmp_path):
-    from dataclasses import replace
-
-    from sqlalchemy.orm import Session
-
-    from scanner.integrations.community.downloads import VerifiedDownload
-    from scanner.modeling.community_matching import MatchEvidence
-    from scanner.modeling.media_identity import (
-        DurationEvidence,
-        MediaIdentity,
-        ProviderIdentifier,
-        ReleaseEvidence,
-    )
-    from scanner.persistence.repository.community_import_projection import LocalImportTarget
-    from scanner.persistence.repository.community_imports import import_verified_download
-    from scanner.security.community_download_receipts import (
-        DownloadReceipt,
-        receipt_identity,
-        receipt_signing_bytes,
-    )
-    from tests.test_community_verified_import import RECEIPT_VECTOR, SERVICE, verified_input
-
-    artifact_bytes, manifest_bytes = original_bytes()
-    signer = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
-    signed = sign_artifact(
-        private_key=signer,
-        artifact_bytes=artifact_bytes,
-        manifest_bytes=manifest_bytes,
-        bounds=BOUNDS,
-    )
-    artifact = parse_artifact(artifact_bytes, bounds=BOUNDS, compressed=True).artifact
-    verified = verify_artifact_signature(
-        artifact_bytes=artifact_bytes,
-        manifest_bytes=manifest_bytes,
-        envelope_bytes=signed.envelope_bytes,
-        historical_key=HistoricalKey(
-            artifact.author.contributor_id,
-            artifact.author.key_id,
-            signer.public_key().public_bytes_raw(),
-            "retired",
-        ),
-        expected_submission_id=artifact.submission_id,
-        bounds=BOUNDS,
-    )
-    receipt_signer = Ed25519PrivateKey.from_private_bytes(
-        bytes.fromhex(RECEIPT_VECTOR["syntheticSeedHex"])
-    )
-    receipt = verified_input().receipt.receipt.model_copy(
-        update={
-            "revision_id": artifact.submission_id,
-            "artifact_digest": hashlib.sha256(artifact_bytes).hexdigest(),
-            "receipt_id": receipt_identity(
-                SERVICE,
-                "reader",
-                artifact.submission_id,
-                hashlib.sha256(artifact_bytes).hexdigest(),
-            ),
-        }
-    )
-    envelope = DownloadReceipt(
-        receipt=receipt,
-        signature=base64.b64encode(receipt_signer.sign(receipt_signing_bytes(receipt))).decode(),
-    )
-    downloaded = VerifiedDownload(
-        SERVICE,
-        "v1-root",
-        artifact.submission_id,
-        verified,
-        envelope,
-        verified_input().trusted_receipt_keys,
-    )
-    identity = MediaIdentity(
-        "movie",
-        tuple(
-            ProviderIdentifier(item.provider, item.entity_type, item.value, "local")
-            for item in artifact.media.work_ids
-            if item.entity_type == "movie"
-        ),
-    )
-    identity = replace(
-        identity, release=ReleaseEvidence(duration=DurationEvidence(100, "file_probe"))
-    )
-    target = LocalImportTarget(
-        "media-legacy", None, str(tmp_path / "v1-local.mp4"), MatchEvidence(identity)
-    )
-    with Session(import_database) as db:
-        revoked = replace(
-            downloaded,
-            verified=replace(
-                verified, historical_key=replace(verified.historical_key, status="revoked")
-            ),
-        )
-        with pytest.raises(ArtifactSignatureError):
-            import_verified_download(
-                db,
-                revoked,
-                target,
-                bounds=BOUNDS,
-                confirm_uncertain=True,
-                credential_ref=only_identity_ref(db),
-            )
-        result = import_verified_download(
-            db,
-            downloaded,
-            target,
-            bounds=BOUNDS,
-            confirm_uncertain=True,
-            credential_ref=only_identity_ref(db),
-        )
-        assert result.review_required
-        assert not result.compatibility.audio.strong_eligible
-        assert result.scan.community_provenance.artifact_schema == "community-artifact-1"
-        from scanner import repository
-        from scanner.models import ReviewCreate, ReviewFilterInput, ReviewSave, ReviewScanMembership
-
-        Path(target.resolved_local_path).write_bytes(b"synthetic physical target")
-        review = repository.create_saved_review(
-            db,
-            media_item_id=target.media_item_id,
-            media_source_id=None,
-            duration_seconds=100,
-            data=ReviewCreate(
-                name="Explicit mapped copy",
-                memberships=[ReviewScanMembership(scan_id=result.scan.id, role="both")],
-            ),
-        )
-        saved = repository.save_saved_review(
-            db,
-            review.id,
-            ReviewSave(
-                revision=review.revision,
-                policy_owner_id=review.policy_owner_id,
-                policy_revision=review.policy_revision,
-                name=review.name,
-                memberships=review.memberships,
-                filters=[
-                    ReviewFilterInput(**item.model_dump()).model_copy(
-                        update={
-                            "start_seconds": item.start_seconds
-                            * 100
-                            / artifact.media.duration_seconds,
-                            "end_seconds": item.end_seconds * 100 / artifact.media.duration_seconds,
-                            "category": "language",
-                            "subcategory": "swearing",
-                            "severity": "medium",
-                        }
-                    )
-                    for item in review.filters
-                ],
-                synchronization=review.synchronization,
-                mcf_document=review.mcf_document.model_copy(update={"material_end_seconds": 100}),
-            ),
-        )
-        exported = repository.export_saved_review_mcf(db, saved.id, saved.revision)
-        assert exported.exported_scans[0].community_provenance == result.scan.community_provenance
-        assert result.scan.duration_seconds == artifact.media.duration_seconds
-
 
 BOUNDS = ResourceBounds(4096, 16384, 10, 256, 12)
 FIXTURES = Path(__file__).resolve().parents[1] / "community-service/test/fixtures"
+# The retired v1 artifacts the service no longer ships; the signature framing is unchanged.
+LEGACY = Path(__file__).resolve().parent / "fixtures/community"
 VECTORS = json.loads((FIXTURES / "artifact-signatures-v1.json").read_text())
 
 
 def original_bytes():
     artifact_bytes = base64.b64decode(
-        json.loads((FIXTURES / "artifact-v1-gzip.json").read_text())["base64"]
+        json.loads((LEGACY / "artifact-v1-gzip.json").read_text())["base64"]
     )
     artifact = parse_artifact(artifact_bytes, bounds=BOUNDS, compressed=True)
     manifest_bytes = json.dumps(
@@ -207,7 +48,7 @@ def original_bytes():
 
 def derived_bytes():
     original, _ = original_bytes()
-    payload = json.loads((FIXTURES / "artifact-v1.json").read_text())
+    payload = json.loads((LEGACY / "artifact-v1.json").read_text())
     parent = {"submission_id": "submission-1", "digest": hashlib.sha256(original).hexdigest()}
     payload["submission_id"] = "derived-1"
     payload["kind"] = "derived"

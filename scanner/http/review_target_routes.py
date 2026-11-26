@@ -24,6 +24,7 @@ from scanner.persistence.repository.review_version_evidence import (
 )
 from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.runtime.scan_version import ScanVersionChanged, file_generation
+from scanner.security.access.api_shapes import AccessErrorCode
 from scanner.security.access.authorization import require
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.decisions import AccessDenied
@@ -123,6 +124,8 @@ def list_target(caller, target, sort, direction, stable_version_id=None):
 def create_target(caller, target, data):
     prepared = capture_target(caller, target)
     principal = caller.access.principal
+    if data.community_memberships and C.COMMUNITY_SEARCH not in caller.access.capabilities:
+        raise AccessDenied(AccessErrorCode.CAPABILITY_DENIED)
     require(
         caller.access,
         C.REVIEWS_CREATE_OWN,

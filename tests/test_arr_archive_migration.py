@@ -6,7 +6,7 @@ import pytest
 
 from scanner.persistence.migrations import adoption
 from tests import upgrade_matrix_support as state
-from tests.activity_migration_support import _clone
+from tests.activity_migration_support import _clone, _upgrade
 from tests.explicit_filter_modes_support import drop_0031_additions
 from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
@@ -213,7 +213,8 @@ def test_unsent_publications_of_archived_work_end_cancelled_and_sent_ones_await_
         database.execute(
             "UPDATE community_operations SET state = 'submitted' WHERE operation_id = 'op-sent'"
         )
-    adoption.upgrade_existing_database(path, path.parent)
+    # Stop at 0025: 0037 later retires every unfinished publication.
+    _upgrade(path, "0025_archive_arr_sources")
     with sqlite3.connect(path) as database:
         assert database.execute(
             "SELECT operation.operation_id, operation.state, publication.cancel_requested "

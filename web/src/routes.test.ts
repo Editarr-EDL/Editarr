@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mayOpen } from "./auth/route-access";
 import type { Capability } from "./auth/capabilities";
 import type { Principal } from "./auth/session";
-import { parseRoute } from "./routes";
+import { editarrItemRoute, libraryItemRoute, parseRoute } from "./routes";
 
 describe("parseRoute", () => {
   it("reads the account deletion deep link and nothing looser", () => {
@@ -11,6 +11,22 @@ describe("parseRoute", () => {
     expect(parseRoute("#/settings/users/abc/delete")).toEqual({ kind: "settings", section: "connections" });
     expect(parseRoute("#/settings/users/42")).toEqual({ kind: "settings", section: "connections" });
   });
+});
+
+it("opens a library item on a specific media source", () => {
+  expect(parseRoute(`#${libraryItemRoute("movies", "movie 1", "source/2")}`))
+    .toEqual({ kind: "library", libraryId: "movies", itemId: "movie 1", sourceId: "source/2" });
+  expect(parseRoute(`#${libraryItemRoute("movies", "movie-1")}`)).toEqual({ kind: "library", libraryId: "movies", itemId: "movie-1" });
+});
+
+it("opens an item's Community tab from library and title routes", () => {
+  expect(parseRoute(`#${libraryItemRoute("movies", "movie-1", "source-1", "community")}`))
+    .toEqual({ kind: "library", libraryId: "movies", itemId: "movie-1", sourceId: "source-1", step: "community" });
+  expect(parseRoute(`#${libraryItemRoute("movies", "movie-1", null, "community")}`))
+    .toEqual({ kind: "library", libraryId: "movies", itemId: "movie-1", step: "community" });
+  expect(parseRoute(`#${editarrItemRoute("title-1", "ver-1", undefined, "community")}`))
+    .toEqual({ kind: "title", titleId: "title-1", versionId: "ver-1", itemId: undefined, step: "community" });
+  expect(parseRoute("#title/title-1/version/ver-1")).not.toHaveProperty("step");
 });
 
 describe("Filters tabs", () => {

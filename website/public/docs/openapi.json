@@ -3468,41 +3468,12 @@
         ],
         "summary": "Recover Receipts",
         "operationId": "recover_receipts_api_community_import_receipts_recover_post",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "exclusiveMinimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "User Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -3533,35 +3504,8 @@
               "type": "string",
               "title": "Import Id"
             }
-          },
-          {
-            "name": "user_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "exclusiveMinimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "User Id"
-            }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RotationConfirmation"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5310,32 +5254,12 @@
         ],
         "summary": "Lookup",
         "operationId": "lookup_api_community_lookup_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LookupRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -5357,32 +5281,12 @@
         ],
         "summary": "Download",
         "operationId": "download_api_community_downloads_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DownloadRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -5404,32 +5308,12 @@
         ],
         "summary": "Status",
         "operationId": "status_api_community_downloads_status_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DownloadStatusRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -5508,16 +5392,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VoteChange"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5566,6 +5440,638 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/find": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Find",
+        "description": "Match the target's keys against the service and remember them under a `findKey`.",
+        "operationId": "find_api_community_find_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/aliases": {
+      "get": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Aliases",
+        "description": "The approved aliases for the version picker: Theatrical first, Other last.",
+        "operationId": "aliases_api_community_aliases_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Apply Master",
+        "description": "Download, verify and link a found version to the target's local version.",
+        "operationId": "apply_master_api_community_masters_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "community"
+        ],
+        "summary": "List Masters",
+        "description": "The caller's links for one item version.",
+        "operationId": "list_masters_api_community_masters_get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "media_source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}": {
+      "get": {
+        "tags": [
+          "community"
+        ],
+        "summary": "View Master",
+        "description": "The master view: the link, the saved preferences and every row in the local set.",
+        "operationId": "view_master_api_community_masters__link_id__get",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}/active-filters": {
+      "get": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Active Filters",
+        "description": "The link's filters that start enabled in a review, on the local timeline now,\nand their merged Simple EDL; `clipped=false` returns them unclipped.",
+        "operationId": "active_filters_api_community_masters__link_id__active_filters_get",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          },
+          {
+            "name": "clipped",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Clipped"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}/alignment/preview": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Preview",
+        "description": "Fit a transform and show every row on the local timeline; nothing is stored.",
+        "operationId": "preview_api_community_masters__link_id__alignment_preview_post",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlignmentPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}/alignment/approve": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Approve",
+        "description": "Store the previewed transform for `for_revision` and return the link.",
+        "operationId": "approve_api_community_masters__link_id__alignment_approve_post",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlignmentApproval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/preferences": {
+      "get": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Read Preferences",
+        "description": "The account's master-set display preferences, or the defaults.",
+        "operationId": "read_preferences_api_community_preferences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Save Preferences",
+        "description": "Save any preference. The threshold and Low Confidence toggle decide which community\nfilters start enabled when a review includes or refreshes them; hiding downvoted\nrows affects only the list.",
+        "operationId": "save_preferences_api_community_preferences_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}/filters/{filter_id}/vote": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Vote",
+        "description": "Persist the vote intent, send it with the link's receipt and record `myVote`.",
+        "operationId": "vote_api_community_masters__link_id__filters__filter_id__vote_post",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          },
+          {
+            "name": "filter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Filter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}/filters/{filter_id}/vote/retry": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Retry Vote",
+        "description": "Resend a saved vote intent's exact bytes.",
+        "operationId": "retry_vote_api_community_masters__link_id__filters__filter_id__vote_retry_post",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          },
+          {
+            "name": "filter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Filter Id"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -5575,6 +6081,252 @@
               }
             }
           }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}/reports": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Report",
+        "description": "Report the link's version or one of its served filters to moderators.",
+        "operationId": "report_api_community_masters__link_id__reports_post",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/masters/{link_id}/check": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Check",
+        "description": "Download and apply a newer revision without using the daily sync allowance.",
+        "operationId": "check_api_community_masters__link_id__check_post",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/sync": {
+      "get": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Read Sync",
+        "description": "The account's sync state and its newest notifications.",
+        "operationId": "read_sync_api_community_sync_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/sync/run": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Run Sync",
+        "description": "Run the daily sync when due; otherwise report the status with `ran: false`.",
+        "operationId": "run_sync_api_community_sync_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/community/sync/notifications/read": {
+      "post": {
+        "tags": [
+          "community"
+        ],
+        "summary": "Read Notifications",
+        "description": "Mark the account's notifications read; `204`.",
+        "operationId": "read_notifications_api_community_sync_notifications_read_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationsRead"
+              }
+            }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -6530,6 +7282,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FilterCandidateSearchResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
+    "/api/filter-candidates/available": {
+      "post": {
+        "summary": "Api Filter Candidates Available",
+        "description": "Whether Recover Scans could find anything: a reachable completed scan of another\nfile of the same work. Reads no media and writes nothing.",
+        "operationId": "api_filter_candidates_available_api_filter_candidates_available_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanMatchSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterCandidateAvailability"
                 }
               }
             }
@@ -9873,6 +10672,7 @@
     "/api/reviews/{review_id}/repair/community": {
       "post": {
         "summary": "Community",
+        "description": "Retired: revision downloads no longer restore review scans (ADR 0002).",
         "operationId": "community_api_reviews__review_id__repair_community_post",
         "parameters": [
           {
@@ -9885,15 +10685,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_community_api_reviews__review_id__repair_community_post"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -11588,6 +12379,27 @@
           "pending": {
             "type": "integer",
             "title": "Pending"
+          },
+          "master_links": {
+            "type": "integer",
+            "title": "Master Links",
+            "description": "Master-set links, including replaced history",
+            "default": 0
+          },
+          "master_notifications": {
+            "type": "integer",
+            "title": "Master Notifications",
+            "default": 0
+          },
+          "master_preferences": {
+            "type": "boolean",
+            "title": "Master Preferences",
+            "default": false
+          },
+          "master_sync_states": {
+            "type": "integer",
+            "title": "Master Sync States",
+            "default": 0
           }
         },
         "type": "object",
@@ -11975,6 +12787,16 @@
           "community_identity_kept": {
             "type": "boolean",
             "title": "Community Identity Kept"
+          },
+          "community_master_links_deleted": {
+            "type": "integer",
+            "title": "Community Master Links Deleted",
+            "default": 0
+          },
+          "community_master_links_transferred": {
+            "type": "integer",
+            "title": "Community Master Links Transferred",
+            "default": 0
           },
           "sessions_revoked": {
             "type": "integer",
@@ -12431,6 +13253,141 @@
         "title": "ActorKind",
         "description": "Who acted. `UNATTRIBUTED` is reserved for rows that predate attribution."
       },
+      "AliasChoice": {
+        "properties": {
+          "choice": {
+            "type": "string",
+            "const": "alias",
+            "title": "Choice"
+          },
+          "alias_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{1,64}$",
+            "title": "Alias Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "choice",
+          "alias_id"
+        ],
+        "title": "AliasChoice"
+      },
+      "AliasLabel": {
+        "properties": {
+          "alias_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{1,64}$",
+            "title": "Alias Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "alias_id"
+        ],
+        "title": "AliasLabel"
+      },
+      "AlignmentApproval": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Token"
+          },
+          "for_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "For Revision"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "for_revision",
+          "confirmed"
+        ],
+        "title": "AlignmentApproval"
+      },
+      "AlignmentPreviewRequest": {
+        "properties": {
+          "anchors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Anchor"
+                },
+                "type": "array",
+                "maxItems": 50,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchors"
+          },
+          "offset_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 86400000.0,
+                "minimum": -86400000.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offset Ms"
+          },
+          "audio_track_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4095.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Track Index"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AlignmentPreviewRequest",
+        "description": "Exactly one of `anchors` (1\u201350) or `offset_ms`."
+      },
+      "Anchor": {
+        "properties": {
+          "filter_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+            "title": "Filter Id"
+          },
+          "local_start_ms": {
+            "type": "integer",
+            "maximum": 86400000.0,
+            "minimum": 0.0,
+            "title": "Local Start Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "filter_id",
+          "local_start_ms"
+        ],
+        "title": "Anchor"
+      },
       "ApiKeySecret": {
         "properties": {
           "api_key": {
@@ -12479,6 +13436,42 @@
           "configured"
         ],
         "title": "ApiKeyStatus"
+      },
+      "ApplyRequest": {
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/FindTarget"
+          },
+          "find_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Find Key"
+          },
+          "community_version_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+            "title": "Community Version Id"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          },
+          "replace": {
+            "type": "boolean",
+            "title": "Replace",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target",
+          "find_key",
+          "community_version_id",
+          "confirmed"
+        ],
+        "title": "ApplyRequest"
       },
       "ArchiveOut": {
         "properties": {
@@ -13410,17 +14403,6 @@
         ],
         "title": "Body_api_import_mcf_upload_api_mcf_imports_upload_post"
       },
-      "Body_community_api_reviews__review_id__repair_community_post": {
-        "properties": {
-          "confirmed": {
-            "type": "boolean",
-            "title": "Confirmed",
-            "default": false
-          }
-        },
-        "type": "object",
-        "title": "Body_community_api_reviews__review_id__repair_community_post"
-      },
       "BulkAccountDeletionOutcome": {
         "properties": {
           "user_id": {
@@ -13792,8 +14774,6 @@
           "community.identity.disconnect.other",
           "community.identity.keys.own",
           "community.identity.keys.other",
-          "community.receipts.recover.own",
-          "community.receipts.recover.other",
           "connections.view",
           "connections.test",
           "connections.edit",
@@ -13829,7 +14809,7 @@
         "properties": {
           "version": {
             "type": "string",
-            "const": "editarr-capabilities-9",
+            "const": "editarr-capabilities-10",
             "title": "Version"
           },
           "permission_revision": {
@@ -15020,102 +16000,6 @@
         ],
         "title": "DockSettings"
       },
-      "DownloadChoice": {
-        "properties": {
-          "contributionId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
-            "title": "Contributionid"
-          },
-          "revisionId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
-            "title": "Revisionid"
-          },
-          "artifactDigest": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$",
-            "title": "Artifactdigest"
-          },
-          "channels": {
-            "items": {
-              "type": "string",
-              "enum": [
-                "audio",
-                "video"
-              ]
-            },
-            "type": "array",
-            "maxItems": 2,
-            "minItems": 1,
-            "title": "Channels"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "contributionId",
-          "revisionId",
-          "artifactDigest",
-          "channels"
-        ],
-        "title": "DownloadChoice"
-      },
-      "DownloadRequest": {
-        "properties": {
-          "lookup": {
-            "$ref": "#/components/schemas/LookupRequest"
-          },
-          "choice": {
-            "$ref": "#/components/schemas/DownloadChoice"
-          },
-          "confirmed": {
-            "type": "boolean",
-            "title": "Confirmed",
-            "default": false
-          },
-          "stage_for_verification": {
-            "type": "boolean",
-            "title": "Stage For Verification",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "lookup",
-          "choice"
-        ],
-        "title": "DownloadRequest"
-      },
-      "DownloadStatusRequest": {
-        "properties": {
-          "target": {
-            "$ref": "#/components/schemas/LookupTarget"
-          },
-          "target_key": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$",
-            "title": "Target Key"
-          },
-          "choices": {
-            "items": {
-              "$ref": "#/components/schemas/DownloadChoice"
-            },
-            "type": "array",
-            "maxItems": 96,
-            "title": "Choices"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "target",
-          "target_key",
-          "choices"
-        ],
-        "title": "DownloadStatusRequest"
-      },
       "DraftFilterPreview": {
         "properties": {
           "media_source_id": {
@@ -15411,6 +16295,13 @@
           "origin"
         ],
         "title": "EffectiveSeverity"
+      },
+      "Empty": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Empty",
+        "description": "`{}` for actions that take no input."
       },
       "EnrollmentConfirmation": {
         "properties": {
@@ -15949,6 +16840,20 @@
         ],
         "title": "ExportSummary"
       },
+      "FilterCandidateAvailability": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "FilterCandidateAvailability",
+        "description": "Whether a Recover Scans search could find a candidate for the item version."
+      },
       "FilterCandidateSearchResult": {
         "properties": {
           "media_item_id": {
@@ -16286,6 +17191,73 @@
           "disposition"
         ],
         "title": "FilterSelectionRule"
+      },
+      "FindRequest": {
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/FindTarget"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AliasLabel"
+              },
+              {
+                "$ref": "#/components/schemas/TextLabel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "refresh": {
+            "type": "boolean",
+            "title": "Refresh",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "title": "FindRequest"
+      },
+      "FindTarget": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "const": "jellyfin",
+            "title": "Source"
+          },
+          "item_id": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Item Id"
+          },
+          "media_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Source Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "item_id"
+        ],
+        "title": "FindTarget",
+        "description": "`{source, item_id, media_source_id}` as the local API receives it."
       },
       "FingerprintActivity": {
         "properties": {
@@ -16919,6 +17891,13 @@
             },
             "type": "array",
             "title": "Resolution Values"
+          },
+          "jump_groups": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryJumpGroup"
+            },
+            "type": "array",
+            "title": "Jump Groups"
           }
         },
         "type": "object",
@@ -17195,6 +18174,30 @@
         "title": "JellyfinSignIn",
         "description": "The Jellyfin credentials of the identity to link. Never stored or audited."
       },
+      "LibraryJumpGroup": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "offset"
+        ],
+        "title": "LibraryJumpGroup",
+        "description": "A run of a sorted library listing a client can jump to, such as a letter or decade."
+      },
       "LibraryReviewCreate": {
         "properties": {
           "name": {
@@ -17253,6 +18256,14 @@
               }
             ],
             "title": "Mcf Metadata Seed"
+          },
+          "community_memberships": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunityMembership"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Community Memberships"
           },
           "media_source_id": {
             "anyOf": [
@@ -17731,99 +18742,6 @@
         ],
         "title": "LoginRequest",
         "description": "A Jellyfin user's name and password; the name only selects whom Jellyfin checks."
-      },
-      "LookupRequest": {
-        "properties": {
-          "target": {
-            "$ref": "#/components/schemas/LookupTarget"
-          },
-          "audio_selection": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AudioSelection"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "page_size": {
-            "type": "integer",
-            "maximum": 96.0,
-            "minimum": 1.0,
-            "title": "Page Size",
-            "default": 16
-          },
-          "cursor": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 2048
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cursor"
-          },
-          "target_key": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Key"
-          },
-          "refresh": {
-            "type": "boolean",
-            "title": "Refresh",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "target"
-        ],
-        "title": "LookupRequest"
-      },
-      "LookupTarget": {
-        "properties": {
-          "source": {
-            "type": "string",
-            "const": "jellyfin",
-            "title": "Source"
-          },
-          "item_id": {
-            "type": "string",
-            "maxLength": 4096,
-            "minLength": 1,
-            "title": "Item Id"
-          },
-          "media_source_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 128
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Media Source Id"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "source",
-          "item_id"
-        ],
-        "title": "LookupTarget"
       },
       "ManagedModelArtifact": {
         "properties": {
@@ -18581,6 +19499,7 @@
                 "enum": [
                   "unsupported_platform",
                   "unsupported_architecture",
+                  "unsupported_os_version",
                   "missing_package",
                   "missing_provider",
                   "deferred_gap",
@@ -18915,6 +19834,69 @@
         ],
         "title": "NewManualReviewFilter"
       },
+      "NotificationsRead": {
+        "properties": {
+          "notification_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Ids"
+          },
+          "all": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "const": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "All"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NotificationsRead",
+        "description": "Exactly one of `notification_ids` (at most 100) or `all: true`."
+      },
+      "OtherChoice": {
+        "properties": {
+          "choice": {
+            "type": "string",
+            "const": "other",
+            "title": "Choice"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "choice"
+        ],
+        "title": "OtherChoice"
+      },
       "OverrideIndicators": {
         "properties": {
           "permissions": {
@@ -18983,7 +19965,7 @@
               "type": "string"
             },
             "type": "object",
-            "maxProperties": 121,
+            "maxProperties": 119,
             "minProperties": 1,
             "title": "Overrides",
             "description": "Capability to allow, deny, or inherit"
@@ -19191,6 +20173,49 @@
         ],
         "title": "PathResolutionRequest"
       },
+      "PreferencesRequest": {
+        "properties": {
+          "confidence_threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Threshold"
+          },
+          "show_low_confidence": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Low Confidence"
+          },
+          "hide_downvoted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hide Downvoted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PreferencesRequest",
+        "description": "Strict JSON numbers and booleans; a string or boolean threshold is refused."
+      },
       "PreviewApproval": {
         "properties": {
           "confirmed": {
@@ -19238,15 +20263,47 @@
               }
             ],
             "title": "Audio Source Scan Id"
+          },
+          "link_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "version_choice": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AliasChoice"
+              },
+              {
+                "$ref": "#/components/schemas/OtherChoice"
+              }
+            ],
+            "title": "Version Choice",
+            "discriminator": {
+              "propertyName": "choice",
+              "mapping": {
+                "alias": "#/components/schemas/AliasChoice",
+                "other": "#/components/schemas/OtherChoice"
+              }
+            }
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
-          "identity_confirmed"
+          "identity_confirmed",
+          "version_choice"
         ],
-        "title": "PreviewInput"
+        "title": "PreviewInput",
+        "description": "The manual-sharing draft plus the master link and required version choice (\u00a77)."
       },
       "PrincipalSummary": {
         "properties": {
@@ -19718,6 +20775,72 @@
         "type": "object",
         "title": "ReleaseEvidence"
       },
+      "ReportRequest": {
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/ReportTarget"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "spam",
+              "inaccurate",
+              "privacy",
+              "rights",
+              "other"
+            ],
+            "title": "Reason"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target",
+          "reason",
+          "confirmed"
+        ],
+        "title": "ReportRequest"
+      },
+      "ReportTarget": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "filter",
+              "version"
+            ],
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "id"
+        ],
+        "title": "ReportTarget"
+      },
       "RequestValidationErrorResponse": {
         "properties": {
           "detail": {
@@ -19912,13 +21035,54 @@
         ],
         "title": "ReviewAudioSource"
       },
-      "ReviewCommunityRepair": {
+      "ReviewCommunityMembership": {
         "properties": {
-          "available": {
-            "type": "boolean",
-            "title": "Available"
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
           },
-          "unavailable_reason": {
+          "link_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "refresh": {
+            "type": "boolean",
+            "title": "Refresh",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReviewCommunityMembership",
+        "description": "One included community filter snapshot in a save request.\n\n`{source_id}` keeps a stored snapshot, `{source_id, refresh: true}` takes a new\nsnapshot from the same link, and `{link_id}` includes a link with a new snapshot.\nSaved snapshots that a request leaves out are removed."
+      },
+      "ReviewCommunitySource": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "link_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -19927,14 +21091,97 @@
                 "type": "null"
               }
             ],
-            "title": "Unavailable Reason"
+            "title": "Link Id"
+          },
+          "community_version_id": {
+            "type": "string",
+            "title": "Community Version Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "match_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Percent"
+          },
+          "master_revision": {
+            "type": "integer",
+            "title": "Master Revision"
+          },
+          "alignment": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment"
+          },
+          "captured_at": {
+            "type": "string",
+            "title": "Captured At"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "current",
+              "changed",
+              "alignment_required",
+              "link_unavailable"
+            ],
+            "title": "State"
+          },
+          "link_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link State"
+          },
+          "filter_count": {
+            "type": "integer",
+            "title": "Filter Count",
+            "default": 0
           }
         },
         "type": "object",
         "required": [
-          "available"
+          "source_id",
+          "link_id",
+          "community_version_id",
+          "label",
+          "master_revision",
+          "captured_at",
+          "state"
         ],
-        "title": "ReviewCommunityRepair"
+        "title": "ReviewCommunitySource",
+        "description": "A stored community filter snapshot and how it compares with its link now.\n\n`state` is `current` (the link's active filters still equal the snapshot),\n`changed` (they differ; a refresh would bring the changes in), `alignment_required`\n(the link awaits alignment, so it can't be refreshed) or `link_unavailable` (the\nlink was deleted, replaced or belongs to another account). The snapshot's filters\nare normal review filters, whatever the state; `filter_count` counts the ones the\nmaster served when it was taken."
       },
       "ReviewDeletionChoice": {
         "properties": {
@@ -20389,7 +21636,14 @@
             "title": "Id"
           },
           "source_scan_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Source Scan Id"
           },
           "source_finding_id": {
@@ -20404,6 +21658,41 @@
               }
             ],
             "title": "Source Finding Id"
+          },
+          "community_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Source Id"
+          },
+          "community_filter_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Filter Id"
+          },
+          "community_edited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Edited"
           },
           "source": {
             "type": "string",
@@ -20534,7 +21823,6 @@
         "type": "object",
         "required": [
           "id",
-          "source_scan_id",
           "source",
           "category",
           "subcategory",
@@ -20547,7 +21835,74 @@
           "edit_action",
           "selected"
         ],
-        "title": "ReviewFilter"
+        "title": "ReviewFilter",
+        "description": "A review filter from a scan (`source_scan_id`) or from an included community\nsnapshot (`community_source_id` and the master's `community_filter_id`)."
+      },
+      "ReviewFilterCommunity": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "filter_id": {
+            "type": "string",
+            "title": "Filter Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "master_revision": {
+            "type": "integer",
+            "title": "Master Revision"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "contributor_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contributor Count"
+          },
+          "low_confidence": {
+            "type": "boolean",
+            "title": "Low Confidence",
+            "default": false
+          },
+          "removed": {
+            "type": "boolean",
+            "title": "Removed",
+            "default": false
+          },
+          "locally_verified": {
+            "type": "boolean",
+            "title": "Locally Verified",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "filter_id",
+          "label",
+          "master_revision"
+        ],
+        "title": "ReviewFilterCommunity",
+        "description": "Read-only provenance of a review filter that came from a community snapshot.\n\nThe filter itself is a normal review filter; whether the user edited it is its\n`community_edited`. `label` names the community version, `removed` means the master\nno longer served it at the last refresh (\"Removed from community\"), and\n`locally_verified` that the filter's own bounds overlap a finding of the same\ncategory from a completed local model scan of the review's version."
       },
       "ReviewFilterDefaultsApplyResult": {
         "properties": {
@@ -20615,7 +21970,14 @@
             "title": "Id"
           },
           "source_scan_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Source Scan Id"
           },
           "source_finding_id": {
@@ -20630,6 +21992,41 @@
               }
             ],
             "title": "Source Finding Id"
+          },
+          "community_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Source Id"
+          },
+          "community_filter_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Filter Id"
+          },
+          "community_edited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Edited"
           },
           "source": {
             "type": "string",
@@ -20764,7 +22161,6 @@
         "type": "object",
         "required": [
           "id",
-          "source_scan_id",
           "source",
           "category",
           "subcategory",
@@ -21001,16 +22397,6 @@
           },
           "recover": {
             "$ref": "#/components/schemas/ReviewRecoveryCounts"
-          },
-          "community": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReviewCommunityRepair"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "type": "object",
@@ -21264,6 +22650,21 @@
             },
             "type": "array",
             "title": "New Manual Filters"
+          },
+          "community_memberships": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ReviewCommunityMembership"
+                },
+                "type": "array",
+                "maxItems": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Memberships"
           }
         },
         "additionalProperties": false,
@@ -21546,7 +22947,7 @@
               ]
             },
             "type": "object",
-            "maxProperties": 121,
+            "maxProperties": 119,
             "minProperties": 1,
             "title": "Defaults",
             "description": "Capability to grant (true), withhold (false), or reset to the catalog (null)"
@@ -21747,6 +23148,13 @@
                 "type": "null"
               }
             ]
+          },
+          "community_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommunitySource"
+            },
+            "type": "array",
+            "title": "Community Sources"
           }
         },
         "type": "object",
@@ -21773,7 +23181,14 @@
             "title": "Id"
           },
           "source_scan_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Source Scan Id"
           },
           "source_finding_id": {
@@ -21788,6 +23203,41 @@
               }
             ],
             "title": "Source Finding Id"
+          },
+          "community_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Source Id"
+          },
+          "community_filter_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Filter Id"
+          },
+          "community_edited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Edited"
           },
           "source": {
             "type": "string",
@@ -21918,12 +23368,21 @@
             "type": "boolean",
             "title": "Label Edited",
             "default": false
+          },
+          "community": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewFilterCommunity"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
           "id",
-          "source_scan_id",
           "source",
           "category",
           "subcategory",
@@ -24807,6 +26266,28 @@
         ],
         "title": "SynchronizationEndMode"
       },
+      "TextLabel": {
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "TextLabel"
+      },
       "UnblockRequest": {
         "properties": {
           "server_id": {
@@ -25342,20 +26823,20 @@
         ],
         "title": "VersionTarget"
       },
-      "VoteChange": {
+      "VoteRequest": {
         "properties": {
           "vote": {
             "type": "string",
             "enum": [
-              "like",
-              "dislike",
-              "neutral"
+              "up",
+              "down",
+              "none"
             ],
             "title": "Vote"
           },
           "operation_id": {
             "type": "string",
-            "pattern": "^vote-[A-Za-z0-9_.-]{1,120}$",
+            "pattern": "^vote-[A-Za-z0-9._~-]{1,123}$",
             "title": "Operation Id"
           },
           "confirmed": {
@@ -25370,13 +26851,13 @@
           "operation_id",
           "confirmed"
         ],
-        "title": "VoteChange"
+        "title": "VoteRequest"
       },
       "VoteRetry": {
         "properties": {
           "operation_id": {
             "type": "string",
-            "pattern": "^vote-[A-Za-z0-9_.-]{1,120}$",
+            "pattern": "^vote-[A-Za-z0-9._~-]{1,123}$",
             "title": "Operation Id"
           },
           "confirmed": {

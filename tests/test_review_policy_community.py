@@ -1,19 +1,15 @@
 """Community preparation binds effective content to current-owner policy evidence."""
 
-import gzip
-import json
-
-import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from scanner.db import SavedReviewRow
-from scanner.formats.community.codec import ArtifactError
+from scanner.formats.community.codec import ResourceBounds
 from scanner.integrations.community.donation_sources import SourceRef, capture_source
-from scanner.integrations.community.donations import approve_donation, prepare_donation
+from scanner.integrations.community.submission_projection import project_submission
 from scanner.persistence.repository.review_policy import prepare_review_policy
-from tests.test_community_donations import BOUNDS, options
+from tests.test_community_submission_projection import options
 from tests.test_review_policy_view import base_rows, enforce
 from tests.test_review_policy_view import policy_review as policy_review
+
+BOUNDS = ResourceBounds(65536, 524288, 100, 4096, 24)
 
 
 def test_community_capture_uses_same_effective_filters_and_changes_guard(policy_review):
@@ -42,89 +38,17 @@ def test_community_capture_uses_same_effective_filters_and_changes_guard(policy_
     assert restored.data()["findings"][0]["selected"] is False
 
 
-def test_actual_community_bytes_use_effective_severity_and_old_consent_is_refused(policy_review):
+def test_submission_projection_uses_effective_severity(policy_review):
     accounts, review_id = policy_review
     enforce(accounts, severities=["swearing"])
-    prepared = prepare_donation(
-        accounts.engine,
-        SourceRef("review", review_id),
-        options(duration_seconds=100),
-        bounds=BOUNDS,
-        source_limit=4,
+    captured = capture_source(
+        accounts.engine, SourceRef("review", review_id), bounds=BOUNDS, source_limit=4
     )
-    artifact = json.loads(gzip.decompress(prepared.artifact_bytes))
-    assert len(artifact["findings"]) == 1
-    assert artifact["findings"][0]["severity"] == "high"
-    assert artifact["findings"][0]["start_seconds"] == 1
-    assert b"policy_owner" not in prepared.artifact_bytes
+    projection = project_submission(captured.data(), "review", options(duration_ms=100_000), None)
+    (entry,) = projection.artifact.entries
+    assert (entry.severity, entry.start_ms) == ("high", 1000)
     enforce(accounts, rules=[])
-    with pytest.raises(ArtifactError, match="Source changed"):
-        approve_donation(
-            accounts.engine,
-            prepared,
-            consent_token=prepared.consent_token,
-            private_key=Ed25519PrivateKey.generate(),
-        )
-
-
-def test_audio_choice_cannot_exclude_required_findings(policy_review):
-    from scanner import repository
-    from scanner.db import ScanFindingRow, ScanRow
-    from scanner.models import ReviewCreate, ReviewScanMembership
-    from scanner.persistence.repository.activity_ownership import ActivityOwner
-    from tests.multi_user_access_support import USER
-
-    accounts, _review_id = policy_review
-    enforce(accounts)
-    with accounts.factory() as db:
-        db.info["review_actor"] = ActivityOwner(USER, 1)
-        source = db.get(ScanRow, "scan")
-        db.add(
-            ScanRow(
-                id="other",
-                media_item_id="media",
-                scan_number=2,
-                source_path=source.source_path,
-                resolved_local_path=source.resolved_local_path,
-                status="complete",
-                duration_seconds=100,
-                scan_audio=True,
-                scan_video=False,
-            )
-        )
-        db.flush()
-        db.add(
-            ScanFindingRow(
-                scan_id="other",
-                source="audio",
-                category="language",
-                subcategory="swearing",
-                severity="low",
-                mcf_channel="audio",
-                start_seconds=4,
-                end_seconds=5,
-                edit_action="mute",
-                selected=False,
-            )
-        )
-        db.commit()
-        review = repository.create_saved_review(
-            db,
-            media_item_id="media",
-            media_source_id=None,
-            data=ReviewCreate(
-                name="Two tracks",
-                memberships=[
-                    ReviewScanMembership(scan_id=identifier, role="audio")
-                    for identifier in ("scan", "other")
-                ],
-            ),
-        )
-    with pytest.raises(ArtifactError, match="enforced review finding"):
-        prepare_donation(
-            accounts.engine,
-            SourceRef("review", review.id),
-            options(duration_seconds=100, audio_source_scan_id="scan"),
-            bounds=BOUNDS,
-            source_limit=4,
-        )
+    restored = capture_source(
+        accounts.engine, SourceRef("review", review_id), bounds=BOUNDS, source_limit=4
+    )
+    assert restored.guard != captured.guard

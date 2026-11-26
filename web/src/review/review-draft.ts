@@ -6,6 +6,7 @@ import type {
   ReviewMcfDocument,
   McfMetadataSeedRequest,
   ReviewRetimeResult,
+  ReviewCommunityMembership,
   ReviewScanMembership,
   ReviewSynchronization,
   SavedReview,
@@ -22,6 +23,7 @@ interface ReviewContent {
   acceptedCredits: AcceptedCreditsReference | AcceptedCreditsProvenance | null;
   mcfMetadataSeed: McfMetadataSeedRequest | null;
   newManualFilters: NewManualReviewFilter[];
+  communityMemberships: ReviewCommunityMembership[];
 }
 
 export interface ReviewDraft extends ReviewContent {
@@ -43,7 +45,7 @@ function clone<T>(value: T): T {
 }
 
 /** Drop derived, read-only provenance so it never marks a draft dirty. */
-function comparableFilter({ label_edited: _derived, ...filter }: ReviewFilter): Omit<ReviewFilter, "label_edited"> {
+function comparableFilter({ label_edited: _derived, community: _community, ...filter }: ReviewFilter): Omit<ReviewFilter, "label_edited" | "community"> {
   return filter;
 }
 
@@ -60,6 +62,7 @@ function contentState(draft: ReviewContent): string {
     acceptedCredits: draft.acceptedCredits,
     mcfMetadataSeed: draft.mcfMetadataSeed,
     newManualFilters: draft.newManualFilters,
+    communityMemberships: draft.communityMemberships,
   });
 }
 
@@ -145,6 +148,7 @@ export function createReviewDraft(
     acceptedCredits: review?.accepted_credits ?? null,
     mcfMetadataSeed: null,
     newManualFilters: [],
+    communityMemberships: (review?.community_sources ?? []).map((source) => ({ source_id: source.source_id })),
   };
   return {
     ...clone(content),
@@ -266,11 +270,30 @@ export function snapshotReviewFilters(draft: ReviewDraft, filters: ReviewFilter[
 }
 
 /**
- * Apply a local filter edit. A label change marks `label_edited` immediately so the display
- * follows the relabel; restoring the loaded label restores its loaded flag (keeping the draft clean).
+ * Changes to these fields mark a community filter as edited by the user (shared as their
+ * verdict), and a label change does for a language filter, whose label is its expression.
+ * Turning a filter on or off is a personal choice and never counts.
+ */
+const COMMUNITY_EDIT_FIELDS = ["start_seconds", "end_seconds", "category", "subcategory", "severity", "edit_action"] as const;
+
+function communityEdit(target: ReviewFilter, patch: Partial<ReviewFilter>) {
+  if (COMMUNITY_EDIT_FIELDS.some((field) => field in patch && patch[field] !== target[field])) return true;
+  const category = "category" in patch ? patch.category : target.category;
+  return category === "language" && "label" in patch && (patch.label || null) !== (target.label || null);
+}
+
+/**
+ * Apply a local filter edit. A direct change to a community filter's times, classification,
+ * severity, action or, for a language filter, label (its word or phrase) marks it
+ * `community_edited`. A label change marks `label_edited` immediately so the display follows
+ * the relabel; restoring the loaded label restores its loaded flag (keeping the draft clean).
  */
 export function updateReviewFilter(draft: ReviewDraft, filterId: string, patch: Partial<ReviewFilter>): ReviewDraft {
   const pair = draft.filterBases[filterId];
+  const target = draft.filters.find((filter) => filter.id === filterId);
+  if (target?.community_source_id && communityEdit(target, patch)) {
+    patch = { ...patch, community_edited: true };
+  }
   if ("label" in patch && !("label_edited" in patch)) {
     const current = draft.filters.find((filter) => filter.id === filterId);
     const loaded = pair?.effective;
@@ -364,7 +387,8 @@ export function duplicateReviewDraft(draft: ReviewDraft, name: string): ReviewDr
   const duplicate = {
     ...createReviewDraft(null, name),
     memberships: clone(draft.memberships),
-    filters: draft.filters.map((filter) => ({ ...clone(filter), id: stableId() })),
+    // Community filters belong to the saved review's snapshots; a new review includes them again by link.
+    filters: draft.filters.filter((filter) => !filter.community_source_id).map((filter) => ({ ...clone(filter), id: stableId() })),
     mcfDocument: clone(draft.mcfDocument),
     synchronization: clone(draft.synchronization),
     acceptedCredits: clone(draft.acceptedCredits),

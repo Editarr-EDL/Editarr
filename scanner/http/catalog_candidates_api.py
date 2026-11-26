@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from scanner import api as root
 from scanner.db import get_db
 from scanner.models import (
+    FilterCandidateAvailability,
     FilterCandidateSearchResult,
     ScanAssociationUpdate,
     ScanMatch,
@@ -17,6 +18,7 @@ from scanner.repository import (
     associate_scans_with_media_item,
     associated_scan_ids_for_media_item,
     find_filter_candidates,
+    possible_candidate_scans,
     resolve_local_path,
     upsert_media_item,
 )
@@ -56,20 +58,28 @@ def api_find_filter_candidates(
         path=found.path,
     )
     associated_scan_ids = associated_scan_ids_for_media_item(db, media_item_id=media_item.id)
-    try:
-        video_duration_seconds = root.get_video_duration(resolution.local_path)
-    except (OSError, RuntimeError, ValueError):
-        video_duration_seconds = found.duration_seconds
-    matches = find_filter_candidates(
-        db,
-        resolved_local_path=str(Path(resolution.local_path).resolve()),
-        duration_seconds=video_duration_seconds,
-        scene_name=found.scene_name,
-        release_group=found.release_group,
-        media_format=found.media_format,
-        media_provider_id=found.media_provider_id,
-        source_path=found.path,
+    resolved_local_path = str(Path(resolution.local_path).resolve())
+    candidates = possible_candidate_scans(
+        db, resolved_local_path=resolved_local_path, media_provider_id=found.media_provider_id
     )
+    matches = []
+    # Without candidate scans nothing can match, so the media file is never probed or hashed.
+    if candidates:
+        try:
+            video_duration_seconds = root.get_video_duration(resolution.local_path)
+        except (OSError, RuntimeError, ValueError):
+            video_duration_seconds = found.duration_seconds
+        matches = find_filter_candidates(
+            db,
+            resolved_local_path=resolved_local_path,
+            duration_seconds=video_duration_seconds,
+            scene_name=found.scene_name,
+            release_group=found.release_group,
+            media_format=found.media_format,
+            media_provider_id=found.media_provider_id,
+            source_path=found.path,
+            candidates=candidates,
+        )
     if not viewer.is_owner:
         stored = catalog_files.stored_scans(db, [scan.id for scan, _reason in matches])
         scan_ids = list(stored)
@@ -89,6 +99,39 @@ def api_find_filter_candidates(
             for scan, reason in matches
         ],
     )
+
+
+@router.post("/api/filter-candidates/available", response_model=FilterCandidateAvailability)
+def api_filter_candidates_available(
+    search: ScanMatchSearch,
+    db: Session = Depends(get_db),
+    viewer: CatalogViewer = Depends(catalog_viewer(Capability.SCANS_FINDINGS_READ)),
+):
+    """Whether Recover Scans could find anything: a reachable completed scan of another
+    file of the same work. Reads no media and writes nothing."""
+    found = catalog_files.source_file(
+        db,
+        viewer,
+        search.item_id,
+        media_source_id=search.media_source_id,
+        path=search.source_path,
+    )
+    try:
+        resolution = resolve_local_path(db, found.path)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc) if viewer.sees_paths() else "Unsupported path") from exc
+    rows = possible_candidate_scans(
+        db,
+        resolved_local_path=str(Path(resolution.local_path).resolve()),
+        media_provider_id=found.media_provider_id,
+    )
+    if rows and not viewer.is_owner:
+        stored = catalog_files.stored_scans(db, [row.id for row in rows])
+        scan_ids = list(stored)
+        rebuilt = catalog_files.stored_targets(db, viewer, [stored[key] for key in scan_ids])
+        targets = dict(zip(scan_ids, rebuilt, strict=True))
+        rows = viewer.visible(rows, lambda row: targets.get(row.id))
+    return FilterCandidateAvailability(available=bool(rows))
 
 
 @router.post("/api/filter-candidates/associations", status_code=204)

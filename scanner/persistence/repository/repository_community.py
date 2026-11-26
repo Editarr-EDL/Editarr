@@ -11,10 +11,8 @@ from sqlalchemy.orm import Session
 from scanner.db import (
     CommunityConnectionRow,
     CommunityIdentityRow,
-    CommunityImportRow,
     CommunityOperationRow,
     SavedReviewRow,
-    ScanRow,
     UserRow,
 )
 from scanner.security.community_identity import load_or_create_installation_identity
@@ -156,61 +154,6 @@ def set_connection(
     return row
 
 
-def find_import(
-    db: Session, *, service_url: str, revision_id: str, digest: str
-) -> CommunityImportRow | None:
-    """Find a previously committed artifact before creating another local scan."""
-    return (
-        db.query(CommunityImportRow)
-        .filter_by(service_url=service_url, revision_id=revision_id, digest=digest)
-        .one_or_none()
-    )
-
-
-def attach_import(
-    db: Session,
-    *,
-    scan_id: str,
-    service_url: str,
-    contribution_id: str,
-    revision_id: str,
-    digest: str,
-    author_id: str,
-    artifact_type: str,
-) -> CommunityImportRow:
-    """Stage provenance beside an imported scan in the caller's transaction.
-
-    Call find_import before creating the scan, and commit the scan plus this row
-    together. A duplicate artifact linked to another scan must reuse that scan.
-    """
-    scan = db.get(ScanRow, scan_id)
-    if scan is None or scan.origin != "imported":
-        raise ValueError("Community provenance requires an imported scan")
-    existing = find_import(db, service_url=service_url, revision_id=revision_id, digest=digest)
-    if existing is not None:
-        if (
-            existing.scan_id,
-            existing.contribution_id,
-            existing.author_id,
-            existing.artifact_type,
-        ) != (scan_id, contribution_id, author_id, artifact_type):
-            raise ValueError("Import already linked to another scan or conflicting metadata")
-        return existing
-    row = CommunityImportRow(
-        id=str(uuid.uuid4()),
-        scan_id=scan_id,
-        service_url=service_url,
-        contribution_id=contribution_id,
-        revision_id=revision_id,
-        digest=digest,
-        author_id=author_id,
-        artifact_type=artifact_type,
-    )
-    db.add(row)
-    db.flush()
-    return row
-
-
 def enqueue_operation(
     db: Session,
     *,
@@ -229,13 +172,18 @@ def enqueue_operation(
     vote: str | None = None,
     authored_review_id: str | None = None,
     actor_id: int | None = None,
+    community_version_id: str | None = None,
+    filter_id: str | None = None,
+    receipt_id: str | None = None,
 ) -> CommunityOperationRow:
     """Persist an exact retry intent of the identity `credential_ref` names.
 
-    The operation's history belongs to that identity's account. Duplicate IDs cannot
-    change its identity.
+    `publish` and `submission` share approved bytes under active consent. A
+    `filter_vote` names the version, filter and snapshot receipt it votes with and
+    keeps the exact vote JSON in `receipt`. The operation's history belongs to that
+    identity's account. Duplicate IDs cannot change its identity.
     """
-    if not operation_id or kind not in {"publish", "receipt", "vote"}:
+    if not operation_id or kind not in {"publish", "submission", "filter_vote"}:
         raise ValueError("Invalid community operation")
     identity = db.get(CommunityIdentityRow, credential_ref)
     if identity is None:
@@ -246,7 +194,7 @@ def enqueue_operation(
         installation_id,
     ):
         raise ValueError("Operation identity does not match the local connection")
-    if kind == "publish":
+    if kind in ("publish", "submission"):
         if not (
             connection.sharing_enabled
             and consent_version == connection.consent_version
@@ -254,15 +202,14 @@ def enqueue_operation(
             and digest
         ):
             raise ValueError("Publishing requires active sharing consent, scan and digest")
-    elif not (contribution_id and revision_id and digest):
-        raise ValueError("Receipt and vote operations require remote revision identity")
-    if (
-        kind == "receipt"
-        and not receipt
-        or kind == "vote"
-        and vote not in {"up", "down", "like", "dislike", "neutral"}
+    elif not (
+        community_version_id
+        and filter_id
+        and receipt_id
+        and receipt
+        and vote in {"up", "down", "none"}
     ):
-        raise ValueError("Receipt or vote data is missing")
+        raise ValueError("A filter vote requires its version, filter, receipt and vote")
     values = dict(
         service_url=service_url,
         kind=kind,
@@ -275,6 +222,9 @@ def enqueue_operation(
         consent_version=consent_version,
         receipt=receipt,
         vote=vote,
+        community_version_id=community_version_id,
+        filter_id=filter_id,
+        receipt_id=receipt_id,
     )
     row = db.get(CommunityOperationRow, operation_id)
     if row is not None:
@@ -342,6 +292,6 @@ def pending_after_restore(
     return [
         row
         for row in rows
-        if row.kind != "publish"
+        if row.kind not in ("publish", "submission")
         or (connection.sharing_enabled and row.consent_version == connection.consent_version)
     ]

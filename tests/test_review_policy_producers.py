@@ -163,6 +163,7 @@ def test_binding_writers_are_enumerated():
         ("repository_review_core.py", "_snapshot_findings"),
         ("repository_review_core.py", "_filter_rows_from_inputs"),
         ("review_repairs.py", "recover_review"),
+        ("review_community_filters.py", "_row"),
     }
     assert producers["_map_policy_floor"] == {
         ("import_mcf.py", "_import_mcf_as_saved_review"),
@@ -193,10 +194,6 @@ def test_policy_interval_producers_use_source_basis_or_mapper():
         ("review_policy_apply.py", "apply_review_defaults"): {"prepare_review_policy"},
         ("review_policy_evidence.py", "evidence_interval"): {"_map_policy_floor"},
         ("review_repairs.py", "recover_review"): {"bind_review_evidence"},
-        ("review_community_repairs.py", "restore_community_review"): {
-            "stage_verified_download",
-            "_finding_map",
-        },
         ("review_policy.py", "validate_policy_draft"): {"_map_policy_floor", "required_evidence"},
         ("repository_review_operations.py", "export_saved_review_edl"): {"prepare_review_export"},
         ("repository_review_operations.py", "export_saved_review_mcf"): {

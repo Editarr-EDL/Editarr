@@ -25,12 +25,20 @@ export async function exercise(database, runtime) {
           expectStatus(await send(new Request(`${origin}/v1/discord/callback?state=${stateId}&code=synthetic`, { headers: { cookie } })));
           result = { stateId };
         } else if (input.action === 'state') {
+          // Master-set state for the Python journey; raw submission bytes are base64 for byte-preservation checks.
           result = {};
-          for (const table of ['contribution_statistics', 'import_receipts', 'revision_votes', 'installation_keys', 'contribution_publications', 'reports']) {
-            result[table] = (await database.prepare(`SELECT * FROM ${table}`).all()).results;
-          }
-          result.payloads = (await database.prepare('SELECT r.revision_id, p.artifact, p.manifest, p.envelope FROM artifact_payloads p JOIN contribution_revisions r ON r.object_key = p.object_key').all()).results
-            .map(row => Object.fromEntries(Object.entries(row).map(([name, value]) => [name, name === 'revision_id' ? value : Buffer.from(value).toString('base64')])));
+          for (const [name, sql] of [
+            ['submissions', `SELECT submission_id, digest, contributor_id, version_id, accepted_seq, tier, state, created_at FROM submissions`],
+            ['versions', 'SELECT version_id, work_id, alias_id, label_text, status, merged_into, revision, quarantined FROM versions'],
+            ['master_revisions', 'SELECT version_id, revision, snapshot_digest, generated_at FROM master_revisions'],
+            ['master_filters', `SELECT filter_id, version_id, category, start_ms, end_ms, confidence, attestations, upvotes, downvotes,
+              disputes, coverage_negatives, low_confidence, served FROM master_filters`],
+            ['download_receipts', 'SELECT * FROM download_receipts'], ['filter_votes', 'SELECT * FROM filter_votes'],
+            ['installation_keys', 'SELECT * FROM installation_keys'], ['reports', 'SELECT * FROM reports'],
+          ]) result[name] = (await database.prepare(sql).all()).results;
+          result.payloads = (await database.prepare('SELECT submission_id, artifact_bytes, manifest_bytes, envelope_bytes FROM submissions').all()).results
+            .map(row => ({ submission_id: row.submission_id, artifact: Buffer.from(row.artifact_bytes).toString('base64'),
+              manifest: Buffer.from(row.manifest_bytes).toString('base64'), envelope: Buffer.from(row.envelope_bytes).toString('base64') }));
         } else if (input.action === 'membership') {
           assert.ok(['member', 'nonmember', 'outage'].includes(input.mode));
           provider.mode = input.mode;
@@ -38,14 +46,15 @@ export async function exercise(database, runtime) {
           await database.prepare('UPDATE discord_membership_refresh SET retry_at = 0').run();
           result = { mode: provider.mode };
         } else if (input.action === 'moderate') {
+          // input: { command, resource, targetId, contributorId? } as in the §7.8 envelope.
           assert.ok(['quarantine', 'restore', 'suspend', 'unsuspend', 'exclude_vote', 'restore_vote', 'resolve_report'].includes(input.command));
-          const kind = input.command === 'resolve_report' ? 'report' : input.revisionId ? 'vote' : ['quarantine', 'restore'].includes(input.command) ? 'revision' : 'contributor';
-          const snapshot = expectStatus(await admin(`/admin/v1/moderation/${kind}/${input.targetId}${input.revisionId ? '/' + input.revisionId : ''}`));
+          const key = input.resource === 'vote' ? `${input.targetId}/${input.contributorId}` : encodeURIComponent(input.targetId);
+          const snapshot = expectStatus(await admin(`/admin/v1/moderation/${input.resource}/${key}`));
           result = expectStatus(await admin('/admin/v1/moderation', { version: 1, actionId: crypto.randomUUID(),
-            command: input.command, targetId: input.targetId, expectedRevision: snapshot.revision,
-            reason: 'Synthetic multi-instance evidence', ...(input.revisionId ? { revisionId: input.revisionId } : {}) }));
+            command: input.command, resource: input.resource, targetId: input.targetId, expectedRevision: snapshot.revision,
+            reason: 'Synthetic multi-instance evidence', ...(input.contributorId ? { contributorId: input.contributorId } : {}) }));
         } else if (input.action === 'storage-failure') {
-          if (input.enabled) database.connection.exec(`CREATE TRIGGER synthetic_e2e_failure AFTER INSERT ON artifact_payloads
+          if (input.enabled) database.connection.exec(`CREATE TRIGGER synthetic_e2e_failure AFTER INSERT ON submissions
             BEGIN SELECT RAISE(ABORT, 'synthetic_disk_failure'); END`);
           else database.connection.exec('DROP TRIGGER synthetic_e2e_failure');
           result = { enabled: input.enabled };

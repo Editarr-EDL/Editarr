@@ -92,7 +92,7 @@ class CapabilityPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    version: Literal["editarr-capabilities-9"]
+    version: Literal["editarr-capabilities-10"]
     permission_revision: int
     principal: PrincipalSummary
     capabilities: list[Capability]

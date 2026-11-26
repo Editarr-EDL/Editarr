@@ -2,6 +2,7 @@ import { useRef, type KeyboardEvent } from "react";
 import type { GuidedReviewWorkspace, WorkflowStep } from "./review-workflow-types";
 
 const steps: ReadonlyArray<{ value: WorkflowStep; label: string }> = [
+  { value: "community", label: "Community" },
   { value: "scans", label: "Scans" },
   { value: "review", label: "Review" },
   { value: "subtitles", label: "Subtitles" },

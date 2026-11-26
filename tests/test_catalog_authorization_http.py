@@ -283,3 +283,41 @@ def test_item_decisions_are_reused_within_one_sync_window(catalog):
     assert sorted(first) == sorted(
         f"item:{item}" for item in (FAMILY_FILM, MATURE, "c3000000000000000000000000000003")
     )
+
+
+def test_recover_scans_availability_reads_only_reachable_candidates(catalog, monkeypatch):
+    from scanner.persistence.repository import repository_catalog
+
+    def no_hashing(_path):
+        raise AssertionError("availability must not hash media")
+
+    monkeypatch.setattr(repository_catalog, "compute_video_md5", no_hashing)
+    search = {"source": "jellyfin", "item_id": FAMILY_FILM}
+    path = "/api/filter-candidates/available"
+    assert catalog.post(OWNER, path, search).json() == {"available": False}
+    _seed_scan(catalog, MATURE, "Synthetic Mature Film.mkv")
+    assert catalog.post(OWNER, path, search).json() == {"available": True}
+    # Casey can't reach the mature film, so nothing is recoverable for them.
+    assert catalog.post(CASEY, path, search).json() == {"available": False}
+    _seed_scan(catalog, "c3000000000000000000000000000003", "Synthetic Late Show.mkv")
+    assert catalog.post(CASEY, path, search).json() == {"available": True}
+    assert _refused(catalog.post(CASEY, path, {**search, "item_id": MATURE}))
+
+
+def test_recover_scans_reads_media_only_when_a_candidate_exists(catalog, monkeypatch):
+    from scanner import api
+    from scanner.persistence.repository import repository_catalog
+
+    reads: list[str] = []
+    monkeypatch.setattr(api, "get_video_duration", lambda _path: reads.append("probe") or 100.0)
+    monkeypatch.setattr(
+        repository_catalog, "compute_video_md5", lambda _path: reads.append("hash") or "a" * 32
+    )
+    search = {"source": "jellyfin", "item_id": FAMILY_FILM}
+    empty = catalog.post(OWNER, "/api/filter-candidates", search)
+    assert empty.status_code == 200 and empty.json()["matches"] == []
+    assert empty.json()["media_item_id"] and reads == []
+
+    _seed_scan(catalog, MATURE, "Synthetic Mature Film.mkv")
+    assert catalog.post(OWNER, "/api/filter-candidates", search).status_code == 200
+    assert reads[:2] == ["probe", "hash"]

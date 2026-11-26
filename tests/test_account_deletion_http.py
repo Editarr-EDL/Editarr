@@ -272,7 +272,15 @@ def test_retention_keeps_files_and_publications_but_ends_sign_in_and_key(app):
         "api_key": True,
         "linked": True,
     }
-    assert body["community"] == {"identity": False, "operations": 1, "pending": 0}
+    assert body["community"] == {
+        "identity": False,
+        "operations": 1,
+        "pending": 0,
+        "master_links": 0,
+        "master_notifications": 0,
+        "master_preferences": False,
+        "master_sync_states": 0,
+    }
     response = delete(app, ADMIN, USER, "retain", body["confirmation"])
     assert response.status_code == 200, response.text
     result = response.json()

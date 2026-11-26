@@ -16,8 +16,9 @@ from scanner.formats.community.codec import (
 from scanner.models import MCF_CATEGORY_REGISTRY
 
 BOUNDS = ResourceBounds(compressed_bytes=4096, expanded_bytes=16384, events=10, text=256, depth=12)
-FIXTURE = Path(__file__).resolve().parents[1] / "community-service/test/fixtures/artifact-v1.json"
-TAXONOMY = FIXTURE.parents[2] / "src/artifact/taxonomy.json"
+# The retired v1 artifact, kept here since the service no longer ships it.
+FIXTURE = Path(__file__).resolve().parent / "fixtures/community/artifact-v1.json"
+TAXONOMY = Path(__file__).resolve().parents[1] / "community-service/src/artifact/taxonomy.json"
 
 
 def artifact() -> dict:

@@ -3,8 +3,6 @@ import { associateFilterCandidates, findFilterCandidates } from "../api/api-scan
 import type { FilterCandidateSearchResult } from "../api/api-scan-types";
 import { scanLabel, scanOriginLabel } from "../shared/display";
 import { scanOptionsSummary } from "./scan-components";
-import type { LookupInput, RemoteFilterCandidate } from "../api/api-community-lookup";
-import { remoteFilterDisplay, useCommunityLookup } from "./use-community-lookup";
 
 export type LocalFilterTarget = Parameters<typeof findFilterCandidates>[0];
 
@@ -17,25 +15,20 @@ export interface FilterCandidate {
   alreadyAssociated: boolean;
 }
 
-export type FilterResult =
-  | { source: "local"; candidate: FilterCandidate; match: FilterCandidateSearchResult["matches"][number] }
-  | { source: "community"; candidate: FilterCandidate; remote: RemoteFilterCandidate };
+export type FilterResult = { candidate: FilterCandidate; match: FilterCandidateSearchResult["matches"][number] };
 
-/** Compose explicit local association and independent, unselected remote discovery. */
+/** Find local filter scans that match a media target and associate the explicitly selected ones. */
 export function useFindFilters({
   target,
   onMessage,
   onAssociated,
   requireVerification = false,
-  communityInput = null,
 }: {
   target: LocalFilterTarget;
   onMessage: (message: string | null) => void;
   onAssociated: () => Promise<void>;
   requireVerification?: boolean;
-  communityInput?: LookupInput | null;
 }) {
-  const community = useCommunityLookup(communityInput);
   const key = JSON.stringify(target);
   const currentKey = useRef(key);
   currentKey.current = key;
@@ -55,7 +48,7 @@ export function useFindFilters({
     return () => { generation.current++; pending.current?.abort(); };
   }, [key]);
 
-  const find = async (includeCommunity = true) => {
+  const find = async () => {
     if (!target.item_id) {
       onMessage("Choose a media item for filter matching.");
       return;
@@ -66,7 +59,6 @@ export function useFindFilters({
     pending.current?.abort();
     const controller = new AbortController();
     pending.current = controller;
-    if (includeCommunity) void community.start();
     try {
       const next = await findFilterCandidates(target, controller.signal);
       if (token !== generation.current || currentKey.current !== key || controller.signal.aborted) return;
@@ -88,7 +80,6 @@ export function useFindFilters({
       await associateFilterCandidates(result.media_item_id, selectedIds);
       if (currentKey.current !== key || token !== generation.current) return;
       setResult(null);
-      community.cancel();
       onMessage(`Associated ${selectedIds.length} ${selectedIds.length === 1 ? "scan" : "scans"}.${requireVerification ? " Check their timing under Scans before using them in a review." : ""}`);
       await onAssociated();
     } catch (error) {
@@ -112,16 +103,12 @@ export function useFindFilters({
     alreadyAssociated: match.already_associated,
   }));
 
-  const results: FilterResult[] = [
-    ...candidates.map((candidate, index) => ({ source: "local" as const, candidate, match: result!.matches[index] })),
-    ...community.candidates.map((remote) => ({ source: "community" as const, candidate: remoteFilterDisplay(remote), remote })),
-  ];
+  const results: FilterResult[] = candidates.map((candidate, index) => ({ candidate, match: result!.matches[index] }));
 
   return {
-    community,
     results,
     finding,
-    open: result !== null || (communityInput !== null && community.status !== "idle" && community.status !== "cancelled"),
+    open: result !== null,
     candidates,
     selectedIds,
     associating,
@@ -131,7 +118,6 @@ export function useFindFilters({
       if (associating) return;
       generation.current++;
       pending.current?.abort();
-      community.cancel();
       setFinding(false);
       setResult(null);
     },

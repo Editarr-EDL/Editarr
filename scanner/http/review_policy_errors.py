@@ -4,10 +4,7 @@ from fastapi.responses import JSONResponse
 
 from scanner.models import ReviewErrorDetail
 from scanner.persistence.repository.review_policy import ReviewPolicyConflict
-from scanner.persistence.repository.review_repairs import (
-    CommunityScanUnavailable,
-    ReviewNeedsRepair,
-)
+from scanner.persistence.repository.review_repairs import ReviewNeedsRepair
 
 
 def install_review_policy_errors(app):
@@ -24,9 +21,6 @@ def install_review_policy_errors(app):
 
     async def repair_conflict(_request, exc):
         detail = ReviewErrorDetail(code=exc.code, message=str(exc), repair=exc.repair)
-        if isinstance(exc, CommunityScanUnavailable):
-            detail.reason = exc.reason
-            detail.transient = exc.transient
         return JSONResponse(
             status_code=409,
             content={"detail": detail.model_dump(mode="json", exclude_unset=True)},

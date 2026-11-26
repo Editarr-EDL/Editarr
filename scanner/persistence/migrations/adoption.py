@@ -67,7 +67,11 @@ SCAN_WORKER_TIMING_REVISION = "0033_scan_worker_timing"
 SCAN_READ_INDEXES_REVISION = "0034_scan_read_indexes"
 STABLE_MEDIA_IDENTITY_REVISION = "0035_stable_media_identity"
 SAMPLED_MEDIA_IDENTITY_REVISION = "0036_sampled_media_identity"
-HEAD_REVISION = SAMPLED_MEDIA_IDENTITY_REVISION
+COMMUNITY_MASTER_REVISION = "0037_community_master_sets"
+RECEIPT_CAPABILITIES_REVISION = "0038_retire_receipt_capabilities"
+REVIEW_COMMUNITY_SOURCES_REVISION = "0039_review_community_sources"
+REVIEW_COMMUNITY_FILTERS_REVISION = "0040_review_community_filters"
+HEAD_REVISION = REVIEW_COMMUNITY_FILTERS_REVISION
 JOURNAL_NAME = "migration-upgrade.json"
 
 
@@ -154,6 +158,10 @@ def _inspect_database(path: Path) -> str | None:
                 [(SCAN_WORKER_TIMING_REVISION,)],
                 [(SCAN_READ_INDEXES_REVISION,)],
                 [(STABLE_MEDIA_IDENTITY_REVISION,)],
+                [(SAMPLED_MEDIA_IDENTITY_REVISION,)],
+                [(COMMUNITY_MASTER_REVISION,)],
+                [(RECEIPT_CAPABILITIES_REVISION,)],
+                [(REVIEW_COMMUNITY_SOURCES_REVISION,)],
                 [(HEAD_REVISION,)],
             ):
                 raise ValueError(f"Unsupported database revision: {revisions!r}")

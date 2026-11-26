@@ -17,6 +17,15 @@ REJECTED = {
     "source_permission_unknown",
     "source_permission_incompatible",
     "source_attribution_mismatch",
+    "protocol_retired",
+    "invalid_submission",
+    "submission_conflict",
+    "work_identity_required",
+    "unknown_alias",
+    "invalid_taxonomy",
+    "invalid_bounds",
+    "key_mismatch",
+    "upload_suspended",
 }
 
 

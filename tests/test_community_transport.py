@@ -158,10 +158,8 @@ def test_provider_backoff_is_bounded_and_errors_are_redacted(tmp_path):
         "invalid_recovery",
         "recovery_conflict",
         "key_operation_conflict",
-        "lookup_limit",
-        "invalid_cursor",
-        "missing_identity",
-        "invalid_lookup",
+        "invalid_vote",
+        "vote_ineligible",
     ],
 )
 def test_known_recovery_and_key_operation_errors_survive_http_boundary(tmp_path, code):

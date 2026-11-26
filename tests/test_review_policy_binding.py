@@ -35,7 +35,11 @@ def body(detail):
 
 
 def _input(review_filter):
-    return {key: value for key, value in review_filter.items() if key != "label_edited"}
+    return {
+        key: value
+        for key, value in review_filter.items()
+        if key not in {"label_edited", "community"}
+    }
 
 
 def tokens(detail):

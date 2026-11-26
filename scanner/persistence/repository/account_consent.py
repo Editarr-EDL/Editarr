@@ -89,6 +89,10 @@ def _consent(impact: AccountImpact, files: list[dict], publications: dict) -> di
             "identity": impact.community_identity,
             "operations": impact.community_operations,
             "pending": impact.community_pending,
+            "master_links": impact.community_masters.links,
+            "master_notifications": impact.community_masters.notifications,
+            "master_preferences": impact.community_masters.preferences,
+            "master_sync_states": impact.community_masters.sync_states,
         },
         "blockers": [
             {"code": code, "count": amount} for code, amount in sorted(impact.blockers.items())
@@ -148,6 +152,8 @@ class Outcome:
     scans_kept: tuple[str, ...] = ()
     files_moved: tuple[int, ...] = ()
     policy_files: tuple[int, ...] = ()
+    master_links_deleted: int = 0
+    master_links_transferred: int = 0
 
 
 def result(
@@ -184,6 +190,8 @@ def result(
         "personal_files_kept": kept,
         "community_operations_kept": impact.community_operations,
         "community_identity_kept": impact.community_identity,
+        "community_master_links_deleted": outcome.master_links_deleted,
+        "community_master_links_transferred": outcome.master_links_transferred,
     } | credentials
     inventory = {
         "reviews": list(impact.reviews),

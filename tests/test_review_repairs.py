@@ -62,7 +62,6 @@ def test_list_flags_broken_review_without_loading_missing_scans(broken_review):
     assert summary.repair.missing_scan_ids == ["legacy-scan-001"]
     assert summary.repair.recover.kept_cues == 1
     assert summary.repair.recover.removed_memberships == 1
-    assert summary.repair.community.available is True
     assert next(value for value in reviews if value.id != review_id).repair is None
 
 

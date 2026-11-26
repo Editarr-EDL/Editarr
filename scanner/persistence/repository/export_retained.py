@@ -2,7 +2,14 @@
 
 from types import SimpleNamespace
 
-from scanner.models import ExportFormat, ReviewFilter, SavedReview, ScanFinding
+from scanner.modeling.community_review_filters import classification
+from scanner.models import (
+    PROVENANCE_FIELDS,
+    ExportFormat,
+    ReviewFilter,
+    SavedReview,
+    ScanFinding,
+)
 from scanner.settings.filter_defaults import enforce_filter_policy
 
 from .repository_mcf_preflight import _mcf_document_issues, _mcf_filter_issues
@@ -19,7 +26,7 @@ def prepare_retained_export(db, row, snapshot):
         raise ReviewPolicyConflict("Retained base values are unavailable")
     review = SavedReview.model_validate(snapshot["review"])
     policy = owner_policy(db, row.policy_owner_id)
-    base = tuple(review.base_filters)
+    base = tuple(review.base_filters) + legacy_community_filters(snapshot["review"])
     effective = list(enforce_filter_policy(base, policy).filters)
     required_ids = set()
     sources = {
@@ -33,8 +40,10 @@ def prepare_retained_export(db, row, snapshot):
         source = sources.get(saved.source_finding_id)
         if source is None:
             scan = scans.get(saved.source_scan_id)
+            # Manual and community filters have no source finding to re-evaluate.
             if active and not (
-                saved.source_finding_id is None and scan and scan.origin == "manual"
+                saved.source_finding_id is None
+                and (saved.community_source_id is not None or (scan and scan.origin == "manual"))
             ):
                 raise ReviewPolicyConflict("Retained source evidence is unavailable")
         else:
@@ -70,7 +79,7 @@ def prepare_retained_export(db, row, snapshot):
             **{
                 key: getattr(finding, key)
                 for key in ReviewFilter.model_fields
-                if key not in {"id", "source_scan_id", "source_finding_id"}
+                if key not in PROVENANCE_FIELDS
             },
             id=f"retained-{finding.id}",
             source_scan_id=finding.scan_id,
@@ -124,4 +133,44 @@ def prepare_retained_export(db, row, snapshot):
         )
     ):
         raise ReviewPolicyConflict("Retained MCF content is incomplete")
+    if duration is None and not scans:
+        duration = snapshot.get("duration_seconds")
     return render_review_export(review, prepared, row.format, duration)[0]
+
+
+def legacy_community_filters(review_data: dict) -> tuple[ReviewFilter, ...]:
+    """Review filters for the community snapshot filters of a retained snapshot taken
+    before community filters were review filters (0040): those snapshots list them
+    under `community_sources[].filters`, all enabled. Each is an enabled skip of both
+    channels or an audio mute; a filter without a valid classification or wholly before
+    the start is left out, as exports did then. Newer snapshots return nothing here."""
+    if any(value.get("community_source_id") for value in review_data.get("base_filters", ())):
+        return ()
+    found = []
+    for source in review_data.get("community_sources", ()):
+        for value in source.get("filters", ()):
+            category, subcategory = classification(value)
+            if category is None or value["end_seconds"] <= max(0.0, value["start_seconds"]):
+                continue
+            mute = value["edit_action"] == "mute"
+            found.append(
+                ReviewFilter(
+                    id=f"community-{source['source_id']}-{value['filter_id']}",
+                    community_source_id=source["source_id"],
+                    community_filter_id=value["filter_id"],
+                    source="audio" if mute else "visual",
+                    category=category,
+                    subcategory=subcategory,
+                    severity=value.get("severity") or None,
+                    mcf_channel="audio" if mute else "both",
+                    label=None,
+                    details=None,
+                    group_key=None,
+                    start_seconds=max(0.0, value["start_seconds"]),
+                    end_seconds=value["end_seconds"],
+                    confidence=None,
+                    edit_action=value["edit_action"],
+                    selected=True,
+                )
+            )
+    return tuple(found)

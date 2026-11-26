@@ -4,7 +4,7 @@ import { communityReviewScans } from "./community-review-scans";
 
 const target = { source: "jellyfin" as const, item_id: "movie", media_source_id: "version-2" };
 const scan = { id: "source", scan_audio: true, scan_video: true, media_source_id: "original-version",
-  community_provenance: { author_id: "original-author", contribution_id: "root", revision_id: "revision", digest: "a".repeat(64) },
+  community_provenance: { author_id: "original-author", digest: "a".repeat(64) },
   community_approvals: [{ source: "jellyfin", target_item_id: "movie", media_source_id: "version-2", channels: ["video"] }] } as Scan;
 
 it("offers only approved target channels while retaining immutable source metadata", () => {

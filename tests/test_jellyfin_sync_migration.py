@@ -17,9 +17,10 @@ from scanner.backup.archive import export_backup
 from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _upgrade
 from tests.community_identity_migration_support import no_network as no_network
+from tests.community_master_migration_support import retire_publications
 from tests.explicit_filter_modes_support import drop_0031_additions
-from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.jellyfin_sync_migration_support import drop_0018_additions
+from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_activity_migration import _assert_recoverable
 from tests.test_backup_activation import _fixture, _restore
@@ -61,7 +62,7 @@ def test_every_supported_revision_upgrades_with_every_row_kept(tmp_path, revisio
     generation = adoption.upgrade_existing_database(path, path.parent)
 
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
-    assert adoption.HEAD_REVISION == "0036_sampled_media_identity"
+    assert adoption.HEAD_REVISION == "0040_review_community_filters"
     upgraded, _ = _snapshot(path)
     drop_0018_additions(upgraded)
     drop_0031_additions(upgraded, original)
@@ -71,7 +72,7 @@ def test_every_supported_revision_upgrades_with_every_row_kept(tmp_path, revisio
         # The existing row has numbered no Jellyfin read yet in any database epoch.
         assert [row[:2] for row in settings] == expected.pop("account_settings")
         assert [tuple(row[2:]) for row in settings] == [(0, None, 0, None)]
-        assert without_stable_media_identity(upgraded) == expected
+        assert without_stable_media_identity(upgraded) == retire_publications(expected, upgraded)
     assert adoption.upgrade_existing_database(path, path.parent) is None
     recovered = adoption.export_upgrade_recovery(path, path.parent, tmp_path / "recovered.db")
     assert generation.is_dir()

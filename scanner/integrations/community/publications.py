@@ -1,14 +1,18 @@
-"""Explicit publication outbox actions; never enroll or send during startup."""
+"""Explicit submission outbox actions; never enroll or send during startup.
+
+Approved `community-artifact-3` bytes are staged as a `submission` operation and sent
+to `POST /v1/submissions` only on an explicit retry. Retired revision `publish`
+operations remain readable but are never sent.
+"""
 
 import asyncio
-import base64
 import hashlib
 import json
 import re
 from datetime import datetime, timezone
 
 from scanner.db import CommunityOperationRow, CommunityPublicationRow
-from scanner.formats.community.codec import parse_artifact
+from scanner.formats.community.artifact_v3 import ArtifactV3Error, decode_artifact_v3
 from scanner.persistence.repository.community_publications import stage_publication
 from scanner.persistence.repository.repository_community import (
     identity_connection,
@@ -17,14 +21,18 @@ from scanner.persistence.repository.repository_community import (
 )
 from scanner.persistence.write_lock import write_lock
 from scanner.security.audit.actions import AuditAction
+from scanner.security.community_artifact_signatures import SignedArtifact
+from scanner.security.community_artifact_v3_signatures import submission_request_body
 
 from .client import CommunityClient
-from .donations import PreparedDonation, approve_donation
+from .master_service import MasterService, encode
 from .publication_status import REJECTED as _REJECTED
 from .publication_status import publication_status
+from .submissions import PreparedSubmission, approve_submission
 from .transport import CommunityFailure
 
 _TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+KINDS = ("submission", "publish")
 
 
 class PublicationOutbox:
@@ -46,7 +54,7 @@ class PublicationOutbox:
             raise CommunityFailure("invalid_operation")
         operation = self.db.get(CommunityOperationRow, operation_id, populate_existing=True)
         payload = self.db.get(CommunityPublicationRow, operation_id, populate_existing=True)
-        if operation is None or operation.kind != "publish" or payload is None:
+        if operation is None or operation.kind not in KINDS or payload is None:
             raise CommunityFailure("publication_evidence_unavailable")
         return operation, payload
 
@@ -72,29 +80,24 @@ class PublicationOutbox:
         ):
             if hashlib.sha256(contents).hexdigest() != expected:
                 raise CommunityFailure("publication_evidence_invalid")
-        body = json.dumps(
-            {
-                "version": 1,
-                "contributionId": operation.contribution_id,
-                "submissionId": operation.revision_id,
-                "artifact": base64.b64encode(payload.artifact_bytes).decode("ascii"),
-                "manifest": base64.b64encode(payload.manifest_bytes).decode("ascii"),
-                "envelope": base64.b64encode(payload.signature_bytes).decode("ascii"),
-            },
-            separators=(",", ":"),
-        ).encode()
+        body = encode(
+            submission_request_body(
+                SignedArtifact(
+                    payload.artifact_bytes, payload.manifest_bytes, payload.signature_bytes
+                )
+            )
+        )
         if len(body) > self.request_bytes:
             raise CommunityFailure("publication_limit")
         return body
 
     def queue(
         self,
-        prepared: PreparedDonation,
+        prepared: PreparedSubmission,
         *,
         consent_token: str,
         consent_version: str,
         operation_id: str,
-        contribution_id: str,
         scan_id: str | None = None,
         record_consent: bool = False,
     ) -> dict:
@@ -104,7 +107,6 @@ class PublicationOutbox:
             consent_token=consent_token,
             consent_version=consent_version,
             operation_id=operation_id,
-            contribution_id=contribution_id,
             scan_id=scan_id,
             record_consent=record_consent,
         )
@@ -119,22 +121,19 @@ class PublicationOutbox:
         consent_token = arguments["consent_token"]
         consent_version = arguments["consent_version"]
         operation_id = arguments["operation_id"]
-        contribution_id = arguments["contribution_id"]
         scan_id = arguments["scan_id"]
         record_consent = arguments["record_consent"]
         try:
-            if not all(
-                isinstance(value, str) and _TOKEN.fullmatch(value)
-                for value in (operation_id, contribution_id)
-            ):
+            if not isinstance(operation_id, str) or not _TOKEN.fullmatch(operation_id):
                 raise CommunityFailure("invalid_operation")
             connection = self.client.connection()
             if connection is None or connection.contributor_id is None:
                 raise CommunityFailure("not_connected")
             identity = self.client._identity()
-            artifact = parse_artifact(
-                prepared.artifact_bytes, bounds=prepared.bounds, compressed=True
-            )
+            try:
+                artifact = decode_artifact_v3(prepared.artifact_bytes)
+            except ArtifactV3Error as error:
+                raise CommunityFailure("publication_evidence_invalid") from error
             if (artifact.artifact.author.contributor_id, artifact.artifact.author.key_id) != (
                 identity.contributor_id,
                 identity.key_id,
@@ -149,7 +148,7 @@ class PublicationOutbox:
             ) or (reference.kind == "scan" and scan_id != reference.identifier):
                 raise CommunityFailure("publication_source_mismatch")
             with write_lock(self.db):
-                signed = approve_donation(
+                signed = approve_submission(
                     self.db.get_bind(),
                     prepared,
                     consent_token=consent_token,
@@ -180,7 +179,7 @@ class PublicationOutbox:
                 service_url=self.client.transport.endpoint.url,
                 contributor_id=identity.contributor_id,
                 installation_id=identity.installation_id,
-                contribution_id=contribution_id,
+                kind="submission",
                 revision_id=artifact.artifact.submission_id,
                 digest=hashlib.sha256(signed.artifact_bytes).hexdigest(),
                 scan_id=scan_id,
@@ -240,71 +239,47 @@ class PublicationOutbox:
             raise
         return self.status(operation_id)
 
-    def _accept(self, operation_id, response):
+    def _accept(self, operation_id, result) -> None:
+        """Store the hosted `POST /v1/submissions` result and acknowledge the operation."""
         operation, payload = self._rows(operation_id)
-        if (
-            not isinstance(response, dict)
-            or set(response)
-            != {
-                "version",
-                "state",
-                "publicationState",
-                "result",
-            }
-            or response["version"] != 1
-            or type(response["version"]) is not int
+        if (result.submission_id, result.submission_digest) != (
+            operation.revision_id,
+            operation.digest,
         ):
             raise CommunityFailure("invalid_response")
-        if response["state"] != "completed" or response["publicationState"] != "published":
-            if response["result"] is not None:
-                raise CommunityFailure("invalid_response")
-            if response["state"] not in {"pending", "failed"} or response[
-                "publicationState"
-            ] not in {
-                "reserved",
-                "object_stored",
-                "failed",
-                "expired",
-            }:
-                raise CommunityFailure("invalid_response")
-            return False
-        result = response["result"]
-        expected = dict(
-            version=1,
-            operationId=operation_id,
-            contributionId=operation.contribution_id,
-            revisionId=operation.revision_id,
-            artifactDigest=operation.digest,
+        payload.result_json = json.dumps(
+            result.model_dump(mode="json", by_alias=True), separators=(",", ":")
         )
-        if (
-            not isinstance(result, dict)
-            or set(result) != {*expected, "committedAt"}
-            or any(result[name] != value for name, value in expected.items())
-            or type(result["version"]) is not int
-            or type(result["committedAt"]) is not int
-            or result["committedAt"] < 0
-        ):
-            raise CommunityFailure("invalid_response")
-        payload.result_json = json.dumps(result, separators=(",", ":"))
         payload.error_code = None
         set_operation_state(self.db, operation_id=operation_id, state="acknowledged")
         self.db.commit()
-        return True
 
     async def run(self, operation_id: str, *, resend: bool = False) -> dict:
-        """Check owned status first; only an explicit retry can send saved bytes."""
+        """Report local status; only an explicit retry sends the saved bytes.
+
+        The service keeps no readable operation status, so a check never sends: a
+        retry with the same `submit-<submissionId>` key and bytes returns the stored
+        result. Retired `publish` operations are never sent.
+        """
         self._clean()
         authority = getattr(self.client, "activity_access", None)
         if authority is not None:
             authority.check()
         try:
             operation, payload = self._rows(operation_id)
-            if operation.state == "acknowledged":
-                return self.status(operation_id)
-            if payload.cancel_requested and operation.state != "submitted":
+            if (
+                not resend
+                or operation.kind != "submission"
+                or operation.state == "acknowledged"
+                or payload.cancel_requested
+                or payload.error_code in _REJECTED
+            ):
                 return self.status(operation_id)
             connection = identity_connection(
-                self.db, self.client.home.credential_ref, operation.service_url
+                self.db,
+                self.client.home.credential_ref,
+                operation.service_url,
+                populate_existing=True,
             )
             if connection is None or connection.contributor_id is None:
                 raise CommunityFailure("not_connected")
@@ -315,38 +290,13 @@ class PublicationOutbox:
                 identity.installation_id,
             ):
                 raise CommunityFailure("identity_conflict")
-            self.db.rollback()
-            try:
-                response = await self.client.transport.request(
-                    "GET",
-                    "/v1/publication-operations/" + operation_id,
-                    identity=identity,
-                )
-            except CommunityFailure as error:
-                if error.code != "operation_not_found":
-                    raise
-                response = None
-            if response is not None and self._accept(operation_id, response):
-                return self.status(operation_id)
-            operation, payload = self._rows(operation_id)
-            if payload.cancel_requested:
-                return self.status(operation_id)
-            if not resend or payload.error_code in _REJECTED:
-                return self.status(operation_id)
-            connection = identity_connection(
-                self.db,
-                self.client.home.credential_ref,
-                operation.service_url,
-                populate_existing=True,
-            )
-            if connection is None or connection.contributor_id is None:
-                raise CommunityFailure("not_connected")
             if (
                 not connection.sharing_enabled
                 or operation.consent_version != connection.consent_version
             ):
                 raise CommunityFailure("sharing_consent_required")
             body = self._body(operation, payload)
+            submission_id = operation.revision_id
 
             def submit():
                 payload.error_code = None
@@ -356,15 +306,8 @@ class PublicationOutbox:
 
             authority.run(submit) if authority is not None else submit()
             self.db.commit()
-            response = await self.client.transport.request(
-                "POST",
-                "/v1/contributions",
-                identity=identity,
-                body=body,
-                operation_id=operation_id,
-            )
-            if not self._accept(operation_id, response):
-                raise CommunityFailure("invalid_response")
+            result = await MasterService(self.client).submit(body, submission_id)
+            self._accept(operation_id, result)
         except CommunityFailure as error:
             self.db.rollback()
             operation, payload = self._rows(operation_id)

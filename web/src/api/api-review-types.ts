@@ -44,6 +44,47 @@ export interface ReviewScanMembership {
   role: ReviewScanRole;
 }
 
+/** How a stored snapshot compares with its master link's served filters now. */
+export type ReviewCommunitySourceState = "current" | "changed" | "alignment_required" | "link_unavailable";
+
+/** A snapshot of one master link's served filters; its filters are normal review filters. */
+export interface ReviewCommunitySource {
+  source_id: string;
+  link_id: string | null;
+  community_version_id: string;
+  label: string;
+  tier: string | null;
+  match_percent: number | null;
+  master_revision: number;
+  alignment: Record<string, unknown> | null;
+  captured_at: string;
+  state: ReviewCommunitySourceState;
+  link_state: string | null;
+  /** The filters the master served when the snapshot was taken. */
+  filter_count: number;
+}
+
+/** Read-only provenance of a review filter from a community snapshot. */
+export interface ReviewFilterCommunity {
+  source_id: string;
+  filter_id: string;
+  /** The community version's label. */
+  label: string;
+  master_revision: number;
+  confidence: number | null;
+  contributor_count: number | null;
+  low_confidence: boolean;
+  /** The master no longer served it at the last refresh. */
+  removed: boolean;
+  /** Its own bounds overlap a finding of the same category from a local model scan. */
+  locally_verified: boolean;
+}
+
+/** Keep a stored snapshot (`source_id`), take a new one from it (`refresh`), or include a link (`link_id`). */
+export type ReviewCommunityMembership =
+  | { source_id: string; refresh?: boolean; link_id?: never }
+  | { link_id: string; source_id?: never; refresh?: never };
+
 export interface ReviewScanReference {
   scan: Scan;
   role: ReviewScanRole;
@@ -51,8 +92,16 @@ export interface ReviewScanReference {
 
 export interface ReviewFilter {
   id: string;
-  source_scan_id: string;
+  /** The scan a scan filter came from; null for a community filter. */
+  source_scan_id: string | null;
   source_finding_id: number | null;
+  /** The included community snapshot and master filter a community filter came from. */
+  community_source_id?: string | null;
+  community_filter_id?: string | null;
+  /** A community filter the user edited directly; bulk changes such as Apply Filter Defaults leave it unset. */
+  community_edited?: boolean | null;
+  /** Read-only community provenance; the server ignores it on save. */
+  community?: ReviewFilterCommunity | null;
   source: ReviewFilterSource;
   category: McfCategoryFamily | null;
   subcategory: McfCategory | null;
@@ -92,7 +141,6 @@ export interface ReviewRepairSummary {
   missing_scan_ids: string[];
   detected_at: string;
   recover: { kept_cues: number; removed_memberships: number; removed_accepted_credits: number };
-  community: { available: boolean; unavailable_reason: string | null } | null;
 }
 
 export interface SavedReviewSummary {
@@ -128,11 +176,13 @@ export interface SavedReview extends SavedReviewSummary, ReviewPolicyToken {
   mcf_document: ReviewMcfDocument;
   synchronization: ReviewSynchronization;
   accepted_credits: AcceptedCreditsProvenance | null;
+  community_sources?: ReviewCommunitySource[];
 }
 
 export interface ReviewCreate {
   name: string;
   memberships?: ReviewScanMembership[];
+  community_memberships?: ReviewCommunityMembership[];
   filters?: ReviewFilterInput[] | null;
   new_manual_filters?: NewManualReviewFilter[];
   mcf_metadata_seed?: McfMetadataSeedRequest | null;
@@ -168,6 +218,7 @@ export interface ReviewSave extends ReviewPolicyToken {
   synchronization: ReviewSynchronization;
   accepted_credits?: AcceptedCreditsReference | null;
   new_manual_filters?: NewManualReviewFilter[];
+  community_memberships?: ReviewCommunityMembership[];
 }
 
 export interface ReviewRetimeRequest extends ReviewPolicyToken {

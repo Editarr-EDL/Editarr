@@ -158,6 +158,16 @@ account.
 
 ## Local community API
 
+> **Master filter sets:** The [local community API](community-local-api.md)
+> defines the routes for finding, downloading, applying, voting on, sharing and
+> updating community master filter sets. Under
+> [ADR 0002](adr/0002-community-master-filter-sets.md), it supersedes the
+> revision-based subsections below: Target lookup, Community Downloads,
+> Import Acknowledgments, Hosted Votes, Revision Quality Ranking, Local
+> Revision Feedback, and the artifact-v2 parts of Publication jobs and
+> Manual Sharing. They will be removed in the removal phase. Connection,
+> enrollment, profile and key routes are unchanged.
+
 Community access is disabled unless `EDITARR_COMMUNITY_SERVICE_URL` (canonical
 HTTPS origin, no trailing slash) and `EDITARR_COMMUNITY_SERVICE_AUDIENCE` (exact
 authority) are configured. No community request starts merely on startup.
@@ -204,173 +214,41 @@ authoritative hosted outcome; outage/conflict retains the same journal. Success
 prompts for a fresh optional-encryption backup without claiming backup freshness.
 No CLI, scheduler, startup, restore or ordinary Discord login rotates keys.
 
-### Target lookup
+### Retired revision routes
 
-`POST /api/community/lookup` accepts one selected local target
-`{source:"jellyfin",item_id,media_source_id?}` with no other fields, optional
-complete `audio_selection`, `page_size` (default 16, 1..96), `cursor`,
-`target_key` and `refresh`. Provider identity/path/version are resolved server-side without media/review upserts.
-The browser cannot supply evidence, fingerprints or alternate-track inventory.
-This read POST still requires administrator, same-origin/CSRF and returns no-store.
+Migration 0037 and [ADR 0002](adr/0002-community-master-filter-sets.md) retire the
+revision-based lookup, download, import-receipt, vote and review-repair flows. These
+local routes still require authentication, same-origin and CSRF, and their
+registered capability (`community.search` for lookup, `community.feedback.submit`
+for votes, `community.download` for the others; a caller without it gets `403
+capability_denied`). They now answer `410 {"error":"protocol_retired"}` with
+`Cache-Control: no-store`:
 
-Success envelope: `{version:1,policyVersion,targetKey,targetEvidence,warnings,
-availability,availabilityError,page,pageError}`. Nullable errors are safe
-`{code,retryable}` values; failed payloads remain null, not zero-match success.
-Missing identity preserves null counts and skips matches. The page contains
-bounded public summaries, attribution/statistics, portable evidence and separate
-video/audio compatibility, with `selected:false`. Results include versioned
-revision-only quality ranking; older responses may retain `ranking:null`.
-Target/file/track/policy changes invalidate pagination; `targetKey` is a local
-opaque guard, distinct from the hosted cursor. Explicit refresh bypasses hosted
-lookup caching. Cancellation drains cooperative capture before closing the Session.
+| Retired route | Replacement |
+| --- | --- |
+| `POST /api/community/lookup` | Find ([local community API §2](community-local-api.md#2-find)) |
+| `POST /api/community/downloads`, `POST /api/community/downloads/status` | Master-set download and apply (§3) |
+| `POST /api/community/import-receipts/recover`, `POST /api/community/import-receipts/{import_id}/retry` | Master snapshot receipts (§3) |
+| `GET`/`POST /api/community/votes/{revision_id}`, `POST /api/community/votes/{revision_id}/retry` | Receipt-bound filter votes (§6) |
+| `POST /api/reviews/{review_id}/repair/community` | None; use `repair/recover` |
 
-Only signed `/v1/availability/batch` (one target) and `/v1/matches` are called.
-There is no whole-library polling, automatic enrollment, upload or artifact
-download. Private paths/selectors/inventory never leave local Editarr. Duration
-is bounded file metadata or unknown, never catalog evidence or frame-count fallback.
-Existing transport retries/backoff and fingerprint budgets remain in force.
-The catalog UI supplies exact selected-version/track input after explicit action and renders
-separate channel compatibility/provenance. Channel-specific selections are bound
-to local target key and immutable revision/digest, with explicit review-required
-channels; local association never accepts them. Artifact downloads/reuse remain
-separate explicit actions. Lookup alone never downloads or applies artifacts.
+Retired imports and their scans remain local data (local community API §10.2).
 
-### Community Downloads
+### Master filter set routes
 
-Authenticated matches include `contributionId`, distinct from `releaseId` and
-`revisionId`. Strict local/frontend DTOs require it; release mismatches fail closed.
-`POST /api/community/downloads` accepts one `{lookup,choice,confirmed}`.
-`lookup` carries the selected target, complete audio snapshot and required current
-`target_key`; cursors/refresh are not download authority. `choice` contains
-`{contributionId,revisionId,artifactDigest,channels}` with one or two unique
-audio/video channels. The backend independently resolves/captures the target,
-revalidates authenticated catalog root/revision/digest and compatibility, refreshes
-trusted receipt-key history and verifies original signed artifact/receipt bytes.
-Uncertain channels require `confirmed:true`; incompatible channels remain refused.
+The [local community API](community-local-api.md) defines the request and
+response shapes. Every route requires authentication; unsafe methods and every
+`POST` also require same-origin and CSRF, and responses are no-store. Links,
+votes, preferences and sync notifications belong to the calling account; another
+account's link is `404`. The master view is read-only: filter decisions happen in
+the saved reviews that include a set, and the local filter decision and update
+review routes are retired (local community API §5, §9).
 
-Success: `{version:1,revisionId,status:"imported"|"reused",scan,receiptState,
-reviewRequired,reviewed}`. Receipt failure does not undo local commit. This action
-never updates a review, applies filters, retimes or exports a sidecar. Editarr
-attempts acknowledgment after local commit. A receipt failure preserves import
-success and durable retry state.
-Both `EDITARR_COMMUNITY_DOWNLOAD_BOUNDS` (explicit JSON ResourceBounds)
-and `EDITARR_COMMUNITY_DOWNLOAD_RESPONSE_BYTES` (positive, at most 3,000,000) are
-required to send; unset means `downloads_not_configured`, not a production default.
-
-`POST /api/community/downloads/status` accepts `{target,target_key,choices}`
-(at most 96) and returns `{version:1,outcomes}` in request order. Each outcome has
-`revisionId,status:"not_imported"|"partial"|"imported"`; committed outcomes also
-have `scanId,approvedChannels,receiptState,reviewRequired,reviewed`. A staged outcome
-also includes `verificationPending:true` and the requested `pendingChannels` that
-were committed for verification. It reads local persisted exact-target imports
-without service access or download limits. Both endpoints require
-real administrator/same-origin/CSRF and return no-store.
-
-Local `Scan.community_approvals` exposes target source/item/version/channel records
-for review controls, separately from immutable `community_provenance`. Existing
-target evidence JSON retains private `selected_channels`/`lookup_target_key`; no
-schema migration or signature change is introduced. Cancellation drains workers;
-an in-flight commit can still succeed, so lost/aborted replies remain unknown until
-local status reconciliation.
-
-### Import Acknowledgments
-
-`POST /api/community/import-receipts/recover` stages at most 100 missing original
-receipt intents from committed imports and returns `{importIds}` without network
-activity. `POST /api/community/import-receipts/{import_id}/retry` accepts
-`{confirmed:true}` and returns `{importId,state:"acknowledged",result}` after a
-matching service acknowledgment. Failure leaves the import and original
-pending/submitted intent recoverable. Both require real administrator,
-same-origin/CSRF and no-store; no browser-supplied receipt
-or service identity is accepted.
-
-Signed hosted `POST /v1/import-receipts` accepts `{version:1,receipt}` with
-`Idempotency-Key: import-<receiptId>`. Completed result
-`{version:1,operationId,revisionId,artifactDigest,receiptId,counted}` is wrapped in
-`{version:1,state:"completed",result}`. `counted` means eligible non-self import,
-not a new increment per request. Deduplicate contributor/revision across
-installations, restores and channel approvals; infer no vote/trust or transfer
-count. Explicit `IMPORT_LIMITS` and trusted `DOWNLOAD_RECEIPT_KEYS` are required;
-the default hosted configuration is disabled.
-
-### Hosted Votes
-
-`POST /v1/contributions/{revisionId}/vote` accepts `{version:1,vote}` where vote is
-`like`, `dislike` or `neutral`, with a new `Idempotency-Key` for each intent. It
-returns `{version:1,state:"completed",result:{version:1,operationId,revisionId,vote}}`.
-Retry the original body/operation using a fresh signature; changing the revision
-or body under that operation conflicts. Saved results recover original intent
-outcomes, never reapply an old vote and need not describe the current vote.
-
-Signed `GET /v1/contributions/{revisionId}/vote` returns
-`{version:1,revisionId,vote,eligible}` for the caller only; absent votes are neutral.
-Signed `GET /v1/contributions/{revisionId}/votes` returns
-`{version:1,revisionId,likes,dislikes}` without voter identities/history. All responses
-use `private, no-store`. Current membership and active requester are required,
-including retries and reads; missing/hidden revisions return 404. Writes require
-an exact-revision counted import and reject self-votes with 403 `vote_ineligible`.
-Upload restrictions do not block voting. Suspension/nonmembership blocks access
-without removing votes/totals. No reason field, report or ranking is accepted.
-`VOTE_LIMITS` explicitly bounds request bytes (<=8192) and queries (<=64), with no
-default. Numbered SQLite 0013 requires explicit backed-up upgrades for existing service stores;
-the default hosted configuration is disabled.
-See the [shared DTO fixture](../tests/fixtures/community/vote-v1.json).
-
-### Revision Quality Ranking
-
-Candidate results include `ranking:{policyVersion,qualityScore,voteCount,uploaderBoost,score}`
-to signed hosted `/v1/matches` and the local lookup projection. Policy is
-`community-ranking-wilson-1`: Wilson lower bound with z=1.96 and one positive/negative
-prior vote. Neutral is excluded from `voteCount`; actual likes/dislikes remain in
-`statistics`. Scores are bounded 0..1 and rounded to nine decimal places. Author
-boost is zero, `score===qualityScore`, no age decay and no usage-based admission. Import/
-upload volume, parent votes and author history never enter the formula.
-
-Hosted order is video band, audio band, descending score, then ASCII revision ID.
-The local client recomputes non-null scores from supplied vote counts and rejects
-inconsistent/unknown policies; typed legacy null remains accepted. No score is
-written into signed artifacts or stored separately in service SQLite. Warm metadata caches
-still reread current counters; policy version is part of cache/cursor identity.
-`community-search-2` cursors include a bounded ranked vote/visibility snapshot.
-New inserts remain outside the original revision ceiling; changed votes/moderation
-invalidate the cursor with 400 `invalid_cursor`. Restart lookup without that cursor,
-rather than silently combining changed page orders. Old cursor versions also fail
-closed. The local UI sorts by compatibility first. See the [shared precise ranking vectors](../tests/fixtures/community/ranking-v1.json).
-
-### Local Revision Feedback
-
-`GET /api/community/votes/{revision_id}` freshly reads signed private own
-vote and public totals, separate from cached catalog results. Response:
-`{version:1,revisionId,scope:{serviceUrl,contributorId},current,totals,pending,error}`.
-`current` is `{vote,eligible,reason:null|"self_vote"|"import_required"}`; `totals`
-is `{likes,dislikes}`; `pending` is `{operationId,vote,state}` or null. Safe error
-is `{code,retryable}` or null. Failed/partial remote reads yield null current/totals
-while retaining any scoped local pending intent. No voter histories are exposed.
-
-Strict `POST` on the same route accepts
-`{vote:"like"|"dislike"|"neutral",operation_id:"vote-...",confirmed:true}`.
-It requires a committed exact-revision non-self import with an acknowledged
-original receipt before persisting intent. `POST /{revision_id}/retry` accepts
-`{operation_id,confirmed:true}` and uses saved bytes only. Both return the hosted
-hosted completed-result envelope; historical success is not current own state.
-Extra/reason fields fail validation. Real administrator, same-origin/CSRF and
-no-store are enforced. Ordinary error envelopes retain
-`code/retryable`; no local/remote failure silently cancels a submitted operation.
-
-The existing operation table stores the exact bounded vote JSON in its `receipt`
-payload field and approved value in `vote`; no migration or new secret. Legacy
-`up`/`down` rows remain preserved but are not translated/sent. Only one unresolved
-local intent per identity/revision can be prepared. Retrying original operation
-and body cannot inflate hosted totals; acknowledged local retries do not resend.
-Full backups retain intents.
-
-UI feedback loads explicitly and never enters public result caches. Late/stale
-candidate replies are discarded. Failures show pending intent, not manufactured
-counts or confirmed own vote; success rereads current state. Catalog counts and
-quality remain snapshots. Both match bands dominate every sort; quality uses
-the ranking score with stable ASCII revision ties. A null score stays unknown.
-See [hosted moderation](../community-service/README.md#reports-and-reversible-moderation)
-for the separate service report contract.
+| Routes | Capability |
+| --- | --- |
+| `POST /api/community/find`, `GET /api/community/aliases`, `GET /api/community/masters`, `GET /api/community/masters/{link_id}`, `GET /api/community/masters/{link_id}/active-filters`, `GET /api/community/preferences` | `community.search` |
+| `POST /api/community/masters`, `POST …/masters/{link_id}/alignment/preview`, `POST …/alignment/approve`, `PATCH /api/community/preferences`, `POST …/masters/{link_id}/check`, `GET /api/community/sync`, `POST /api/community/sync/run`, `POST /api/community/sync/notifications/read` | `community.download` |
+| `POST …/masters/{link_id}/filters/{filter_id}/vote`, `POST …/vote/retry`, `POST …/masters/{link_id}/reports` | `community.feedback.submit` |
 
 ### Publication jobs
 
@@ -507,7 +385,7 @@ generation. When that evidence is unavailable, the original version stays in
 history and can be used in the existing verification flow. Signed Community
 artifacts keep their existing fingerprint and signature formats.
 
-See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts).
+See [works, versions, aliases and match keys](community-scan-service-contracts.md#3-works-versions-aliases-and-match-keys).
 
 ## Named review API
 
@@ -543,24 +421,18 @@ metadata fields. `ReviewMcfDocument` is the review-owned editable copy.
 `SavedReviewSummary` contains `revision`, `content_revision`, `edl_content_revision`,
 `mcf_content_revision`, `exports`, and nullable `repair`. A repair is present exactly
 when persisted `review_scan_repairs` rows exist. It contains `message`, ordered
-`missing_scan_ids`, earliest `detected_at`, `recover` counts (`kept_cues`,
-`removed_memberships`, `removed_accepted_credits`), and nullable `community`
-(`available`, nullable `unavailable_reason`). The message is
+`missing_scan_ids`, earliest `detected_at`, and `recover` counts (`kept_cues`,
+`removed_memberships`, `removed_accepted_credits`). The message is
 "This review uses a scan that no longer exists."
 
 Flagged reviews remain listed, but ordinary review operations return
 `409 {detail: {code: "review_needs_repair", message, repair}}` with
-`Cache-Control: no-store`. Delete and the two explicit repair commands remain
+`Cache-Control: no-store`. Delete and the explicit recover command remain
 available under their normal authority. Hidden reviews still return 404.
 Recover preserves copied cue values as manual/null-finding cues, removes missing
 memberships and accepted credits, rebuilds policy evidence, and clears repairs.
-Community repair requires review-save and `community.download` authority, current
-target access, and the existing verified-download gates. It restores provenance
-through event IDs (exact content fallback only without an old map) and rebinds the
-receipt atomically. Any unmatched reference rolls back the attempt. A failed
-download returns `409 community_scan_unavailable` in the same envelope, with
-`reason` and `transient`. Definitive reasons persist; retryable failures do not.
-Both commands return `SavedReview`; repeating a successful command is harmless.
+It returns `SavedReview`; repeating a successful recovery is harmless. The
+community repair route is [retired](#retired-revision-routes).
 Existing sidecars are not removed by migration or repair.
 
 `ExportStatus.exports` always has `edl` and `mcf`
@@ -594,7 +466,7 @@ reads and sets the instance default mode. See "Filter preferences and enforced p
 | `POST /api/mcf-imports/upload` | Multipart `.mcf` file plus JSON-string `options` (`target`, `name`) | `201 McfImportResult` |
 | `POST /api/reviews/{review_id}/retime` | Complete `ReviewRetimeRequest` draft | `200 ReviewRetimeResult` |
 | `POST /api/reviews/{review_id}/repair/recover` | None; review-save authority | `200 SavedReviewSummary` |
-| `POST /api/reviews/{review_id}/repair/community` | None; review-save plus `community.download` | `200 SavedReviewSummary` |
+| `POST /api/reviews/{review_id}/repair/community` | Retired | `410 {"error":"protocol_retired"}` |
 | `POST /api/credits-detections` | Authoritative target reference and optional Qwen model | `202 CreditsDetectionStartResult` |
 | `GET /api/credits-detections/{scan_id}` | None | `200 CreditsDetectionStartResult` |
 | `POST /api/credits-detections/{scan_id}/model-consent` | Explicit acquire or continue-without-Qwen decision | `202 CreditsDetectionStartResult` |
@@ -959,7 +831,7 @@ does not prove analysis. Historical/imported unknown input stays null. Stale or
 missing queued inputs and unverifiable audio checkpoints stop without substitution.
 Device-bound audio selection tokens expire. Start a new scan and choose the audio
 track again if a queued selection can no longer be verified.
-See [work, release, and fingerprint contracts](community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts)
+See [match key types](community-scan-service-contracts.md#32-match-key-types)
 for how selected tracks affect community matching.
 
 ### Scan naming
@@ -989,13 +861,39 @@ The transitional `manual` flag is derived from `origin == "manual"`; an AI scan 
 Files remains `generated`. Imported scans also expose their safe `import_source_name` and
 UTC `imported_at` and have no execution duration; import creation is a separate workflow.
 
+Recover Scans uses `POST /api/filter-candidates` (search and match, which may hash
+media) and `POST /api/filter-candidates/associations`. `POST
+/api/filter-candidates/available` takes the same search body and answers `{"available":
+bool}`: whether the caller can reach a completed scan of another file of the same work
+(TMDB/TVDB provider ID). It reads no media and writes nothing; it needs
+`scans.findings.read`, and the web app disables Recover Scans when it is false and the
+item has no other local versions, previous versions, pending imports or linked scans with
+scans. Because it doesn't hash, a search can still find nothing; the dialog then says
+"No recoverable scans matched this file."
+
 ## Primary flows
 
 - Settings: `GET`/`PUT /api/settings/jellyfin`, `POST /api/settings/jellyfin/test`.
 - Catalog: `GET /api/libraries`, `GET /api/libraries/{library_id}/items`,
   `GET /api/library-items/{item_id}`, and `/children`/`image` variants.
   Library paging uses `start_index` and `limit`; sorting, EDL filtering, and
-  title search compose in the same request.
+  title search compose in the same request. `edl_filter` is `all`, `exported`,
+  `not_exported`, or `outdated` (an EDL exported before its review last changed).
+  `jump_groups` lists the groups of the whole filtered, sorted listing in list
+  order as `{key, label, offset}`, where `offset` is the index of the group's
+  first item, so a client can page straight to a group. Groups come from the
+  same key the listing is sorted by, so each is contiguous in either direction:
+  `title` groups by initial (`A`–`Z` after removing accents and case folding,
+  with dotless `ı` read as `i`; `#` for digits, symbols and other scripts,
+  which sort first); `year` by decade (key `2010`, label `2010s`); `rating` by
+  case-folded rating (labelled as its first item's rating; a leading `:` is
+  doubled so no rating takes the missing-value key); `duration` by
+  length band (keys `0`, `90`, `120`, `150`, `180` minutes, labelled `<90m`,
+  `90m`, `2h`, `2h30`, `3h+`); and `type` by case-folded item type (label such
+  as `Movie`, `Series` or `Music video`). Items without a year, rating or
+  length form one group with key `:none` (label `No year`, `No rating` or
+  `No length`), placed where the sort puts them: last ascending, first
+  descending.
 - Scans: `POST /api/scans` accepts a Jellyfin item ID and options. It rejects
   non-video or unreadable mapped items. Repeated scans for the same media item
   receive new per-item scan IDs and enter the serial queue.
@@ -1039,6 +937,32 @@ UTC `imported_at` and have no execution duration; import creation is a separate 
   boundary. Mutations use the current
   review `revision`; content changes also advance `content_revision` and affected format
   revisions. Saves include the complete editable `mcf_document` and `synchronization`.
+- Community filters: `SavedReview.community_sources` lists the community master-set
+  snapshots a review includes; create and save requests take `community_memberships`
+  (omitted on save keeps them). Including a set adds each served filter to `filters`
+  as a normal review filter with `source_scan_id: null`, `community_source_id`,
+  `community_filter_id`, `community_edited` (set by direct user edits, never by Apply
+  Filter Defaults) and read-only `community` provenance (version label, confidence,
+  contributor count, `removed`, `locally_verified`). Below-threshold and Low
+  Confidence filters start disabled. Community filters are enabled, disabled and
+  adjusted like scan filters and go through the same policy, EDL/MCF export, sidecar,
+  subtitle and sharing paths. Refreshing a snapshot keeps the user's edits by filter
+  ID, takes new master values for unedited filters, adds new ones, and flags filters
+  no longer served as removed. Exports need at least one scan or one community filter;
+  a community-only review exports beside the review target's file. Including a link
+  or refreshing a snapshot needs `community.search` and evidence-edit permission, and
+  only the review owner may take a snapshot of their own link; see
+  [review community filters](community-local-api.md#saved-review-community-filters).
+- Filtered subtitles redact the words of every enabled audio-channel language filter
+  that has a word or phrase (its label), whatever the filter's source or action (mute
+  or skip); a filter without one, such as an unlabeled community filter, changes no
+  subtitle.
+- Filter previews follow the filter's action, whatever its source: the draft preview
+  renders a mute as `audio/mpeg` and a skip as `video/mp4`, and a saved filter's
+  `mute-preview` or `video-preview` is available for a mute or a skip respectively.
+  A saved review's draft preview without a source scan plays only while the target
+  file is the review's bound version and, for an unchanged community filter, the
+  local version its snapshot was aligned to; otherwise it returns `409 target_changed`.
 - Manual filters: `new_manual_filters` in saved-review create/save requests stages
   human-authored audio mute and visual skip filters with required MCF classification. The successful transaction creates
   or reuses the target version's Manual evidence scan and returns assigned provenance;

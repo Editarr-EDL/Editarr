@@ -1,13 +1,6 @@
 import { env } from './helpers/environment';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, describe, expect, it } from 'vitest';
-import identityMigration from '../migrations/0001_identity_operations.sql?raw';
-import budgetMigration from '../migrations/0002_budget_ledger.sql?raw';
-import quotaMigration from '../migrations/0003_quotas.sql?raw';
-import admissionMigration from '../migrations/0004_request_admission.sql?raw';
-import oauthMigration from '../migrations/0005_discord_oauth.sql?raw';
-import usageMigration from '../migrations/0006_oauth_usage.sql?raw';
-import membershipMigration from '../migrations/0007_membership.sql?raw';
-import profileMigration from '../migrations/0008_enrollment_profiles.sql?raw';
 import vector from '../../tests/fixtures/community/local-enrollment-request-v1.json';
 import contract from '../../tests/fixtures/community/enrollment-profile-v1.json';
 import { verifyRequestSignature } from '../src/security/request-signatures';
@@ -21,11 +14,7 @@ const policy = { now: 1700000030, maxLifetimeSeconds: 120, maxClockSkewSeconds: 
   expectedAuthority: 'community.example', expectedKeyId: keyId };
 
 beforeAll(async () => {
-  for (const sql of [identityMigration, budgetMigration, quotaMigration, admissionMigration,
-    oauthMigration, usageMigration, membershipMigration, profileMigration]) {
-    await env.CATALOG_DB.exec(sql.replace(/\s*\n\s*/g, ' '));
-  }
-  await env.CATALOG_DB.prepare('UPDATE quota_policy SET enabled = 1').run();
+  await applyBaseline(env.CATALOG_DB);
 });
 
 function request() {

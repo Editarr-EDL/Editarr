@@ -79,7 +79,9 @@ function subtractReviewRanges(
 }
 
 /** Build selected and unselected skip/mute ranges for the review timeline. */
-export function savedReviewTimelineRanges(filters: SavedReview["filters"]): SavedReviewTimelineRange[] {
+export function savedReviewTimelineRanges(
+  filters: ReadonlyArray<Pick<SavedReview["filters"][number], "selected" | "edit_action" | "start_seconds" | "end_seconds">>,
+): SavedReviewTimelineRange[] {
   return [true, false].flatMap((selected) => {
     const applicable = filters.filter((filter) => filter.selected === selected);
     const skip = mergeReviewRanges(applicable
@@ -216,9 +218,13 @@ export function visualFilterListLabel(
   return named || `Video filter ${index + 1}`;
 }
 
-/** Look up the origin of a filter's source scan for {@link savedReviewFilterDescription}. */
+/**
+ * Look up the origin of a filter's source scan for {@link savedReviewFilterDescription}. A community
+ * filter is named like an imported one: by its label, else its classification.
+ */
 export function filterSourceOrigin(filter: SavedReview["filters"][number], scanById: Map<string, Scan>): Scan["origin"] | null {
-  return scanById.get(filter.source_scan_id)?.origin ?? null;
+  if (filter.community_source_id) return "imported";
+  return filter.source_scan_id ? scanById.get(filter.source_scan_id)?.origin ?? null : null;
 }
 
 function isNoObjectionableContent(value: string | null | undefined): boolean {
@@ -288,7 +294,7 @@ export function mergeSavedReviewFilters(
     current.endSeconds = Math.max(current.endSeconds, endSeconds);
     const description = savedReviewFilterDescription(filter, filterSourceOrigin(filter, scanById));
     if (description) current.descriptions.add(description);
-    if (scanById.has(filter.source_scan_id)) current.scanIds.add(filter.source_scan_id);
+    if (filter.source_scan_id && scanById.has(filter.source_scan_id)) current.scanIds.add(filter.source_scan_id);
   }
   return groups.map((group) => ({
     key: group.filters.map((filter) => filter.id).join(":"),

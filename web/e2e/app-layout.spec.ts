@@ -146,7 +146,7 @@ test("drills through a series season and episode", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Example Series" })).toBeVisible();
   await page.getByRole("button", { name: "Open Season 1" }).click();
   await expect(page.getByRole("heading", { name: "Season 1" })).toBeVisible();
-  await page.getByRole("button", { name: "Episode 1" }).click();
+  await page.getByRole("button", { name: "Open Episode 1" }).click();
   await expect(page.getByRole("heading", { name: "Episode 1" })).toBeVisible();
 });
 

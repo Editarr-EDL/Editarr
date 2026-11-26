@@ -59,8 +59,15 @@ All `variables` values are strings. Supply the existing service contract values:
 
 - `PUBLIC_ORIGIN`, `POLICY_VERSION`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`.
 - `ACCESS_ISSUER`, `ACCESS_AUDIENCE`, `OPERATOR_ORIGIN`, `OPERATOR_SUBJECTS`.
-- `PUBLICATION_LIMITS`, `LOOKUP_LIMITS`, `DOWNLOAD_LIMITS`, `IMPORT_LIMITS`,
-  `VOTE_LIMITS`, `REPORT_LIMITS`, `MODERATION_LIMITS`, `DOWNLOAD_RECEIPT_KEYS`.
+- `SUBMISSION_LIMITS`, `VOTE_LIMITS`, `REPORT_LIMITS`, `MODERATION_LIMITS`,
+  `DOWNLOAD_RECEIPT_KEYS`.
+- `MASTER_POLICY`, with every key of contract §8.1. Startup refuses a missing
+  or invalid value.
+
+`VOTE_LIMITS` may add `votesPerHour` (default 120 votes per contributor per hour).
+The revision-era `PUBLICATION_LIMITS`, `LOOKUP_LIMITS`, `DOWNLOAD_LIMITS` and
+`IMPORT_LIMITS` variables were removed with their routes; configuration that still
+names them is refused.
 
 Structured variables are JSON serialized into strings, as in the existing binding
 contract. Limits and the receipt key ring are validated with the shared service
@@ -98,9 +105,11 @@ observations, not Cloudflare charges. SQLite reports logical changes including
 triggers; scanned-row counts and restored provenance remain unknown.
 
 Signature, replay, membership, Access/CSRF, immutable evidence, one-open-report per
-contributor/revision and provider cooldown protections remain. Configured body,
-artifact expansion, schema, query, page, lineage and cache bounds protect individual
-operations; they are not user usage allowances. Docker CPU/memory and physical disk
+contributor and target, and provider cooldown protections remain. Configured body,
+artifact expansion, schema, query and page bounds protect individual operations.
+The `MASTER_POLICY` per-contributor submission, master-check and per-installation
+sync limits and the stored-submission byte caps in `artifact_storage_policy` (350 MB
+global, 7 MB per contributor) protect the shared store. Docker CPU/memory and physical disk
 capacity remain operational constraints. Capacity tests must use isolated storage.
 
 ## Persistence and recovery
@@ -136,8 +145,8 @@ recovery requirements. Manual snapshots have no automatic pruning or schedule.
 
 ### Retention And Offline Preview
 
-Policy community-retain-first-1 retains exact signed BLOBs, revisions/lineage,
-identity/public-key history, durable operations, import uniqueness facts, votes,
+Policy community-retain-first-1 retains exact signed submission BLOBs, master
+revisions, identity/public-key history, durable operations, download receipts, votes,
 reports and moderation audit indefinitely. Only existing transient expiries and
 Docker log rotation apply; moderation/withdrawal does not delete evidence. No schema
 guard is weakened, and no VACUUM/reclaimed-capacity or paid-storage policy is added.
@@ -165,26 +174,27 @@ cutover. Preserve the original volume, configuration and receipt key history.
 Restoring stale snapshots can roll back revocations, moderation, replay and
 operation state: recovery must account for that before access is enabled.
 
-Current schema is **17**. Migrations 0015/0016 preserve all prior rows while
-retiring usage admission and moving historical report allowance values out of
-active reports. Starting schemas 1–16 are supported. Existing configuration must
-use report/operator JSON with only `requestBytes` and `maxQueries`; remove retired
-allowance fields before activating. Legacy archive validation is separate from
-the current snapshot/upgrade workflow.
+Current schema is the **`community-master-1` baseline, version 1**
+(`0001_master_baseline.sql`). The master-filter-set refactor rebased the service
+migrations ([contract §8](community-scan-service-contracts.md#8-storage-schema-service),
+[ADR 0002](adr/0002-community-master-filter-sets.md) D1). The owner explicitly
+authorized discarding the old community service store because it has no users;
+the old revision-era lineage (schemas 1–18) cannot be upgraded. Startup, `backup`,
+`upgrade` and `retention` refuse an old-lineage store with
+`reason=unsupported_database_lineage` and never stamp, upgrade or back it up.
 
-Migration 0017 removes Radarr and Sonarr provenance. It rewrites the
-`radarr_catalog_minutes` and `sonarr_catalog_minutes` duration sources to
-`jellyfin_ticks` and identifier provenance such as `radarr.movie` or `sonarr.series`
-to `source_metadata` in the catalog copies of match evidence. Every published row
-and ID stays, so lookups return the same publications. Signed artifact bytes are
-unchanged. Schema 17 refuses any publication, match or availability request that
-carries those values with its normal validation error and stores nothing. Editarr
-builds without Radarr and Sonarr support (from `refactor(scanner): remove Radarr
-and Sonarr sources` onward) never send them. Older builds still work for Jellyfin
-and file-only media, but their requests about Radarr- or Sonarr-sourced items are
-refused. To move a schema 16 store, stop the service and run the upgrade below
-with the new image. It writes and verifies the pre-upgrade backup at `--destination`
-itself, so no separate backup step is needed.
+To move from the old lineage, an operator resets the store explicitly:
+
+1. Stop the service: `docker compose -f community-service/compose.yaml stop community`.
+2. Archive the old data volume, for example by renaming or copying it to a
+   private location. Do not delete it.
+3. Create a new, empty data volume for `community-data`, then run
+   `docker compose -f community-service/compose.yaml run --rm --no-deps maintenance init --confirm`.
+4. Update configuration to the master-set variables above and start the service.
+
+Contributor identities are not carried over; contributors enroll again. This reset
+applies only to the community service. It is never automatic, and later schema
+changes return to versioned, verified-backup-first upgrades.
 
 To upgrade to the current schema, build the reviewed image, stop the
 service, and run `docker compose -f community-service/compose.yaml run --rm --no-deps
@@ -194,9 +204,8 @@ verifies it, then runs an atomic migration. Unknown
 schemas are refused, and failed migrations roll back. Image rollback is safe only
 with a schema-compatible image; it is not a database downgrade.
 
-Legacy D1 stores and encrypted legacy archives require an offline conversion.
-Preserve and verify the original data before conversion. See
-[isolated service restore](../community-service/README.md#isolated-service-restore).
+Legacy D1 stores and encrypted legacy archives belong to the retired lineage and
+cannot be restored into the current service. Keep them archived if they must be retained.
 
 ### Image replacement and rollback
 
@@ -238,9 +247,10 @@ docker volume create NEW_RECOVERY_VOLUME
 docker run --rm --network none --read-only --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:size=32m,noexec,nosuid,nodev --volume ORIGINAL_BACKUP_VOLUME:/backups:ro --volume NEW_RECOVERY_VOLUME:/data editarr-community:REVIEWED_TAG node --input-type=module -e 'import {copyFileSync,chmodSync,constants} from "node:fs"; import {openDatabase} from "./dist/runtime/schema.mjs"; copyFileSync("/backups/VERIFIED_SNAPSHOT.sqlite","/data/community.sqlite",constants.COPYFILE_EXCL); chmodSync("/data/community.sqlite",0o600); openDatabase("/data/community.sqlite").database.close();'
 ```
 
-This has no listener, service-secret mount or network. For a supported older snapshot,
-run the explicit backup-first upgrade in the new volume before validation; it cannot
-be opened by the current server until upgraded. Keep original `user_version` and bytes.
+This has no listener, service-secret mount or network. For a snapshot of an older
+`community-master-1` version, run the explicit backup-first upgrade in the new volume
+before validation; it cannot be opened by the current server until upgraded. An
+old-lineage snapshot is refused. Keep original `user_version` and bytes.
 Create a protected Compose override outside the checkout:
 
 ```yaml

@@ -27,7 +27,7 @@ export function signedInStatus({
     sign_in: { jellyfin: true },
     display_name: username,
     access: {
-      version: "editarr-capabilities-9",
+      version: "editarr-capabilities-10",
       permission_revision: revision,
       principal: {
         user_id: userId, role, credential: "session", status: "active", link_state: "verified",

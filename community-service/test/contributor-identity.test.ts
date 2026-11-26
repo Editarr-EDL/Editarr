@@ -1,13 +1,6 @@
 import { env } from './helpers/environment';
+import { applyBaseline } from './helpers/schema';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import identityMigration from '../migrations/0001_identity_operations.sql?raw';
-import budgetMigration from '../migrations/0002_budget_ledger.sql?raw';
-import quotaMigration from '../migrations/0003_quotas.sql?raw';
-import admissionMigration from '../migrations/0004_request_admission.sql?raw';
-import oauthMigration from '../migrations/0005_discord_oauth.sql?raw';
-import usageMigration from '../migrations/0006_oauth_usage.sql?raw';
-import membershipMigration from '../migrations/0007_membership.sql?raw';
-import profileMigration from '../migrations/0008_enrollment_profiles.sql?raw';
 import { createBotMembership } from '../src/integrations/discord/membership';
 import { authenticateContributor } from '../src/security/contributor-auth';
 import { signedEnrollment } from './helpers/enrollment-signatures';
@@ -20,10 +13,7 @@ const origin = 'https://community.example';
 const emptyDigest = 'sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:';
 
 beforeAll(async () => {
-  for (const migration of [identityMigration, budgetMigration, quotaMigration, admissionMigration,
-    oauthMigration, usageMigration, membershipMigration, profileMigration]) {
-    await db.exec(migration.replace(/\s*\n\s*/g, ' '));
-  }
+  await applyBaseline(db);
 });
 
 async function register() {
@@ -67,7 +57,6 @@ async function signedGet(identity: Awaited<ReturnType<typeof register>>,
 describe('own-identity contributor HTTP route', () => {
   it('wires bot eligibility into Node service identity and never exposes provider linkage or secrets', async () => {
     const identity = await register();
-    await db.prepare('UPDATE quota_policy SET enabled = 1').run();
     const timestamp = Math.floor(Date.now() / 1000);
     const client = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ user: { id: identity.discordId } }));
     const bindings = { ...env, PUBLIC_ORIGIN: origin, POLICY_VERSION: 'fixture-policy-1', DISCORD_GUILD_ID: '1554889314549243986',
@@ -103,8 +92,6 @@ describe('own-identity contributor HTTP route', () => {
         .rejects.toMatchObject({ code: expected });
       const response = await contributorIdentity(await signedGet(identity), db, 'community.example', now, check);
       expect(response.status).toBe(outcome === 'ineligible' ? 403 : 503);
-      expect(await db.prepare('SELECT 1 FROM quota_charges WHERE contributor_id = ?')
-        .bind(identity.contributorId).first()).toBeNull();
       expect(await db.prepare('SELECT 1 FROM operations WHERE contributor_id = ?')
         .bind(identity.contributorId).first()).toBeNull();
       expect(client).toHaveBeenCalledOnce();
@@ -122,7 +109,6 @@ describe('own-identity contributor HTTP route', () => {
 
   it('verifies current key and membership before charging and returning only own status', async () => {
     const identity = await register();
-    await db.prepare('UPDATE quota_policy SET enabled = 1').run();
     const deniedMembership = await contributorIdentity(await signedGet(identity), db,
       'community.example', now, async () => 'ineligible');
     expect(deniedMembership.status).toBe(403);
@@ -143,8 +129,6 @@ describe('own-identity contributor HTTP route', () => {
 
   it('ignores legacy caps but rejects key retirement, suspension and wrong authority', async () => {
     const identity = await register();
-    await db.prepare('UPDATE quota_policy SET enabled = 1').run();
-    await db.prepare("UPDATE quota_caps SET cap = 1 WHERE resource = 'worker_requests'").run();
     try {
       expect((await contributorIdentity(await signedGet(identity), db,
         'community.example', now, async () => 'eligible')).status).toBe(200);
@@ -169,7 +153,6 @@ describe('own-identity contributor HTTP route', () => {
         });
       expect(retired.status).toBe(401);
     } finally {
-      await db.prepare("UPDATE quota_caps SET cap = 1800 WHERE resource = 'worker_requests'").run();
     }
   });
 });

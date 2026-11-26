@@ -96,7 +96,7 @@ export function authenticationStatus(state: "setup_required" | "unauthenticated"
     sign_in: { jellyfin: true },
     display_name: signedIn ? "owner" : null,
     access: signedIn ? {
-      version: "editarr-capabilities-9",
+      version: "editarr-capabilities-10",
       permission_revision: 1,
       principal: { user_id: 1, role: "owner", credential: "session", status: "active", link_state: "verified" },
       capabilities: [...CAPABILITIES],
@@ -224,10 +224,6 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/settings/jellyfin" && method === "GET") {
       await json(route, { server_url: "http://jellyfin.test", api_key_configured: true, last_checked_at: null, last_error: null }); return;
     }
-    if (url.pathname === "/api/community/downloads/status") {
-      const body = route.request().postDataJSON();
-      await json(route, { version: 1, outcomes: body.choices.map((choice: { revisionId: string }) => ({ revisionId: choice.revisionId, status: "not_imported" })) }); return;
-    }
     if (url.pathname === "/api/mcf-registry") {
       await json(route, { families: [
         { token: "language", label: "Language", categories: [{ token: "swearing", label: "Swearing" }] },
@@ -285,7 +281,8 @@ export async function mockApi(page: Page) {
     if (url.pathname === "/api/libraries/movies/items") {
       const filteredItems = items.filter((item) =>
         url.searchParams.get("search") !== "missing"
-        && (url.searchParams.get("edl_filter") !== "not_exported" || !item.exports.exports.edl.present),
+        && (url.searchParams.get("edl_filter") !== "not_exported" || !item.exports.exports.edl.present)
+        && (url.searchParams.get("edl_filter") !== "outdated" || (item.exports.exports.edl.present && item.exports.exports.edl.outdated)),
       );
       await json(route, { items: filteredItems, total_count: filteredItems.length, rating_values: ["PG-13"], resolution_values: ["4K"] }); return;
     }

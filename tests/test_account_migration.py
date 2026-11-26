@@ -32,6 +32,7 @@ from scanner.security.auth_repository_sessions import (
 )
 from scanner.settings.config import Settings
 from tests.account_migration_support import assert_preserved_after_account_migration
+from tests.community_master_migration_support import MASTER_COLUMNS, put_back_retired
 from tests.community_schema_fixture import create_unversioned_fixture
 from tests.jellyfin_setup_fake import install, setup_body
 from tests.test_auth_policy import _deployment_snapshot
@@ -111,6 +112,7 @@ def _legacy_database(path, revision="0009_readable_api_key", *, administrator=Tr
 # had none; tests pin that owner's state on their own (test_remove_passwords_migration).
 # Snapshots ignore usernames and display names, and drop a profile row left empty.
 # Dedicated migration tests check the new manual provenance and worker timing columns.
+# 0037 retires revision-link rows; snapshots put them back (community_master_migration_support).
 _ARCHIVE_COLUMNS = {
     "arr_settings": {"api_key"},
     "media_items": {"archived_source"},
@@ -119,7 +121,15 @@ _ARCHIVE_COLUMNS = {
     "user_profiles": {"display_name", "updated_at"},
     "scans": {"worker_elapsed_seconds", "worker_attempt_started_at"},
     "scan_findings": {"manually_added", "manually_edited"},
-    "review_filters": {"manually_added", "manually_edited"},
+    # 0040 adds community provenance, null for every earlier filter.
+    "review_filters": {
+        "manually_added",
+        "manually_edited",
+        "community_source_id",
+        "community_filter_id",
+        "community_edited",
+    },
+    **MASTER_COLUMNS,
     "users": {
         "password_hash",
         "local_credential",
@@ -171,6 +181,7 @@ def _snapshot(path):
                 rows[table].append(tuple(row[column] for column in columns[table]))
     for table in set(_ARCHIVED_ACCESS) & rows.keys():
         rows[table].sort(key=repr)
+    put_back_retired(rows, columns)
     if "user_profiles" in rows:
         rows["user_profiles"] = [row for row in rows["user_profiles"] if any(row[1:])]
     return rows, columns

@@ -69,6 +69,10 @@ LATER = [
     "0033_scan_worker_timing",
     "0034_scan_read_indexes",
     "0035_stable_media_identity",
+    "0036_sampled_media_identity",
+    "0037_community_master_sets",
+    "0038_retire_receipt_capabilities",
+    "0039_review_community_sources",
 ]
 SOURCES = [*PROFILE_SOURCES, *LATER]
 ACCOUNTS = "0010_user_accounts"
@@ -79,7 +83,7 @@ _TIME = "%Y-%m-%d %H:%M:%S.%f"
 def test_the_matrix_covers_every_revision_below_head():
     versions = Path(adoption.__file__).parent / "versions"
     chain = [None, *(path.stem for path in sorted(versions.glob("0*.py")))]
-    assert chain[-1] == adoption.HEAD_REVISION == "0036_sampled_media_identity"
+    assert chain[-1] == adoption.HEAD_REVISION == "0040_review_community_filters"
     assert SOURCES == chain[:-1]
 
 

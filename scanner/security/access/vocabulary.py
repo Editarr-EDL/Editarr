@@ -37,7 +37,6 @@ class Target(StrEnum):
     OWN_RESOURCE = "own_resource"
     OTHER_RESOURCE = "other_resource"
     OTHER_ACCOUNT = "other_account"
-    OTHER_ACCOUNT_RESOURCE = "other_account_resource"
     SCOPED_RECORDS = "scoped_records"
 
 
@@ -48,7 +47,7 @@ class TargetRule:
     `media_scoped` means the caller's media decision must allow the target's
     media. `account_protected` means the target account's class must pass
     `ACCOUNT_PROTECTION`. Resources are reviews, scans, jobs, exports,
-    publications and import receipts; their owner is the current owner, not
+    and publications; their owner is the current owner, not
     the historical author.
     """
 
@@ -65,9 +64,6 @@ TARGET_RULES: Mapping[Target, TargetRule] = MappingProxyType(
         Target.OWN_RESOURCE: TargetRule(Facet.OWN, media_scoped=True, account_protected=False),
         Target.OTHER_RESOURCE: TargetRule(Facet.OTHER, media_scoped=True, account_protected=False),
         Target.OTHER_ACCOUNT: TargetRule(Facet.OTHER, media_scoped=False, account_protected=True),
-        Target.OTHER_ACCOUNT_RESOURCE: TargetRule(
-            Facet.OTHER, media_scoped=True, account_protected=True
-        ),
         # Rows are filtered to accounts and media the caller may already act on.
         Target.SCOPED_RECORDS: TargetRule(Facet.ANY, media_scoped=True, account_protected=True),
     }

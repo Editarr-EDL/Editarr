@@ -82,21 +82,21 @@ it("groups a shown clean verdict under No objectionable content without a descri
 /** The previous incremental merge, kept as a behavioural reference. */
 function previousMerge(filters: Filter[], scanById: Map<string, Scan>) {
   const merged: { key: string; filters: Filter[]; startSeconds: number; endSeconds: number; descriptions: string[]; scanIds: string[] }[] = [];
-  const describe = (items: Filter[]) => [...new Set(items.map((item) => savedReviewFilterDescription(item, scanById.get(item.source_scan_id)?.origin)).filter(Boolean))];
+  const describe = (items: Filter[]) => [...new Set(items.map((item) => savedReviewFilterDescription(item, scanById.get(item.source_scan_id!)?.origin)).filter(Boolean))];
   for (const filter of [...filters].sort((left, right) => left.start_seconds - right.start_seconds)) {
     const startSeconds = filter.start_seconds;
     const endSeconds = Math.max(startSeconds, filter.end_seconds ?? startSeconds + 1);
     const current = merged[merged.length - 1];
     if (!current || startSeconds > current.endSeconds) {
       merged.push({ key: filter.id, filters: [filter], startSeconds, endSeconds, descriptions: describe([filter]),
-        scanIds: scanById.has(filter.source_scan_id) ? [filter.source_scan_id] : [] });
+        scanIds: scanById.has(filter.source_scan_id!) ? [filter.source_scan_id!] : [] });
     } else {
       current.filters.push(filter);
       current.endSeconds = Math.max(current.endSeconds, endSeconds);
       current.key = `${current.key}:${filter.id}`;
       current.descriptions = describe(current.filters);
-      if (scanById.has(filter.source_scan_id)) {
-        current.scanIds = [...new Set([...current.scanIds, filter.source_scan_id])].sort((left, right) => (
+      if (scanById.has(filter.source_scan_id!)) {
+        current.scanIds = [...new Set([...current.scanIds, filter.source_scan_id!])].sort((left, right) => (
           (scanById.get(left)?.scan_id ?? 0) - (scanById.get(right)?.scan_id ?? 0)));
       }
     }

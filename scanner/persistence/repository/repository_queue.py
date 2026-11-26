@@ -378,6 +378,10 @@ def update_scan_status(
     row.status = status
     row.error_message = error_message
     row.updated_at = now
+    if status == "complete" and row.origin == "generated":
+        from .community_master_filters import refresh_scan_verification
+
+        refresh_scan_verification(db, scan_id)
     db.commit()
 
 

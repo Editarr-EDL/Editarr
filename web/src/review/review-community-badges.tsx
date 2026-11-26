@@ -1,0 +1,38 @@
+import type { SavedReview } from "../api/api-review-types";
+import { ConfidenceBadge, LocallyVerifiedIcon } from "../scans/community-master-badges";
+import { isCommunityFilter } from "./review-community";
+
+type Filter = SavedReview["filters"][number];
+
+/** How many of a review's filters came from community snapshots. */
+export const communityResultCount = (filters: Filter[]) => filters.filter(isCommunityFilter).length;
+
+/**
+ * Source details of a result row's community filters for its muted meta line: the community version, its
+ * compact confidence badge, contributor count and Locally verified icon. Renders nothing for scan filters.
+ */
+export function CommunityFilterSource({ filters }: { filters: Filter[] }) {
+  const community = filters.filter((filter) => filter.community);
+  if (!community.length) return null;
+  return <span className="review-community-attribution">{community.map((filter) => {
+    const info = filter.community!;
+    return <span className="review-community-filter" key={filter.id}>
+      <span className="review-community-label">Community · {info.label}</span>
+      {info.confidence !== null && <ConfidenceBadge confidence={info.confidence} low={info.low_confidence} compact />}
+      {info.contributor_count !== null && <span>
+        {info.contributor_count} {info.contributor_count === 1 ? "contributor" : "contributors"}</span>}
+      {info.locally_verified && <LocallyVerifiedIcon />}
+    </span>;
+  })}</span>;
+}
+
+/** The "Edited" and "Removed from community" flags of a result row's community filters. */
+export function CommunityFilterFlags({ filters }: { filters: Filter[] }) {
+  const edited = filters.some((filter) => filter.community && filter.community_edited);
+  const removed = filters.some((filter) => filter.community?.removed);
+  if (!edited && !removed) return null;
+  return <span className="review-community-flags">
+    {edited && <span className="master-badge review-community-edited">Edited</span>}
+    {removed && <span className="master-badge review-community-removed">Removed from community</span>}
+  </span>;
+}

@@ -184,12 +184,12 @@ def test_previous_revision_preserves_rows_and_recoverable_snapshot(tmp_path, rev
             "OR analyzed_audio_selection_json IS NOT NULL"
         ).fetchone() == (0,)
         assert connection.execute("SELECT count(*) FROM audio_track_selections").fetchone() == (0,)
-        assert connection.execute("SELECT count(*) FROM community_import_targets").fetchone() == (
-            0,
-        )
+        assert connection.execute(
+            "SELECT count(*) FROM retired_community_import_targets"
+        ).fetchone() == (0,)
         assert connection.execute("SELECT count(*) FROM community_publications").fetchone() == (0,)
         assert connection.execute(
-            "SELECT count(*) FROM community_imports WHERE artifact_bytes IS NOT NULL "
+            "SELECT count(*) FROM retired_community_imports WHERE artifact_bytes IS NOT NULL "
             "OR manifest_bytes IS NOT NULL OR signature_bytes IS NOT NULL "
             "OR historical_key_json IS NOT NULL OR provenance_json IS NOT NULL "
             "OR event_ids_json IS NOT NULL OR receipt_json IS NOT NULL"

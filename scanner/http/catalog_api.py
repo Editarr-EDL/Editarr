@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from . import (
     catalog_candidates_api,
     catalog_library_api,
+    catalog_library_order,
     catalog_settings_api,
     identity_verification_api,
     stable_catalog_api,
@@ -32,8 +33,8 @@ api_update_filter_defaults_settings = catalog_settings_api.api_update_filter_def
 api_apply_filter_defaults = catalog_settings_api.api_apply_filter_defaults
 
 api_list_jellyfin_libraries = catalog_library_api.api_list_jellyfin_libraries
-_library_sort_value = catalog_library_api._library_sort_value
-_normalized_title = catalog_library_api._normalized_title
+_library_sort_value = catalog_library_order.library_sort_value
+_normalized_title = catalog_library_order.normalized_title
 _library_browse_items = catalog_library_api._library_browse_items
 _with_library_item_state = catalog_library_api._with_library_item_state
 _cached_library_items = catalog_library_api._cached_library_items

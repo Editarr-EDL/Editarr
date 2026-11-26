@@ -60,7 +60,9 @@ class CommunityConnectionRow(Base):
 
 
 class CommunityImportRow(Base):
-    __tablename__ = "community_imports"
+    """A revision-protocol download, retired by 0037; its scan stays a plain imported scan."""
+
+    __tablename__ = "retired_community_imports"
     __table_args__ = (
         UniqueConstraint(
             "service_url", "revision_id", "digest", name="uq_community_import_revision"
@@ -90,7 +92,7 @@ class CommunityOperationRow(Base):
     __tablename__ = "community_operations"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('publish', 'receipt', 'vote')", name="ck_community_operation_kind"
+            "kind IN ('publish', 'submission', 'filter_vote')", name="ck_community_operation_kind"
         ),
         CheckConstraint(
             "state IN ('pending', 'submitted', 'acknowledged', 'failed')",
@@ -118,14 +120,20 @@ class CommunityOperationRow(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     # Who started it; null when nobody recorded that, as for every pre-0013 row.
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # Master-set vote intents (0037); the exact vote JSON stays in `receipt`.
+    community_version_id = Column(String(128), nullable=True)
+    filter_id = Column(String(128), nullable=True)
+    receipt_id = Column(String(64), nullable=True)
 
 
 class CommunityImportTargetRow(Base):
-    """A local, explicitly approved physical target association for immutable remote evidence."""
+    """A retired import's approved physical target, kept by 0037 for its imported scan."""
 
-    __tablename__ = "community_import_targets"
+    __tablename__ = "retired_community_import_targets"
     import_id = Column(
-        String(36), ForeignKey("community_imports.id", ondelete="CASCADE"), primary_key=True
+        String(36),
+        ForeignKey("retired_community_imports.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     media_item_id = Column(
         String, ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True

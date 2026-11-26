@@ -107,6 +107,12 @@ class SavedReviewRow(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    community_sources = relationship(
+        "ReviewCommunitySourceRow",
+        back_populates="review",
+        cascade="all, delete-orphan",
+        order_by="ReviewCommunitySourceRow.position",
+    )
 
     @validates("name")
     def validate_name(self, key, value):
@@ -160,7 +166,12 @@ class ReviewPolicyEvidenceRow(Base):
 
 
 class ReviewFilterRow(Base):
-    """Copied content, never an alias of editable source evidence."""
+    """Copied content, never an alias of editable source evidence.
+
+    A filter comes from a scan (`source_scan_id`, and `source_finding_id` unless added
+    by hand) or from an included community snapshot (`community_source_id` and the
+    master's `community_filter_id`); otherwise both kinds behave the same.
+    """
 
     __tablename__ = "review_filters"
     __table_args__ = (
@@ -170,6 +181,24 @@ class ReviewFilterRow(Base):
             ["source_finding_id", "source_scan_id"],
             ["scan_findings.id", "scan_findings.scan_id"],
             name="fk_review_filters_source_finding_scan",
+        ),
+        ForeignKeyConstraint(
+            ["review_id", "community_source_id"],
+            ["review_community_sources.review_id", "review_community_sources.id"],
+            name="fk_review_filters_community_source",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "community_source_id",
+            "community_filter_id",
+            name="uq_review_filters_community_filter",
+        ),
+        CheckConstraint(
+            "(source_scan_id IS NULL) = (community_source_id IS NOT NULL) "
+            "AND (community_source_id IS NULL) = (community_filter_id IS NULL) "
+            "AND (community_source_id IS NULL OR source_finding_id IS NULL)",
+            name="ck_review_filters_provenance",
         ),
         CheckConstraint("position >= 0", name="ck_review_filters_position"),
         CheckConstraint("source IN ('audio', 'visual')", name="ck_review_filters_source"),
@@ -194,7 +223,7 @@ class ReviewFilterRow(Base):
 
     review_id = Column(String, ForeignKey("saved_reviews.id", ondelete="CASCADE"), primary_key=True)
     id = Column(String, primary_key=True)
-    source_scan_id = Column(String, ForeignKey("scans.id"), nullable=False)
+    source_scan_id = Column(String, ForeignKey("scans.id"), nullable=True)
     source_finding_id = Column(Integer, nullable=True)
     position = Column(Integer, nullable=False)
     source = Column(String, nullable=False)
@@ -213,6 +242,10 @@ class ReviewFilterRow(Base):
     selected = Column(Boolean, nullable=False, default=True)
     manually_added = Column(Boolean, nullable=True)
     manually_edited = Column(Boolean, nullable=True)
+    community_source_id = Column(String(36), nullable=True)
+    community_filter_id = Column(String(128), nullable=True)
+    # A community filter the user edited directly (not through bulk defaults).
+    community_edited = Column(Boolean, nullable=True)
 
     review = relationship("SavedReviewRow", back_populates="filters")
     source_scan = relationship("ScanRow", foreign_keys=[source_scan_id])

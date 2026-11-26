@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from scanner.db import ReviewFilterRow, ReviewScanMembershipRow, ReviewScanRepairRow, SavedReviewRow
-from scanner.models import ReviewCommunityRepair, ReviewRecoveryCounts, ReviewRepairSummary
+from scanner.models import ReviewRecoveryCounts, ReviewRepairSummary
 
 from ..write_lock import write_lock
 from .repository_rows import _utc
@@ -55,15 +55,6 @@ def summarize_repairs(records):
     if not records:
         return None
     preserved = [preserved_rows(record) for record in records]
-    community = [record for record in records if record.community_json]
-    reason = next(
-        (
-            record.community_unavailable_reason
-            for record in community
-            if record.community_unavailable_reason
-        ),
-        None,
-    )
     return ReviewRepairSummary(
         missing_scan_ids=[record.missing_scan_id for record in records],
         detected_at=_utc(min(record.detected_at for record in records)),
@@ -76,14 +67,6 @@ def summarize_repairs(records):
                 len(value.get("review_accepted_credits", [])) for value in preserved
             ),
         ),
-        community=(
-            ReviewCommunityRepair(
-                available=len(community) == len(records) and reason is None,
-                unavailable_reason=reason,
-            )
-            if community
-            else None
-        ),
     )
 
 
@@ -93,15 +76,6 @@ class ReviewNeedsRepair(RuntimeError):
     def __init__(self, repair):
         super().__init__(repair.message)
         self.repair = repair
-
-
-class CommunityScanUnavailable(ReviewNeedsRepair):
-    code = "community_scan_unavailable"
-
-    def __init__(self, repair, reason, *, transient):
-        super().__init__(repair)
-        self.reason = reason
-        self.transient = transient
 
 
 def require_repaired(db, review_id):

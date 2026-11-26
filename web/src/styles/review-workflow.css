@@ -23,7 +23,7 @@
 .review-workflow { display: grid; gap: 12px; min-width: 0; }
 .review-workflow [hidden] { display: none; }
 .review-workflow > [role="tabpanel"] { min-width: 0; }
-.review-workflow-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.review-workflow-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .review-workflow-tabs > button {
   min-width: 0;
   min-height: 46px;
@@ -43,10 +43,21 @@
 }
 .workflow-release-panel { display: grid; gap: 14px; }
 .workflow-review-picker { max-width: min(100%, 360px); }
-.workflow-scan-actions { margin-block-start: 14px; }
+.workflow-scan-actions { margin-block-start: 14px; align-items: flex-start; }
+.recover-scans-action { display: inline-grid; gap: 4px; max-width: 320px; }
+.community-tab { display: grid; gap: 14px; }
+.community-tab .section-heading { flex-wrap: wrap; gap: 12px; }
+.review-community-changed { color: #f3c969; font-weight: 600; }
+.review-community-attribution { display: grid; gap: 4px; min-width: 0; }
+.review-community-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.review-community-label { font-weight: 600; }
+.review-community-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 4px; }
+.review-community-flags .master-badge { white-space: normal; border-radius: 6px; }
+/* Confidence badges wrap in the narrow Source column so the actions column keeps Preview and the vote side by side. */
+.review-community-filter .master-badge { white-space: normal; overflow-wrap: normal; border-radius: 6px; }
+.review-community-edited { border-color: #58709a; color: #b9d6ff; }
+.review-community-removed { border-color: #8a5a40; color: #ffc19e; background: #2b211b; }
 .review-workflow .saved-review-panel { overflow: visible; }
-.review-workflow .saved-review-current-header { flex-wrap: wrap; }
-.review-workflow .review-save-actions { margin: 0; }
 .review-workflow .mcf-review-metadata { margin-block: 16px 0; }
 
 .workflow-published-files {
@@ -75,22 +86,6 @@
 }
 .workflow-published-files > .form-status, .workflow-published-files > .form-error { flex-basis: 100%; }
 
-.guided-review-editor {
-  display: grid;
-  grid-template-columns: minmax(145px, 1fr) minmax(0, 3fr);
-  align-items: start;
-  gap: 12px;
-  margin-block: 12px;
-}
-.guided-review-evidence {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid #363f4e;
-  border-radius: 8px;
-  background: #181e28;
-}
-.guided-review-evidence .saved-review-memberships { display: grid; gap: 10px; }
-.guided-review-evidence .saved-review-membership-roles { margin-block-start: 12px; }
 
 .review-timeline-summary {
   position: sticky;
@@ -127,12 +122,18 @@
 }
 .saved-review-filter-results > .finding-group + .finding-group { margin-block-start: 16px; }
 .review-filter-actions { padding-block-start: 9px; border-block-start: 1px solid #303641; }
-.guided-review-editor .saved-review-overview { padding: 0; border: 0; }
-.guided-review-editor .tiered-review-table { min-width: 665px; }
-.guided-review-editor .tiered-review-table :is(th, td):nth-child(5) { width: 120px; }
 
-@media (max-width: 1010px) {
-  .guided-review-editor { grid-template-columns: minmax(0, 1fr); }
+/* With the sidebar beside it the tab row is narrow, so the five labels shrink to fit on one line. */
+@media (min-width: 561px) and (max-width: 900px) {
+  .review-workflow-tabs { gap: 6px; }
+  .review-workflow-tabs > button { padding-inline: 4px; font-size: 14px; }
+}
+@media (min-width: 761px) and (max-width: 800px) {
+  .review-workflow-tabs > button { font-size: 13px; }
+}
+
+@media (max-width: 460px) {
+  .review-workflow-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {

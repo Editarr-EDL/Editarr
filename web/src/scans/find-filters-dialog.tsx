@@ -1,9 +1,9 @@
 import type { RefObject } from "react";
 import { ModalDialog } from "../ui/ModalDialog";
 import type { FilterCandidate, FilterResult } from "./use-find-filters";
-import { CommunityFilterResults, type CommunityResultsProps } from "./community-filter-results";
 import { audioTrackLabel } from "./audio-track-field";
 
+/** Local scans that match this item, for the Scans tab's Recover Scans action. */
 export function FindFiltersDialog({
   candidates,
   selectedIds,
@@ -13,7 +13,6 @@ export function FindFiltersDialog({
   onClose,
   returnFocusRef,
   results,
-  community,
 }: {
   candidates: FilterCandidate[];
   selectedIds: string[];
@@ -23,11 +22,10 @@ export function FindFiltersDialog({
   onClose: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   results?: FilterResult[];
-  community?: CommunityResultsProps;
 }) {
   return <ModalDialog labelledBy="filter-candidates-heading" className="find-filters-dialog" onClose={associating ? undefined : onClose} returnFocusRef={returnFocusRef}>
-    <h2 id="filter-candidates-heading">Found Filters</h2>
-    {candidates.length ? <div className="bounded-scan-list" role="list" aria-label="Found filter scans">
+    <h2 id="filter-candidates-heading">Recover Scans</h2>
+    {candidates.length ? <div className="bounded-scan-list" role="list" aria-label="Recoverable scans">
       {candidates.map((candidate) => <div role="listitem" key={candidate.id}><label
         className={`scan-history-row candidate-scan${candidate.alreadyAssociated ? " associated-scan" : ""}`}
       >
@@ -44,8 +42,8 @@ export function FindFiltersDialog({
         </div>
       </label>
       </div>)}
-    </div> : <p className="muted-copy">No matching filter scans were found.</p>}
-    {results?.map((entry) => entry.source === "local" ? <details key={entry.candidate.id}>
+    </div> : <p className="muted-copy">No recoverable scans matched this file.</p>}
+    {results?.map((entry) => <details key={entry.candidate.id}>
       <summary tabIndex={0}>Local provenance: {entry.candidate.label}</summary>
       <p>Created: {entry.match.scan.created_at}; filters: {entry.match.scan.finding_count}</p>
       <p>Editarr: {entry.match.scan.release_version || "Unknown"}; scanner: {entry.match.scan.scanner_behavior_version || "Unknown"}</p>
@@ -55,13 +53,12 @@ export function FindFiltersDialog({
         <p>{stage.stage}: {stage.model_id || "Unknown model"}; revision: {stage.model_revision || "Unknown"}</p>
         <p>Effective settings: {stage.effective_settings ? JSON.stringify(stage.effective_settings) : "Unknown"}</p>
       </div>)}
-    </details> : null)}
+    </details>)}
     <div className="button-row">
       <button className="btn-secondary" onClick={onClose} disabled={associating}>Cancel</button>
       <button className="btn-primary" onClick={onAssociate} disabled={associating || !selectedIds.length}>
         {associating ? "Associating…" : "Associate Selected"}
       </button>
     </div>
-    {community && <CommunityFilterResults {...community} />}
   </ModalDialog>;
 }

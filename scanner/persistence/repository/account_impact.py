@@ -32,6 +32,7 @@ from scanner.formats.export_layout import ExportId
 from scanner.persistence.rows.db_account_links import OPEN_STATES, AccountLinkTransitionRow
 from scanner.persistence.rows.db_policies import ExportScope
 
+from .account_community_masters import MasterImpact, master_impact
 from .export_identity_moves import PlannedMove
 from .review_disposition import DeletionPlan
 from .scan_jobs import ScanJobFacts
@@ -123,6 +124,7 @@ class AccountImpact:
     community_pending: int
     blockers: dict[str, int]
     visible: Visibility
+    community_masters: MasterImpact = MasterImpact()
 
 
 # Returns the MU-36 plan of one review the caller may delete, or None when it may not.
@@ -304,4 +306,5 @@ def build_impact(
         ),
         blockers=blockers,
         visible=visible,
+        community_masters=master_impact(db, user_id),
     )

@@ -4,12 +4,10 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from scanner.db import CommunityImportRow, CommunityOperationRow
+from scanner.db import CommunityOperationRow
 from scanner.persistence.migrations.adoption import upgrade_existing_database
 from scanner.persistence.repository.repository_community import (
-    attach_import,
     enqueue_operation,
-    find_import,
     load_local_identity,
     pending_after_restore,
     set_connection,
@@ -24,15 +22,6 @@ from tests.community_identity_support import identity_home, only_identity_ref
 from tests.community_schema_fixture import create_unversioned_fixture
 
 SERVICE = "https://community.example"
-IMPORT = dict(
-    scan_id="legacy-scan-001",
-    service_url=SERVICE,
-    contribution_id="contribution-1",
-    revision_id="revision-1",
-    digest="sha256:123",
-    author_id="author-1",
-    artifact_type="filter-set",
-)
 OPERATION = dict(
     operation_id="retry-1",
     service_url=SERVICE,
@@ -55,24 +44,6 @@ def engine(tmp_path):
         connection.execute(text("UPDATE scans SET origin='imported' WHERE id='legacy-scan-001'"))
     yield engine
     engine.dispose()
-
-
-def test_scan_and_provenance_rollback_and_idempotent_reuse(engine):
-    with Session(engine) as db:
-        with pytest.raises(RuntimeError, match="rollback"), db.begin():
-            attach_import(db, **IMPORT)
-            raise RuntimeError("rollback")
-        assert (
-            find_import(db, service_url=SERVICE, revision_id="revision-1", digest="sha256:123")
-            is None
-        )
-        db.rollback()
-        with db.begin():
-            first = attach_import(db, **IMPORT)
-            assert attach_import(db, **IMPORT).id == first.id
-        assert db.query(CommunityImportRow).count() == 1
-        with pytest.raises(ValueError, match="conflicting metadata"):
-            attach_import(db, **(IMPORT | {"author_id": "another"}))
 
 
 def test_operation_retry_and_restore_reconciliation(engine):
@@ -107,34 +78,38 @@ def test_operation_retry_and_restore_reconciliation(engine):
                 ).operation_id
                 == row.operation_id
             )
-            receipt = enqueue_operation(
+            submission = enqueue_operation(
                 db,
-                operation_id="receipt-1",
-                service_url=SERVICE,
-                kind="receipt",
-                contributor_id="author-1",
-                installation_id="installation-1",
-                contribution_id="contribution-1",
-                revision_id="revision-1",
-                digest="sha256:123",
-                receipt="service-signed-receipt",
+                **(OPERATION | {"operation_id": "submission-1", "kind": "submission"}),
                 credential_ref=only_identity_ref(db),
             )
             vote = enqueue_operation(
                 db,
                 operation_id="vote-1",
                 service_url=SERVICE,
-                kind="vote",
+                kind="filter_vote",
                 contributor_id="author-1",
                 installation_id="installation-1",
-                contribution_id="contribution-1",
-                revision_id="revision-1",
-                digest="sha256:123",
+                community_version_id="v_1",
+                filter_id="f_1",
+                receipt_id="a" * 64,
+                receipt='{"version":1,"vote":"up"}',
                 vote="up",
                 credential_ref=only_identity_ref(db),
             )
-            assert receipt.receipt == "service-signed-receipt"
-            assert vote.vote == "up"
+            assert submission.kind == "submission"
+            assert (vote.vote, vote.filter_id, vote.receipt_id) == ("up", "f_1", "a" * 64)
+            with pytest.raises(ValueError, match="filter vote requires"):
+                enqueue_operation(
+                    db,
+                    operation_id="vote-2",
+                    service_url=SERVICE,
+                    kind="filter_vote",
+                    contributor_id="author-1",
+                    installation_id="installation-1",
+                    vote="like",
+                    credential_ref=only_identity_ref(db),
+                )
             with pytest.raises(ValueError, match="different intent"):
                 enqueue_operation(
                     db,
@@ -152,7 +127,7 @@ def test_operation_retry_and_restore_reconciliation(engine):
             credential_ref=only_identity_ref(restored),
         )
         assert [(row.operation_id, row.state) for row in pending] == [
-            ("receipt-1", "pending"),
+            ("submission-1", "pending"),
             ("vote-1", "pending"),
             ("retry-1", "submitted"),
         ]
@@ -184,7 +159,7 @@ def test_operation_retry_and_restore_reconciliation(engine):
                 key_id="sha256:key-1",
                 credential_ref=only_identity_ref(restored),
             )
-        ] == ["receipt-1", "vote-1"]
+        ] == ["vote-1"]
         assert restored.query(CommunityOperationRow).count() == 3
 
 

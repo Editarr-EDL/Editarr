@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 from dataclasses import dataclass
+from typing import Protocol
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -11,7 +12,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 from scanner.formats.community.codec import (
     DecodedArtifact,
     DecodedManifest,
-    Manifest,
     ResourceBounds,
     parse_artifact,
     parse_manifest,
@@ -29,7 +29,14 @@ class SignedArtifact:
 
 
 class ArtifactSignatureError(ValueError):
-    """Original bytes or their trusted historical author binding cannot be verified."""
+    """Original bytes or their trusted historical author binding cannot be verified.
+
+    `code` is the service error the failure corresponds to (§7.2).
+    """
+
+    def __init__(self, message: str = "", code: str = "invalid_submission") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -70,26 +77,7 @@ def verify_artifact_signature(
         or manifest.manifest.submission_id != expected_submission_id
     ):
         raise ArtifactSignatureError("Historical key or submission binding mismatch")
-    if not envelope_bytes or len(envelope_bytes) > 256:
-        raise ArtifactSignatureError("Invalid detached signature envelope length")
-    try:
-        text = envelope_bytes.decode("utf-8")
-        envelope = json.loads(text)
-        if not isinstance(envelope, dict) or envelope.get("schema_version") != ENVELOPE_VERSION:
-            raise ValueError
-        encoded = envelope.get("signature")
-        if not isinstance(encoded, str):
-            raise ValueError
-        signature = base64.b64decode(encoded, validate=True)
-        if len(signature) != 64 or base64.b64encode(signature).decode("ascii") != encoded:
-            raise ValueError
-        canonical = json.dumps(
-            {"schema_version": ENVELOPE_VERSION, "signature": encoded}, separators=(",", ":")
-        )
-        if text != canonical:
-            raise ValueError
-    except (UnicodeError, ValueError) as exc:
-        raise ArtifactSignatureError("Noncanonical detached signature envelope") from exc
+    signature = decode_signature_envelope(envelope_bytes)
     try:
         Ed25519PublicKey.from_public_bytes(historical_key.public_key).verify(
             signature, signature_base(manifest_bytes, manifest.manifest)
@@ -104,7 +92,54 @@ def verify_artifact_signature(
     )
 
 
-def signature_base(manifest_bytes: bytes, manifest: Manifest) -> bytes:
+class ManifestIdentity(Protocol):
+    """Manifest fields covered by `editarr-community-artifact-signature-v1`."""
+
+    schema_version: str
+    artifact_schema_version: str
+    artifact_format: str
+    submission_id: str
+    contributor_id: str
+    key_id: str
+    artifact_digest: str
+
+
+def encode_signature_envelope(signature: bytes) -> bytes:
+    """Return the exact `community-artifact-signature-1` envelope for 64 signature bytes."""
+    if len(signature) != 64:
+        raise ValueError("Expected a 64-byte Ed25519 signature")
+    return json.dumps(
+        {
+            "schema_version": ENVELOPE_VERSION,
+            "signature": base64.b64encode(signature).decode("ascii"),
+        },
+        separators=(",", ":"),
+    ).encode("ascii")
+
+
+def decode_signature_envelope(envelope_bytes: bytes) -> bytes:
+    """Return the signature from a canonical envelope; any other spelling is rejected."""
+    if not envelope_bytes or len(envelope_bytes) > 256:
+        raise ArtifactSignatureError("Invalid detached signature envelope length")
+    try:
+        text = envelope_bytes.decode("utf-8")
+        envelope = json.loads(text)
+        if not isinstance(envelope, dict) or envelope.get("schema_version") != ENVELOPE_VERSION:
+            raise ValueError
+        encoded = envelope.get("signature")
+        if not isinstance(encoded, str):
+            raise ValueError
+        signature = base64.b64decode(encoded, validate=True)
+        if len(signature) != 64 or base64.b64encode(signature).decode("ascii") != encoded:
+            raise ValueError
+        if envelope_bytes != encode_signature_envelope(signature):
+            raise ValueError
+    except (UnicodeError, ValueError) as exc:
+        raise ArtifactSignatureError("Noncanonical detached signature envelope") from exc
+    return signature
+
+
+def signature_base(manifest_bytes: bytes, manifest: ManifestIdentity) -> bytes:
     """Encode versioned identity fields and both SHA-256 hashes without JSON normalization."""
     fields = (
         manifest.schema_version,
@@ -136,11 +171,5 @@ def sign_artifact(
     artifact = parse_artifact(artifact_bytes, bounds=bounds, compressed=True)
     manifest = parse_manifest(manifest_bytes, artifact=artifact, bounds=bounds)
     signature = private_key.sign(signature_base(manifest.stored_bytes, manifest.manifest))
-    envelope = json.dumps(
-        {
-            "schema_version": ENVELOPE_VERSION,
-            "signature": base64.b64encode(signature).decode("ascii"),
-        },
-        separators=(",", ":"),
-    ).encode("ascii")
+    envelope = encode_signature_envelope(signature)
     return SignedArtifact(artifact.stored_bytes, manifest.stored_bytes, envelope)

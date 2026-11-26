@@ -15,17 +15,22 @@ import httpx
 from scanner.security.community_identity import InstallationIdentity
 from scanner.security.community_signatures import (
     SignatureProfileError,
-    _url_components,
     sign_request,
+    url_components,
 )
 
 
 class CommunityFailure(RuntimeError):
-    """Machine-readable failure with no remote payload, query or secret in its message."""
+    """Machine-readable failure with no remote payload, query or secret in its message.
 
-    def __init__(self, code: str, *, retryable: bool = False):
+    `details` carries only the bounded extra fields a contract error defines, such as
+    `mergedInto`, a `reason` token or a `retryAfter` delay in seconds.
+    """
+
+    def __init__(self, code: str, *, retryable: bool = False, details: dict | None = None):
         self.code = code
         self.retryable = retryable
+        self.details = dict(details or {})
         super().__init__(code)
 
 
@@ -38,7 +43,7 @@ class ServiceEndpoint:
         try:
             if not isinstance(self.url, str) or not isinstance(self.audience, str):
                 raise ValueError("Expected configured endpoint and audience")
-            _, authority, path, query = _url_components(self.url)
+            _, authority, path, query = url_components(self.url)
             if path != "/" or query != "?" or self.url != f"https://{authority}":
                 raise ValueError("Expected service origin")
             if authority != self.audience:
@@ -47,11 +52,16 @@ class ServiceEndpoint:
             raise CommunityFailure("invalid_endpoint") from error
 
     def target(self, path: str) -> str:
+        """The signed URL for `path`; only a single `name=<decimal>` query is accepted."""
+        path, separator, query = path.partition("?")
+        if separator and not re.fullmatch(r"[A-Za-z]{1,32}=[0-9]{1,16}", query):
+            raise CommunityFailure("invalid_endpoint")
         if not path.startswith("/v1/") or "?" in path or "#" in path or "\\" in path:
             raise CommunityFailure("invalid_endpoint")
+        path += separator + query
         target = self.url + path
         try:
-            _url_components(target)
+            url_components(target)
         except SignatureProfileError as error:
             raise CommunityFailure("invalid_endpoint") from error
         return target
@@ -97,12 +107,6 @@ _REMOTE_CODES = {
     "recovery_expired",
     "invalid_recovery",
     "recovery_conflict",
-    "artifact_unavailable",
-    "contribution_not_found",
-    "contribution_unavailable",
-    "historical_key_untrusted",
-    "download_limit",
-    "download_query_limit",
     "invalid_publication",
     "invalid_artifact",
     "invalid_artifact_signature",
@@ -117,17 +121,42 @@ _REMOTE_CODES = {
     "source_permission_unknown",
     "source_permission_incompatible",
     "source_attribution_mismatch",
-    "lookup_limit",
-    "invalid_cursor",
-    "missing_identity",
-    "invalid_lookup",
-    "invalid_import_receipt",
-    "import_query_limit",
     "invalid_vote",
     "vote_ineligible",
-    "vote_query_limit",
-    "revision_not_available",
+    "invalid_match",
+    "invalid_submission",
+    "upload_suspended",
+    "submission_conflict",
+    "work_identity_required",
+    "unknown_alias",
+    "invalid_taxonomy",
+    "invalid_bounds",
+    "key_mismatch",
+    "version_not_found",
+    "version_unavailable",
+    "version_merged",
+    "invalid_master_request",
+    "filter_not_found",
+    "sync_rate_limited",
+    "report_ineligible",
+    "report_already_open",
+    "invalid_sync",
+    "invalid_report",
 }
+_TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+
+
+def _error_details(error: dict, retry_after: str) -> dict:
+    """Keep only the contract-defined extra error fields, each a bounded token."""
+    details = {
+        name: error[name]
+        for name in ("mergedInto", "reason")
+        if isinstance(error.get(name), str) and _TOKEN.fullmatch(error[name])
+    }
+    if retry_after.isascii() and retry_after.isdigit() and len(retry_after) <= 9:
+        details["retryAfter"] = int(retry_after)
+    return details
+
 
 _RECOVERY_CANDIDATE_ROUTES = {
     ("POST", "/v1/keys/recovery-status"),
@@ -239,8 +268,6 @@ class CommunityTransport:
                 headers = {name: value for name, value in signed.items() if isinstance(value, str)}
                 headers["accept"] = "application/json"
                 headers["accept-encoding"] = "identity"
-                if method == "POST" and path == "/v1/matches":
-                    headers["editarr-filter-details"] = "1"
                 try:
                     async with client.stream(
                         method, target, content=body, headers=headers
@@ -276,21 +303,24 @@ class CommunityTransport:
                             ):
                                 raise CommunityFailure("invalid_response")
                             return payload
-                        code = (
-                            payload.get("error", {}).get("code")
-                            if (
-                                isinstance(payload, dict) and isinstance(payload.get("error"), dict)
-                            )
-                            else None
+                        error = (
+                            payload["error"]
+                            if isinstance(payload, dict) and isinstance(payload.get("error"), dict)
+                            else {}
                         )
+                        code = error.get("code")
                         code = (
                             code
                             if isinstance(code, str) and code in _REMOTE_CODES
                             else "remote_error"
                         )
                         retryable = response.status_code in {429, 502, 503, 504}
-                        failure = CommunityFailure(code, retryable=retryable)
                         retry_after = response.headers.get("retry-after", "")
+                        failure = CommunityFailure(
+                            code,
+                            retryable=retryable,
+                            details=_error_details(error, retry_after),
+                        )
                         if retry_after:
                             try:
                                 wait = float(retry_after)

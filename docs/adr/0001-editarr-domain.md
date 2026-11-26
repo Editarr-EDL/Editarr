@@ -5,7 +5,8 @@
 Accepted.
 
 For community matching, the local-only identity rule below is superseded by
-[the typed work and release contract](../community-scan-service-contracts.md#3-work-release-and-fingerprint-contracts).
+[the work, version and match-key contract](../community-scan-service-contracts.md#3-works-versions-aliases-and-match-keys)
+(see also [ADR 0002](0002-community-master-filter-sets.md)).
 Jellyfin server/item IDs remain local catalog keys, not public work IDs. This
 ADR continues to describe ownership of local scans and exports.
 

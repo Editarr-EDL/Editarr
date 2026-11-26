@@ -3,20 +3,21 @@ import { CommunityApiError } from "./api-community";
 import type { MediaIdentity, EntityType, IdentityProvider, EpisodeNumber } from "./api-media-identity";
 import type { AudioTrack } from "./api-audio-tracks";
 import { runtimeApiBasePath } from "../shared/runtime-urls";
+import type { MasterSharingSummary, VersionChoice } from "./api-community-master-types";
 
 export type SharingSource = { kind: "scan" | "review"; id: string };
 export type PublicationJob = {
   ownerId: number | null; actorId: number | null; contributorId: string;
-  operationId: string; contributionId: string; revisionId: string; artifactDigest: string;
+  operationId: string; artifactDigest: string;
   state: "pending" | "paused" | "published" | "rejected" | "cancelled" | "cancel_pending";
   phase: string; cancelRequested: boolean; errorCode: string | null;
-  result: { committedAt: number; revisionId: string } | null;
+  result: { committedAt: number } | null;
 };
 export type SharingContext = {
   sourceOwnerId: number | null;
   name: string; mediaIdentity: MediaIdentity | null; durationSeconds: number | null;
   audioSources: { scanId: string; track: AudioTrack | null }[];
-  sourceTerms: { authorId: string; revisionId: string; termsVersion: string }[];
+  sourceTerms: { authorId: string; termsVersion: string }[];
   jobs: PublicationJob[]; terms: { version: string; text: string };
   accessVerified: boolean; accessError: string | null;
 };
@@ -26,7 +27,7 @@ export type SharingFinding = {
   channel: string; category: string | null; subcategory: string | null; note: string | null;
   manual?: { added: boolean | null; edited: boolean | null } | null;
 };
-export type SharingPreview = {
+export type SharingPreview = Partial<MasterSharingSummary> & {
   previewId: string; expiresAt: number; terms: { version: string; text: string };
   preview: {
     artifact: {
@@ -49,6 +50,9 @@ export type PublicMediaReference = {
 export type SharingDraft = {
   name: string; identity_confirmed: boolean; media: PublicMediaReference | null;
   audio_source_scan_id: string | null;
+  /** Master set to project against; null uses the account's link for the source's local version. */
+  link_id: string | null;
+  version_choice: VersionChoice;
 };
 
 async function request<Result>(path: string, init?: RequestInit): Promise<Result> {

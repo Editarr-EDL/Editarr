@@ -1,0 +1,280 @@
+"""Project a local scan or saved review, and its master link, into a v3 submission
+(contract §5.2, local API §7, D21–D22, ADR 0002 U6).
+
+| Source | Entry |
+| --- | --- |
+| Kept review or scan cue | `support`, proposing the master filter it overlaps |
+| Edited, enabled community review filter | `support` of its master filter, with the user's values |
+| Disabled or untouched community review filter | not shared |
+| Completed scan stages | `coverage`, for every category on the channel they analyzed |
+
+A language support carries its label (the flagged word or phrase) as its `expression`
+when the label is a valid expression. Editarr never sends `dispute` entries: turning a
+filter off is personal, and a 👎 vote is the only negative a user casts. All times are
+milliseconds on the local file timeline.
+"""
+
+import json
+from collections import defaultdict
+from collections.abc import Iterable
+from dataclasses import dataclass
+
+from scanner.formats.community.artifact_v3_models import ArtifactV3
+from scanner.modeling.community_coverage import stage_categories
+from scanner.modeling.community_filter_proposals import (
+    Cue,
+    Estimates,
+    LinkedFilter,
+    estimate,
+    inverse_alignment,
+    propose_filters,
+)
+from scanner.modeling.community_master_state import intervals_overlap
+from scanner.modeling.community_match_keys import FileKey, HashKey
+from scanner.modeling.community_work_identity import WorkIdentity
+from scanner.modeling.model_core import MCF_CATEGORY_TO_FAMILY
+
+from .submission_attestations import cue_expression, review_attestations
+
+MAX_ENTRIES = 2000
+MAX_INTERVALS = 512
+_ORIGINS = {"generated": "model", "manual": "manual", "imported": "downloaded"}
+
+
+@dataclass(frozen=True)
+class LinkProjection:
+    """A master link as sharing needs it: rows already on the local timeline."""
+
+    version_id: str
+    revision: int
+    alignment: dict | None
+    filters: tuple[LinkedFilter, ...]
+
+
+@dataclass(frozen=True)
+class SubmissionOptions:
+    submission_id: str
+    contributor_id: str
+    key_id: str
+    created_at: int
+    work: WorkIdentity
+    version_choice: dict
+    duration_ms: int
+    match_keys: tuple[FileKey, ...]
+
+
+@dataclass(frozen=True)
+class Projection:
+    artifact: ArtifactV3
+    estimates: Estimates
+    warnings: tuple[str, ...]
+
+
+def _ms(seconds: float, duration_ms: int) -> int:
+    return max(0, min(duration_ms, int(round(seconds * 1000))))
+
+
+def _value(item):
+    return getattr(item, "value", item)
+
+
+def _evidence(origin: str, manual_review: bool, verified: bool, model_version: str | None):
+    return {
+        "origin": origin,
+        "manualReview": manual_review,
+        "locallyVerified": verified,
+        "modelVersion": model_version if origin == "model" else None,
+    }
+
+
+def _model_version(scan: dict) -> str:
+    for field in ("release_version", "scanner_behavior_version", "audio_model", "video_model"):
+        value = scan.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip().encode("utf-8")[:128].decode("utf-8", "ignore")
+    return "unknown"
+
+
+def _model_findings(data: dict) -> dict[str, list[tuple[float, float | None]]]:
+    """Local model findings by category, from the captured generated scans."""
+    generated = {scan["id"] for scan in data["scans"] if scan["origin"] == "generated"}
+    rows = data["policy_evidence"] or data["base_findings"]
+    found = defaultdict(list)
+    for row in rows:
+        if row.get("scan_id") in generated and row.get("category"):
+            found[_value(row["category"])].append((row["start_seconds"], row["end_seconds"]))
+    return found
+
+
+def _cues(data: dict, kind: str, duration_ms: int, warnings: list[str]):
+    """Kept, classified cues with their evidence, on the local timeline."""
+    scans = {scan["id"]: scan for scan in data["scans"]}
+    model = _model_findings(data)
+    cues = []
+    for row in data["findings"]:
+        if not row.get("selected", True) or row.get("community_source_id"):
+            continue
+        category, subcategory = _value(row.get("category")), row.get("subcategory")
+        severity, end = _value(row.get("severity")), row.get("end_seconds")
+        if (
+            not (category and subcategory and severity)
+            or end is None
+            or _value(MCF_CATEGORY_TO_FAMILY.get(subcategory)) != category
+        ):
+            warnings.append("unclassified_cue_skipped")
+            continue
+        start_ms, end_ms = _ms(row["start_seconds"], duration_ms), _ms(end, duration_ms)
+        if not start_ms < end_ms:
+            warnings.append("cue_outside_media")
+            continue
+        scan = scans[row.get("source_scan_id", row.get("scan_id"))]
+        edited = bool(row.get("manually_added") or row.get("manually_edited"))
+        if kind == "review" and row.get("source_finding_id") is None:
+            origin = "manual"
+        else:
+            origin = _ORIGINS[scan["origin"]]
+        review = kind == "review" or origin == "manual" or edited
+        verified = (
+            origin != "downloaded"
+            or edited
+            or any(
+                intervals_overlap(start_ms, end_ms, start, stop) for start, stop in model[category]
+            )
+        )
+        cues.append(
+            (
+                Cue(start_ms, end_ms, category),
+                {
+                    "subcategory": subcategory,
+                    "severity": severity,
+                    "action": "mute" if row.get("edit_action") == "mute" else "skip",
+                    "expression": cue_expression(category, row.get("label")),
+                    "evidence": _evidence(origin, review, verified, _model_version(scan)),
+                },
+            )
+        )
+    return cues
+
+
+def _coverage(data: dict, kind: str, duration_ms: int) -> list[dict]:
+    """Completed stage intervals per channel category; reviews may be retimed, so only scans."""
+    if kind != "scan" or data["root"]["origin"] != "generated":
+        return []
+    spans = defaultdict(list)
+    for stage in data["stages"]:
+        categories = stage_categories(stage["stage"])
+        if stage["status"] != "complete" or not categories:
+            continue
+        for interval in _intervals(stage.get("intervals_json")):
+            start = _ms(interval["start_seconds"], duration_ms)
+            end = _ms(interval["end_seconds"], duration_ms)
+            if start < end:
+                for category in categories:
+                    spans[category].append((start, end))
+    coverage = []
+    for category in sorted(spans):
+        merged: list[list[int]] = []
+        for start, end in sorted(spans[category]):
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        if len(merged) <= MAX_INTERVALS:
+            intervals = [{"startMs": start, "endMs": end} for start, end in merged]
+            coverage.append({"category": category, "intervals": intervals})
+    return coverage
+
+
+def _intervals(encoded) -> list[dict]:
+    try:
+        value = json.loads(encoded or "[]")
+    except ValueError:
+        return []
+    return [
+        item
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(item.get("start_seconds"), (int, float))
+        and isinstance(item.get("end_seconds"), (int, float))
+    ]
+
+
+def _key_json(key: FileKey) -> dict:
+    if isinstance(key, HashKey):
+        return {"type": key.type, "value": key.value, "sizeBytes": key.size_bytes}
+    return {"type": key.type, "algorithm": key.algorithm, "value": key.value}
+
+
+def _hint(link: LinkProjection | None) -> dict | None:
+    if link is None:
+        return None
+    inverse = inverse_alignment(link.alignment)
+    if inverse is None:
+        return None
+    anchors = (link.alignment or {}).get("anchors", 0)
+    return {
+        "versionId": link.version_id,
+        "revision": link.revision,
+        "offsetMs": inverse[0],
+        "scale": inverse[1],
+        "anchors": anchors if isinstance(anchors, int) and 0 <= anchors <= 2000 else 0,
+    }
+
+
+def project_submission(
+    data: dict, kind: str, options: SubmissionOptions, link: LinkProjection | None
+) -> Projection:
+    """Build the validated artifact and the ≈ estimates against the linked master set.
+
+    `data` is a captured scan or review source (`donation_sources.capture_source`).
+    """
+    warnings: list[str] = []
+    duration = options.duration_ms
+    cues = _cues(data, kind, duration, warnings)
+    model = _model_findings(data)
+    attested = review_attestations(
+        data if kind == "review" else {},
+        duration,
+        lambda category, start, end: any(
+            intervals_overlap(start, end, first, last) for first, last in model[category]
+        ),
+        warnings,
+        link.version_id if link else None,
+    )
+    rows: Iterable[LinkedFilter] = link.filters if link else ()
+    proposals = propose_filters([cue for cue, _values in cues], rows, attested.filter_ids)
+    entries = [
+        {
+            "kind": "support",
+            "proposedFilterId": proposals.get(index),
+            "startMs": cue.start_ms,
+            "endMs": cue.end_ms,
+            "category": cue.category,
+            **values,
+        }
+        for index, (cue, values) in enumerate(cues)
+    ]
+    entries.extend(attested.entries)
+    if len(entries) > MAX_ENTRIES:
+        raise ValueError("A submission holds at most 2,000 entries")
+    document = {
+        "schemaVersion": "community-artifact-3",
+        "submissionId": options.submission_id,
+        "createdAt": options.created_at,
+        "author": {"contributorId": options.contributor_id, "keyId": options.key_id},
+        "work": options.work.as_artifact(),
+        "version": options.version_choice,
+        "media": {
+            "durationMs": duration,
+            "matchKeys": [_key_json(key) for key in options.match_keys],
+        },
+        "alignmentHint": _hint(link),
+        "coverage": _coverage(data, kind, duration),
+        "entries": [{"entryId": f"e{index + 1}", **entry} for index, entry in enumerate(entries)],
+    }
+    artifact = ArtifactV3.model_validate(document, strict=True, by_alias=True, by_name=False)
+    return Projection(
+        artifact,
+        estimate(proposals, len(cues), attested.supports, attested.adjustments),
+        tuple(sorted(set(warnings))),
+    )

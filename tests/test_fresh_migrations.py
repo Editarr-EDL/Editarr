@@ -32,7 +32,7 @@ def test_fresh_migration_matches_supported_schema(tmp_path):
         assert inspect(engine).get_table_names().count("alembic_version") == 1
         with engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-                "0036_sampled_media_identity"
+                "0040_review_community_filters"
             )
     finally:
         engine.dispose()

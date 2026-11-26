@@ -112,7 +112,7 @@ export async function fetchScanReferences(scanId: string): Promise<ScanReference
 /** Find completed scans with filters that can be associated with a media item.
  * @param search Media identity and optional source path.
  */
-export async function findFilterCandidates(search: {
+export type FilterCandidateSearch = {
   source: "jellyfin";
   item_id: string;
   media_source_id?: string | null;
@@ -125,7 +125,9 @@ export async function findFilterCandidates(search: {
   release_group: string | null;
   media_format: string | null;
   media_provider_id: string | null;
-}, signal?: AbortSignal): Promise<FilterCandidateSearchResult> {
+};
+
+export async function findFilterCandidates(search: FilterCandidateSearch, signal?: AbortSignal): Promise<FilterCandidateSearchResult> {
   const response = await fetch(`${runtimeApiBasePath()}/filter-candidates`, {
     method: "POST",
     signal,
@@ -134,6 +136,18 @@ export async function findFilterCandidates(search: {
   });
   if (!response.ok) throw await responseError(response, "Unable to find matching filters");
   return response.json();
+}
+
+/** Whether Recover Scans could find a reachable scan of another file of the same work; reads no media. */
+export async function filterCandidatesAvailable(search: FilterCandidateSearch, signal?: AbortSignal): Promise<boolean> {
+  const response = await fetch(`${runtimeApiBasePath()}/filter-candidates/available`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(search),
+  });
+  if (!response.ok) throw await responseError(response, "Unable to check for recoverable scans");
+  return (await response.json()).available === true;
 }
 
 export async function associateFilterCandidates(mediaItemId: string, scanIds: string[]): Promise<void> {
