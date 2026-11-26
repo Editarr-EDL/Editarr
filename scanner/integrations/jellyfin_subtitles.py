@@ -148,21 +148,19 @@ def _usable_subtitle(path: Path | None, format: str) -> bool:
         return False
 
 
-def _other_stems(db, item: JellyfinMediaItem, version: str | None, media: Path) -> set[str]:
-    """Separate alternate versions whose filenames share a prefix with this one."""
+def jellyfin_sibling_stems(db, item: JellyfinMediaItem, media: Path) -> frozenset[str]:
+    """Find the other catalog video stems Jellyfin can match in this media directory."""
     stems = set()
-    for candidate in item.versions:
-        if candidate.id == version or not candidate.path:
-            continue
+    paths = {item.path, *(version.path for version in item.versions)}
+    for path in paths - {None, ""}:
         try:
-            other = Path(resolve_local_path(db, candidate.path).local_path).resolve()
+            mapped = Path(resolve_local_path(db, path).local_path)
+            other = mapped.parent.resolve() / mapped.name
         except (OSError, ValueError, RuntimeError):
             continue
-        if other.parent == media.parent and other.stem.casefold().startswith(
-            media.stem.casefold() + "."
-        ):
+        if other != media and other.parent == media.parent:
             stems.add(other.stem.casefold())
-    return stems
+    return frozenset(stems)
 
 
 def _external_identity(db, media, stream: dict, sibling_stems: set[str], published: set[str]):
@@ -200,6 +198,7 @@ def discover_jellyfin_subtitles(
     media: Path,
     audio_language: str | None,
     published: set[str],
+    catalog_sibling_stems: frozenset[str],
 ) -> list[JellyfinSubtitle]:
     """Only offer Jellyfin streams of the already authorized physical version."""
     discovered = {}
@@ -210,7 +209,8 @@ def discover_jellyfin_subtitles(
         if stream.get("IsExternal") is True
     ]
     embedded = embedded_subtitle_streams(media) if media.suffix.lower() in _EMBEDDABLE else []
-    sibling_stems = _other_stems(db, item, version, media) if external else set()
+    media_prefix = f"{media.stem.casefold()}."
+    sibling_stems = {stem for stem in catalog_sibling_stems if stem.startswith(media_prefix)}
     for stream in (*external, *embedded):
         language = normalize_language(stream.get("Language"))
         index = stream.get("Index")

@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -15,6 +16,16 @@ _ILLEGAL_FILENAME = frozenset('<>:"/\\|?*')
 _LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[a-z0-9]{2,8})?")
 _OUTPUT_FORMATS = {"srt", "ass", "ssa", "vtt"}
 _FILENAME_BYTES = 255
+
+# Jellyfin's NamingOptions video extensions across 10.11 and 12.
+_VIDEO_EXTENSIONS = frozenset(
+    """
+    .001 .3g2 .3gp .amv .asf .asx .avi .bin .bivx .divx .dv .dvr-ms .f4v .fli .flv
+    .ifo .img .iso .m2t .m2ts .m2v .m4v .mkv .mk3d .mov .mp4 .mpe .mpeg .mpg .mts
+    .mxf .nrg .nsv .nuv .ogg .ogm .ogv .pva .qt .rec .rm .rmvb .strm .svq3 .tp .ts
+    .ty .viv .vob .vp3 .webm .wmv .wtv .xvid
+""".split()
+)
 
 
 class SubtitleNameError(ValueError):
@@ -110,3 +121,29 @@ def named_publication_path(
             "is too long.",
         )
     return media.with_name(filename)
+
+
+def require_unique_video_match(
+    media: Path,
+    destination: Path,
+    entries: Iterable[Path],
+    catalog_sibling_stems: frozenset[str],
+) -> None:
+    """Reject another video with an exact or dot-delimited match to the complete sidecar stem."""
+    stem = destination.stem.casefold()
+
+    def matches(sibling: str) -> bool:
+        return stem == sibling or stem.startswith(sibling + ".")
+
+    if any(matches(sibling) for sibling in catalog_sibling_stems) or any(
+        entry != media
+        and entry.suffix.casefold() in _VIDEO_EXTENSIONS
+        and matches(entry.stem.casefold())
+        and entry.is_file()
+        for entry in entries
+    ):
+        raise SubtitleNameError(
+            "subtitle_version_ambiguous",
+            "Jellyfin would attach the subtitle to more than one video in this folder. "
+            "Use a distinct saved review title or distinct video filenames, then preview again.",
+        )

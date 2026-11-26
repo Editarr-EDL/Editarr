@@ -226,6 +226,7 @@ def subtitle_publish(
                 output.content,
                 publication,
                 output.destination,
+                catalog_sibling_stems=current.sibling_stems,
             )
 
         with publication_lock(caller.db):

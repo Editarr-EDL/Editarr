@@ -15,6 +15,7 @@ from scanner.formats.subtitle_redaction import SubtitleMute, SubtitleRedaction, 
 from scanner.integrations.jellyfin_subtitles import (
     JellyfinSubtitle,
     discover_jellyfin_subtitles,
+    jellyfin_sibling_stems,
     subtitle_id,
 )
 from scanner.modeling.model_subtitles import (
@@ -46,7 +47,6 @@ from scanner.runtime.subtitle_transcript import (
 )
 
 from .media_identity_store import review_version_id
-from .repository_paths import resolve_local_path
 from .review_export_target import _review_export_scans
 from .review_policy import prepare_review_policy, require_policy_evidence, require_policy_revision
 from .review_policy_evidence import policy_export_filters
@@ -68,6 +68,7 @@ class ReviewSubtitleEvidence:
     mutes: tuple[SubtitleMute, ...]
     audio: tuple[ReviewedAudio, ...]
     stable_version: str | None
+    sibling_stems: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -91,28 +92,6 @@ class RenderedSubtitle:
     input_fingerprint: tuple[int, ...] | None
     destination: Path | None
     publication_error: SubtitleNameError | SubtitleConflict | None
-
-
-def _require_unambiguous_name(db, target, actual: Path) -> None:
-    # The selected sidecar also attaches to a shorter sibling stem ending at a dot.
-    item = target.source.catalog_item
-    for value in item.versions:
-        if value.id == target.source.media_source_id or not value.path:
-            continue
-        try:
-            other = Path(resolve_local_path(db, value.path).local_path).resolve()
-        except (OSError, ValueError, RuntimeError):
-            continue
-        stem, other_stem = actual.stem.casefold(), other.stem.casefold()
-        if (
-            other != actual
-            and other.parent == actual.parent
-            and (stem == other_stem or stem.startswith(other_stem + "."))
-        ):
-            raise SubtitleError(
-                "subtitle_version_ambiguous",
-                "Jellyfin would attach the subtitle to more than one version in this folder",
-            )
 
 
 def subtitle_mutes(policy, duration_seconds=None) -> tuple[SubtitleMute, ...]:
@@ -161,7 +140,6 @@ def review_subtitle_evidence(
         memberships, scans, media = (), {}, target_media
     if review.media_source_id != (target.source.media_source_id or ""):
         raise SubtitleError("subtitle_media_changed", "The selected media version changed")
-    _require_unambiguous_name(db, target, media)
     mutes = subtitle_mutes(policy, target.source.duration_seconds)
     return ReviewSubtitleEvidence(
         target.source.media_source_id or "",
@@ -170,6 +148,7 @@ def review_subtitle_evidence(
         mutes,
         tuple(reviewed_audio_sources(db, memberships, scans, media)),
         review_version_id(db, review.id),
+        jellyfin_sibling_stems(db, target.source.catalog_item, media),
     )
 
 
@@ -259,6 +238,7 @@ def subtitle_catalog(
         media=media,
         audio_language=audio.source.language if audio else None,
         published={row.filename for row in published},
+        catalog_sibling_stems=evidence.sibling_stems,
     )
     fallback, transcript = None, None
     if not any(track.source.supported for track in tracks):
@@ -360,7 +340,12 @@ def render_subtitle(
             evidence.media, track.source, publication, language_tokens
         )
         check_named_destination(
-            destination, media_slot(evidence.media, evidence.version), publication, source_id
+            evidence.media,
+            destination,
+            media_slot(evidence.media, evidence.version),
+            publication,
+            source_id,
+            catalog_sibling_stems=evidence.sibling_stems,
         )
     except (SubtitleNameError, SubtitleConflict) as exc:
         return RenderedSubtitle(

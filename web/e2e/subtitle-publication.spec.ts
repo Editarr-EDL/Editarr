@@ -14,6 +14,7 @@ const track: SubtitleSource = {
 const title = "ryan - Family Review";
 const filename = `example-4k.${title}.en.forced.srt`;
 const previewToken = "a".repeat(64);
+const cueChange = { start_seconds: 2, end_seconds: 3, original: "Original cue", filtered: "Updated cue" };
 
 async function openSubtitleWorkflow(page: Page, publicationBlockReason?: string) {
   const publications: PublishedSubtitle[] = [
@@ -29,7 +30,7 @@ async function openSubtitleWorkflow(page: Page, publicationBlockReason?: string)
     track_title: publicationBlockReason ? null : title, publication_block_reason: publicationBlockReason ?? null,
   }));
   await page.route(`**/api/reviews/${review.id}/subtitles/preview`, (route) => json(route, {
-    source: track, cues: [{ start_seconds: 2, end_seconds: 3, original: "Original cue", filtered: "Updated cue" }],
+    source: track, cues: [cueChange],
     changed_cues: 1, unchanged_cues: 3,
     preview_token: publicationBlockReason ? null : previewToken,
     track_title: publicationBlockReason ? null : title,
@@ -44,6 +45,26 @@ async function openSubtitleWorkflow(page: Page, publicationBlockReason?: string)
   await page.goto("/#/library/movies/item/movie-1");
   await chooseWorkflowStep(page, "Subtitles");
 }
+
+test("retries a blocked cue preview after a temporary subtitle destination conflict clears", async ({ page }) => {
+  const message = "A subtitle already uses this filename.";
+  await openSubtitleWorkflow(page);
+  await page.route(`**/api/reviews/${review.id}/subtitles/preview`, (route) => json(route, {
+    source: track, cues: [cueChange], changed_cues: 1, unchanged_cues: 3,
+    track_title: title, preview_token: null, filename: null, publication_block_reason: message,
+  }), { times: 1 });
+  const cuePreview = page.getByRole("region", { name: "Cue preview" });
+  await cuePreview.getByRole("button", { name: "Preview cue changes" }).click();
+  await expect(cuePreview.getByText("Updated cue")).toBeVisible();
+  await expect(cuePreview.getByRole("alert")).toHaveText(message);
+  await expect(cuePreview.getByRole("button", { name: "Continue to Publish" })).toHaveCount(0);
+
+  await cuePreview.getByRole("button", { name: "Retry cue preview" }).click();
+  await expect(cuePreview.getByRole("alert")).toHaveCount(0);
+  await cuePreview.getByRole("button", { name: "Continue to Publish" }).click();
+  const publish = page.getByRole("region", { name: "Publish to Jellyfin" });
+  await expect(publish.getByRole("button", { name: "Publish filtered subtitles" })).toBeEnabled();
+});
 
 for (const width of [320, 1440]) {
   test(`shows the exact named sidecar with shared forced playback at ${width}px`, async ({ page }) => {

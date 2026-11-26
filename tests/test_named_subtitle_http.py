@@ -156,3 +156,74 @@ def test_jellyfin_catalog_keeps_published_file_out_of_source_picker(app):
     assert [track["id"] for track in listed.json()["sources"]] == [prepared["source_id"]]
     assert listed.json()["sources"][0]["published_filename"] == filename
     assert listed.json()["published_subtitles"][0]["owned_by_viewer"] is True
+
+
+@pytest.mark.parametrize(
+    ("sibling", "blocked"),
+    [
+        (".Sam - Subtitle review.mkv", True),
+        (".SAM - SUBTITLE REVIEW.EN.FORCED.MP4", True),
+        (".Sam - Subtitle reviewX.mkv", False),
+        (".Sam - Subtitle review.nfo", False),
+    ],
+)
+def test_named_sidecar_is_only_for_its_selected_video(app, sibling, blocked):
+    review, source = seed_subtitle_review(app)
+    media_stem = source.name.removesuffix(".en.forced.srt")
+    source.with_name(media_stem + sibling).write_bytes(b"sibling")
+    selected = selected_source(app, review)
+    preview = subtitle_request(app, review, "preview", selected)
+    assert preview.status_code == 200, preview.text
+    result = preview.json()
+    assert result["changed_cues"] == 1
+    assert result["cues"][0]["filtered"] == "close the gate."
+    if blocked:
+        assert result["preview_token"] is result["filename"] is None
+        assert "more than one video" in result["publication_block_reason"]
+        denied = subtitle_request(app, review, "publish", selected | {"preview_token": "a" * 64})
+        assert denied.status_code == 409, denied.text
+        assert denied.json()["detail"]["code"] == "subtitle_version_ambiguous"
+    else:
+        assert result["preview_token"] and result["filename"]
+        published = subtitle_request(
+            app, review, "publish", selected | {"preview_token": result["preview_token"]}
+        )
+        assert published.status_code == 200, published.text
+
+
+def test_catalog_sibling_blocks_preview_before_local_file_appears(app):
+    review, source = seed_subtitle_review(app)
+    media_stem = source.name.removesuffix(".en.forced.srt")
+    sibling = source.with_name(f"{media_stem}.Sam - Subtitle review.mkv")
+    with app.accounts.factory() as db:
+        item = app.items[db.get(SavedReviewRow, review.id).media_item.jellyfin_id]
+        item.versions.append(
+            item.versions[0].model_copy(
+                update={"id": "third", "path": str(sibling)},
+            )
+        )
+    selected = selected_source(app, review)
+    preview = subtitle_request(app, review, "preview", selected)
+    assert preview.status_code == 200, preview.text
+    assert "more than one video" in preview.json()["publication_block_reason"]
+    assert preview.json()["cues"][0]["filtered"] == "close the gate."
+
+
+def test_publish_rechecks_sibling_after_preparing_to_write(app, monkeypatch):
+    review, source = seed_subtitle_review(app)
+    prepared = preview_for_publication(app, review)
+    media_stem = source.name.removesuffix(".en.forced.srt")
+    sibling = source.with_name(f"{media_stem}.Sam - Subtitle review.mkv")
+    require_same_subtitle_input = review_subtitle_api.require_same_subtitle_input
+
+    def create_sibling_after_check(*args):
+        require_same_subtitle_input(*args)
+        sibling.write_bytes(b"appeared after rendering")
+
+    monkeypatch.setattr(
+        review_subtitle_api, "require_same_subtitle_input", create_sibling_after_check
+    )
+    refused = subtitle_request(app, review, "publish", prepared)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == "subtitle_version_ambiguous"
+    assert not source.with_name(f"{media_stem}.Sam - Subtitle review.en.forced.srt").exists()

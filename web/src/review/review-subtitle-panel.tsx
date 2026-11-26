@@ -30,6 +30,9 @@ export function ReviewSubtitlePanel({ subtitles, onContinue, onStartAudioScan }:
   </section>;
   if (!sources) return <p className="muted-copy" role="status">Finding subtitle tracks…</p>;
   const trackTitle = preview?.kind === "ready" ? preview.value.track_title : sources.track_title;
+  const canContinue = preview?.kind === "ready" && !publicationBlockReason;
+  const previewLabel = previewing ? "Preparing preview…"
+    : preview?.kind === "ready" ? "Retry cue preview" : "Preview cue changes";
 
   return <div className="workflow-release-grid">
     <section className="workflow-release-panel" aria-labelledby="subtitle-source-heading">
@@ -75,12 +78,10 @@ export function ReviewSubtitlePanel({ subtitles, onContinue, onStartAudioScan }:
           </tr>)}</tbody>
         </table>}
       </>}
-      {source && (preview?.kind !== "ready" || !publicationBlockReason) && <div className="button-row">
-        {preview?.kind !== "ready"
-          ? <button type="button" className="btn-primary" disabled={previewing} onClick={() => void subtitles.requestPreview()}>
-            {previewing ? "Preparing preview…" : "Preview cue changes"}
-          </button>
-          : <button type="button" className="btn-primary" onClick={onContinue}>Continue to Publish</button>}
+      {source && <div className="button-row">
+        {canContinue
+          ? <button type="button" className="btn-primary" onClick={onContinue}>Continue to Publish</button>
+          : <button type="button" className="btn-primary" disabled={previewing} onClick={() => void subtitles.requestPreview()}>{previewLabel}</button>}
       </div>}
     </section>
   </div>;

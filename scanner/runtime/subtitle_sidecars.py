@@ -17,7 +17,7 @@ from scanner.modeling.model_subtitles import PublishedSubtitle, SubtitleSource
 
 from .durability import atomic_write_bytes, sync_directory
 from .maintenance import _lock, _unlock
-from .subtitle_publication_names import NamedSubtitlePublication
+from .subtitle_publication_names import NamedSubtitlePublication, require_unique_video_match
 
 _PUBLISHED = "Editarr Filtered"
 _HASH = re.compile(r"[0-9a-f]{64}")
@@ -314,14 +314,19 @@ def _name_key(name: str) -> str:
 
 
 def check_named_destination(
-    destination: Path, slot: str, publication: NamedSubtitlePublication, source_id: str
+    media: Path,
+    destination: Path,
+    slot: str,
+    publication: NamedSubtitlePublication,
+    source_id: str,
+    *,
+    catalog_sibling_stems: frozenset[str] = frozenset(),
 ) -> None:
-    """Refuse existing filenames owned by anyone else, including case-insensitive matches."""
+    """Refuse a name shared with another video or an existing file owned by someone else."""
     key = _name_key(destination.name)
-    if any(
-        entry.name != destination.name and _name_key(entry.name) == key
-        for entry in destination.parent.iterdir()
-    ):
+    entries = tuple(destination.parent.iterdir())
+    require_unique_video_match(media, destination, entries, catalog_sibling_stems)
+    if any(entry.name != destination.name and _name_key(entry.name) == key for entry in entries):
         raise SubtitleConflict(
             "A subtitle already uses this filename on a case-insensitive match. "
             "Choose a distinct saved review title."
@@ -352,6 +357,8 @@ def publish_named_sidecar(
     content: bytes,
     publication: NamedSubtitlePublication,
     destination: Path,
+    *,
+    catalog_sibling_stems: frozenset[str] = frozenset(),
 ) -> tuple[str, bool]:
     """Write one named output and retire previous names only after the new output is safe."""
     if len(content) > MAX_SUBTITLE_BYTES:
@@ -362,7 +369,14 @@ def publish_named_sidecar(
     # Serialize logical replacements as well as title collisions across Editarr processes
     # using the same media directory, including different instances with separate databases.
     with _destination_lock(media.parent / ".editarr-subtitle-publications.json"):
-        check_named_destination(destination, slot, publication, source.id)
+        check_named_destination(
+            media,
+            destination,
+            slot,
+            publication,
+            source.id,
+            catalog_sibling_stems=catalog_sibling_stems,
+        )
         previous_names = []
         for path, record in _publication_records(media, slot):
             if path == destination or record.get("publication") != identity:
