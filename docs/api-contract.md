@@ -1182,9 +1182,26 @@ It creates no export row, directory, or sidecar. Cross-user downloads also need
 the actor's personal download capability.
 
 The `/api/reviews/{review_id}/subtitles/sources`, `/preview`, and `/publish`
-operations share the same saved-review export eligibility. This includes users
-whose only export permission is to download that review. A published subtitle is
-available to everyone who can play that media version in Jellyfin.
+operations share the same saved-review export eligibility, including users
+whose only export permission is to download that review. Publication requires
+the signed-in account's saved Jellyfin username. The exact track title is
+`username - review title` and is visible to everyone who can play that media
+version. A filtered forced track keeps its forced flag, so Jellyfin can select
+it for other viewers.
+
+Sources return the proposed `track_title` and optionally a
+`publication_block_reason`. Preview returns the redacted cues even when an
+exact named sidecar cannot be written. In that case its `preview_token` and
+`filename` are null and the reason explains the block. A publishable preview
+binds its token to the actor, saved review revision and policy, exact media
+version, subtitle inputs, track title, and destination filename.
+
+A later publish replaces one owned subtitle for the same publisher, review,
+media version, and source. If the title changed, Editarr writes the new file
+before retiring the prior owned filename. Existing shared sidecars remain
+available. Filename conflicts, including case-only or Unicode-equivalent
+matches, require a distinct saved review title. Publication listings include
+`owned_by_viewer` so Editarr can identify the signed-in user's tracks.
 
 Migration `0021_export_snapshots` appends `content_bytes`, `snapshot_json`,
 `destination_path`, and `publication_revision` to `media_item_exports`.

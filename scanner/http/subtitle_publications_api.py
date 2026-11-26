@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
 
 from scanner.modeling.model_subtitles import PublishedSubtitle
+from scanner.runtime.subtitle_publication_names import subtitle_publisher_id
 from scanner.runtime.subtitle_sidecars import discover_publications, media_slot
 from scanner.security.access.capability_ids import Capability
 
@@ -36,7 +37,11 @@ def list_subtitle_publications(
     try:
         media = Path(viewer.resolve(found.path)).resolve(strict=True)
         publications = (
-            discover_publications(media, media_slot(media, found.media_source_id or ""))
+            discover_publications(
+                media,
+                media_slot(media, found.media_source_id or ""),
+                viewer=subtitle_publisher_id(viewer.access.principal.account.local_export_id.value),
+            )
             if media.is_file()
             else []
         )

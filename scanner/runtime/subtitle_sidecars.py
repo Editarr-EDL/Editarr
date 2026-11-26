@@ -1,4 +1,4 @@
-"""Shared subtitle sidecars with no-clobber creation and recoverable ownership."""
+"""Subtitle sidecars with no-clobber creation and recoverable ownership."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import tempfile
+import unicodedata
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from scanner.modeling.model_subtitles import PublishedSubtitle, SubtitleSource
 
 from .durability import atomic_write_bytes, sync_directory
 from .maintenance import _lock, _unlock
+from .subtitle_publication_names import NamedSubtitlePublication
 
 _PUBLISHED = "Editarr Filtered"
 _HASH = re.compile(r"[0-9a-f]{64}")
@@ -108,6 +110,8 @@ def _read_record(destination: Path, slot: str):
         record = json.loads(read_local_bytes(_record_path(destination), 8192))
     except FileNotFoundError:
         return None
+    except (ValueError, OSError) as exc:
+        raise SubtitleConflict("Subtitle publication ownership could not be verified") from exc
     if (
         not isinstance(record, dict)
         or record.get("filename") != destination.name
@@ -115,6 +119,14 @@ def _read_record(destination: Path, slot: str):
         or not isinstance(record.get("inputs"), list)
         or not 1 <= len(record["inputs"]) <= 2
         or not all(_valid_identity(value) for value in record["inputs"])
+    ):
+        raise SubtitleConflict("Subtitle publication ownership could not be verified")
+    identity = record.get("publication")
+    if "publication" in record and (
+        not isinstance(identity, list)
+        or len(identity) != 4
+        or not all(isinstance(value, str) and 0 < len(value) <= 128 for value in identity)
+        or _HASH.fullmatch(identity[0]) is None
     ):
         raise SubtitleConflict("Subtitle publication ownership could not be verified")
     for entry in record["inputs"]:
@@ -130,21 +142,61 @@ def _existing_file(path: Path) -> tuple[tuple[int, ...], dict]:
     return fingerprint, _identity(fingerprint, content)
 
 
-def discover_publications(media: Path, slot: str) -> list[PublishedSubtitle]:
-    """Find verified current publications even if their original source went away."""
-    discovered = []
+def _publication_records(media: Path, slot: str):
+    """Find the records of the version's managed sidecar paths."""
     for path in sorted(media.parent.iterdir()):
-        if not path.name.startswith(f"{media.stem}.{_PUBLISHED} ") or not generated_name(path.name):
+        if not path.name.startswith(f"{media.stem}.") or path.suffix not in {
+            ".srt",
+            ".ass",
+            ".ssa",
+            ".vtt",
+        }:
             continue
         try:
             record = _read_record(path, slot)
-            if record is None or _existing_file(path)[1] not in record["inputs"]:
+            if record is None:
                 continue
-            discovered.append(PublishedSubtitle.model_validate(record))
+            if "publication" not in record and not generated_name(path.name):
+                continue
         except (ValueError, OSError):
-            # File changes or unrelated lookalike files are not Editarr publications.
             continue
-    return discovered
+        yield path, record
+
+
+def discover_publications(
+    media: Path, slot: str, *, viewer: str | None = None
+) -> list[PublishedSubtitle]:
+    """List verified publications for the selected media file."""
+    return discover_publications_and_owned_sources(media, slot, viewer=viewer)[0]
+
+
+def discover_publications_and_owned_sources(
+    media: Path,
+    slot: str,
+    *,
+    viewer: str | None = None,
+    publication: NamedSubtitlePublication | None = None,
+) -> tuple[list[PublishedSubtitle], dict[str, str]]:
+    """List verified publications and the selected review's own filename per source."""
+    discovered = []
+    own_sources = {}
+    for path, record in _publication_records(media, slot):
+        try:
+            if _existing_file(path)[1] not in record["inputs"]:
+                continue
+            identity = record.get("publication")
+            owned = bool(viewer and identity and identity[0] == viewer)
+            discovered.append(PublishedSubtitle.model_validate(record | {"owned_by_viewer": owned}))
+            if (
+                publication is not None
+                and identity
+                and identity == publication.identity(identity[3])
+            ):
+                if record["label"] == publication.title or identity[3] not in own_sources:
+                    own_sources[identity[3]] = path.name
+        except (ValueError, OSError):
+            continue
+    return discovered, own_sources
 
 
 def _stage(directory: Path, payload: bytes, *, shared: bool = False) -> Path:
@@ -194,9 +246,18 @@ def _destination_lock(record_path: Path):
         os.close(descriptor)
 
 
-def _publish_locked(destination: Path, slot: str, source: SubtitleSource, content: bytes) -> bool:
+def _publish_locked(
+    destination: Path,
+    slot: str,
+    source: SubtitleSource,
+    content: bytes,
+    publication: NamedSubtitlePublication | None = None,
+) -> bool:
     record_path = _record_path(destination)
     previous = _read_record(destination, slot)
+    identity = publication.identity(source.id) if publication else None
+    if previous is not None and previous.get("publication") != identity:
+        raise SubtitleConflict("A different subtitle publication already uses this filename")
     try:
         before, old_file = _existing_file(destination)
     except FileNotFoundError:
@@ -212,12 +273,14 @@ def _publish_locked(destination: Path, slot: str, source: SubtitleSource, conten
         new_file = _identity(file_fingerprint(temporary), content)
         record = {
             "filename": destination.name,
-            "label": f"{source.label} · Filtered",
+            "label": publication.title if publication else f"{source.label} · Filtered",
             "format": source.format,
             "forced": source.forced,
             "media_slot": slot,
             "inputs": [new_file] if old_file is None else [old_file, new_file],
         }
+        if publication is not None:
+            record["publication"] = identity
         # If interrupted, an exact inode and digest pair still proves either owned output.
         _save_record(record_path, record)
         if before is None:
@@ -238,9 +301,82 @@ def _publish_locked(destination: Path, slot: str, source: SubtitleSource, conten
 
 
 def publish_sidecar(media: Path, slot: str, source: SubtitleSource, content: bytes) -> bool:
-    """Publish atomically without replacing an unverified output."""
+    """Write a legacy shared sidecar without replacing an unverified output."""
     if len(content) > MAX_SUBTITLE_BYTES:
         raise ValueError("The resulting subtitle is too large")
     destination = publication_path(media, source)
     with _destination_lock(_record_path(destination)):
         return _publish_locked(destination, slot, source, content)
+
+
+def _name_key(name: str) -> str:
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def check_named_destination(
+    destination: Path, slot: str, publication: NamedSubtitlePublication, source_id: str
+) -> None:
+    """Refuse existing filenames owned by anyone else, including case-insensitive matches."""
+    key = _name_key(destination.name)
+    if any(
+        entry.name != destination.name and _name_key(entry.name) == key
+        for entry in destination.parent.iterdir()
+    ):
+        raise SubtitleConflict(
+            "A subtitle already uses this filename on a case-insensitive match. "
+            "Choose a distinct saved review title."
+        )
+    previous = _read_record(destination, slot)
+    if previous is not None and previous.get("publication") != publication.identity(source_id):
+        raise SubtitleConflict(
+            "A different subtitle publication already uses this filename. "
+            "Choose a distinct saved review title."
+        )
+    try:
+        _state, current = _existing_file(destination)
+    except FileNotFoundError:
+        return
+    except (ValueError, OSError) as exc:
+        raise SubtitleConflict("The existing subtitle destination could not be verified") from exc
+    if previous is None or current not in previous["inputs"]:
+        raise SubtitleConflict(
+            "A different subtitle file already exists at the destination. "
+            "Choose a distinct saved review title."
+        )
+
+
+def publish_named_sidecar(
+    media: Path,
+    slot: str,
+    source: SubtitleSource,
+    content: bytes,
+    publication: NamedSubtitlePublication,
+    destination: Path,
+) -> tuple[str, bool]:
+    """Write one named output and retire previous names only after the new output is safe."""
+    if len(content) > MAX_SUBTITLE_BYTES:
+        raise ValueError("The resulting subtitle is too large")
+    if destination.parent != media.parent or not destination.name.startswith(media.stem + "."):
+        raise ValueError("The subtitle destination does not belong to the selected media file")
+    identity = publication.identity(source.id)
+    # Serialize logical replacements as well as title collisions across Editarr processes
+    # using the same media directory, including different instances with separate databases.
+    with _destination_lock(media.parent / ".editarr-subtitle-publications.json"):
+        check_named_destination(destination, slot, publication, source.id)
+        previous_names = []
+        for path, record in _publication_records(media, slot):
+            if path == destination or record.get("publication") != identity:
+                continue
+            before, actual = _existing_file(path)
+            if actual not in record["inputs"]:
+                raise SubtitleConflict("The previous named subtitle changed before replacement")
+            previous_names.append((path, before))
+        with _destination_lock(_record_path(destination)):
+            replaced = _publish_locked(destination, slot, source, content, publication)
+        for path, before in previous_names:
+            if file_fingerprint(path) != before:
+                raise SubtitleConflict("The previous named subtitle changed before replacement")
+            path.unlink()
+            _record_path(path).unlink(missing_ok=True)
+            sync_directory(path.parent)
+    return destination.name, replaced or bool(previous_names)

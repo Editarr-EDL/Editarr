@@ -1,0 +1,158 @@
+"""Published Jellyfin names and their authorization across accounts and review changes."""
+
+from pathlib import Path
+
+import pytest
+
+import scanner.api  # noqa: F401 - initialize the API before importing its routes
+from scanner.db import SavedReviewRow, ScanRow
+from scanner.http import review_subtitle_api, subtitle_publications_api
+from scanner.modeling.model_subtitles import SubtitleSource
+from scanner.runtime.subtitle_sidecars import media_slot, publish_sidecar
+from scanner.security.access.capability_ids import Capability as C
+from scanner.security.access.overrides import OverrideEffect
+from tests.multi_user_access_support import PEER_USER, USER
+from tests.subtitle_review_http_support import (
+    SUBTITLE_TEXT,
+    link_publisher,
+    pin_review_file,
+    preview_for_publication,
+    seed_subtitle_review,
+    selected_source,
+    subtitle_request,
+)
+from tests.subtitle_review_http_support import app as app
+from tests.subtitle_review_http_support import (
+    subtitle_publishing_dependencies as subtitle_publishing_dependencies,
+)
+
+_FILTERED = SUBTITLE_TEXT.replace(b"Damn, ", b"")
+
+
+@pytest.fixture(autouse=True)
+def routes(app, monkeypatch):
+    app.client.app.include_router(review_subtitle_api.router)
+    app.client.app.include_router(subtitle_publications_api.router)
+    monkeypatch.setattr(review_subtitle_api, "_refresh", lambda *_: True)
+
+
+def test_same_review_gets_separate_named_tracks_and_shared_visibility(app):
+    review, source = seed_subtitle_review(app)
+    media = pin_review_file(app, review)
+    link_publisher(app, PEER_USER, "Café")
+    for capability in (C.REVIEWS_VIEW_OTHER, C.REVIEWS_EXPORT_OTHER):
+        app.accounts.set_override(PEER_USER, capability, OverrideEffect.ALLOW)
+
+    legacy = SubtitleSource(
+        id="c" * 64,
+        label="Original",
+        language="eng",
+        format="srt",
+        kind="external",
+        forced=True,
+    )
+    publish_sidecar(media, media_slot(media, "alternate"), legacy, b"older shared copy")
+    path = media.with_name(f"{media.stem}.Editarr Filtered {'c' * 16}.eng.forced.srt")
+    sam = preview_for_publication(app, review)
+    copied = subtitle_request(app, review, "publish", sam, user=PEER_USER)
+    assert copied.status_code == 409, copied.text
+    assert copied.json()["detail"]["code"] == "subtitle_source_changed"
+    sam_result = subtitle_request(app, review, "publish", sam)
+    assert sam_result.status_code == 200, sam_result.text
+    cafe = preview_for_publication(app, review, user=PEER_USER)
+    cafe_result = subtitle_request(app, review, "publish", cafe, user=PEER_USER)
+    assert cafe_result.status_code == 200, cafe_result.text
+
+    sam_file, cafe_file = [
+        source.parent / response.json()["filename"] for response in (sam_result, cafe_result)
+    ]
+    assert sam_file.name == f"{media.stem}.Sam - Subtitle review.en.forced.srt"
+    assert cafe_file.name == f"{media.stem}.Café - Subtitle review.en.forced.srt"
+    assert sam_file.read_bytes() == cafe_file.read_bytes() == _FILTERED
+    assert path.read_bytes() == b"older shared copy"
+
+    with app.accounts.factory() as db:
+        item_id = db.get(SavedReviewRow, review.id).media_item.jellyfin_id
+    for viewer, own, other in ((USER, sam_file, cafe_file), (PEER_USER, cafe_file, sam_file)):
+        listed = app.send(
+            "GET",
+            f"/api/media/subtitles/publications?item_id={item_id}&media_source_id=alternate",
+            app.accounts.cookie(viewer),
+        )
+        assert listed.status_code == 200, listed.text
+        by_file = {item["filename"]: item for item in listed.json()["published_subtitles"]}
+        assert by_file[own.name]["owned_by_viewer"] is True
+        assert by_file[other.name]["owned_by_viewer"] is False
+        assert by_file[path.name]["owned_by_viewer"] is False
+        assert {by_file[filename]["label"] for filename in (own.name, other.name)} == {
+            "Sam - Subtitle review",
+            "Café - Subtitle review",
+        }
+
+
+def test_account_rename_requires_new_preview_and_retires_only_prior_name(app):
+    review, source = seed_subtitle_review(app)
+    old = preview_for_publication(app, review)
+    original = subtitle_request(app, review, "publish", old)
+    assert original.status_code == 200, original.text
+    old_file = source.parent / original.json()["filename"]
+    link_publisher(app, USER, "Samantha")
+    stale = subtitle_request(app, review, "publish", old)
+    assert stale.status_code == 409, stale.text
+    assert old_file.read_bytes() == _FILTERED
+    new = preview_for_publication(app, review)
+    published = subtitle_request(app, review, "publish", new)
+    assert published.status_code == 200, published.text
+    assert published.json()["replaced"] is True
+    new_file = source.parent / published.json()["filename"]
+    assert ".Samantha - Subtitle review." in new_file.name
+    assert new_file.read_bytes() == _FILTERED
+    assert not old_file.exists()
+    assert source.read_bytes() == SUBTITLE_TEXT
+
+
+@pytest.mark.parametrize("case", ["unlinked", "reserved", "unknown language", "collision"])
+def test_preview_remains_available_without_an_exact_writable_name(app, case):
+    review, source = seed_subtitle_review(app, linked=case != "unlinked")
+    conflict = None
+    if case == "reserved":
+        link_publisher(app, USER, "Forced Name")
+    elif case == "unknown language":
+        with app.accounts.factory() as db:
+            item = db.get(SavedReviewRow, review.id).media_item
+            app.items[item.jellyfin_id].versions[1].subtitle_streams[0]["Language"] = "zz"
+    elif case == "collision":
+        stem = source.name.removesuffix(".en.forced.srt")
+        conflict = source.with_name(f"{stem}.Sam - Subtitle review.en.forced.srt")
+        conflict.write_bytes(b"unmanaged")
+    selected = selected_source(app, review)
+    preview = subtitle_request(app, review, "preview", selected)
+    assert preview.status_code == 200, preview.text
+    result = preview.json()
+    assert result["changed_cues"] == 1
+    assert result["cues"][0]["filtered"] == "close the gate."
+    assert result["publication_block_reason"]
+    assert result["preview_token"] is result["filename"] is None
+    denied = subtitle_request(app, review, "publish", selected | {"preview_token": "a" * 64})
+    assert denied.status_code == 409, denied.text
+    assert denied.json()["detail"]["message"] == result["publication_block_reason"]
+    if conflict is not None:
+        assert conflict.read_bytes() == b"unmanaged"
+
+
+def test_jellyfin_catalog_keeps_published_file_out_of_source_picker(app):
+    review, _ = seed_subtitle_review(app)
+    prepared = preview_for_publication(app, review)
+    result = subtitle_request(app, review, "publish", prepared)
+    assert result.status_code == 200, result.text
+    filename = result.json()["filename"]
+    with app.accounts.factory() as db:
+        row = db.get(SavedReviewRow, review.id)
+        path = Path(db.get(ScanRow, row.memberships[0].scan_id).resolved_local_path)
+        streams = app.items[row.media_item.jellyfin_id].versions[1].subtitle_streams
+        streams.append(streams[0] | {"Index": 6, "Path": str(path.with_name(filename))})
+    listed = subtitle_request(app, review, "sources", {})
+    assert listed.status_code == 200, listed.text
+    assert [track["id"] for track in listed.json()["sources"]] == [prepared["source_id"]]
+    assert listed.json()["sources"][0]["published_filename"] == filename
+    assert listed.json()["published_subtitles"][0]["owned_by_viewer"] is True

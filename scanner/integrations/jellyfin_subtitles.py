@@ -165,11 +165,15 @@ def _other_stems(db, item: JellyfinMediaItem, version: str | None, media: Path) 
     return stems
 
 
-def _external_identity(db, media, stream: dict, sibling_stems: set[str]):
+def _external_identity(db, media, stream: dict, sibling_stems: set[str], published: set[str]):
     path = _external_path(db, media, stream.get("Path"))
     if path:
         name = path.name.casefold()
-        if generated_name(path.name) or any(name.startswith(stem + ".") for stem in sibling_stems):
+        if (
+            name in published
+            or generated_name(path.name)
+            or any(name.startswith(stem + ".") for stem in sibling_stems)
+        ):
             return None
     format = path.suffix.lower().lstrip(".") if path else _format(stream)[0]
     identifier = path.name if path else f"unavailable:{stream.get('Index')}"
@@ -198,9 +202,8 @@ def discover_jellyfin_subtitles(
     published: set[str],
 ) -> list[JellyfinSubtitle]:
     """Only offer Jellyfin streams of the already authorized physical version."""
-    from scanner.runtime.subtitle_sidecars import publication_path
-
     discovered = {}
+    published = {filename.casefold() for filename in published}
     external = [
         stream
         for stream in _version_streams(item, version, server_path)[:128]
@@ -212,7 +215,7 @@ def discover_jellyfin_subtitles(
         language = normalize_language(stream.get("Language"))
         index = stream.get("Index")
         if stream.get("IsExternal") is True:
-            found = _external_identity(db, media, stream, sibling_stems)
+            found = _external_identity(db, media, stream, sibling_stems, published)
             if found is None:
                 continue
             identifier, format, path, supported = found
@@ -257,9 +260,6 @@ def discover_jellyfin_subtitles(
                 and audio_language.partition("-")[0] == language.partition("-")[0]
             ),
         )
-        filename = publication_path(media, source).name
-        if filename in published:
-            source = source.model_copy(update={"published_filename": filename})
         discovered[identity] = JellyfinSubtitle(source, path, index, container, encoder)
     return sorted(
         discovered.values(),

@@ -20,6 +20,7 @@ export interface PublishedSubtitle {
   label: string;
   format: string;
   forced: boolean;
+  owned_by_viewer?: boolean;
 }
 
 export interface ReviewSubtitleSources {
@@ -28,6 +29,8 @@ export interface ReviewSubtitleSources {
   audio_source_id: string | null;
   fallback: "available" | "scan_required" | "choose_audio" | null;
   published_subtitles: PublishedSubtitle[];
+  track_title?: string | null;
+  publication_block_reason?: string | null;
 }
 
 export interface SubtitleCuePreview {
@@ -42,7 +45,10 @@ export interface ReviewSubtitlePreview {
   cues: SubtitleCuePreview[];
   changed_cues: number;
   unchanged_cues: number;
-  preview_token: string;
+  preview_token?: string | null;
+  track_title?: string | null;
+  filename?: string | null;
+  publication_block_reason?: string | null;
 }
 
 export interface ReviewSubtitlePublication {

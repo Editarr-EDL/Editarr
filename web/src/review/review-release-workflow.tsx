@@ -7,7 +7,7 @@ import { canExportSavedReview, EXPORT_FORMATS } from "./export-model";
 import { ExportDialog } from "./review-export-dialog";
 import { isReviewDraftDirty } from "./review-draft";
 import type { GuidedReviewWorkspace, WorkflowStep } from "./review-workflow-types";
-import { ReviewSubtitlePanel, subtitleSourceDetails } from "./review-subtitle-panel";
+import { ReviewSubtitlePanel, SubtitlePlaybackNotice, subtitleSourceDetails } from "./review-subtitle-panel";
 import { useReviewSubtitles, type ReviewSubtitles } from "./use-review-subtitles";
 import "../styles/subtitle-workflow.css";
 
@@ -34,7 +34,7 @@ export function PublishedSubtitleFiles() {
   return <ul className="published-subtitle-files" aria-label="Published subtitle files">
     {subtitles.published.map((track) => <li key={track.filename}>
       <strong>{track.label}</strong>
-      <small>{track.format.toUpperCase()}{track.forced ? " · Forced" : ""} · Shared</small>
+      <small>{track.format.toUpperCase()}{track.forced ? " · Forced" : ""}{track.owned_by_viewer ? " · Your track" : ""} · Shared</small>
     </li>)}
   </ul>;
 }
@@ -61,7 +61,7 @@ function ReviewPublishPanel({ workspace, subtitles, onStepChange }: {
   const chosen = format && formats.includes(format) ? format : formats[0];
   const preferredDestination = !formats.length && mayUseCommunity ? "community" : destination;
   const prepared = subtitles.prepared;
-  const replacing = prepared?.published_filename;
+  const replacing = prepared?.source.published_filename;
 
   return <div className="workflow-release">
     {formats.length > 0 && mayUseCommunity && <div className="button-row" role="group" aria-label="Publish destination">
@@ -89,10 +89,15 @@ function ReviewPublishPanel({ workspace, subtitles, onStepChange }: {
           <h3 id="workflow-jellyfin-heading">Publish to Jellyfin</h3>
           {chosen === "subtitles" && subtitles.publicationStatus && <p className={subtitles.publicationStatus.error ? "load-error" : "form-status"}
             role={subtitles.publicationStatus.error ? "alert" : "status"}>{subtitles.publicationStatus.message}</p>}
-          {chosen === "subtitles" ? prepared ? <>
-            <div><strong>{prepared.label}</strong><p className="muted-copy">{subtitleSourceDetails(prepared)}</p></div>
-            <p className="muted-copy">The filtered track is shared with everyone who can play this version in Jellyfin.</p>
-            {replacing && <p className="muted-copy">Publishing replaces the prior filtered copy of this source.</p>}
+          {chosen === "subtitles" ? subtitles.publicationBlockReason
+            ? <p className="load-error" role="alert">{subtitles.publicationBlockReason}</p>
+            : prepared ? <>
+            <div>
+              <p className="workflow-subtitle-title">Jellyfin track title <strong>{prepared.track_title}</strong></p>
+              <p className="muted-copy">{subtitleSourceDetails(prepared.source)}</p>
+            </div>
+            <SubtitlePlaybackNotice forced={prepared.source.forced} />
+            {replacing && <p className="muted-copy">Publishing replaces your previous copy for this review and source.</p>}
             <div><button type="button" className="btn-primary" disabled={busy || subtitles.publishing}
               onClick={() => void subtitles.publish()}>{subtitles.publishing ? "Publishing…" : "Publish filtered subtitles"}</button></div>
           </> : <>

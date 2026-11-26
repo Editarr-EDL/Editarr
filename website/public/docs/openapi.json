@@ -20589,6 +20589,11 @@
           "forced": {
             "type": "boolean",
             "title": "Forced"
+          },
+          "owned_by_viewer": {
+            "type": "boolean",
+            "title": "Owned By Viewer",
+            "default": false
           }
         },
         "type": "object",
@@ -25709,7 +25714,14 @@
       "SubtitlePreview": {
         "properties": {
           "preview_token": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Preview Token"
           },
           "source": {
@@ -25729,11 +25741,43 @@
           "unchanged_cues": {
             "type": "integer",
             "title": "Unchanged Cues"
+          },
+          "track_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Title"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "publication_block_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Block Reason"
           }
         },
         "type": "object",
         "required": [
-          "preview_token",
           "source",
           "cues",
           "changed_cues",
@@ -26061,6 +26105,28 @@
             },
             "type": "array",
             "title": "Published Subtitles"
+          },
+          "track_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Title"
+          },
+          "publication_block_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Block Reason"
           }
         },
         "type": "object",

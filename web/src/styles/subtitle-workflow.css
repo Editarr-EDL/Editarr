@@ -22,6 +22,9 @@
 
 .workflow-release-panel :is(h3, p) { margin: 0; }
 
+.workflow-subtitle-title { overflow-wrap: anywhere; }
+.workflow-subtitle-title strong { display: block; }
+
 .workflow-release-options { display: grid; gap: 8px; }
 
 .workflow-release-options button.workflow-release-option {
