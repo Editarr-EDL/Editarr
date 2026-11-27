@@ -2,7 +2,9 @@
 
 The four noul questions match `d1-3b-full4`; each severity key adds a `score` question
 whose levels are the shipped severity rubric (lowest first). Severity is the
-argmax level; the probability-weighted level is kept as `severity_expected`.
+argmax level; the probability-weighted level is kept as `severity_expected`. A key
+whose distribution is unusable (production's `d1_detector.severity_level` rules) gets
+no level, so describe-eval counts it as unusable instead of scoring level 0.
 """
 
 from __future__ import annotations
@@ -23,21 +25,27 @@ def severity_questions() -> dict[str, dict]:
 
 
 def parse_severity(body: dict) -> tuple[dict[str, int], dict[str, float]]:
-    """(argmax level, expected level) per key from `score` answers; raises ValueError."""
-    answers = body.get("answers") or {}
+    """(argmax level, expected level) for each key with a usable `score` answer.
+
+    Answers may list probabilities or map `"0"`..`"n-1"` to them; anything production's
+    `severity_level` rejects (missing, wrong length, non-finite, negative or all-zero)
+    leaves the key out rather than failing the frame or defaulting to level 0.
+    """
+    answers = body.get("answers") if isinstance(body, dict) else None
+    answers = answers if isinstance(answers, dict) else {}
     levels: dict[str, int] = {}
     expected: dict[str, float] = {}
     for key, ladder in RUBRIC.items():
         answer = answers.get(f"sev_{key}")
         probabilities = answer.get("probabilities") if isinstance(answer, dict) else None
-        if isinstance(probabilities, dict):
-            probabilities = [probabilities.get(str(level), 0.0) for level in range(len(ladder))]
-        if not isinstance(probabilities, list) or len(probabilities) != len(ladder):
-            raise ValueError(f"missing score answer for {key}: {answer!r}")
-        values = [float(value) for value in probabilities]
-        levels[key] = max(range(len(values)), key=values.__getitem__)
-        total = sum(values) or 1.0
-        expected[key] = round(sum(level * value for level, value in enumerate(values)) / total, 4)
+        if isinstance(probabilities, list):
+            answer = {"probabilities": {str(i): value for i, value in enumerate(probabilities)}}
+        level = d1_detector.severity_level(answer, len(ladder))
+        if level is None:
+            continue
+        values = [float(answer["probabilities"][str(i)]) for i in range(len(ladder))]
+        levels[key] = level
+        expected[key] = round(sum(i * value for i, value in enumerate(values)) / sum(values), 4)
     return levels, expected
 
 

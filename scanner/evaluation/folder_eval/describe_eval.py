@@ -151,17 +151,16 @@ def evaluate_model(rows: list[dict[str, Any]], judge: Judge | None) -> dict[str,
                 "hallucination_rate": _ratio(false_mentions, len(negatives)),
             }
         result["description"] = per_key
+    # Frames that attempted severity; a failed reply (null) or a missing key is unusable.
     severity_rows = [
-        row
-        for row in rows
-        if isinstance(row["frame"].get("severity"), dict) and row["truth_severity"] is not None
+        row for row in rows if "severity" in row["frame"] and row["truth_severity"] is not None
     ]
     if severity_rows:
         severity_map = SeverityMap.load()
         result["severity"] = {
             key: severity_metrics(
                 [row["truth_severity"][key] for row in severity_rows],
-                [row["frame"]["severity"].get(key) for row in severity_rows],
+                [(row["frame"]["severity"] or {}).get(key) for row in severity_rows],
                 severity_map.max_level[key],
             )
             for key in SEVERITY_KEYS

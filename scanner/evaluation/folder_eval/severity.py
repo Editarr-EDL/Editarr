@@ -72,10 +72,11 @@ def window_severity(
     return levels
 
 
-def _pairs(truth: list[int | None], predicted: list[int | None]) -> list[tuple[int, int]]:
-    return [
-        (t, p) for t, p in zip(truth, predicted, strict=True) if t is not None and p is not None
-    ]
+def usable_level(value: Any, max_level: int) -> int | None:
+    """A predicted level as an int in 0..max_level, or None when it is unusable."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= max_level:
+        return None
+    return value
 
 
 def quadratic_kappa(pairs: list[tuple[int, int]], levels: int) -> float | None:
@@ -98,16 +99,21 @@ def quadratic_kappa(pairs: list[tuple[int, int]], levels: int) -> float | None:
 
 
 def severity_metrics(
-    truth: list[int | None], predicted: list[int | None], max_level: int
+    truth: list[int | None], predicted: list[Any], max_level: int
 ) -> dict[str, Any]:
-    """Exact and within-1 accuracy plus quadratic kappa over windows scored on both sides."""
-    pairs = _pairs(truth, predicted)
+    """Exact and within-1 accuracy plus quadratic kappa over windows with a truth level
+    and a usable predicted level. Windows with a truth level whose prediction is missing
+    or out of range (an unusable reply) are counted as `unusable`, never coerced to a level.
+    """
+    scored = [(t, usable_level(p, max_level)) for t, p in zip(truth, predicted, strict=True)]
+    pairs = [(t, p) for t, p in scored if t is not None and p is not None]
+    unusable = sum(1 for t, p in scored if t is not None and p is None)
     if not pairs:
-        return {"n": 0, "exact": None, "within_1": None, "kappa": None}
-    clamp = [(t, min(max(p, 0), max_level)) for t, p in pairs]
+        return {"n": 0, "unusable": unusable, "exact": None, "within_1": None, "kappa": None}
     return {
-        "n": len(clamp),
-        "exact": round(sum(t == p for t, p in clamp) / len(clamp), 4),
-        "within_1": round(sum(abs(t - p) <= 1 for t, p in clamp) / len(clamp), 4),
-        "kappa": quadratic_kappa(clamp, max_level + 1),
+        "n": len(pairs),
+        "unusable": unusable,
+        "exact": round(sum(t == p for t, p in pairs) / len(pairs), 4),
+        "within_1": round(sum(abs(t - p) <= 1 for t, p in pairs) / len(pairs), 4),
+        "kappa": quadratic_kappa(pairs, max_level + 1),
     }

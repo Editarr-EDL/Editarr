@@ -27,8 +27,8 @@ FRAME_EXTRAS = (
 # Extras kept even when empty, so an empty list still records "measured, none".
 KEEP_EMPTY = {"logprob_fallback"}
 # Extras kept when a backend explicitly returns null: a failed description turn still
-# counts as an attempt for describe-eval.
-KEEP_NULL = {"description"}
+# counts as an attempt for describe-eval, and its severity as unusable.
+KEEP_NULL = {"description", "severity"}
 
 
 def _keep_extra(output: dict[str, Any], extra: str) -> bool:

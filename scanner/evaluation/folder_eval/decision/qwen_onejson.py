@@ -117,7 +117,10 @@ def boolean_probabilities(
 
 
 def parse_onejson(text: str) -> tuple[str, dict[str, int]]:
-    """Validate a one-turn reply; returns (description, severity) or raises ValueError."""
+    """Validate a one-turn reply; returns (description, severity) or raises ValueError.
+
+    Severity keys with an out-of-range level are left out (unusable), not clamped.
+    """
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
         raise ValueError("no JSON object in reply")
@@ -136,7 +139,8 @@ def parse_onejson(text: str) -> tuple[str, dict[str, int]]:
         value = severity.get(key)
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError(f"severity.{key} is not an integer")
-        levels[key] = min(max(value, 0), len(ladder) - 1)
+        if 0 <= value < len(ladder):  # an out-of-range level is unusable, never clamped
+            levels[key] = value
     return clip_words(description.strip()) or "none", levels
 
 

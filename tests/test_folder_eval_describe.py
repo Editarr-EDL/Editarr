@@ -67,20 +67,21 @@ def test_severity_metrics_and_quadratic_kappa():
     assert metrics["n"] == 4 and metrics["exact"] == 0.5 and metrics["within_1"] == 0.75
     assert severity_metrics([None], [1], 3) == {
         "n": 0,
+        "unusable": 0,
         "exact": None,
         "within_1": None,
         "kappa": None,
     }
 
 
-def test_parse_description_validates_clamps_and_clips():
+def test_parse_description_validates_drops_out_of_range_levels_and_clips():
     text = (
         'ok {"description": "A man punches another man.", "severity": '
-        '{"violence": 5, "sex": 0, "nudity": 0, "drugs": 1}}'
+        '{"violence": 5, "sex": 0, "nudity": -1, "drugs": 1}}'
     )
     assert parse_description(text) == (
         "A man punches another man.",
-        {"violence": 3, "sex": 0, "nudity": 0, "drugs": 1},
+        {"sex": 0, "drugs": 1},
     )
     for bad in (
         "no json",
@@ -260,8 +261,7 @@ def test_d1_severity_request_and_parsing(monkeypatch, tmp_path):
     levels, expected = parse_severity(body)
     assert levels == {"violence": 2, "sex": 0, "nudity": 0, "drugs": 2}
     assert expected["violence"] == pytest.approx(1.7)
-    with pytest.raises(ValueError):
-        parse_severity({"answers": {}})
+    assert parse_severity({"answers": {}}) == ({}, {})
 
     monkeypatch.setenv("EDITARR_DM_IMAGE_LONG_EDGE", "0")
     backend = BACKENDS["d1-3b-sev"]()
