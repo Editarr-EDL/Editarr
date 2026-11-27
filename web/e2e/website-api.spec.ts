@@ -66,6 +66,13 @@ test("API reference examples, enum parameters, and union branches follow the sch
   await expect(scan.locator(".api-code")).toContainText('"scan_audio":false,"scan_video":true');
   const schedule = await open("op-configure_schedule_api_backups_schedule_put");
   await expect(schedule.locator(".api-code")).toContainText('"interval_hours":1,"keep_count":1');
+  const interval = schedule.locator(".api-prop-head").filter({ hasText: "interval_hours" });
+  await expect(interval.locator(".api-constraint")).toHaveText(["1–8760"]);
+  await expect(schedule.locator(".api-prop-head").filter({ hasText: "destination" }).locator(".api-constraint"))
+    .toHaveText(["1–4096 chars"]);
+  const audit = await open("op-audit_list_api_audit_get");
+  const pageSize = audit.locator("tr").filter({ hasText: "page_size" }).locator(".api-constraint");
+  await expect(pageSize).toHaveText(["1–100", "default: 25"]);
 
   const logout = await open("op-auth_logout_api_auth_logout_post");
   await expect(logout.locator(".api-auth")).toHaveText("Browser session cookie only");

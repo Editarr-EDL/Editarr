@@ -11,7 +11,7 @@
   if (!toc || !container || !count || !search || !globalThis.EditarrApiSchema || !globalThis.EditarrApiExamples) return;
   const { el } = globalThis.EditarrApiSchema;
   const { AUTH_LABELS, authMode } = globalThis.EditarrApiExamples;
-  let parameterType, schemaTree, curlExample;
+  let parameterType, constraintChips, schemaTree, curlExample;
 
   let spec = null;
   let loaded = false;
@@ -48,7 +48,10 @@
       const row = el('tr');
       const name = el('td');
       name.append(el('code', null, parameter.name));
-      row.append(name, el('td', null, parameter.in), el('td', 'api-type-cell', parameterType(parameter.schema)),
+      const type = el('td', 'api-type-cell', parameterType(parameter.schema));
+      const chips = constraintChips(parameter.schema);
+      if (chips) type.append(chips);
+      row.append(name, el('td', null, parameter.in), type,
         el('td', null, parameter.required ? 'Yes' : 'No'),
         el('td', null, parameter.description ?? parameter.schema?.description ?? ''));
       rows.append(row);
@@ -237,7 +240,7 @@
     .then((document_) => {
       spec = document_;
       const schemas = globalThis.EditarrApiSchema.create(spec);
-      ({ parameterType, schemaTree } = schemas);
+      ({ parameterType, constraintChips, schemaTree } = schemas);
       ({ curlExample } = globalThis.EditarrApiExamples.create(schemas));
       render();
       loaded = true;

@@ -109,6 +109,61 @@
       return isNullable(schema) ? `${typed} | null` : typed;
     }
 
+    function plural(count, unit) {
+      return `${count} ${unit}${count === 1 ? '' : 's'}`;
+    }
+
+    /** `1–255 chars`, `≥ 1 item`, `≤ 100 chars`, or null when neither bound is set. */
+    function sizeRange(min, max, unit) {
+      if (min !== undefined && max !== undefined) {
+        return min === max ? `exactly ${plural(min, unit)}` : `${min}–${max} ${unit}s`;
+      }
+      if (min !== undefined) return `≥ ${plural(min, unit)}`;
+      return max !== undefined ? `≤ ${plural(max, unit)}` : null;
+    }
+
+    /** Numeric bounds as `1–168`, `≥ 1`, `> 0`, or `≤ 100`. */
+    function numberRange(schema) {
+      const { minimum, maximum, exclusiveMinimum, exclusiveMaximum } = schema;
+      if (minimum !== undefined && maximum !== undefined) return [`${minimum}–${maximum}`];
+      return [
+        minimum !== undefined && `≥ ${minimum}`,
+        exclusiveMinimum !== undefined && `> ${exclusiveMinimum}`,
+        maximum !== undefined && `≤ ${maximum}`,
+        exclusiveMaximum !== undefined && `< ${exclusiveMaximum}`,
+      ];
+    }
+
+    /**
+     * Short labels for a schema's validation keywords and default, read from the schema and
+     * its single non-null variant (so `anyOf [string, null]` keeps its string limits).
+     */
+    function constraints(schema) {
+      if (!schema || typeof schema !== 'object') return [];
+      const alternatives = variants(schema);
+      const value = alternatives?.nonNull.length === 1 ? { ...alternatives.nonNull[0], ...schema } : schema;
+      const labels = [
+        ...numberRange(value),
+        sizeRange(value.minLength, value.maxLength, 'char'),
+        sizeRange(value.minItems, value.maxItems, 'item'),
+        value.uniqueItems && 'unique items',
+        value.pattern !== undefined && `pattern: ${value.pattern}`,
+        value.readOnly && 'read-only',
+        value.writeOnly && 'write-only',
+        value.default !== undefined && `default: ${JSON.stringify(value.default)}`,
+      ];
+      return labels.filter(Boolean);
+    }
+
+    /** Muted chips for `constraints(schema)`, or null when there are none. */
+    function constraintChips(schema) {
+      const labels = constraints(schema);
+      if (!labels.length) return null;
+      const group = el('span', 'api-constraints');
+      labels.forEach((label) => group.append(el('span', 'api-constraint', label)));
+      return group;
+    }
+
     function valueLine(label, values) {
       const line = el('p', 'api-enum');
       line.append(el('span', 'api-enum-label', label));
@@ -127,15 +182,14 @@
       head.append(el('code', 'api-prop-name', name), el('span', 'api-type', typeLabel(schema)));
       if (required) head.append(el('span', 'api-flag api-flag-required', 'required'));
       if (isNullable(schema)) head.append(el('span', 'api-flag', 'nullable'));
+      const chips = constraintChips(schema);
+      if (chips) head.append(chips);
       const body = el('div', 'api-prop-body');
       const resolved = schema?.$ref ? lookup(schema.$ref) : schema;
       const description = schema?.description ?? resolved?.description;
       if (description) body.append(el('p', 'api-prop-desc', description));
       const values = enumValues(schema);
       if (values) body.append(valueLine('One of', values));
-      if (schema?.default !== undefined) {
-        body.append(valueLine('Default', [schema.default]));
-      }
       fillRow(item, head, body, schema, seen, depth);
       return item;
     }
@@ -223,6 +277,8 @@
       const head = el('p', 'api-schema-head');
       head.append(el('span', 'api-type api-type-root', typeLabel(schema)));
       if (isNullable(schema)) head.append(el('span', 'api-flag', 'nullable'));
+      const chips = constraintChips(schema);
+      if (chips) head.append(chips);
       box.append(head);
       const nested = expandable(schema, new Set());
       const description = (schema.$ref ? lookup(schema.$ref) : schema).description;
@@ -281,7 +337,7 @@
       return schema.type === 'boolean' ? false : null;
     }
 
-    return { typeLabel, parameterType, resolve, expandable, schemaTree, sample };
+    return { typeLabel, parameterType, constraintChips, resolve, expandable, schemaTree, sample };
   }
 
   globalThis.EditarrApiSchema = { el, create };

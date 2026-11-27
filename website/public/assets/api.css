@@ -134,6 +134,9 @@
 .api-node > summary:hover .api-prop-name { color: var(--api-accent); }
 .api-node > summary:focus-visible { outline: 2px solid #80a7ff; outline-offset: 2px; }
 .api-node > .api-prop-body { padding-left: 16px; }
+.api-constraints { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.api-type-cell .api-constraints { display: flex; min-width: 12rem; max-width: 18rem; margin-top: 5px; white-space: normal; }
+.api-constraint { padding: 1px 6px; border: 1px solid #2c323d; border-radius: 4px; color: #98a3b3; background: #171b22; font-family: var(--api-mono); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .api-union-intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; padding: 3px 0 3px 16px; font-size: 12px; }
 .api-flag-discriminator { color: #9ee0c0; background: #14261f; font-family: var(--api-mono); overflow-wrap: anywhere; }
 

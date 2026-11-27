@@ -124,7 +124,11 @@ describe("catalog coverage", () => {
   it("has copy for every model the backend can offer", () => {
     const names = source.match(/DISPLAY_NAMES = \{([\s\S]*?)\n\}/)?.[1] ?? "";
     const qwen = source.match(/QWEN_MODEL_DISPLAY_NAMES = \{([\s\S]*?)\n\}/)?.[1] ?? "";
-    const ids = [...`${names}\n${qwen}`.matchAll(/^\s+"([^"]+)":/gm)].map((match) => match[1]);
+    // Keys may be string literals or module constants such as APPLE_SPEECH_MODEL.
+    const constant = (name: string) => source.match(new RegExp(`^${name} = "([^"]+)"`, "m"))?.[1] ?? name;
+    const ids = [...`${names}\n${qwen}`.matchAll(/^\s+(?:"([^"]+)"|([A-Z][A-Z0-9_]*)):/gm)]
+      .map((match) => match[1] ?? constant(match[2]));
+    expect(ids).toContain("apple_speech");
     expect(ids.length).toBeGreaterThan(15);
     expect(ids.filter((id) => id !== "qwen3_vl" && !MODEL_COPY[id])).toEqual([]);
   });
