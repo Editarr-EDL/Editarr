@@ -320,3 +320,10 @@ def test_append_after_a_torn_line_keeps_the_next_record(tmp_path):
         os.close(descriptor)
     assert set(load_results(path)) == {"a", "c"}
 
+
+def test_describe_eval_defaults_to_the_subset_film_subset_writes():
+    from scanner.commands.folder_eval_cli import _parser
+
+    parser = _parser()
+    written = parser.parse_args(["film-subset"]).name
+    assert parser.parse_args(["describe-eval"]).subset == written

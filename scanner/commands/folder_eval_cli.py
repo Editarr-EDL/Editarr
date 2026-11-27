@@ -107,7 +107,7 @@ def _parser() -> argparse.ArgumentParser:
     sample.add_argument("--seed", type=int, default=DEFAULT_SEED)
     film_subset = commands.add_parser(
         "film-subset",
-        help="Write a stratified subset of decision_sample film windows (films_qwen300)",
+        help=f"Write a stratified subset of decision_sample film windows ({FILMS_QWEN300})",
     )
     film_subset.add_argument("--name", default=FILMS_QWEN300)
     film_subset.add_argument("--size", type=int, default=300)
@@ -118,7 +118,9 @@ def _parser() -> argparse.ArgumentParser:
         "describe-eval",
         help="Judge descriptions (d1-3B, text only) and severity; write describe_eval.json",
     )
-    describe.add_argument("--subset", default="films_qwen100")
+    describe.add_argument(
+        "--subset", default=FILMS_QWEN300, help=f"Subset name (default: {FILMS_QWEN300})"
+    )
     describe.add_argument("--models", help="Comma-separated model ids (default: all)")
     commands.add_parser("viewer", help="Copy the static viewer into _results/")
     serve_parser = commands.add_parser(
