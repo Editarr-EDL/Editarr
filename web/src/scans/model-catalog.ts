@@ -44,6 +44,7 @@ const SEVERITY_ARTIFACT: Record<string, string> = {
   "qwen3-vl-4b-instruct-4bit": "qwen3-vl-4b",
 };
 const SEVERITY_ENRICHMENT = "qwen3_vl";
+const QWEN_FILTER = "qwen";
 
 const REASONS: Record<string, string> = {
   unsupported_platform: "Not supported on this server’s operating system",
@@ -86,34 +87,48 @@ function downloadStatus(capability: ModelCapability | undefined): ModelStatus {
   }
 }
 
-/** The capability records deciding one option's availability and download state. */
-function joinCapabilities(role: ModelRole, id: string, byId: Map<string, ModelCapability>) {
-  if (role !== "severity") return { availability: byId.get(id), download: byId.get(id) };
-  return {
-    availability: byId.get(SEVERITY_ENRICHMENT),
-    download: byId.get(SEVERITY_ARTIFACT[id] ?? SEVERITY_ENRICHMENT) ?? byId.get(SEVERITY_ENRICHMENT),
-  };
+/** The video detector record carrying a description model's download state (its artifact is shared). */
+const qwenArtifact = (qwenModelId: string, byId: Map<string, ModelCapability>) => {
+  const detector = SEVERITY_ARTIFACT[qwenModelId];
+  return detector ? byId.get(detector) : undefined;
+};
+
+/**
+ * The capability records deciding one option's availability and download state. The Qwen filter loads the
+ * selected description model (`qwenModelId`), so its download state follows that model's artifact.
+ */
+function joinCapabilities(role: ModelRole, id: string, byId: Map<string, ModelCapability>, qwenModelId: string | null) {
+  if (role === "severity") {
+    return { availability: byId.get(SEVERITY_ENRICHMENT), download: qwenArtifact(id, byId) ?? byId.get(SEVERITY_ENRICHMENT) };
+  }
+  if (role === "filter" && id === QWEN_FILTER && qwenModelId) {
+    return { availability: byId.get(id), download: qwenArtifact(qwenModelId, byId) ?? byId.get(id) };
+  }
+  return { availability: byId.get(id), download: byId.get(id) };
 }
 
 /**
  * Build picker options for one role from ScanCapabilities. Offered models come from the role's list;
  * `model_capabilities` adds availability, download state and size, plus the role's unavailable models
- * with readable reasons. `defaultId` overrides which option is marked Default.
+ * with readable reasons. `defaultId` overrides which option is marked Default. For the filter role,
+ * `qwenModelId` is the selected description model, whose artifact the Qwen filter downloads and loads;
+ * without it, the default description model is assumed, as the backend does.
  */
 export function buildModelOptions(role: ModelRole, capabilities: ScanCapabilities | null | undefined,
-  options: { defaultId?: string } = {}): ModelOption[] {
+  options: { defaultId?: string; qwenModelId?: string } = {}): ModelOption[] {
   if (!capabilities) return [];
   const { list, ids } = ROLES[role];
   const offered: ScanModelCapability[] = capabilities[list] ?? [];
   const byId = new Map((capabilities.model_capabilities ?? []).map((item) => [item.id, item]));
   const offeredIds = new Set(offered.map((model) => model.id));
   const defaultId = options.defaultId ?? defaultModelId(offered);
+  const qwenModelId = options.qwenModelId || defaultModelId(capabilities.qwen_models ?? []);
   const missing: ScanModelCapability[] = role === "severity" ? [] : ids
     .filter((id) => !offeredIds.has(id) && byId.get(id)?.availability === "unavailable")
     .map((id) => byId.get(id)!);
 
   return [...offered, ...missing].map((model) => {
-    const joined = joinCapabilities(role, model.id, byId);
+    const joined = joinCapabilities(role, model.id, byId, qwenModelId);
     const available = offeredIds.has(model.id) && joined.availability?.availability !== "unavailable";
     const copy = MODEL_COPY[model.id] ?? fallbackCopy(model.display_name);
     const reasonId = role === "severity" ? SEVERITY_ENRICHMENT : model.id;

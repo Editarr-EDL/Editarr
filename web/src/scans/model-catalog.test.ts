@@ -79,6 +79,23 @@ describe("buildModelOptions", () => {
     expect(mac[0]).toMatchObject({ available: true, recommended: true, status: { kind: "ready", bytesTotal: 5_776_630_909 } });
   });
 
+  it("sizes the Qwen filter by the selected description model, which it loads", () => {
+    const caps: ScanCapabilities = {
+      ...windows,
+      audio_filters: [{ id: "qwen", display_name: "Qwen (multilingual)" }],
+      model_capabilities: [
+        capability("qwen", { stage: "audio", download: download("ready", 5_776_630_909) }),
+        capability("qwen3-vl-8b", { download: download("ready", 5_776_630_909) }),
+        capability("qwen3-vl-4b", { download: download("not_downloaded", 3_109_729_929) }),
+      ],
+    };
+    const qwenFilter = (qwenModelId?: string) => buildModelOptions("filter", caps, { qwenModelId })[0];
+    expect(qwenFilter("qwen3-vl-4b-instruct-4bit").status).toEqual({ kind: "download", bytesTotal: 3_109_729_929 });
+    expect(qwenFilter("qwen3-vl-8b-instruct-4bit").status).toEqual({ kind: "ready", bytesTotal: 5_776_630_909 });
+    expect(qwenFilter().status).toEqual({ kind: "ready", bytesTotal: 5_776_630_909 });
+    expect(qwenFilter("future-qwen").status).toEqual({ kind: "ready", bytesTotal: 5_776_630_909 });
+  });
+
   it("works without model_capabilities, honors defaultId, and falls back for unknown models", () => {
     const options = buildModelOptions("video", {
       audio_models: [], audio_filters: [], qwen_models: [],

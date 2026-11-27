@@ -59,7 +59,8 @@ export function NewScanDialog({ form, title, meta, versions, mediaSourceId, onVe
   const scanNameRef = useRef<HTMLInputElement>(null);
   const { capabilities, scanType, scanAudio, scanVideo, adding } = form;
   const transcribers = buildModelOptions("transcriber", capabilities, { defaultId: preferredDefault(capabilities?.audio_models, "whisper") });
-  const filters = buildModelOptions("filter", capabilities, { defaultId: preferredDefault(capabilities?.audio_filters, "better_profanity") });
+  const filters = buildModelOptions("filter", capabilities,
+    { defaultId: preferredDefault(capabilities?.audio_filters, "better_profanity"), qwenModelId: form.qwenModel });
   const videoModels = buildModelOptions("video", capabilities);
 
   useEffect(() => {

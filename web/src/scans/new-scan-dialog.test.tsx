@@ -84,4 +84,28 @@ describe("NewScanDialog", () => {
     await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Add to Queue" })); });
     expect(form.submit).toHaveBeenCalledWith("Director's cut");
   });
+
+  it("updates the Qwen filter's download size when the description model changes", () => {
+    const qwenCapabilities: ScanCapabilities = {
+      ...capabilities,
+      audio_filters: [{ id: "qwen", display_name: "Qwen (multilingual)" }],
+      qwen_models: [{ id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B", recommended: true },
+        { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B" }],
+      model_capabilities: (["qwen", "qwen3-vl-8b", "qwen3-vl-4b"] as const).map((id) => ({
+        id, display_name: id, stage: id === "qwen" ? "audio" : "detector", availability: "available", reason: null, device: "mlx",
+        weight_requirement: "on_demand", enrichment_behavior: "none",
+        download: id === "qwen3-vl-4b"
+          ? { state: "not_downloaded", bytes_downloaded: null, bytes_total: 3_109_729_929, error_code: null, error_detail: null }
+          : { state: "ready", bytes_downloaded: null, bytes_total: 5_776_630_909, error_code: null, error_detail: null },
+      })),
+    };
+    const form = fakeForm({ capabilities: qwenCapabilities, audioFilter: "qwen" });
+    const filterCard = () => screen.getByRole("button", { name: /Filter: Qwen$/ }).closest(".model-picker")!;
+    const { rerender } = render(<NewScanDialog form={form} title="Example Movie" meta="Movie · 2025" versions={versions}
+      mediaSourceId="source-1" onVersionChange={vi.fn()} />);
+    expect(filterCard()).toHaveTextContent("Ready · 5.4 GB");
+    rerender(<NewScanDialog form={{ ...form, qwenModel: "qwen3-vl-4b-instruct-4bit" }} title="Example Movie" meta="Movie · 2025"
+      versions={versions} mediaSourceId="source-1" onVersionChange={vi.fn()} />);
+    expect(filterCard()).toHaveTextContent("Downloads 2.9 GB first");
+  });
 });
