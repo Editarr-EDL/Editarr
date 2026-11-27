@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 
 const VIEWER = new URL("../../scanner/evaluation/folder_eval/viewer/", import.meta.url);
-const { S } = await import(new URL("data.js", VIEWER));
+const { S, canonicalKey, canonicalMeta, canonicalRow } = await import(new URL("data.js", VIEWER));
 const { itemCorrect, outcomeFor, supportsKey } = await import(new URL("scoring.js", VIEWER));
 const { liveBlock } = await import(new URL("live-metrics.js", VIEWER));
 const { isSensitive } = await import(new URL("sensitivity.js", VIEWER));
@@ -17,6 +17,7 @@ const ok = (flagged) => ({ status: "ok", flagged, scores: {} });
 beforeEach(() => {
   Object.assign(S, { modelIds: [], metas: {}, results: {}, items: [], corrections: {}, byId: new Map() });
   S.familyOrder = ["violence", "fear", "nudity", "sex"];
+  S.families = {};
 });
 
 test("a token-only model does not score the family", () => {
@@ -71,4 +72,22 @@ test("merged rows recompute scores and flags from the final frames", async () =>
   assert.deepEqual(merged.flagged, []);
   assert.equal(merged.best.violence, 2);
   assert.deepEqual(merged.sample.flagged, []);
+});
+
+test("general-token aliases are scored and corrected as their family", () => {
+  S.families = { violence: ["murder", "weapons"], fear: ["fire"] };
+  S.familyOrder = Object.keys(S.families);
+  assert.equal(canonicalKey("violence/violence"), "violence");
+  assert.equal(canonicalKey("violence/weapons"), "violence/weapons");
+  assert.equal(canonicalKey("unknown/x"), "unknown/x");
+  const meta = canonicalMeta({ supports: ["violence", "violence/violence", "violence/weapons"] });
+  assert.deepEqual(meta.supports, ["violence", "violence/weapons"]);
+  const row = canonicalRow({ id: "a", status: "ok", flagged: ["violence", "violence/violence"], frames: [
+    { n: 0, scores: { violence: 0.8, "violence/violence": 0.9 }, asked: ["violence", "violence/violence"] }] });
+  assert.deepEqual(row.flagged, ["violence"]);
+  assert.deepEqual(row.frames[0].scores, { violence: 0.9 });
+  assert.deepEqual(row.frames[0].asked, ["violence"]);
+  const fight = item("fight", ["violence"]);
+  assert.equal(itemCorrect(fight, ok(row.flagged), meta), true);
+  assert.equal(itemCorrect(fight, ok(["violence", "violence/violence"]), { supports: ["violence", "violence/violence"] }), true);
 });

@@ -11,6 +11,37 @@ export const S = {
   trees: {}, folderStats: {}, shell: "", expanded: new Set([""]),
 };
 
+/**
+ * Canonical MCF key, as in the inventory: a general-token alias that some backends emit (e.g. violence/violence,
+ * which is not one of the family's inventory tokens) becomes its family; other keys are unchanged.
+ */
+export function canonicalKey(key) {
+  const i = key.indexOf("/");
+  if (i < 0) return key;
+  const fam = key.slice(0, i), toks = S.families[fam];
+  return toks && !toks.includes(key.slice(i + 1)) ? fam : key;
+}
+
+const canonicalList = (keys) => [...new Set(keys.map(canonicalKey))];
+const canonicalScores = (scores) => {
+  const out = {};
+  for (const [k, v] of Object.entries(scores || {})) { const c = canonicalKey(k); out[c] = Math.max(out[c] ?? -Infinity, v); }
+  return out;
+};
+
+/** A JSONL row with canonical keys in its clip and frame scores, flags and asked keys. */
+export function canonicalRow(row) {
+  const frames = (row.frames || []).map((fr) => ({
+    ...fr, scores: canonicalScores(fr.scores), ...(Array.isArray(fr.asked) ? { asked: canonicalList(fr.asked) } : {}),
+  }));
+  return { ...row, frames, ...(row.scores ? { scores: canonicalScores(row.scores) } : {}), flagged: canonicalList(row.flagged || []) };
+}
+
+/** Model meta with canonical `supports`, so aliases are never scored or offered as corrections. */
+export function canonicalMeta(meta) {
+  return Array.isArray(meta.supports) ? { ...meta, supports: canonicalList(meta.supports) } : meta;
+}
+
 export async function fetchJSON(url, optional) {
   try {
     const res = await fetch(url, { cache: "no-cache" });
@@ -63,7 +94,7 @@ export async function loadBase() {
   S.subset = await loadSubset(summary);
   S.modelIds = await discoverModels(index, summary);
   const metas = await Promise.all(S.modelIds.map((id) => fetchJSON(`models/${encodeURIComponent(id)}.meta.json`, true)));
-  S.modelIds.forEach((id, i) => { S.metas[id] = metas[i] || { model_id: id }; });
+  S.modelIds.forEach((id, i) => { S.metas[id] = canonicalMeta(metas[i] || { model_id: id }); });
   setStatus("");
 }
 
@@ -106,7 +137,7 @@ export function loadModel(id) {
     (row) => {
       if (!row || !row.id) return;
       const meta = S.metas[id], wanted = S.subset?.frames.get(row.id);
-      const next = compactResult(row, meta, wanted);
+      const next = compactResult(canonicalRow(row), meta, wanted);
       if (next.asked) S.askedModels.add(id);
       map.set(row.id, mergeResult(map.get(row.id), next, meta, wanted));
     },

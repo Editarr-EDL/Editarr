@@ -1,5 +1,5 @@
 /* Clip-level ground-truth and outcome rules shared by the views. */
-import { S } from "./data.js";
+import { S, canonicalKey } from "./data.js";
 
 export const OUTCOMES = ["TP", "FP", "FN", "TN", "unscored"];
 export const outcomeClass = (o) => o.replace(/\s+/g, "").toLowerCase();
@@ -28,10 +28,13 @@ export function supportsKey(meta, key) {
   return sup.includes(key);
 }
 
-/** Keys a model is judged on: its supported families and tokens (every family when supports is unknown). */
+/**
+ * Keys a model is judged on: its supported families and canonical tokens (every family when supports is unknown).
+ * General-token aliases such as violence/violence count as their family.
+ */
 export function scorableKeys(meta) {
   const sup = meta && meta.supports;
-  return Array.isArray(sup) && sup.length ? sup : S.familyOrder;
+  return Array.isArray(sup) && sup.length ? [...new Set(sup.map(canonicalKey))] : S.familyOrder;
 }
 
 /** Decision models record the keys they were asked; a family counts as asked if it or any of its tokens was. */

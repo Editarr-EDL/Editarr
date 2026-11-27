@@ -55,6 +55,7 @@ def test_apply_corrections_marks_corrected_items_scored():
     [
         ({"item_id": "zzz", "key": "violence", "value": True}, "unknown item_id"),
         ({"item_id": "a", "key": "violence/nope", "value": True}, "key must be"),
+        ({"item_id": "a", "key": "violence/violence", "value": True}, "key must be"),
         ({"item_id": "a", "key": "violence", "value": 1}, "value must be"),
         ({"item_id": "a", "key": "violence"}, "value is required"),
         ({"item_id": "a", "key": "violence", "value": True, "x": 1}, "unknown fields"),
@@ -265,3 +266,12 @@ def test_server_requeues_summary_when_it_used_stale_corrections(server, monkeypa
     monkeypatch.setattr(server.summarizer, "request", lambda: requests.append(1))
     server._refresh_summary()
     assert requests == [1]
+
+
+def test_summary_scores_general_token_aliases_as_their_family():
+    items = [{"id": "a", "path": "video/x/a.mp4", "expected": ["violence"], "scored": True}]
+    results = {"a": {"id": "a", "status": "ok", "flagged": ["violence", "violence/violence"],
+                     "frames": [{"n": 0, "scores": {}}]}}
+    summary = summarize_model(items, results, {"supports": ["violence", "violence/violence"]})
+    assert summary["families"]["violence"]["tp"] == 1 and summary["tokens"] == {}
+    assert set(summary["by_folder"]["video/x"]) == {"violence"}
