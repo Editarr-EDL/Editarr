@@ -15,14 +15,14 @@ export function chooseScanType(dialog: HTMLElement, name: ScanTypeName) {
   fireEvent.click(scanTypeRadio(dialog, name));
 }
 
-/** A model picker's Change button, named "<label>: <selected model>". */
+/** A model picker's Change button, named "Change <label>: <selected model>". */
 export function modelPicker(dialog: HTMLElement, label: string) {
-  return within(dialog).getByRole("button", { name: new RegExp(`^${escape(label)}: `) });
+  return within(dialog).getByRole("button", { name: new RegExp(`^Change ${escape(label)}: `) });
 }
 
 /** Wait for a picker to show `name` as its selection. */
 export async function expectSelectedModel(dialog: HTMLElement, label: string, name: string) {
-  await waitFor(() => expect(modelPicker(dialog, label)).toHaveAccessibleName(`${label}: ${name}`));
+  await waitFor(() => expect(modelPicker(dialog, label)).toHaveAccessibleName(`Change ${label}: ${name}`));
 }
 
 /** Open a model picker once its options load and choose the option whose name starts with `name`. */

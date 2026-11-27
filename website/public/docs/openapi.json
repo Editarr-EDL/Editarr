@@ -40,7 +40,7 @@
           "API keys"
         ],
         "summary": "Own Issue",
-        "description": "Create or replace the caller's key; the previous key stops working immediately.",
+        "description": "Create or replace the caller's key; the previous key stops working immediately.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "own_issue_api_auth_api_key_post",
         "requestBody": {
           "content": {
@@ -75,9 +75,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -118,7 +115,7 @@
           "API keys"
         ],
         "summary": "Own Reveal",
-        "description": "Show the caller's current key after password confirmation.",
+        "description": "Show the caller's current key after password confirmation.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "own_reveal_api_auth_api_key_reveal_post",
         "requestBody": {
           "content": {
@@ -153,9 +150,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -435,7 +429,7 @@
           "API keys"
         ],
         "summary": "User Issue",
-        "description": "Create or replace another account's key (owner only).",
+        "description": "Create or replace another account's key (owner only).\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "user_issue_api_users__user_id__api_key_post",
         "parameters": [
           {
@@ -481,9 +475,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -545,7 +536,7 @@
           "API keys"
         ],
         "summary": "User Reveal",
-        "description": "Show another account's key (owner only).",
+        "description": "Show another account's key (owner only).\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "user_reveal_api_users__user_id__api_key_reveal_post",
         "parameters": [
           {
@@ -591,9 +582,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -1327,7 +1315,7 @@
           "Settings"
         ],
         "summary": "Put User Policy",
-        "description": "Replace the rules and severities enforced on an account (owner, fresh password).",
+        "description": "Replace the rules and severities enforced on an account (owner, fresh password).\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "put_user_policy_api_settings_filters_users__user_id__policy_put",
         "parameters": [
           {
@@ -1373,9 +1361,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -1500,7 +1485,7 @@
           "Users & permissions"
         ],
         "summary": "Assign Role",
-        "description": "Make another account an admin or an ordinary user (owner only).",
+        "description": "Make another account an admin or an ordinary user (owner only).\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "assign_role_api_users__user_id__role_put",
         "parameters": [
           {
@@ -1546,9 +1531,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -1948,7 +1930,7 @@
           "Users & permissions"
         ],
         "summary": "Transfer Ownership",
-        "description": "Make another account the owner; the caller becomes an admin.\n\nRefusals: 409 `own_account`, 409 `successor_disabled`, 409\n`successor_credentials_required`, 409 `permission_revision_stale` when the\ncaller's permissions changed during the request, and the access codes.",
+        "description": "Make another account the owner; the caller becomes an admin.\n\nRefusals: 409 `own_account`, 409 `successor_disabled`, 409\n`successor_credentials_required`, 409 `permission_revision_stale` when the\ncaller's permissions changed during the request, and the access codes.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "transfer_ownership_api_users__user_id__ownership_post",
         "parameters": [
           {
@@ -1995,9 +1977,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2009,7 +1988,7 @@
           "Users & permissions"
         ],
         "summary": "Read Overrides",
-        "description": "Another account's role, stored overrides, and effective capabilities (owner only).",
+        "description": "Another account's role, stored overrides, and effective capabilities (owner only).\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "read_overrides_api_users__user_id__permissions_get",
         "parameters": [
           {
@@ -2046,9 +2025,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2058,7 +2034,7 @@
           "Users & permissions"
         ],
         "summary": "Change Overrides",
-        "description": "Allow, deny, or inherit the listed capabilities for another account (owner only).",
+        "description": "Allow, deny, or inherit the listed capabilities for another account (owner only).\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "change_overrides_api_users__user_id__permissions_patch",
         "parameters": [
           {
@@ -2105,9 +2081,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2119,7 +2092,7 @@
           "Users & permissions"
         ],
         "summary": "Read Role Defaults",
-        "description": "Every delegable capability's default for admins and users (owner only).",
+        "description": "Every delegable capability's default for admins and users (owner only).\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "read_role_defaults_api_roles_defaults_get",
         "responses": {
           "200": {
@@ -2135,9 +2108,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2149,7 +2119,7 @@
           "Users & permissions"
         ],
         "summary": "Change Role Defaults",
-        "description": "Change the listed defaults; accounts of that role without an override follow live.",
+        "description": "Change the listed defaults; accounts of that role without an override follow live.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "change_role_defaults_api_roles__role__defaults_patch",
         "parameters": [
           {
@@ -2200,9 +2170,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2214,7 +2181,7 @@
           "Users & permissions"
         ],
         "summary": "Read Default",
-        "description": "The live local default every local account without its own selection follows.",
+        "description": "The live local default every local account without its own selection follows.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "read_default_api_media_access_default_get",
         "responses": {
           "200": {
@@ -2230,9 +2197,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2242,7 +2206,7 @@
           "Users & permissions"
         ],
         "summary": "Change Default",
-        "description": "Replace the live local default; it cannot be `inherit`.",
+        "description": "Replace the live local default; it cannot be `inherit`.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "change_default_api_media_access_default_put",
         "requestBody": {
           "content": {
@@ -2278,9 +2242,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2292,7 +2253,7 @@
           "Users & permissions"
         ],
         "summary": "Read User Access",
-        "description": "Another account's own selection, or the default it follows.",
+        "description": "Another account's own selection, or the default it follows.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "read_user_access_api_users__user_id__media_access_get",
         "parameters": [
           {
@@ -2329,9 +2290,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2341,7 +2299,7 @@
           "Users & permissions"
         ],
         "summary": "Change User Access",
-        "description": "Store a local account's own selection, or return it to the default with `inherit`.",
+        "description": "Store a local account's own selection, or return it to the default with `inherit`.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "change_user_access_api_users__user_id__media_access_put",
         "parameters": [
           {
@@ -2388,9 +2346,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2402,7 +2357,7 @@
           "Users & permissions"
         ],
         "summary": "Prove Link",
-        "description": "Prove the target account and a Jellyfin identity; return a proof and the preview.\n\nThe proof expires after ten minutes, works once, and only for this caller's\nsession and this account.",
+        "description": "Prove the target account and a Jellyfin identity; return a proof and the preview.\n\nThe proof expires after ten minutes, works once, and only for this caller's\nsession and this account.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "prove_link_api_users__user_id__link_proof_post",
         "parameters": [
           {
@@ -2449,9 +2404,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2463,7 +2415,7 @@
           "Users & permissions"
         ],
         "summary": "Link Account",
-        "description": "Link or relink an account with a proof from `/link/proof` and its confirmation.\n\nNew export files are written first; the identity and publications change in\none transaction; old files are removed only after that commits. A failure\nbefore the commit leaves the old identity and files. `removing` reports old\nfiles that recovery removes later.",
+        "description": "Link or relink an account with a proof from `/link/proof` and its confirmation.\n\nNew export files are written first; the identity and publications change in\none transaction; old files are removed only after that commits. A failure\nbefore the commit leaves the old identity and files. `removing` reports old\nfiles that recovery removes later.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "link_account_api_users__user_id__link_post",
         "parameters": [
           {
@@ -2510,9 +2462,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2524,7 +2473,7 @@
           "Users & permissions"
         ],
         "summary": "Preview Account Deletion",
-        "description": "Describe what deleting another account in `mode` does to each of its resources.",
+        "description": "Describe what deleting another account in `mode` does to each of its resources.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "preview_account_deletion_api_users__user_id__deletion_get",
         "parameters": [
           {
@@ -2593,9 +2542,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2605,7 +2551,7 @@
           "Users & permissions"
         ],
         "summary": "Delete Account",
-        "description": "Delete another account exactly as previewed; the request carries the caller's password.",
+        "description": "Delete another account exactly as previewed; the request carries the caller's password.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "delete_account_api_users__user_id__deletion_post",
         "parameters": [
           {
@@ -2652,9 +2598,6 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
         ]
@@ -2666,7 +2609,7 @@
           "Users & permissions"
         ],
         "summary": "Bulk Delete Accounts",
-        "description": "Delete each listed account with its own confirmation, committing each alone.\n\nEvery target is authorized and confirmed on its own, and the password is\nverified once. A refusal or an operational failure of one target names its\ncode after that target rolls back; earlier targets stay applied and later ones\nstill run. A wrong or throttled password stops the request.",
+        "description": "Delete each listed account with its own confirmation, committing each alone.\n\nEvery target is authorized and confirmed on its own, and the password is\nverified once. A refusal or an operational failure of one target names its\ncode after that target rolls back; earlier targets stay applied and later ones\nstill run. A wrong or throttled password stops the request.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "bulk_delete_accounts_api_users_bulk_deletion_post",
         "requestBody": {
           "content": {
@@ -2701,9 +2644,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -2884,7 +2824,7 @@
           "Jellyfin accounts"
         ],
         "summary": "Unblock Jellyfin User",
-        "description": "Let a blocked Jellyfin user sign in or be imported again; their next sign-in\ncreates a fresh account.",
+        "description": "Let a blocked Jellyfin user sign in or be imported again; their next sign-in\ncreates a fresh account.\n\nRequires an interactive browser session; API keys receive 403 interactive_session_required.",
         "operationId": "unblock_jellyfin_user_api_jellyfin_blocks_unblock_post",
         "requestBody": {
           "content": {
@@ -2919,9 +2859,6 @@
           }
         },
         "security": [
-          {
-            "ApiKey": []
-          },
           {
             "BrowserSession": []
           }
@@ -14665,7 +14602,9 @@
           },
           "options": {
             "type": "string",
-            "title": "Options"
+            "contentMediaType": "application/json",
+            "title": "Options",
+            "description": "JSON-encoded EdlImportOptions sent as a text field."
           }
         },
         "type": "object",
@@ -14684,7 +14623,9 @@
           },
           "options": {
             "type": "string",
-            "title": "Options"
+            "contentMediaType": "application/json",
+            "title": "Options",
+            "description": "JSON-encoded McfImportOptions sent as a text field."
           }
         },
         "type": "object",

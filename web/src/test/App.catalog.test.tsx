@@ -481,7 +481,7 @@ describe("production saved-review UI authority", () => {
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
     chooseScanType(dialog, "Credits");
     expect(within(dialog).getByText(/local chapter and visual analysis/)).toBeVisible();
-    expect(within(dialog).queryByRole("button", { name: /^Video model: / })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^Change Video model: / })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("textbox", { name: "Scan name (optional)" })).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Add to Queue" }));
 

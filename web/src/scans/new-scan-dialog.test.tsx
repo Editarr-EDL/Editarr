@@ -50,7 +50,7 @@ describe("NewScanDialog", () => {
     }
     const names = visited.map((element) => element.getAttribute("aria-label") || element.textContent?.trim());
     expect(names.slice(0, 3)).toEqual(["Version", "Close", "Audio and video"]);
-    expect(names).toContain("Transcriber: Whisper");
+    expect(names).toContain("Change Transcriber: Whisper");
     expect(names).not.toContain("Audio");
     expect(visited.some((element) => element.tagName === "SUMMARY")).toBe(true);
     expect(names).not.toContain("Representative frames per flagged segment");
@@ -60,7 +60,7 @@ describe("NewScanDialog", () => {
   it("leaves Escape to an open model list, then closes unless a scan is being added", async () => {
     const form = fakeForm();
     const dialog = renderDialog(form);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Video model: NudeNet" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change Video model: NudeNet" }));
     fireEvent.keyDown(screen.getByRole("listbox", { name: "Video model" }), { key: "Escape" });
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(form.close).not.toHaveBeenCalled();

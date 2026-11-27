@@ -21,7 +21,7 @@ function Harness({ onChange = () => {}, initial = "nudenet" }: { onChange?: (id:
   return <ModelPicker label="Video model" options={options} value={value} onChange={(id) => { setValue(id); onChange(id); }} />;
 }
 
-const trigger = (name: string) => screen.getByRole("button", { name: `Video model: ${name}` });
+const trigger = (name: string) => screen.getByRole("button", { name: `Change Video model: ${name}` });
 const activeOption = () => {
   const listbox = screen.getByRole("listbox", { name: "Video model" });
   return document.getElementById(listbox.getAttribute("aria-activedescendant") ?? "");
@@ -115,7 +115,7 @@ describe("ModelPicker", () => {
 
   it("disables the trigger without options and shows an unavailable selection's reason", () => {
     const { rerender } = render(<ModelPicker label="Filter" options={[]} value="" onChange={() => {}} />);
-    expect(screen.getByRole("button", { name: "Filter: No models available" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Change Filter: No models available" })).toBeDisabled();
     rerender(<ModelPicker label="Video model" options={options} value="d1-3b" onChange={() => {}} info={<span>help</span>} />);
     expect(trigger("d1-3B")).toHaveAccessibleDescription(expect.stringContaining("Needs transformers 5.14 or newer"));
     expect(screen.getByText("help")).toBeInTheDocument();

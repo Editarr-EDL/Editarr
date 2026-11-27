@@ -85,10 +85,10 @@ for (const width of [320, 1440]) {
     await expect(catalogSelect).toHaveValue("2");
     await expect(catalogSelect.locator("option:checked")).toHaveText("Stream 2 / eng / Commentary / aac / 2 channels");
     await expect(dialog.locator("p").filter({ hasText: "Stream 2 / eng / Commentary" })).toHaveCount(0);
-    await expect(modelPicker(dialog, "Filter")).toHaveAccessibleName("Filter: better-profanity");
+    await expect(modelPicker(dialog, "Filter")).toHaveAccessibleName("Change Filter: better-profanity");
     await chooseModel(dialog, "Filter", "Qwen");
     const severityModel = modelPicker(dialog, "Severity and Description model");
-    await expect(severityModel).toHaveAccessibleName("Severity and Description model: Qwen3-VL 8B");
+    await expect(severityModel).toHaveAccessibleName("Change Severity and Description model: Qwen3-VL 8B");
     await severityModel.click();
     const severityList = page.getByRole("listbox", { name: "Severity and Description model", exact: true });
     await expect(severityList.getByRole("group", { name: "Recommended" }).getByRole("option", { name: /^Qwen3-VL 8B/ })).toHaveAttribute("aria-selected", "true");

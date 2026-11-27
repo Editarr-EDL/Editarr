@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
+from scanner.security.access.route_match import route_interactive_only
 from scanner.security.auth_routes import (
     AUTH_JELLYFIN_LOGIN_PATH,
     AUTH_QUICK_CONNECT_PATHS,
@@ -19,6 +20,17 @@ DESCRIPTION = (
     "operations require an interactive browser session and return 403 "
     "interactive_session_required when called with an API key."
 )
+BROWSER_ONLY_NOTE = (
+    "Requires an interactive browser session; API keys receive 403 interactive_session_required."
+)
+
+
+def _security(public: bool, browser_only: bool) -> list[dict[str, list[str]]]:
+    if public:
+        return []
+    if browser_only:
+        return [{"BrowserSession": []}]
+    return [{"ApiKey": []}, {"BrowserSession": []}]
 
 
 def configure_api_documentation(application: FastAPI) -> None:
@@ -50,9 +62,15 @@ def configure_api_documentation(application: FastAPI) -> None:
                 for method, operation in operations.items():
                     if method in {"get", "post", "put", "patch", "delete", "head", "options"}:
                         operation["tags"] = [tag_for(path)]
-                        operation["security"] = (
-                            [] if public else [{"ApiKey": []}, {"BrowserSession": []}]
-                        )
+                        browser_only = not public and route_interactive_only((method.upper(), path))
+                        operation["security"] = _security(public, browser_only)
+                        if browser_only:
+                            description = operation.get("description")
+                            operation["description"] = (
+                                f"{description}\n\n{BROWSER_ONLY_NOTE}"
+                                if description
+                                else BROWSER_ONLY_NOTE
+                            )
             application.openapi_schema = document
         return application.openapi_schema
 

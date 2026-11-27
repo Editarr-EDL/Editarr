@@ -1,4 +1,4 @@
-/** Schema helpers for the API reference: type labels, lazy property trees, and curl samples. */
+/** Schema helpers for the API reference: type labels, lazy property and union trees, and samples. */
 (() => {
   const MAX_DEPTH = 12;
 
@@ -42,10 +42,26 @@
         return `map<string, ${schema.additionalProperties === true ? 'any' : typeLabel(schema.additionalProperties)}>`;
       }
       const base = schema.type ?? (schema.properties ? 'object' : 'any');
-      return schema.format ? `${base} (${schema.format})` : base;
+      const detail = schema.format ?? schema.contentMediaType;
+      return detail ? `${base} (${detail})` : base;
     }
 
-    /** Follow refs, single variants, arrays, and maps to the object whose properties can be expanded. */
+    /** Follow refs, single non-null variants, and single allOf wrappers to the concrete schema. */
+    function resolve(schema) {
+      let current = schema;
+      for (let guard = 0; current && guard < 8; guard += 1) {
+        if (current.$ref) current = lookup(current.$ref);
+        else if (variants(current)?.nonNull.length === 1) current = variants(current).nonNull[0];
+        else if (current.allOf?.length === 1) current = current.allOf[0];
+        else break;
+      }
+      return current;
+    }
+
+    /**
+     * Follow refs, single variants, arrays, and maps to what can be expanded: an object's
+     * properties (`schema`) or a union of several non-null alternatives (`union`).
+     */
     function expandable(schema, seen) {
       let current = schema;
       const refs = [];
@@ -59,6 +75,9 @@
         }
         const alternatives = variants(current);
         if (alternatives?.nonNull.length === 1) { current = alternatives.nonNull[0]; continue; }
+        if (alternatives?.nonNull.length > 1) {
+          return { union: { alternatives: alternatives.nonNull, discriminator: current.discriminator }, refs };
+        }
         if (current.allOf?.length === 1) { current = current.allOf[0]; continue; }
         if (current.type === 'array' && current.items) { current = current.items; continue; }
         if (current.additionalProperties && typeof current.additionalProperties === 'object' && !current.properties) {
@@ -78,6 +97,16 @@
       if (alternatives?.nonNull.length === 1) return enumValues(alternatives.nonNull[0]);
       if (schema?.type === 'array') return enumValues(schema.items);
       return null;
+    }
+
+    /** Short parameter type: allowed values such as `admin | user` for enums, else the type label. */
+    function parameterType(schema) {
+      const values = enumValues(schema);
+      const label = typeLabel(schema);
+      if (!values) return label;
+      const text = values.map((value) => (typeof value === 'string' ? value : JSON.stringify(value))).join(' | ');
+      const typed = label.endsWith('[]') ? `(${text})[]` : text;
+      return isNullable(schema) ? `${typed} | null` : typed;
     }
 
     function valueLine(label, values) {
@@ -107,24 +136,76 @@
       if (schema?.default !== undefined) {
         body.append(valueLine('Default', [schema.default]));
       }
-      const nested = depth < MAX_DEPTH ? expandable(schema, seen) : null;
-      if (nested?.schema) {
-        const details = el('details', 'api-node');
-        const summary = el('summary');
-        summary.append(head);
-        details.append(summary, body);
-        details.addEventListener('toggle', () => {
-          if (!details.open || details.dataset.built) return;
-          details.dataset.built = 'true';
-          body.append(propertyList(nested.schema, new Set([...seen, ...nested.refs]), depth + 1));
-        });
-        item.append(details);
-      } else {
-        item.append(head);
-        if (nested?.recursive) body.append(el('p', 'api-prop-desc', `↻ Recursive reference to ${nested.recursive}`));
-        if (body.childNodes.length) item.append(body);
-      }
+      fillRow(item, head, body, schema, seen, depth);
       return item;
+    }
+
+    /** Attach a row's head and body, as a lazily expanded node when `schema` has more structure. */
+    function fillRow(item, head, body, schema, seen, depth) {
+      const nested = depth < MAX_DEPTH ? expandable(schema, seen) : null;
+      if (nested?.schema || nested?.union) {
+        item.append(lazyNode(head, body, () => nestedContent(nested, seen, depth + 1)));
+        return;
+      }
+      item.append(head);
+      if (nested?.recursive) body.append(el('p', 'api-prop-desc', `↻ Recursive reference to ${nested.recursive}`));
+      if (body.childNodes.length) item.append(body);
+    }
+
+    /** A <details> whose extra content is built the first time it opens. */
+    function lazyNode(head, body, build) {
+      const details = el('details', 'api-node');
+      const summary = el('summary');
+      summary.append(head);
+      details.append(summary, body);
+      details.addEventListener('toggle', () => {
+        if (!details.open || details.dataset.built) return;
+        details.dataset.built = 'true';
+        body.append(build());
+      });
+      return details;
+    }
+
+    /** Render what `expandable` found: a property list or a union's branches. */
+    function nestedContent(nested, seen, depth) {
+      const scope = new Set([...seen, ...nested.refs]);
+      return nested.schema ? propertyList(nested.schema, scope, depth) : unionList(nested.union, scope, depth);
+    }
+
+    /** The discriminator value selecting `branch`, from the mapping or the branch's own const/enum. */
+    function discriminatorValue(branch, discriminator) {
+      if (!discriminator?.propertyName) return undefined;
+      const mapped = Object.entries(discriminator.mapping ?? {}).find(([, ref]) => ref === branch.$ref);
+      if (mapped) return mapped[0];
+      const property = resolve(branch)?.properties?.[discriminator.propertyName];
+      if (property?.const !== undefined) return property.const;
+      return property?.enum?.length === 1 ? property.enum[0] : undefined;
+    }
+
+    /** One expandable row per alternative of a oneOf/anyOf, tagged with its discriminator value. */
+    function unionList(union, seen, depth) {
+      const list = el('ul', 'api-props api-union');
+      const { alternatives, discriminator } = union;
+      const intro = el('li', 'api-union-intro');
+      const chosen = Boolean(discriminator?.propertyName);
+      intro.append(el('span', 'api-enum-label', chosen ? 'One of these shapes, chosen by' : 'One of these shapes'));
+      if (chosen) intro.append(el('code', 'api-prop-name', discriminator.propertyName));
+      list.append(intro);
+      alternatives.forEach((branch, index) => {
+        const item = el('li', 'api-prop');
+        const head = el('span', 'api-prop-head');
+        head.append(el('span', 'api-flag', `Option ${index + 1}`), el('span', 'api-type', typeLabel(branch)));
+        const value = discriminatorValue(branch, discriminator);
+        if (value !== undefined) {
+          head.append(el('code', 'api-flag api-flag-discriminator', `${discriminator.propertyName}: ${JSON.stringify(value)}`));
+        }
+        const body = el('div', 'api-prop-body');
+        const description = branch.description ?? resolve(branch)?.description;
+        if (description) body.append(el('p', 'api-prop-desc', description));
+        fillRow(item, head, body, branch, seen, depth);
+        list.append(item);
+      });
+      return list;
     }
 
     function propertyList(schema, seen, depth) {
@@ -148,7 +229,7 @@
       if (description) box.append(el('p', 'api-prop-desc', description));
       const values = enumValues(schema);
       if (values) box.append(valueLine('One of', values));
-      if (nested?.schema) box.append(propertyList(nested.schema, new Set(nested.refs), 1));
+      if (nested?.schema || nested?.union) box.append(nestedContent(nested, new Set(), 1));
       return box;
     }
 
@@ -175,7 +256,7 @@
       return { integer: 0, number: 0, boolean: false, string: 'string' }[schema.type] ?? null;
     }
 
-    return { typeLabel, expandable, schemaTree, sample };
+    return { typeLabel, parameterType, resolve, expandable, schemaTree, sample };
   }
 
   globalThis.EditarrApiSchema = { el, create };

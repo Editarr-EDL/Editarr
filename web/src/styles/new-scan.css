@@ -1,5 +1,6 @@
 /* New Scan dialog: header, scan type cards, model sections, advanced settings, and sticky footer. */
-.new-scan-dialog { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; box-sizing: border-box; width: min(720px, 100%); max-height: calc(100dvh - 40px); overflow: hidden; border: 1px solid #46516a; border-radius: 12px; background: #1b2029; box-shadow: 0 24px 70px #0008; }
+/* A minmax(0, 1fr) column keeps nowrap text (the footer summary) from widening every row past the dialog. */
+.new-scan-dialog { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; box-sizing: border-box; width: min(720px, 100%); max-height: calc(100dvh - 40px); overflow: hidden; border: 1px solid #46516a; border-radius: 12px; background: #1b2029; box-shadow: 0 24px 70px #0008; }
 .new-scan-dialog * { box-sizing: border-box; }
 .new-scan-dialog p { margin: 0; overflow-wrap: anywhere; }
 

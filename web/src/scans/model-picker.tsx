@@ -13,7 +13,7 @@ const isBottomSheet = () => typeof window.matchMedia === "function" && window.ma
 
 /**
  * A model choice shown as a summary card whose "Change" button opens a grouped listbox of `options`
- * (see `buildModelOptions`). The button's accessible name is "<label>: <selected name>"; choosing an
+ * (see `buildModelOptions`). The button's accessible name is "Change <label>: <selected name>"; choosing an
  * available row calls `onChange` and returns focus to the button. On narrow screens the list is a bottom sheet.
  * @param info Optional help (for example an `InfoButton`) shown beside the visible label.
  */
@@ -81,7 +81,7 @@ export function ModelPicker({ label, options, value, onChange, disabled = false,
       </div>
       <button ref={trigger} type="button" className="model-picker-change" disabled={inactive}
         aria-haspopup="listbox" aria-expanded={isOpen} aria-controls={isOpen ? listboxId : undefined}
-        aria-label={`${label}: ${name}`} aria-describedby={summaryId}
+        aria-label={`Change ${label}: ${name}`} aria-describedby={summaryId}
         onClick={() => setOpen(!open)}
         onKeyDown={(event) => {
           if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !open) { event.preventDefault(); setOpen(true); }

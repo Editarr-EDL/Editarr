@@ -8,9 +8,10 @@
   const version = document.querySelector('#api-version');
   const tocToggle = document.querySelector('.api-toc-toggle');
   const nav = document.querySelector('#api-nav');
-  if (!toc || !container || !count || !search || !globalThis.EditarrApiSchema) return;
+  if (!toc || !container || !count || !search || !globalThis.EditarrApiSchema || !globalThis.EditarrApiExamples) return;
   const { el } = globalThis.EditarrApiSchema;
-  let typeLabel, expandable, schemaTree, sample;
+  const { AUTH_LABELS, authMode } = globalThis.EditarrApiExamples;
+  let parameterType, schemaTree, curlExample;
 
   let spec = null;
   let total = 0;
@@ -23,24 +24,6 @@
 
   function methodBadge(method) {
     return el('span', `api-method api-method-${method}`, method.toUpperCase());
-  }
-
-  function curlExample(entry) {
-    const { method, path, operation } = entry;
-    const query = (operation.parameters ?? []).filter((parameter) => parameter.in === 'query' && parameter.required);
-    const suffix = query.length ? `?${query.map((parameter) => `${parameter.name}=…`).join('&')}` : '';
-    const lines = [`curl -X ${method.toUpperCase()} "$EDITARR_URL${path}${suffix}"`];
-    if (!entry.public) lines.push('  -H "X-Api-Key: $EDITARR_API_KEY"');
-    const content = operation.requestBody?.content ?? {};
-    if (content['application/json']) {
-      lines.push('  -H "Content-Type: application/json"');
-      const body = JSON.stringify(sample(content['application/json'].schema) ?? {});
-      lines.push(`  -d '${body.replace(/'/g, "'\\''")}'`);
-    } else if (content['multipart/form-data']) {
-      const schema = expandable(content['multipart/form-data'].schema, new Set())?.schema;
-      for (const name of Object.keys(schema?.properties ?? { file: {} })) lines.push(`  -F "${name}=@file"`);
-    }
-    return lines.join(' \\\n');
   }
 
   function parametersTable(entry) {
@@ -64,7 +47,7 @@
       const row = el('tr');
       const name = el('td');
       name.append(el('code', null, parameter.name));
-      row.append(name, el('td', null, parameter.in), el('td', 'api-type-cell', typeLabel(parameter.schema)),
+      row.append(name, el('td', null, parameter.in), el('td', 'api-type-cell', parameterType(parameter.schema)),
         el('td', null, parameter.required ? 'Yes' : 'No'),
         el('td', null, parameter.description ?? parameter.schema?.description ?? ''));
       rows.append(row);
@@ -90,8 +73,7 @@
       body.append(el('p', 'api-op-desc', paragraph.trim()));
     }
     const meta = el('p', 'api-op-meta');
-    meta.append(el('span', `api-auth ${entry.public ? 'api-auth-public' : 'api-auth-key'}`,
-      entry.public ? 'Public' : 'API key or browser session'));
+    meta.append(el('span', `api-auth api-auth-${entry.auth}`, AUTH_LABELS[entry.auth]));
     meta.append(el('code', 'api-op-id', operation.operationId));
     body.append(meta);
     if (operation.parameters?.length) body.append(block('Parameters', parametersTable(entry)));
@@ -119,10 +101,15 @@
       responses.append(row);
     }
     body.append(block('Responses', responses));
-    const pre = el('pre', 'api-code');
-    pre.tabIndex = 0;
-    pre.append(el('code', null, curlExample(entry)));
-    body.append(block('Example', pre));
+    const example = curlExample(entry);
+    const parts = example.notes.map((note) => el('p', 'api-note api-example-note', note));
+    if (example.text) {
+      const pre = el('pre', 'api-code');
+      pre.tabIndex = 0;
+      pre.append(el('code', null, example.text));
+      parts.unshift(pre);
+    }
+    body.append(block('Example', ...parts));
   }
 
   function renderOperation(entry) {
@@ -139,7 +126,6 @@
   }
 
   function render() {
-    const publicSecurity = (operation) => Array.isArray(operation.security) && operation.security.length === 0;
     const declared = (spec.tags ?? []).map((tag) => tag.name);
     const groups = new Map(declared.map((name) => [name, []]));
     for (const [path, item] of Object.entries(spec.paths ?? {})) {
@@ -148,7 +134,7 @@
         if (!operation) continue;
         const tag = operation.tags?.[0] ?? 'Other';
         if (!groups.has(tag)) groups.set(tag, []);
-        const entry = { method, path, operation, tag, id: `op-${operation.operationId}`, public: publicSecurity(operation) };
+        const entry = { method, path, operation, tag, id: `op-${operation.operationId}`, auth: authMode(operation) };
         entry.text = [method, path, operation.summary, operation.operationId, tag].join(' ').toLowerCase();
         groups.get(tag).push(entry);
         operations.push(entry);
@@ -248,7 +234,9 @@
     })
     .then((document_) => {
       spec = document_;
-      ({ typeLabel, expandable, schemaTree, sample } = globalThis.EditarrApiSchema.create(spec));
+      const schemas = globalThis.EditarrApiSchema.create(spec);
+      ({ parameterType, schemaTree } = schemas);
+      ({ curlExample } = globalThis.EditarrApiExamples.create(schemas));
       render();
       applyFilter();
       reveal(location.hash);
