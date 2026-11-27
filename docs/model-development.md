@@ -309,6 +309,11 @@ uv run editarr-evaluate-folder viewer
 uv run editarr-evaluate-folder serve --port 8765
 ```
 
+Each run records its throughput and memory in `_results/models/<id>.meta.json`:
+`server_peak_rss_mb` is the peak of a llama.cpp model server during the last run, and
+`process_peak_rss_mb` is the harness process's lifetime high-water mark, which under
+`all` includes the models scored before it.
+
 Open `http://127.0.0.1:8765/_results/index.html`. `serve` binds only to 127.0.0.1
 (`--port 0` picks a free port) and rejects other `Host` headers, cross-site `Origin` or
 `Sec-Fetch-Site` values, non-JSON or oversized correction bodies, and excluded paths,

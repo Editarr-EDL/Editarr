@@ -132,7 +132,9 @@ def summarize_model(
         "mean_ms_per_frame": throughput if throughput is not None else latency,
         "latency_ms_per_frame": latency,
         "timing_source": "wall_clock" if throughput is not None else "per_item_latency",
-        "peak_rss_mb": meta.get("peak_rss_mb"),
+        # Metas written before the split recorded only the process peak as `peak_rss_mb`.
+        "process_peak_rss_mb": meta.get("process_peak_rss_mb", meta.get("peak_rss_mb")),
+        "server_peak_rss_mb": meta.get("server_peak_rss_mb"),
         **_group(clips, supports, families),
         "by_folder": {
             folder: _rows(

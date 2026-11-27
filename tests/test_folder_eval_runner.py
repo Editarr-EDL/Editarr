@@ -327,3 +327,33 @@ def test_describe_eval_defaults_to_the_subset_film_subset_writes():
     parser = _parser()
     written = parser.parse_args(["film-subset"]).name
     assert parser.parse_args(["describe-eval"]).subset == written
+
+
+def test_meta_records_server_and_process_memory_separately(tmp_path, monkeypatch):
+    from scanner.evaluation.folder_eval import runner
+
+    layout = _runner_layout(tmp_path)
+
+    class Served:
+        model_id = "fake"
+        peak_rss_bytes = 3 * 2**30
+
+        def meta(self):
+            return {"model_id": "fake", "supports": ["violence"], "thresholds": {"*": 0.5}}
+
+        def score_frames(self, paths):
+            return [{"scores": {"violence": 0.1}} for _ in paths]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(runner, "create_backend", lambda _model_id: Served())
+    runner.run_model(layout, "fake")
+    meta = json.loads(layout.model_meta("fake").read_text())
+    assert meta["server_peak_rss_mb"] == 3072.0 and meta["process_peak_rss_mb"] > 0
+    assert "peak_rss_mb" not in meta
+    summary = summarize_model([], {}, meta)
+    assert summary["server_peak_rss_mb"] == 3072.0
+    assert summary["process_peak_rss_mb"] == meta["process_peak_rss_mb"]
+    legacy = summarize_model([], {}, {"peak_rss_mb": 12.5})
+    assert (legacy["process_peak_rss_mb"], legacy["server_peak_rss_mb"]) == (12.5, None)

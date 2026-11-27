@@ -11,7 +11,7 @@ from .backends import BackendUnavailable, create_backend, model_download_policy
 from .frames import frames_present
 from .paths import Layout, matches_prefix
 from .results import append_line, load_results, write_model_index
-from .run_meta import peak_rss_mb, write_meta
+from .run_meta import process_peak_rss_mb, server_peak_rss_mb, write_meta
 from .scoring import resolve_concurrency, scored
 
 log = logging.getLogger(__name__)
@@ -174,7 +174,8 @@ def _run_model(
                 if frame_count
                 else None
             ),
-            "peak_rss_mb": peak_rss_mb(),
+            "process_peak_rss_mb": process_peak_rss_mb(),
+            "server_peak_rss_mb": server_peak_rss_mb(backend),
         }
         if frame_count or errors:
             write_meta(layout, backend, stats)

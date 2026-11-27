@@ -1,4 +1,12 @@
-"""Per-model `<id>.meta.json`: backend metadata plus run statistics and throughput."""
+"""Per-model `<id>.meta.json`: backend metadata plus run statistics and throughput.
+
+Memory fields (MiB, from the last run that scored frames):
+- `server_peak_rss_mb`: peak resident memory of the backend's model server process
+  (llama.cpp backends), sampled while scoring; absent for in-process backends.
+- `process_peak_rss_mb`: the harness Python process's high-water mark when the run
+  ended. It covers the whole process lifetime, so under `all` it also includes the
+  models scored earlier in the same process.
+"""
 
 from __future__ import annotations
 
@@ -10,15 +18,21 @@ from .backends import Backend
 from .paths import Layout, write_json
 
 
-def peak_rss_mb() -> float:
-    """Process high-water resident set in MiB (ru_maxrss is bytes on macOS, KiB on Linux);
-    0.0 where `resource` is unavailable (Windows)."""
+def process_peak_rss_mb() -> float:
+    """Process-lifetime high-water resident set in MiB (ru_maxrss is bytes on macOS, KiB
+    on Linux); 0.0 where `resource` is unavailable (Windows)."""
     try:
         import resource
     except ImportError:
         return 0.0
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return round((peak if platform.system() == "Darwin" else peak * 1024) / 2**20, 1)
+
+
+def server_peak_rss_mb(backend: Backend) -> float | None:
+    """Peak RSS in MiB of the backend's model server (`peak_rss_bytes`), or None."""
+    peak = getattr(backend, "peak_rss_bytes", None)
+    return round(peak / 2**20, 1) if peak else None
 
 
 def accumulate_throughput(previous: dict[str, Any], stats: dict[str, Any]) -> dict[str, Any]:
@@ -50,13 +64,16 @@ def write_meta(layout: Layout, backend: Backend, stats: dict[str, Any]) -> None:
     path = layout.model_meta(backend.model_id)
     meta = backend.meta()
     previous = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-    peak = max(stats["peak_rss_mb"], previous.get("peak_rss_mb") or 0.0)
-    meta["peak_rss_mb"] = peak
+    meta["process_peak_rss_mb"] = stats["process_peak_rss_mb"]
+    memory = f"harness process peak RSS {stats['process_peak_rss_mb']} MiB (process lifetime)"
+    if stats.get("server_peak_rss_mb") is not None:
+        meta["server_peak_rss_mb"] = stats["server_peak_rss_mb"]
+        memory = f"model server peak RSS {stats['server_peak_rss_mb']} MiB, {memory}"
     meta["last_run"] = stats
     meta["throughput"] = accumulate_throughput(previous, stats)
     notes = meta.get("notes") or ""
     meta["notes"] = (
         f"{notes} Last run: {stats['items']} items, {stats['frames']} frames, "
-        f"{stats['ms_per_frame']} ms/frame, peak RSS {peak} MiB."
+        f"{stats['ms_per_frame']} ms/frame, {memory}."
     ).strip()
     write_json(path, meta)
