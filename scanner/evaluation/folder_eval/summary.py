@@ -181,7 +181,7 @@ def build_summary(layout: Layout, corrections: dict[str, Any]) -> dict[str, Any]
     for model_id in write_model_index(layout):
         meta_path = layout.model_meta(model_id)
         meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
-        results = load_results(layout.model_jsonl(model_id))
+        results = load_results(layout.model_jsonl(model_id), meta.get("thresholds") or {})
         models[model_id] = summarize_model(items, results, meta)
         # Every model keeps a decision_sample section (the viewer expects it); other
         # subsets appear only for models with results on their items.

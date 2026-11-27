@@ -55,44 +55,50 @@ function clipNarrative(frames) {
   return { severity: Object.keys(severity).length ? severity : null, description };
 }
 
+/** Aggregate compact frames (their full `scores` and `askedKeys`) like the harness's aggregate. */
+const aggregateCompact = (frames, meta) => aggregate(frames.map((f) => ({ n: f.n, scores: f.scores, asked: f.askedKeys })), meta);
+
 /** Sample view: re-aggregated over exactly the subset frames (null if any is missing), like restrict_results. */
 function withSample(base, meta, wanted) {
   if (!wanted) return base;
   if (base.status !== "ok") { base.sample = base; return base; }
-  const frames = [...wanted].map((n) => base.subRaw.get(n));
+  const byN = new Map(base.frames.map((f) => [f.n, f]));
+  const frames = [...wanted].map((n) => byN.get(n));
   if (frames.some((f) => !f)) { base.sample = null; return base; }
-  const a = aggregate(frames, meta);
+  const a = aggregateCompact(frames, meta);
   const narrative = clipNarrative(base.frames.filter((f) => wanted.has(f.n)));
   base.sample = { ...base, scores: a.scores, best: a.best, asked: a.asked, flagged: a.flagged, ...narrative };
   return base;
 }
 
 /**
- * Compact one JSONL row: clip scores/flags, per-frame top-5 and best frame per key. For decision-sample items
- * (`wanted` = Set of subset frame numbers) raw subset frames are kept so `sample` can be (re)computed.
+ * Compact one JSONL row: clip scores/flags, best frame per key and per frame its scores, top-5 and narrative.
+ * Frames keep every score so merged rows and the decision sample (`wanted` = Set of subset frame numbers)
+ * can be re-aggregated.
  */
 export function compactResult(row, meta, wanted) {
   const raw = row.frames || [];
   const agg = aggregate(raw, meta);
   const frames = raw.map((fr) => ({
     n: fr.n,
+    scores: fr.scores || {},
     top: Object.entries(fr.scores || {}).sort((a, b) => b[1] - a[1]).slice(0, 5),
     labels: (fr.labels || []).slice(0, 8),
     asked: Array.isArray(fr.asked) ? fr.asked.length : null,
+    askedKeys: Array.isArray(fr.asked) ? fr.asked : undefined,
     ...frameNarrative(fr),
   }));
   const base = {
     status: row.status || "ok", error: row.error, elapsed_ms: row.elapsed_ms, scores: row.scores || agg.scores,
     flagged: withFamilies(row.flagged || []), best: agg.best, asked: agg.asked, frames, ...clipNarrative(frames),
-    subRaw: wanted ? new Map(raw.filter((fr) => wanted.has(fr.n)).map((fr) => [fr.n, { n: fr.n, scores: fr.scores, asked: fr.asked }])) : null,
   };
   return withSample(base, meta, wanted);
 }
 
 /**
  * Merge a repeated line into the previous one like the harness's merge_record: errors never replace an ok
- * result; a line covering all earlier frames replaces it; otherwise frames merge by n (newer wins) and flags union.
- * Clip scores are approximated as the per-key max of both lines (display only; metrics use flags).
+ * result; a line covering all earlier frames replaces it; otherwise frames merge by n (newer wins) and clip
+ * scores, best frames, asked keys and flags are recomputed from the merged frames with the model's thresholds.
  */
 export function mergeResult(prev, next, meta, wanted) {
   if (!prev) return next;
@@ -102,14 +108,8 @@ export function mergeResult(prev, next, meta, wanted) {
   if (prev.frames.every((f) => nextNs.has(f.n))) return next;
   const byN = new Map(prev.frames.map((f) => [f.n, f]));
   next.frames.forEach((f) => byN.set(f.n, f));
-  const scores = { ...prev.scores }, best = { ...prev.best };
-  for (const [k, v] of Object.entries(next.scores)) if (!(k in scores) || v >= scores[k]) { scores[k] = v; best[k] = next.best[k] ?? best[k]; }
-  const asked = prev.asked || next.asked ? new Set([...(prev.asked || []), ...(next.asked || [])]) : null;
-  const subRaw = prev.subRaw || next.subRaw ? new Map([...(prev.subRaw || []), ...(next.subRaw || [])]) : null;
   const frames = [...byN.keys()].sort((a, b) => a - b).map((n) => byN.get(n));
-  const merged = {
-    ...next, frames, scores, best, asked, subRaw, ...clipNarrative(frames),
-    flagged: [...new Set([...prev.flagged, ...next.flagged])],
-  };
+  const a = aggregateCompact(frames, meta);
+  const merged = { ...next, frames, scores: a.scores, best: a.best, asked: a.asked, flagged: a.flagged, ...clipNarrative(frames) };
   return withSample(merged, meta, wanted);
 }

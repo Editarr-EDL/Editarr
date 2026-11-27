@@ -360,3 +360,19 @@ def test_meta_records_server_and_process_memory_separately(tmp_path, monkeypatch
     assert summary["process_peak_rss_mb"] == meta["process_peak_rss_mb"]
     legacy = summarize_model([], {}, {"peak_rss_mb": 12.5})
     assert (legacy["process_peak_rss_mb"], legacy["server_peak_rss_mb"]) == (12.5, None)
+
+
+def test_merged_rows_recompute_flags_from_the_final_frames(tmp_path):
+    lines = [
+        {"id": "a", "status": "ok", "flagged": ["violence"], "frames": [
+            {"n": 0, "scores": {"violence": 0.9}}, {"n": 1, "scores": {"violence": 0.1}}]},
+        {"id": "a", "status": "ok", "flagged": [], "frames": [
+            {"n": 0, "scores": {"violence": 0.2}}, {"n": 2, "scores": {"violence": 0.3}}]},
+    ]
+    path = tmp_path / "m.jsonl"
+    path.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+    (tmp_path / "m.meta.json").write_text(json.dumps({"thresholds": {"violence": 0.25}}))
+    record = load_results(path)["a"]
+    assert [frame["n"] for frame in record["frames"]] == [0, 1, 2]
+    assert record["scores"] == {"violence": 0.3} and record["flagged"] == ["violence"]
+    assert load_results(path, {"*": 0.5})["a"]["flagged"] == []

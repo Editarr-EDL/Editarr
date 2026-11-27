@@ -57,3 +57,18 @@ test("sensitivity covers every model's flags and corrections", () => {
   applyCorrections(clip);
   assert.equal(isSensitive(clip), true);
 });
+
+test("merged rows recompute scores and flags from the final frames", async () => {
+  const { compactResult, mergeResult } = await import(new URL("results.js", VIEWER));
+  const meta = { thresholds: { violence: 0.25 } };
+  const first = compactResult({ id: "a", status: "ok", flagged: ["violence"], frames: [
+    { n: 0, scores: { violence: 0.9 } }, { n: 1, scores: { violence: 0.1 } }] }, meta);
+  const second = compactResult({ id: "a", status: "ok", flagged: [], frames: [
+    { n: 0, scores: { violence: 0.2 } }, { n: 2, scores: { violence: 0.24 } }] }, meta);
+  const merged = mergeResult(first, second, meta, new Set([0, 1]));
+  assert.deepEqual(merged.frames.map((f) => f.n), [0, 1, 2]);
+  assert.deepEqual(merged.scores, { violence: 0.24 });
+  assert.deepEqual(merged.flagged, []);
+  assert.equal(merged.best.violence, 2);
+  assert.deepEqual(merged.sample.flagged, []);
+});

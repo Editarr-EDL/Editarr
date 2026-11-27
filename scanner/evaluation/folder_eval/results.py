@@ -31,9 +31,14 @@ def aggregate(frames: list[dict[str, Any]], thresholds: dict[str, float]) -> tup
     return scores, sorted(flagged)
 
 
-def merge_record(previous: dict[str, Any] | None, record: dict[str, Any]) -> dict[str, Any]:
-    """Combine two lines for one item: frames merge by `n` (newer wins), errors never
-    replace an earlier ok result, and item scores are the max over merged frames."""
+def merge_record(
+    previous: dict[str, Any] | None,
+    record: dict[str, Any],
+    thresholds: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """Combine two lines for one item: frames merge by `n` (newer wins) and errors never
+    replace an earlier ok result. Item scores and flags are recomputed from the merged
+    frames with `thresholds`, so a replaced frame's old flag does not survive."""
     if previous is None:
         return record
     if record.get("status") != "ok":
@@ -47,16 +52,31 @@ def merge_record(previous: dict[str, Any] | None, record: dict[str, Any]) -> dic
         return record
     by_n.update({frame["n"]: frame for frame in record.get("frames", [])})
     frames = [by_n[n] for n in sorted(by_n)]
-    scores, _ = aggregate(frames, {})
-    flagged = sorted(set(previous.get("flagged", [])) | set(record.get("flagged", [])))
+    scores, flagged = aggregate(frames, thresholds or {})
     return {**record, "frames": frames, "scores": scores, "flagged": flagged}
 
 
-def load_results(path: Path) -> dict[str, dict[str, Any]]:
-    """Read a model jsonl, merging repeated lines per id with `merge_record`."""
+def _meta_thresholds(path: Path) -> dict[str, float]:
+    """Thresholds from the `<id>.meta.json` next to a model's `<id>.jsonl`, if any."""
+    meta = path.with_name(f"{path.stem}.meta.json")
+    try:
+        return json.loads(meta.read_text(encoding="utf-8")).get("thresholds") or {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def load_results(
+    path: Path, thresholds: dict[str, float] | None = None
+) -> dict[str, dict[str, Any]]:
+    """Read a model jsonl, merging repeated lines per id with `merge_record`.
+
+    `thresholds` default to those in the model's meta.json next to `path`.
+    """
     results: dict[str, dict[str, Any]] = {}
     if not path.is_file():
         return results
+    if thresholds is None:
+        thresholds = _meta_thresholds(path)
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
@@ -66,7 +86,7 @@ def load_results(path: Path) -> dict[str, dict[str, Any]]:
                 record = json.loads(line)
             except json.JSONDecodeError:
                 continue  # A run killed mid-write can leave a truncated last line.
-            results[record["id"]] = merge_record(results.get(record["id"]), record)
+            results[record["id"]] = merge_record(results.get(record["id"]), record, thresholds)
     return results
 
 
