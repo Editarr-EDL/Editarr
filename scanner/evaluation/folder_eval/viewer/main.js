@@ -35,7 +35,7 @@ function syncScopeControl(r) {
 
 function showError(err) {
   console.error(err);
-  fill($("#main"), h("div", { class: "error" }, h("h2", { text: "Could not load results" }), h("p", { text: String(err.message || err) })));
+  fill($("#main"), h("div", { class: "error", role: "alert" }, h("h2", { text: "Could not load results" }), h("p", { text: String(err.message || err) })));
   setStatus("");
 }
 

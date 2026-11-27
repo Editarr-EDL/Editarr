@@ -93,14 +93,17 @@ export function syncControl(id, value) {
   if (el && document.activeElement !== el && el.value !== value) el.value = value;
 }
 
-/** Page navigation links; onHref(page) returns the hash for that page. */
-export function pager(total, page, onHref) {
+/**
+ * Page navigation links; onHref(page) returns the hash for that page. `label` names the navigation landmark, which
+ * must be unique on the page (e.g. top and bottom pagers). A single page is a plain count, not a landmark.
+ */
+export function pager(total, page, onHref, label = "Pages") {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (pages <= 1) return h("nav", { class: "pager", "aria-label": "Pages" }, h("span", { text: `${total} items` }));
+  if (pages <= 1) return h("p", { class: "pager" }, h("span", { text: `${total} items` }));
   const link = (p, label) => p < 1 || p > pages || p === page
     ? h("span", { class: "btn disabled", "aria-disabled": "true", text: label })
     : h("a", { class: "btn", href: onHref(p), text: label });
-  return h("nav", { class: "pager", "aria-label": "Pages" },
+  return h("nav", { class: "pager", "aria-label": label },
     link(1, "« First"), link(page - 1, "‹ Prev"),
     h("span", { text: `Page ${page} of ${pages} · ${total} items` }),
     link(page + 1, "Next ›"), link(pages, "Last »"));

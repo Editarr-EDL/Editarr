@@ -138,8 +138,8 @@ export async function showFolder(r) {
     && (!q || i.path.toLowerCase().includes(q)) && (p.corr !== "1" || i.corr));
   const page = Math.max(1, Number(p.page) || 1);
   const slice = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pg = () => pager(items.length, page, (n) => hashWith({ page: n }));
-  fill($("#folder-items"), pg(), h("div", { class: "table-wrap" }, h("table", { class: "items" },
+  const pg = (where) => pager(items.length, page, (n) => hashWith({ page: n }), `Pages (${where})`);
+  fill($("#folder-items"), pg("top"), h("div", { class: "table-wrap" }, h("table", { class: "items" },
     h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Item" }), h("th", { scope: "col", text: "Expected" }),
       S.modelIds.map((id) => h("th", { scope: "col", text: S.metas[id].display_name || id })))),
     h("tbody", {}, slice.map((item) => h("tr", {},
@@ -148,5 +148,5 @@ export async function showFolder(r) {
         h("a", { href: hashWith({ item: item.id }), class: "path", title: item.path,
           text: item.path.split("/").pop() + (item.window ? ` @ ${fmtWindow(item.window)}` : "") }))),
       h("td", {}, expectedChips(item), item.source_tags?.length ? itemExtras({ source_tags: item.source_tags }) : null),
-      S.modelIds.map((id) => modelCell(item, id, scope))))))), pg());
+      S.modelIds.map((id) => modelCell(item, id, scope))))))), pg("bottom"));
 }

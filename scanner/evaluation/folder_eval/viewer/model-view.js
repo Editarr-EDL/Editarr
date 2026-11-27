@@ -170,8 +170,8 @@ function updateModelList(id, p, scope) {
   const rows = modelRows(id, p, scope);
   const page = Math.max(1, Number(p.page) || 1);
   const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pg = () => pager(rows.length, page, (n) => hashWith({ page: n }));
-  fill(box, note, pg(),
+  const pg = (where) => pager(rows.length, page, (n) => hashWith({ page: n }), `Pages (${where})`);
+  fill(box, note, pg("top"),
     slice.length ? h("ul", { class: "cards" }, slice.map((row) => card(row, p.cat === "__none" ? null : p.cat, scope)))
-      : h("p", { class: "muted", text: "No matching items." }), pg());
+      : h("p", { class: "muted", text: "No matching items." }), pg("bottom"));
 }

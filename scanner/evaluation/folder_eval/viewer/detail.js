@@ -55,11 +55,29 @@ function mediaSection(item) {
   return { nodes, media };
 }
 
+/* The item whose dialog is open, so focus can return to its link once the view re-renders after closing. */
+let openedFor = null;
+
+/**
+ * Move focus back to the control that opened the detail for itemId: the first focusable link to that item in the
+ * re-rendered view (the original node is usually replaced), else the main region.
+ */
+export function restoreDetailFocus(itemId, root = document) {
+  const links = [...root.querySelectorAll("#main a[href]")].filter((a) => a.getAttribute("tabindex") !== "-1"
+    && new URLSearchParams(a.getAttribute("href").split("?")[1] || "").get("item") === itemId);
+  (links[0] || root.querySelector("#main"))?.focus();
+}
+
 /** Open the dialog for itemId (from the route's item param) or close it when absent. */
 export async function syncDetail(itemId) {
   const dlg = $("#detail");
   const item = itemId && S.byId.get(itemId);
-  if (!item) { if (dlg.open) dlg.close(); return; }
+  if (!item) {
+    if (dlg.open) dlg.close();
+    if (openedFor) { restoreDetailFocus(openedFor); openedFor = null; }
+    return;
+  }
+  openedFor = item.id;
   $("#detail-title").textContent = item.path.split("/").pop() + (item.window ? ` @ ${fmtWindow(item.window)}` : "");
   if (!allLoaded()) fill($("#detail-body"), h("p", { class: "loading", text: "Loading model results…" }));
   if (!dlg.open) dlg.showModal();

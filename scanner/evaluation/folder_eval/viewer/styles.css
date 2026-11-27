@@ -138,6 +138,7 @@ body.show-sensitive .reveal { display: none; }
 .films { margin-top: .75rem; }
 .films summary { cursor: pointer; font-weight: 600; }
 tr.film-first > * { border-top: 2px solid var(--border); }
+.films tbody th[scope="row"] { font-weight: normal; }
 .sensitive-toggle { align-self: center; padding: 0; font-size: .85rem; }
 
 /* corrections */

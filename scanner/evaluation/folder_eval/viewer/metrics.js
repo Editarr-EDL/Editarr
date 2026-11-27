@@ -44,11 +44,17 @@ function filmsTable(films, note) {
   return h("details", { class: "films", open: true },
     h("summary", {}, `Films (${entries.length - (films.all ? 1 : 0)})`, note ? h("span", { class: "muted live", text: ` · ${note}` }) : null),
     h("div", { class: "table-wrap" }, h("table", {}, head("Film", "Windows", "Key"),
-      h("tbody", {}, entries.flatMap(([name, f]) => breakdownRows(f).map((r, i) => h("tr", { class: i ? "" : "film-first" },
-        h("th", { scope: "row" }, i ? "" : name === "all" ? "All films"
-          : h("a", { href: buildHash("folder", name, {}), text: name.replace(/^films\//, ""), title: f.imdb_id || null })),
-        h("td", { text: i ? "" : f.windows ?? "–" }),
-        h("td", { text: r.key }), cells(r))))))));
+      // One row group per film: its name and window count span the group, and each key heads its own row.
+      entries.map(([name, f]) => {
+        const rows = breakdownRows(f);
+        return h("tbody", {}, rows.map((r, i) => h("tr", { class: i ? "" : "film-first" },
+          i ? null : [
+            h("th", { scope: "rowgroup", rowspan: rows.length }, name === "all" ? "All films"
+              : h("a", { href: buildHash("folder", name, {}), text: name.replace(/^films\//, ""), title: f.imdb_id || null })),
+            h("td", { rowspan: rows.length, text: f.windows ?? "–" }),
+          ],
+          h("th", { scope: "row", text: r.key }), cells(r))));
+      }))));
 }
 
 /**
