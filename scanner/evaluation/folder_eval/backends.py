@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Protocol
 
+from .siglip2_gore import ARTIFACT_ID as GORE_ARTIFACT_ID
+
 DECISION_MODEL_IDS = ("d1-omni-2b", "clef-flash", "d1-3b")
+INSTALL_HINT = "install it from Editarr's model settings or rerun with --allow-downloads"
+_ALLOW_DOWNLOADS: ContextVar[bool] = ContextVar("folder_eval_allow_downloads", default=False)
 
 
 class Backend(Protocol):
@@ -23,6 +29,48 @@ class Backend(Protocol):
 
 class BackendUnavailable(RuntimeError):
     pass
+
+
+@contextmanager
+def model_download_policy(allow_downloads: bool) -> Iterator[None]:
+    """Run the block with Editarr model downloads refused unless `allow_downloads`.
+
+    Refusal covers every acquisition, including loaders the harness reuses from
+    `scanner.pipeline`, so a missing artifact fails instead of downloading.
+    """
+    from scanner.modeling.model_acquisition_authority import refused_model_downloads
+
+    token = _ALLOW_DOWNLOADS.set(allow_downloads)
+    try:
+        if allow_downloads:
+            yield
+        else:
+            with refused_model_downloads():
+                yield
+    finally:
+        _ALLOW_DOWNLOADS.reset(token)
+
+
+def downloads_allowed() -> bool:
+    """Whether the current run may download Editarr model artifacts (`--allow-downloads`)."""
+    return _ALLOW_DOWNLOADS.get()
+
+
+def require_local_artifacts(artifact_ids: tuple[str, ...]) -> None:
+    """Raise BackendUnavailable for the first artifact that is not installed locally,
+    unless downloads are allowed."""
+    if downloads_allowed():
+        return
+    from scanner.model_acquisition import get_acquisition_service
+
+    service = get_acquisition_service()
+    for artifact_id in artifact_ids:
+        try:
+            service.verified_local_artifact(artifact_id, verify_content=False)
+        except Exception as exc:  # noqa: BLE001 - any lookup failure disables the model
+            raise BackendUnavailable(
+                f"unavailable: {artifact_id} is not installed ({exc}); {INSTALL_HINT}"
+            ) from exc
 
 
 def _detector_key(producer: str, family: Any, label: str, confidence: float) -> str:
@@ -109,6 +157,11 @@ class Siglip2Backend:
 
     model_id = "siglip2"
     _HEADS = {"nsfw": "nudity", "violence": "violence"}
+    artifacts = (
+        "siglip2-base-patch16-256",
+        "siglip2-moderation-head-nsfw",
+        "siglip2-moderation-head-violence",
+    )
 
     def __init__(self) -> None:
         from scanner.pipeline import siglip2_moderation
@@ -163,6 +216,11 @@ LOCAL_BACKENDS: dict[str, Callable[[], Backend]] = {
     "siglip2": Siglip2Backend,
     "siglip2-gore": _siglip2_gore,
 }
+# Editarr artifacts each local backend loads; NudeNet's weights ship with its package.
+LOCAL_ARTIFACTS: dict[str, tuple[str, ...]] = {
+    "siglip2": Siglip2Backend.artifacts,
+    "siglip2-gore": (GORE_ARTIFACT_ID,),
+}
 
 
 def _decision_backends() -> dict[str, Callable[[], Backend]]:
@@ -182,10 +240,28 @@ def available_model_ids() -> list[str]:
     return ids
 
 
+def _local_backend(model_id: str) -> Backend:
+    """Build a local backend from verified local artifacts (see `model_download_policy`)."""
+    from scanner.model_acquisition import AcquisitionError
+
+    factory = LOCAL_BACKENDS[model_id]
+    require_local_artifacts(LOCAL_ARTIFACTS.get(model_id, ()))
+    try:
+        return factory()
+    except AcquisitionError as exc:
+        raise BackendUnavailable(f"unavailable: {model_id}: {exc}; {INSTALL_HINT}") from exc
+    except ImportError as exc:
+        raise BackendUnavailable(f"unavailable: {model_id}: {exc}") from exc
+
+
 def create_backend(model_id: str) -> Backend:
-    """Instantiate a backend by id; decision models load lazily from `decision.registry`."""
+    """Instantiate a backend by id; decision models load lazily from `decision.registry`.
+
+    Missing artifacts, refused downloads and acquisition failures raise
+    BackendUnavailable, so `run` reports the model unavailable and `all` skips it.
+    """
     if model_id in LOCAL_BACKENDS:
-        return LOCAL_BACKENDS[model_id]()
+        return _local_backend(model_id)
     try:
         backends = _decision_backends()
     except BackendUnavailable:

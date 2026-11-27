@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any
 
-from .backends import BackendUnavailable, create_backend
+from .backends import BackendUnavailable, create_backend, model_download_policy
 from .frames import frames_present
 from .paths import Layout, matches_prefix
 from .results import append_line, load_results, write_model_index
@@ -68,14 +68,33 @@ def run_model(
     retry_errors: bool = False,
     subset: dict[str, list[int]] | None = None,
     concurrency: int | None = None,
+    allow_downloads: bool = False,
 ) -> dict[str, Any]:
     """Score pending inventory items with one model, resuming from its jsonl.
 
     An item is done once its merged line has every wanted frame (all extracted frames,
     or only the `subset` frames); earlier ok frames are reused, not recomputed.
     `concurrency` scores that many items in parallel (decision backends only; default:
-    the backend's `default_concurrency`).
+    the backend's `default_concurrency`). Editarr model artifacts must already be
+    installed unless `allow_downloads`.
     """
+    with model_download_policy(allow_downloads):
+        return _run_model(
+            layout, model_id, limit=limit, only_folder=only_folder,
+            retry_errors=retry_errors, subset=subset, concurrency=concurrency,
+        )
+
+
+def _run_model(
+    layout: Layout,
+    model_id: str,
+    *,
+    limit: int | None,
+    only_folder: str | None,
+    retry_errors: bool,
+    subset: dict[str, list[int]] | None,
+    concurrency: int | None,
+) -> dict[str, Any]:
     inventory = layout.load_inventory()
     output = layout.model_jsonl(model_id)
     done = load_results(output)

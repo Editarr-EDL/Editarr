@@ -86,6 +86,14 @@ def _parser() -> argparse.ArgumentParser:
         sub.add_argument("--only-folder", help="Path prefix, e.g. video/movies_fight")
         sub.add_argument("--limit", type=int, help="Process at most N pending items")
 
+    def downloads(sub: argparse.ArgumentParser) -> None:
+        sub.add_argument(
+            "--allow-downloads",
+            action="store_true",
+            help="Let Editarr-managed models download missing artifacts (default: use "
+            "installed artifacts only and report others unavailable)",
+        )
+
     frames = commands.add_parser("frames", help="Extract frames with ffmpeg (resumable)")
     selection(frames)
     frames.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1))
@@ -102,6 +110,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Items scored in parallel (decision models only; default: per-model setting)",
     )
     selection(run)
+    downloads(run)
 
     sample = commands.add_parser("sample", help="Write subsets/decision_sample.json")
     sample.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -138,6 +147,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     everything.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1))
     selection(everything)
+    downloads(everything)
     return parser
 
 
@@ -176,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
                 layout, args.model, limit=limit, only_folder=prefix,
                 retry_errors=args.retry_errors,
                 subset=load_subset(layout, args.subset) if args.subset else None,
-                concurrency=args.concurrency,
+                concurrency=args.concurrency, allow_downloads=args.allow_downloads,
             )
         except BackendUnavailable as exc:
             log.error("%s", exc)
@@ -184,7 +194,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "all":
         for model_id in filter(None, (value.strip() for value in args.models.split(","))):
             try:
-                run_model(layout, model_id, limit=limit, only_folder=prefix)
+                run_model(
+                    layout, model_id, limit=limit, only_folder=prefix,
+                    allow_downloads=args.allow_downloads,
+                )
             except BackendUnavailable as exc:
                 log.warning("Skipping %s: %s", model_id, exc)
     if args.command == "describe-eval":

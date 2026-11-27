@@ -2,7 +2,8 @@
 
 Each id wraps `scanner.pipeline.decision_detection.detector_for`, so prompts, weights,
 thresholds and (for d1-3B) rubric severity come from production code and the pinned,
-hash-verified artifacts. Missing artifacts are reported as unavailable, never downloaded.
+hash-verified artifacts. Missing artifacts are reported as unavailable unless the run
+allows downloads (`--allow-downloads`).
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from typing import Any
 
 from scanner.pipeline import decision_detection
 
-from ..backends import BackendUnavailable
+from ..backends import BackendUnavailable, downloads_allowed, require_local_artifacts
 
 PREFIX = "scan-"
 
@@ -33,7 +34,8 @@ class ScanDetectorBackend:
         return f"Editarr {self.detector.label_prefix} detector"
 
     def check_available(self) -> None:
-        """Raise BackendUnavailable unless the capability is usable and weights are local."""
+        """Raise BackendUnavailable unless the capability is usable and weights are local
+        (or, with downloads allowed, could be acquired)."""
         from scanner.model_acquisition import get_acquisition_service
         from scanner.settings.capabilities import capability_for
 
@@ -41,13 +43,13 @@ class ScanDetectorBackend:
         if capability.availability == "unavailable":
             raise BackendUnavailable(f"unavailable: {self.video_model}: {capability.reason}")
         artifact_id = _artifact_id(self.video_model)
+        if not downloads_allowed():
+            require_local_artifacts((artifact_id,))
+            return
         try:
-            get_acquisition_service().verified_local_artifact(artifact_id, verify_content=False)
-        except Exception as exc:  # noqa: BLE001 - any lookup failure disables the model
-            raise BackendUnavailable(
-                f"unavailable: {artifact_id} is not installed ({exc}); install it from "
-                "Editarr's model settings first (the harness never downloads it)"
-            ) from exc
+            get_acquisition_service().acquire(artifact_id)
+        except Exception as exc:  # noqa: BLE001 - any acquisition failure disables the model
+            raise BackendUnavailable(f"unavailable: {artifact_id}: {exc}") from exc
 
     def meta(self) -> dict[str, Any]:
         thresholds = _thresholds(self.video_model)

@@ -201,7 +201,7 @@ measure false positives.
 detectors, decision models and VLMs against labels taken from a folder of public
 datasets and real films, and serves a static viewer for reviewing and correcting them.
 It needs only the project dependencies plus `ffmpeg` and `ffprobe` on `PATH`; it never
-downloads datasets, films or weights.
+downloads datasets or films, and downloads model weights only with `--allow-downloads`.
 
 ### Data root
 
@@ -268,8 +268,12 @@ changing the inventory when any listed film has no file or a key names no film i
 detectors `scan-d1-3b`, `scan-qwen3-vl-8b` and `scan-qwen3-vl-4b`, and the evaluation-only
 llama.cpp and MLX ids in
 [`decision/`](../scanner/evaluation/folder_eval/decision/) (for example `d1-3b-f512`,
-`qwen3vl-8b`, `qwen3vl-8b-mlx-desc`). Editarr artifacts must already be installed
-(from model settings); a missing model is reported as unavailable and skipped by `all`.
+`qwen3vl-8b`, `qwen3vl-8b-mlx-desc`). By default `run` and `all` refuse downloads:
+`nudenet`, `siglip2`, `siglip2-gore` and the `scan-*` ids use Editarr artifacts already
+installed from model settings and verified locally, and a missing artifact or failed
+acquisition is reported as unavailable (`run` exits with status 2, `all` skips the
+model). `--allow-downloads` lets those ids acquire missing Editarr artifacts. The
+llama.cpp and MLX ids never download; fetch their weights as described below.
 
 The llama.cpp ids read GGUF weights from `<models dir>/<model>/`, where the models dir is
 `$EDITARR_DECISION_MODELS_DIR`, else `evaluation/llama-cpp` under Editarr's model cache
@@ -289,12 +293,12 @@ and `EDITARR_CASCADE_DESCRIBER` tune the decision ids, as described in their mod
 | `frames` | Extract frames with ffmpeg (resumable; `--only-folder`, `--limit`, `--workers`) |
 | `sample` | Write the stratified `decision_sample` subset |
 | `film-subset` | Write a stratified subset of decision-sample film windows |
-| `run` | Score frames with one model (resumable; `--subset`, `--concurrency`, `--retry-errors`) |
+| `run` | Score frames with one model (resumable; `--subset`, `--concurrency`, `--retry-errors`, `--allow-downloads`) |
 | `summarize` | Write `summary.json` and `models/index.json` |
 | `describe-eval` | Judge descriptions with d1-3B and compare severity levels |
 | `viewer` | Copy the static viewer into `_results/` |
 | `serve` | Serve the data root with the corrections API |
-| `all` | `inventory`, `frames`, every available model, `summarize` and `viewer` |
+| `all` | `inventory`, `frames`, every available model, `summarize` and `viewer` (`--allow-downloads`) |
 
 ```bash
 uv run editarr-evaluate-folder inventory
