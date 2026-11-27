@@ -18,6 +18,9 @@ from scanner.pipeline import decision_detection
 from ..backends import BackendUnavailable, downloads_allowed, require_local_artifacts
 
 PREFIX = "scan-"
+# Shipped detectors that rate rubric severity; their frames always carry a severity map,
+# empty when every answer was unusable, so describe-eval counts those as unusable.
+SEVERITY_MODELS = frozenset({"d1-3b"})
 
 
 class ScanDetectorBackend:
@@ -62,7 +65,7 @@ class ScanDetectorBackend:
             "artifact": f"{self.detector.model_id}@{self.detector.model_revision}",
             "notes": (
                 "Production decision detector: one yes/no question per family per frame"
-                + (", plus rubric severity levels." if self.video_model == "d1-3b" else ".")
+                + (", plus rubric severity levels." if self.video_model in SEVERITY_MODELS else ".")
             ),
         }
 
@@ -75,7 +78,7 @@ class ScanDetectorBackend:
                     "scores": {family.value: score for family, score in decision.scores.items()},
                     "labels": [],
                 }
-                if decision.levels:
+                if self.video_model in SEVERITY_MODELS:
                     frame["severity"] = {
                         family.value: level for family, level in decision.levels.items()
                     }
