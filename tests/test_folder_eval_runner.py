@@ -122,6 +122,9 @@ def test_run_fails_fast_when_backend_creation_reports_unavailable(tmp_path, monk
         raise BackendUnavailable("decision backends unavailable")
 
     monkeypatch.setattr(runner, "create_backend", unavailable)
+    # `run` refuses downloads process-wide; restore the policy after the test.
+    monkeypatch.setenv("EDITARR_WORKER_MODEL_DOWNLOADS", "")
+    monkeypatch.setattr("scanner.evaluation.folder_eval.backends._downloads_allowed", False)
     code = cli.main(["--data-root", str(tmp_path), "run", "--model", "fake"])
     assert code == 2 and not layout.model_jsonl("fake").exists()
 

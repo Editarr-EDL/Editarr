@@ -269,9 +269,10 @@ changing the inventory when any listed film has no file or a key names no film i
 detectors `scan-d1-3b`, `scan-qwen3-vl-8b` and `scan-qwen3-vl-4b`, and the evaluation-only
 llama.cpp and MLX ids in
 [`decision/`](../scanner/evaluation/folder_eval/decision/) (for example `d1-3b-f512`,
-`qwen3vl-8b`, `qwen3vl-8b-mlx-desc`). By default `run` and `all` refuse downloads:
-`nudenet`, `siglip2`, `siglip2-gore` and the `scan-*` ids use Editarr artifacts already
-installed from model settings and verified locally, and a missing artifact or failed
+`qwen3vl-8b`, `qwen3vl-8b-mlx-desc`). By default `run` and `all` refuse downloads for
+the whole process, from the moment the command starts: `nudenet`, `siglip2`,
+`siglip2-gore` and the `scan-*` ids use Editarr artifacts already installed from model
+settings and verified locally, and a missing artifact or failed
 acquisition is reported as unavailable (`run` exits with status 2, `all` skips the
 model). `--allow-downloads` lets those ids acquire missing Editarr artifacts. The
 llama.cpp and MLX ids never download; fetch their weights as described below.

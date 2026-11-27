@@ -41,20 +41,6 @@ def _downloads_refused() -> bool:
 
 
 @contextmanager
-def refused_model_downloads() -> Iterator[None]:
-    """Refuse unbound model downloads in this process for the block, then restore."""
-    previous = os.environ.get(_DOWNLOADS)
-    refuse_model_downloads()
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop(_DOWNLOADS, None)
-        else:
-            os.environ[_DOWNLOADS] = previous
-
-
-@contextmanager
 def request_server() -> Iterator[None]:
     """Refuse unbound acquisition in this process while it serves HTTP requests."""
     global _serving_requests

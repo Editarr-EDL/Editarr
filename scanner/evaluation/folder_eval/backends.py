@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -12,7 +10,7 @@ from .siglip2_gore import ARTIFACT_ID as GORE_ARTIFACT_ID
 
 DECISION_MODEL_IDS = ("d1-omni-2b", "clef-flash", "d1-3b")
 INSTALL_HINT = "install it from Editarr's model settings or rerun with --allow-downloads"
-_ALLOW_DOWNLOADS: ContextVar[bool] = ContextVar("folder_eval_allow_downloads", default=False)
+_downloads_allowed = False
 
 
 class Backend(Protocol):
@@ -31,29 +29,25 @@ class BackendUnavailable(RuntimeError):
     pass
 
 
-@contextmanager
-def model_download_policy(allow_downloads: bool) -> Iterator[None]:
-    """Run the block with Editarr model downloads refused unless `allow_downloads`.
+def configure_model_downloads(allow_downloads: bool) -> None:
+    """Set the harness's model-download policy once, at CLI start before any model threads.
 
-    Refusal covers every acquisition, including loaders the harness reuses from
-    `scanner.pipeline`, so a missing artifact fails instead of downloading.
+    Unless `allow_downloads`, Editarr's process-wide download refusal is switched on, so
+    every acquisition (including loaders reused from `scanner.pipeline`) fails instead of
+    downloading. Without this call downloads count as not allowed for the local-artifact
+    checks, but Editarr's own refusal stays off.
     """
-    from scanner.modeling.model_acquisition_authority import refused_model_downloads
+    global _downloads_allowed
+    _downloads_allowed = allow_downloads
+    if not allow_downloads:
+        from scanner.modeling.model_acquisition_authority import refuse_model_downloads
 
-    token = _ALLOW_DOWNLOADS.set(allow_downloads)
-    try:
-        if allow_downloads:
-            yield
-        else:
-            with refused_model_downloads():
-                yield
-    finally:
-        _ALLOW_DOWNLOADS.reset(token)
+        refuse_model_downloads()
 
 
 def downloads_allowed() -> bool:
-    """Whether the current run may download Editarr model artifacts (`--allow-downloads`)."""
-    return _ALLOW_DOWNLOADS.get()
+    """Whether this harness process may download Editarr model artifacts."""
+    return _downloads_allowed
 
 
 def require_local_artifacts(artifact_ids: tuple[str, ...]) -> None:
@@ -241,7 +235,7 @@ def available_model_ids() -> list[str]:
 
 
 def _local_backend(model_id: str) -> Backend:
-    """Build a local backend from verified local artifacts (see `model_download_policy`)."""
+    """Build a local backend from verified local artifacts (see `configure_model_downloads`)."""
     from scanner.model_acquisition import AcquisitionError
 
     factory = LOCAL_BACKENDS[model_id]

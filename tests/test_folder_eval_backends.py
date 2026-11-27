@@ -1,18 +1,22 @@
-"""Model downloads: refused by default, translated to BackendUnavailable, opt-in per run."""
+"""Model downloads: refused by default, translated to BackendUnavailable, opt-in at CLI start."""
 
 from __future__ import annotations
+
+from contextlib import nullcontext
 
 import pytest
 
 from scanner.evaluation.folder_eval import backends
 from scanner.evaluation.folder_eval.backends import (
     BackendUnavailable,
+    configure_model_downloads,
     create_backend,
-    model_download_policy,
 )
 from scanner.evaluation.folder_eval.decision import scan_detectors
 from scanner.model_acquisition import AcquisitionError
 from scanner.modeling.model_acquisition_authority import require_acquisition
+
+DOWNLOADS_ENV = "EDITARR_WORKER_MODEL_DOWNLOADS"
 
 
 class _Service:
@@ -36,57 +40,71 @@ def service(monkeypatch):
     return fake
 
 
-def test_downloads_are_refused_only_inside_the_default_policy(monkeypatch):
-    monkeypatch.delenv("EDITARR_WORKER_MODEL_DOWNLOADS", raising=False)
-    with model_download_policy(False):
-        with pytest.raises(AcquisitionError) as refused:
-            require_acquisition(download=True)
-    assert refused.value.code == "download_not_permitted"
+@pytest.fixture
+def policy(monkeypatch):
+    """Apply configure_model_downloads; the env refusal and flag are restored afterwards."""
+    # setenv records the original state, so the refusal set by the code under test is undone.
+    monkeypatch.setenv(DOWNLOADS_ENV, "")
+    monkeypatch.setattr(backends, "_downloads_allowed", False)
+    return configure_model_downloads
+
+
+def test_default_policy_refuses_downloads_process_wide(policy):
     require_acquisition(download=True)
-    with model_download_policy(True):
+    policy(True)
+    require_acquisition(download=True)
+    policy(False)
+    with pytest.raises(AcquisitionError) as refused:
         require_acquisition(download=True)
+    assert refused.value.code == "download_not_permitted"
 
 
-def test_missing_local_artifacts_make_the_backend_unavailable(service, monkeypatch):
+def test_missing_local_artifacts_make_the_backend_unavailable(service, policy, monkeypatch):
     monkeypatch.setitem(backends.LOCAL_BACKENDS, "siglip2", lambda: pytest.fail("loaded"))
-    with model_download_policy(False):
-        with pytest.raises(BackendUnavailable, match="siglip2-base-patch16-256.*--allow-downloads"):
-            create_backend("siglip2")
+    policy(False)
+    with pytest.raises(BackendUnavailable, match="siglip2-base-patch16-256.*--allow-downloads"):
+        create_backend("siglip2")
 
 
-def test_acquisition_failures_while_loading_make_the_backend_unavailable(service, monkeypatch):
+def test_acquisition_failures_while_loading_make_the_backend_unavailable(
+    service, policy, monkeypatch
+):
     def load():
         raise AcquisitionError("download_not_permitted", "downloads refused")
 
     monkeypatch.setitem(backends.LOCAL_BACKENDS, "siglip2-gore", load)
-    with model_download_policy(True), pytest.raises(BackendUnavailable, match="refused"):
+    policy(True)
+    with pytest.raises(BackendUnavailable, match="refused"):
         create_backend("siglip2-gore")
 
 
-def test_scan_detectors_acquire_only_when_downloads_are_allowed(service, monkeypatch):
+def test_scan_detectors_acquire_only_when_downloads_are_allowed(service, policy, monkeypatch):
     monkeypatch.setattr(
         "scanner.settings.capabilities.capability_for",
         lambda _model: type("Capability", (), {"availability": "available"})(),
     )
     backend = object.__new__(scan_detectors.ScanDetectorBackend)
     backend.video_model = "qwen3-vl-4b"
-    with model_download_policy(False), pytest.raises(BackendUnavailable, match="not installed"):
+    policy(False)
+    with pytest.raises(BackendUnavailable, match="not installed"):
         backend.check_available()
     assert service.acquired == []
-    with model_download_policy(True):
-        backend.check_available()
+    policy(True)
+    backend.check_available()
     assert service.acquired == ["qwen3-vl-4b-instruct-4bit"]
 
 
 @pytest.mark.parametrize("command", [["run", "--model", "m"], ["all", "--models", "m"]])
 @pytest.mark.parametrize("flag", [[], ["--allow-downloads"]])
-def test_cli_passes_the_download_opt_in(tmp_path, monkeypatch, command, flag):
+def test_cli_sets_the_download_policy_before_running(tmp_path, policy, command, flag, monkeypatch):
     from scanner.commands import folder_eval_cli as cli
 
     seen = []
 
-    def fake_run(_layout, model_id, **kwargs):
-        seen.append(kwargs["allow_downloads"])
+    def fake_run(_layout, _model_id, **_kwargs):
+        seen.append(backends.downloads_allowed())
+        with pytest.raises(AcquisitionError) if not flag else nullcontext():
+            require_acquisition(download=True)
         raise BackendUnavailable("unavailable: m")
 
     for name in ("run_model", "write_inventory", "extract_frames", "summarize", "install_viewer"):

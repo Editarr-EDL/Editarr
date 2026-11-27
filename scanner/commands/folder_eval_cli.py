@@ -16,6 +16,7 @@ from scanner.evaluation.folder_eval.backends import (
     DECISION_MODEL_IDS,
     LOCAL_BACKENDS,
     BackendUnavailable,
+    configure_model_downloads,
 )
 from scanner.evaluation.folder_eval.film_sources import (
     FilmSourceError,
@@ -157,6 +158,9 @@ def main(argv: list[str] | None = None) -> int:
     layout = Layout((args.data_root or default_data_root()).resolve())
     prefix = normalize_prefix(getattr(args, "only_folder", None))
     limit = getattr(args, "limit", None)
+    if args.command in {"run", "all"}:
+        # Process-wide, before any model thread starts; see configure_model_downloads.
+        configure_model_downloads(args.allow_downloads)
 
     if args.command in {"inventory", "all"}:
         write_inventory(layout, LabelRules.load(args.rules))
@@ -186,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
                 layout, args.model, limit=limit, only_folder=prefix,
                 retry_errors=args.retry_errors,
                 subset=load_subset(layout, args.subset) if args.subset else None,
-                concurrency=args.concurrency, allow_downloads=args.allow_downloads,
+                concurrency=args.concurrency,
             )
         except BackendUnavailable as exc:
             log.error("%s", exc)
@@ -194,10 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "all":
         for model_id in filter(None, (value.strip() for value in args.models.split(","))):
             try:
-                run_model(
-                    layout, model_id, limit=limit, only_folder=prefix,
-                    allow_downloads=args.allow_downloads,
-                )
+                run_model(layout, model_id, limit=limit, only_folder=prefix)
             except BackendUnavailable as exc:
                 log.warning("Skipping %s: %s", model_id, exc)
     if args.command == "describe-eval":
