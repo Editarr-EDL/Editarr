@@ -40,6 +40,8 @@ function showError(err) {
 }
 
 window.addEventListener("hashchange", route);
+// The skip link targets #main, which is not a route: move focus without changing the hash.
+document.querySelector(".skip-link").addEventListener("click", (e) => { e.preventDefault(); $("#main").focus(); });
 initSensitiveToggle($("#show-sensitive"));
 initDetail();
 $("#scope").addEventListener("change", (e) => withParams({ scope: e.target.value, page: "" }));
