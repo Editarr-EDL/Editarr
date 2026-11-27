@@ -101,7 +101,29 @@ def run_model(
         return {"items": 0, "frames": 0, "errors": 0}
     load_started = time.perf_counter()
     backend = create_backend(model_id)
-    load_ms = round((time.perf_counter() - load_started) * 1000, 1)
+    try:
+        return _score_pending(
+            layout, backend, model_id, pending, done, concurrency,
+            round((time.perf_counter() - load_started) * 1000, 1),
+        )
+    finally:
+        # Every exit path (errors, BackendUnavailable, KeyboardInterrupt, SystemExit from
+        # SIGTERM) releases the model before `all` loads the next one.
+        backend.close()
+        write_model_index(layout)
+
+
+def _score_pending(
+    layout: Layout,
+    backend: Any,
+    model_id: str,
+    pending: list[tuple[dict[str, Any], list[dict[str, Any]]]],
+    done: dict[str, dict[str, Any]],
+    concurrency: int | None,
+    load_ms: float,
+) -> dict[str, Any]:
+    """Score `pending` with a loaded backend, appending lines and writing meta.json."""
+    output = layout.model_jsonl(model_id)
     thresholds = backend.meta().get("thresholds", {})
     workers = resolve_concurrency(backend, concurrency)
     log.info("%s loaded in %.1fs, %d concurrent item(s)", model_id, load_ms / 1000, workers)
@@ -161,6 +183,4 @@ def run_model(
         }
         if frame_count or errors:
             write_meta(layout, backend, stats)
-        backend.close()
-        write_model_index(layout)
     return stats

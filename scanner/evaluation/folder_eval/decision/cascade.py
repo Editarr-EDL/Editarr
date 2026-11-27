@@ -76,7 +76,10 @@ class CascadeBackend:
 
     def meta(self) -> dict:
         decider = self._decider()
-        meta = decider.meta()
+        try:
+            meta = decider.meta()
+        finally:
+            decider.close()
         return {
             **meta,
             "model_id": self.model_id,
@@ -92,9 +95,12 @@ class CascadeBackend:
     def check_available(self) -> None:
         for factory in (self._decider, self._describer):
             backend = factory()
-            check = getattr(backend, "check_available", None)
-            if check is not None:
-                check()
+            try:
+                check = getattr(backend, "check_available", None)
+                if check is not None:
+                    check()
+            finally:
+                backend.close()
 
     def score_frames(self, paths: list[Path]) -> list[dict]:
         return self.score_items([paths])[0]

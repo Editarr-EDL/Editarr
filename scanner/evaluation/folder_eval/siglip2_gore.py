@@ -127,4 +127,7 @@ class Siglip2GoreBackend:
         }
 
     def close(self) -> None:
-        return None
+        from .backends import release_local_models
+
+        self._processor = self._model = self._execution = self._text = None
+        release_local_models()

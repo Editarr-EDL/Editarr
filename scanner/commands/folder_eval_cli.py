@@ -9,8 +9,13 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import signal
 import sys
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from scanner.evaluation.folder_eval.backends import (
     DECISION_MODEL_IDS,
@@ -152,9 +157,32 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+@contextmanager
+def _sigterm_exits() -> Iterator[None]:
+    """Turn SIGTERM into SystemExit for the block, so `finally` clauses close backends
+    (stopping llama-server and freeing model memory) instead of orphaning them."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def stop(signum: int, _frame: Any) -> None:
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, stop)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = _parser().parse_args(argv)
+    with _sigterm_exits():
+        return _run(args)
+
+
+def _run(args: argparse.Namespace) -> int:
     layout = Layout((args.data_root or default_data_root()).resolve())
     prefix = normalize_prefix(getattr(args, "only_folder", None))
     limit = getattr(args, "limit", None)

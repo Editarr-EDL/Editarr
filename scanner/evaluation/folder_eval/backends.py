@@ -82,6 +82,33 @@ def _detector_key(producer: str, family: Any, label: str, confidence: float) -> 
     return f"{result.category.value}/{result.subcategory.value}"
 
 
+def release_local_models() -> None:
+    """Drop the SigLIP2 and NudeNet models cached by `scanner.pipeline` and return their
+    accelerator memory, so the next model in `all` does not load next to them.
+
+    Only modules that were imported are touched; nothing is imported or loaded here.
+    """
+    import gc
+    import sys
+
+    released = False
+    moderation = sys.modules.get("scanner.pipeline.siglip2_moderation")
+    if moderation is not None and moderation._CACHE:
+        with moderation._LOAD_LOCK:
+            moderation._CACHE.clear()
+        released = True
+    visual = sys.modules.get("scanner.pipeline.visual")
+    if visual is not None and getattr(visual, "_detector", None) is not None:
+        visual._detector = None
+        released = True
+    if not released:
+        return
+    gc.collect()
+    torch = sys.modules.get("torch")
+    if torch is not None and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
 class NudeNetBackend:
     """NudeNet 320n via the scanner's cached detector and configured risk labels."""
 
@@ -143,7 +170,8 @@ class NudeNetBackend:
         return outputs
 
     def close(self) -> None:
-        return None
+        self._detector = None
+        release_local_models()
 
 
 class Siglip2Backend:
@@ -196,7 +224,7 @@ class Siglip2Backend:
         return outputs
 
     def close(self) -> None:
-        return None
+        release_local_models()
 
 
 def _siglip2_gore() -> Backend:
@@ -269,5 +297,9 @@ def create_backend(model_id: str) -> Backend:
     # Fail before any item is attempted when the binary or weights are missing.
     check = getattr(backend, "check_available", None)
     if check is not None:
-        check()
+        try:
+            check()
+        except BaseException:
+            backend.close()
+            raise
     return backend
