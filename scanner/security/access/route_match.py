@@ -18,7 +18,7 @@ from starlette.routing import compile_path
 
 from .catalog import CAPABILITIES
 from .route_table import ROUTE_RULES
-from .routes import Gated, RouteKey
+from .routes import AnyPrincipal, Gated, PrincipalReason, RouteKey
 from .vocabulary import Authentication
 
 
@@ -51,15 +51,35 @@ def matched_route(application: Any, scope: Mapping[str, Any]) -> RouteKey | None
     return None
 
 
+def route_interactive_only(key: RouteKey | None) -> bool:
+    """Whether every capability the route `key` can exercise needs a fresh session.
+
+    Shared by the API-key middleware and the published OpenAPI security.
+    """
+
+    rule = ROUTE_RULES.get(key) if key is not None else None
+    return isinstance(rule, Gated) and all(
+        CAPABILITIES[capability].authentication is Authentication.FRESH_INTERACTIVE
+        for capability in rule.capabilities
+    )
+
+
+def route_session_cookie_only(key: RouteKey | None) -> bool:
+    """Whether the route `key` acts on the caller's own browser session.
+
+    Such handlers read the session cookie itself, so an API key is admitted by
+    the middleware but finds no session to act on.
+    """
+
+    rule = ROUTE_RULES.get(key) if key is not None else None
+    return isinstance(rule, AnyPrincipal) and rule.reason is PrincipalReason.OWN_SESSION
+
+
 def interactive_only(application: Any, scope: Mapping[str, Any]) -> bool:
-    """Whether every capability the matched route can exercise needs a fresh session.
+    """Whether the matched route needs a fresh session for every capability.
 
     An API key can never satisfy such a route, so the middleware refuses it
     before the handler runs, whichever task later migrates that handler.
     """
 
-    rule = ROUTE_RULES.get(matched_route(application, scope))
-    return isinstance(rule, Gated) and all(
-        CAPABILITIES[capability].authentication is Authentication.FRESH_INTERACTIVE
-        for capability in rule.capabilities
-    )
+    return route_interactive_only(matched_route(application, scope))

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { openWorkflowStep } from "./new-scan-controls.mjs";
 import { childEnvironment, pythonPath } from "./prerequisites.mjs";
 
 export function captureScanState(run) {
@@ -37,10 +38,14 @@ export async function deletedSharedScanDraft({ run, member, ownerContext, scan, 
   const { page, context } = member;
   const name = `Unsaved shared scan draft ${width}`;
   const itemRoute = `/api/library-items/${item}`;
+  await openWorkflowStep(page, "Review", expect);
   await page.getByRole("button", { name: "New Review", exact: true }).click();
   await page.getByLabel("New review name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Start new review", exact: true }).click();
-  await page.getByRole("checkbox", { name: new RegExp(`^Other actor ${width}`) }).check();
+  await page.getByRole("button", { name: /^Sources · / }).click();
+  const sources = page.getByRole("dialog", { name: "Included scans", exact: true });
+  await sources.getByRole("checkbox", { name: new RegExp(`^Other actor ${width}`) }).check();
+  await sources.getByRole("button", { name: "Done", exact: true }).click();
   const save = page.getByRole("button", { name: "Save Review", exact: true });
   await expect(save).toBeEnabled();
   await capture(page, run, `scan-draft-before-deletion-${width}`);
@@ -71,7 +76,8 @@ export async function deletedSharedScanDraft({ run, member, ownerContext, scan, 
     prompt = { type: dialog.type(), message: dialog.message() };
     await dialog.dismiss();
   });
-  await page.getByRole("navigation", { name: "Primary navigation", exact: true }).getByRole("button", { name: "Synthetic Movies", exact: true }).click();
+  // The breadcrumb's library link is visible at every width; narrow windows collapse the primary navigation.
+  await page.getByRole("navigation", { name: "Breadcrumb", exact: true }).getByRole("button", { name: "Synthetic Movies", exact: true }).click();
   assert.deepEqual(prompt, { type: "confirm", message: "Discard unsaved review changes and leave this page?" });
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   await expect(save).toBeEnabled();
@@ -133,17 +139,24 @@ export async function mediaRevocation({ run, member, providerState, dropItemCach
   await expect.poll(() => providerState.itemReads).toBeGreaterThan(reads);
   await expect(page.getByText("Media unavailable", { exact: true })).toBeVisible();
   providerState.unavailable = false;
+  const restoredReads = providerState.itemReads;
   // Editarr reuses a linked user's item decisions until that user's next sync.
   await resync();
-  const restoredReads = providerState.itemReads;
-  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  // Retry rereads the item's protected routes, which answered 404 while the item was hidden.
+  const [reopened] = await Promise.all([
+    page.waitForResponse(response => new RegExp(`^/api/library-items/[^/]+(/(scans|reviews))?$`).test(new URL(response.url()).pathname)
+      && response.request().method() === "GET" && response.status() === 200),
+    page.getByRole("button", { name: "Retry", exact: true }).click(),
+  ]);
   await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-  assert.ok(providerState.itemReads > restoredReads, "Reopening performs a fresh authorization read");
+  const providerReads = providerState.itemReads - restoredReads;
+  assert.ok(providerReads > 0, "Restoration rereads the provider item");
   assert.equal(await page.getByRole("dialog").count(), 0);
   await capture(page, run, `scan-media-restored-${width}`);
   await axe(page, `scan-media-restored-${width}`);
   run.write(`scan-media-revocation-${width}.json`, {
     permissionRevision: before.permission_revision, principalUnchanged: true,
     denialStatus: denied.status(), workspaceCleared: true, reopeningRevalidated: true,
+    reopeningRead: new URL(reopened.url()).pathname.replace(/^\/api\/library-items\/[^/]+/, "/api/library-items/{id}"), providerItemReadsAfterRestore: providerReads,
   });
 }

@@ -14,7 +14,8 @@ own jobs without server paths or global queue controls.
 ## How to get to it (user POV)
 
 - Open a downloaded Jellyfin item.
-- Click **New Scan** in the selected version's detail view.
+- Open the item's **Scans** tab (in the **Library item workflow** tabs) and click
+  **New Scan**.
 - Open **Open scans queue and history** to reach the **Scans queue and history** region.
 - Every scan targets a Jellyfin item. The removed Other Files routes
   (`/api/manual-scans`, `/api/manual-files/*`) answer 404 even to the owner.
@@ -73,18 +74,29 @@ At both 1440x900 and 320x900, the helper performs these checks.
 
 1. Sign in as an ordinary user. Require safe catalog paths to be null, no path
    input, and no hidden settings, model-inventory, or path-mapping requests.
-2. Open the exact **New Scan** dialog. Select `audio`, `video`, or `combined`
-   through **Scan type**. Before changing a model, compare **Video model** and
-   **Severity and Description model** with `/api/capabilities`: each option reads
-   its display name plus " (recommended)" when `recommended` is true, only
-   Qwen3-VL 8B is recommended, `d1-3b` is offered, and an untouched select shows
-   the recommended entry (else the first). The simulated Linux host has no MLX,
-   so NudeNet stays the video default there. The Severity and Description select
-   must be described by its helper text. Then select audio stream `2`, `whisper`,
-   `better_profanity`, `nudenet` (video) or `d1-3b` (combined), Severity and
-   Description model Qwen3-VL 4B, six representative frames, and a two-second
-   join gap where applicable. Fill the unique **Scan name (optional)** field.
-3. Capture **Add to Queue** and require HTTP 201 with the exact name and options.
+2. Open the exact **New Scan** dialog. Press the `Audio`, `Video`, or
+   `Audio and video` radio card in the **Scan type** group. Before changing a
+   model, open each **Change** picker (accessible name
+   `Change <label>: <selected model>`) for **Video model** and **Severity and
+   Description model** and compare its listbox with `/api/capabilities`
+   (`lib/scan-model-choices.mjs`). Every offered model is listed; a model is
+   available unless its `model_capabilities` record is unavailable (description
+   models follow `qwen3_vl`); **Video model** also lists the detectors this host
+   can't run. Unavailable rows are `aria-disabled` under **Unavailable on this
+   host**, and only available recommended models sit under **Recommended**. Only
+   Qwen3-VL 8B is recommended, `d1-3b` is offered, and an untouched picker
+   selects the recommended entry (else the first). The simulated Linux host has
+   no MLX, so NudeNet stays the video default and every Qwen3-VL row is
+   unavailable. The **About the Severity and Description model** button must show
+   the helper text. Then select audio stream `2` and choose `whisper`,
+   `better_profanity`, and `nudenet` (video) or `d1-3b` (combined) from their
+   listboxes. Expand **Advanced video settings** (collapsed by default) and set
+   six representative frames and a two-second join gap where applicable. Choose
+   Severity and Description model Qwen3-VL 4B when it is available; otherwise
+   pressing its disabled row must leave the listbox open and the selection
+   unchanged. Fill the unique **Scan name (optional)** field.
+3. Capture **Add to Queue** and require HTTP 201 with the exact name and options,
+   including the audio models and the expected `qwen_model`.
    Read protected queue and history APIs independently.
 4. Wait for running fake-model progress before cancelling the audio job. Require
    persisted `cancelled`, not a disappeared spinner. Require no reorder buttons.
@@ -98,12 +110,13 @@ At both 1440x900 and 320x900, the helper performs these checks.
    blocker and disabled **Delete scan**. Require `has_hidden_references=true`
    and `reviews=[]`, with no private review name in the ordinary user's DOM.
 8. Sign in as the owner in a fresh context and require other-user rename controls.
-   Create a member review draft that includes the owner's shared scan. Delete
+   On the **Review** tab, create a member review draft that includes the owner's
+   shared scan through the **Sources** button's **Included scans** popover. Delete
    that scan through the owner API, then save the member draft. Require 404
    `scan_not_found`, a fresh item GET 200, no persisted review, and the same
    workspace and draft. Cancel the existing navigation discard prompt and
-   require the draft to remain (the prompt comes from the **Synthetic Movies**
-   library link), then explicitly discard it before continuing.
+   require the draft to remain (the prompt comes from the breadcrumb's
+   **Synthetic Movies** library link), then explicitly discard it before continuing.
 9. Open **New Scan**.
    Deny the member `media.browse`, refresh on focus, and require **Page unavailable**
    with cleared dialog and results. Restore permission and await focus refresh.
@@ -114,8 +127,12 @@ At both 1440x900 and 320x900, the helper performs these checks.
    capabilities and permission revision remain unchanged. **Retry** must reread
    the item and refuse it while unavailable. When provider access returns, the
    owner runs `POST /api/jellyfin/sync`, because Editarr reuses a linked user's
-   item decisions until that user's next sync; the page then reopens only after
-   a fresh successful read. The old dialog must not reopen.
+   item decisions until that user's next sync; **Retry** then reopens the page
+   only after a fresh 200 read of the item's protected routes (the item, its
+   scans, or its reviews), which answered 404 while it was hidden, and the
+   provider item must have been reread since access returned. The old
+   dialog must not reopen. `scan-media-revocation-*.json` records that read and
+   the provider item reads after restoration.
 
 The helper checks viewport overflow, uncaught page errors, and WCAG axe results.
 Right after setup, `lib/scan-connection-probes.mjs` writes

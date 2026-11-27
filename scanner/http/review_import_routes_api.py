@@ -308,7 +308,11 @@ def _mcf_import_issues_http_error(exc: _McfImportIssues) -> HTTPException:
 )
 async def api_import_mcf_upload(
     file: UploadFile = File(...),
-    options: str = Form(...),
+    options: str = Form(
+        ...,
+        description="JSON-encoded McfImportOptions sent as a text field.",
+        json_schema_extra={"contentMediaType": "application/json"},
+    ),
     caller: ReviewAccess = Depends(review_caller),
 ):
     """Import an uploaded MCF for the requested media target."""
@@ -375,7 +379,11 @@ async def api_import_mcf_upload(
 )
 async def api_import_edl_upload(
     file: UploadFile = File(...),
-    options: str = Form(...),
+    options: str = Form(
+        ...,
+        description="JSON-encoded EdlImportOptions sent as a text field.",
+        json_schema_extra={"contentMediaType": "application/json"},
+    ),
     caller: ReviewAccess = Depends(review_caller),
 ):
     """Import an uploaded EDL for the requested media target."""

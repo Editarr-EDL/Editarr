@@ -1,21 +1,17 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { fetchCapabilities, primaryImageUrl } from "../api/api-service";
-import { deleteScan, enqueueScan, fetchAssociatedScans, fetchScanHistory, fetchScanQueue, requiresAudioTrackRefresh } from "../api/api-scans";
-import { deleteExport, startCreditsDetection } from "../api/api-reviews";
-import type { ScanCapabilities } from "../api/api-system-types";
+import { primaryImageUrl } from "../api/api-service";
+import { deleteScan, fetchAssociatedScans, fetchScanHistory, fetchScanQueue } from "../api/api-scans";
+import { deleteExport } from "../api/api-reviews";
 import { identifyEditarrVersion, type EditarrItem } from "../api/api-stable-media";
 import { ScanVerificationDialog } from "../scans/scan-verification";
 import type { JellyfinMediaItem } from "../api/api-media-types";
 import type { ExportFormat, ExportStatus } from "../api/api-mcf-types";
-import type { ScanOptions, Scan } from "../api/api-scan-types";
+import type { Scan } from "../api/api-scan-types";
 import type { SavedReview } from "../api/api-review-types";
-import { validateDisplayName } from "../shared/name-validation";
 import { usePageTitle } from "../shared/display";
-import { ScanCapabilityDisclosure } from "../scans/scan-capability-disclosure";
-import { AudioLanguageHelp, QwenModelField } from "../scans/qwen-model-field";
-import { ModelOptions, resolveModelChoice } from "../scans/model-options";
-import { AudioTrackField } from "../scans/audio-track-field";
-import { useAudioTracks } from "../scans/use-audio-tracks";
+import { NewScanDialog } from "../scans/new-scan-dialog";
+import { useNewScan } from "../scans/use-new-scan";
+import { formatMediaDuration } from "./media-display";
 import { useVerificationAudioScan } from "../scans/use-verification-audio-scan";
 import { IDLE_SCAN_POLL_MS, scanPollDelay, useScanPolling } from "../scans/use-scan-polling";
 import { MediaWorkflowHeader } from "./media-workflow-header";
@@ -57,25 +53,11 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const mayReadHistory = mayReadFindings || mayViewOwnJobs || mayViewOtherJobs;
   const imageTag = typeof item.image_tags.Primary === "string" ? item.image_tags.Primary : undefined;
   const imageUrl = item.image_url ? applicationUrl(item.image_url) : (imageTag ? primaryImageUrl(item.id, imageTag) : null);
-  const [showNewScan, setShowNewScan] = useState(false);
-  const [scanType, setScanType] = useState<"audio" | "video" | "combined" | "credits">("audio");
-  const scanAudio = scanType === "audio" || scanType === "combined";
-  const scanVideo = scanType === "video" || scanType === "combined";
-  const [audioModel, setAudioModel] = useState("whisper");
-  const [audioFilter, setAudioFilter] = useState("better_profanity");
-  const [videoModel, setVideoModel] = useState("");
-  const [coarseScanInterval, setCoarseScanInterval] = useState(5);
-  const [coarseScanEnabled, setCoarseScanEnabled] = useState(false);
-  const [qwenModel, setQwenModel] = useState("");
-  const [qwenSummariesPerSegment, setQwenSummariesPerSegment] = useState(4);
-  const [qwenSegmentJoinGapSeconds, setQwenSegmentJoinGapSeconds] = useState(3);
   const initialMediaSourceId = initialSourceId ?? item.versions.find((version) => version.id)?.id ?? null;
   const [versions, setVersions] = useState(() => item.versions.map((version) => ({ ...version, exports: normalizedExportStatus(version) })));
   const [mediaSourceId, setMediaSourceId] = useState(initialMediaSourceId);
   const [selectedReviewMediaSourceId, setSelectedReviewMediaSourceId] = useState(initialMediaSourceId);
   const verificationAudio = useVerificationAudioScan();
-  const audioTracks = useAudioTracks({ item_id: item.id, media_source_id: mediaSourceId },
-    mayScan && showNewScan && scanAudio, verificationAudio.requestedSelection);
   const verificationSession = useRef(0);
   const openVerification = (scan: Scan | null) => {
     verificationSession.current++;
@@ -94,10 +76,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
     setReviewDirty(dirty);
     onDirtyChange(dirty);
   }, [onDirtyChange]);
-  const [capabilities, setCapabilities] = useState<ScanCapabilities | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [scanSubmitError, setScanSubmitError] = useState<{ message: string; refreshTracks?: boolean } | null>(null);
-  const needsAudioTrackRefresh = scanAudio && scanSubmitError?.refreshTracks;
   const [deletingExport, setDeletingExport] = useState<ExportFormat | null>(null);
   const [showManageExports, setShowManageExports] = useState(false);
   const [fallbackExportStatus, setFallbackExportStatus] = useState<ExportStatus>(() => normalizedExportStatus(item));
@@ -114,7 +92,6 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   const [scanToDelete, setScanToDelete] = useState<Scan | null>(null);
   const [deletingScan, setDeletingScan] = useState(false);
   const newScanTriggerRef = useRef<HTMLButtonElement>(null);
-  const scanPopoverRef = useRef<HTMLElement>(null);
   const wasNewScanOpen = useRef(false);
   const selectedReviewVersion = versions.find(
     (version) => version.id === selectedReviewMediaSourceId,
@@ -195,25 +172,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       || !!(scanResult?.context === scanContext && scanResult.otherVersionScans)
       || previousVersions.some((previous) => previous.scans.length > 0) });
   useScanPolling(loadScans, loadScans);
-  useEffect(() => {
-    if (!mayScan || !showNewScan) return;
-    void fetchCapabilities().then((next) => {
-      setCapabilities(next);
-      setAudioModel((current) => (
-        next.audio_models.length > 0 && !next.audio_models.some((model) => model.id === current)
-          ? next.audio_models[0].id
-          : current
-      ));
-      setAudioFilter((current) => (
-        next.audio_filters.length > 0
-        && !next.audio_filters.some((filter) => filter.id === current)
-          ? next.audio_filters[0].id
-          : current
-      ));
-      setVideoModel((current) => resolveModelChoice(current, next.video_models));
-      setQwenModel((current) => resolveModelChoice(current, next.qwen_models));
-    }).catch(() => setMessage("Unable to load scan options."));
-  }, [mayScan, showNewScan]);
+  const newScan = useNewScan({ itemId: item.id, mediaSourceId, mayScan, verificationAudio, onMessage: setMessage, onQueued: loadScans });
+  const showNewScan = newScan.open;
   useEffect(() => {
     setVersions(item.versions.map((version) => ({ ...version, exports: normalizedExportStatus(version) })));
     const keepAvailableSource = (sourceId: string | null) =>
@@ -224,60 +184,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   useEffect(() => {
     const wasOpen = wasNewScanOpen.current;
     wasNewScanOpen.current = showNewScan;
-    if (showNewScan) {
-      const frame = window.requestAnimationFrame(() => scanPopoverRef.current?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), button:not([disabled])")?.focus());
-      return () => window.cancelAnimationFrame(frame);
-    } else if (wasOpen && !scanToVerify) {
-      newScanTriggerRef.current?.focus();
-    }
+    if (!showNewScan && wasOpen && !scanToVerify) newScanTriggerRef.current?.focus();
   }, [showNewScan, scanToVerify]);
-  const closeNewScan = () => { setShowNewScan(false); verificationAudio.finish(); };
-  const addToQueue = async () => {
-    if (!mayScan || adding || (scanAudio && !audioTracks.ready) || needsAudioTrackRefresh) return;
-    const scanName = validateDisplayName(scanPopoverRef.current?.querySelector<HTMLInputElement>('input[aria-label="Scan name (optional)"]')?.value || "", false);
-    if (scanName.error) { setScanSubmitError({ message: scanName.error }); return; }
-    setAdding(true); setScanSubmitError(null); setMessage(null);
-    if (scanType === "credits") {
-      try {
-        const result = await startCreditsDetection({
-          target: { source: "jellyfin", item_id: item.id, media_source_id: mediaSourceId },
-          qwen_model: null,
-        });
-        setShowNewScan(false);
-        setMessage(`Credits scan ${result.scan.scan_id} added to the queue.`);
-        await loadScans();
-      } catch (error) {
-        setScanSubmitError({ message: error instanceof Error ? error.message : "Unable to add credits scan to queue." });
-      } finally {
-        setAdding(false);
-      }
-      return;
-    }
-    const options: ScanOptions = {
-      name: scanName.normalized,
-      scan_audio: scanAudio,
-      audio_model: scanAudio ? audioModel : null,
-      audio_filter: scanAudio ? audioFilter : null,
-      audio_selection: scanAudio ? audioTracks.selection : undefined,
-      scan_video: scanVideo,
-      ...(scanVideo ? (videoModel ? { video_model: videoModel } : {}) : { video_model: null }),
-      coarse_scan_interval: scanVideo && coarseScanEnabled ? coarseScanInterval : undefined,
-      coarse_scan_enabled: scanVideo && coarseScanEnabled,
-      ...(qwenModel ? { qwen_model: qwenModel } : {}),
-      qwen_summaries_per_segment: qwenSummariesPerSegment,
-      qwen_segment_join_gap_seconds: qwenSegmentJoinGapSeconds,
-    };
-    try {
-      const scan = await enqueueScan(item.id, options, mediaSourceId);
-      verificationAudio.finish(scan);
-      setShowNewScan(false);
-      setMessage(`Scan ${scan.scan_id} added to the queue.`);
-      await loadScans();
-    } catch (error) {
-      setScanSubmitError({ message: error instanceof Error ? error.message : "Unable to add scan to queue.",
-        refreshTracks: requiresAudioTrackRefresh(error) });
-    } finally { setAdding(false); }
-  };
   const deleteManagedExport = async (format: ExportFormat) => {
     setDeletingExport(format); setMessage(null);
     try {
@@ -297,38 +205,18 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
   };
   const openNewScan = (audio = false) => {
     if (!mayScan) return;
-    if (audio) {
-      setMediaSourceId(selectedReviewMediaSourceId);
-      setScanType("audio");
-    }
-    setScanSubmitError(null);
-    setShowNewScan(true);
+    if (audio) setMediaSourceId(selectedReviewMediaSourceId);
+    newScan.openForm(audio);
   };
   const leaveDetail = (route: string) => onNavigate(route);
+  const scanDuration = versions.find((version) => version.id === mediaSourceId)?.duration_seconds ?? item.duration_seconds;
+  const newScanMeta = [item.item_type, item.year, scanDuration != null && formatMediaDuration(scanDuration)].filter(Boolean).join(" · ");
   const selectReviewVersion = (sourceId: string | null) => {
     if (reviewDirty && !window.confirm("Discard unsaved review changes and switch versions?")) return;
     setImportedReview(null);
     openVerification(null);
     setMediaSourceId(sourceId);
     setSelectedReviewMediaSourceId(sourceId);
-  };
-  const trapNewScanFocus = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape" && !adding) {
-      event.preventDefault();
-      closeNewScan();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = Array.from(scanPopoverRef.current?.querySelectorAll<HTMLElement>(
-      "input:not([disabled]), select:not([disabled]), button:not([disabled])",
-    ) || []);
-    if (!focusable.length) return;
-    const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
-    const nextIndex = event.shiftKey
-      ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
-      : (currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
-    event.preventDefault();
-    focusable[nextIndex].focus();
   };
   return <div className="content-page media-detail">
     <LibraryBreadcrumbs crumbs={breadcrumbs} onNavigate={leaveDetail} />
@@ -357,20 +245,8 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
         onStartAudioScan: () => openNewScan(true),
         stageImportsForVerification: !!stableIdentity,
       }} />
-    {mayScan && showNewScan && <div className="modal-backdrop" role="presentation"><section className="scan-popover catalog-scan-dialog" ref={scanPopoverRef} onKeyDown={trapNewScanFocus} role="dialog" aria-modal="true" aria-labelledby="new-scan-heading">
-      <h2 id="new-scan-heading">New Scan</h2>
-      {versions.length > 0 && <label className="field"><span>Version</span><select aria-label="Version" disabled={adding || verificationAudio.setup} value={mediaSourceId || ""} onChange={(event) => { setScanSubmitError(null); setMediaSourceId(event.target.value || null); }}>{versions.map((version, index) => <option key={version.id || `${version.name || "version"}-${index}`} value={version.id || ""} disabled={!version.id}>{version.name || `Version ${index + 1}`}{version.resolution ? ` · ${version.resolution}` : ""}{version.media_format ? ` · ${version.media_format}` : ""}</option>)}</select></label>}
-      <label className="field"><span>Scan type</span><select aria-label="Scan type" disabled={adding || verificationAudio.setup} value={scanType} onChange={(event) => { setScanSubmitError(null); setScanType(event.target.value as typeof scanType); }}><option value="audio">Audio</option><option value="video">Video</option><option value="combined">Audio and video</option><option value="credits">Credits</option></select></label>
-      {scanAudio && <><AudioTrackField {...audioTracks} disabled={adding} /><label className="field"><span>Transcriber</span><select aria-label="Transcriber" value={audioModel} onChange={(event) => setAudioModel(event.target.value)}>{(capabilities?.audio_models || []).map((model) => <option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label><label className="field"><span>Filter</span><select aria-label="Filter" value={audioFilter} onChange={(event) => setAudioFilter(event.target.value)}>{(capabilities?.audio_filters || []).map((filter) => <option key={filter.id} value={filter.id}>{filter.display_name}</option>)}</select></label><AudioLanguageHelp /></>}
-      {scanVideo && <><label className="field"><span>Video model</span><select aria-label="Video model" value={videoModel} onChange={(event) => setVideoModel(event.target.value)}><ModelOptions models={capabilities?.video_models} /></select></label><label><input type="checkbox" checked={coarseScanEnabled} onChange={(event) => setCoarseScanEnabled(event.target.checked)} /> Enable coarse scan</label>{coarseScanEnabled && <label className="field"><span>Coarse scan interval (seconds)</span><input type="number" min="0.1" step="0.1" value={coarseScanInterval} onChange={(event) => setCoarseScanInterval(Number(event.target.value))} /></label>}<label className="field"><span>Representative frames per flagged segment</span><input aria-label="Representative frames per flagged segment" type="number" min="1" step="1" value={qwenSummariesPerSegment} onChange={(event) => setQwenSummariesPerSegment(Number(event.target.value))} /></label><label className="field"><span>Join flagged segments within (seconds)</span><input aria-label="Join flagged segments within (seconds)" type="number" min="0" step="0.1" value={qwenSegmentJoinGapSeconds} onChange={(event) => setQwenSegmentJoinGapSeconds(Number(event.target.value))} /></label><p className="muted-copy">Fine scans analyze every source frame. Qwen receives evenly spaced representative flagged frames together after the scene scan; short clean gaps can be joined into one segment.</p></>}
-      {scanType === "credits" ? <p className="muted-copy">Detect the start of closing credits using local chapter and visual analysis.</p> : <QwenModelField capabilities={capabilities} value={qwenModel} onChange={setQwenModel} />}
-      {scanAudio && <ScanCapabilityDisclosure capabilities={capabilities} backendId={audioModel} scanType="audio" />}
-      {scanVideo && <ScanCapabilityDisclosure capabilities={capabilities} backendId={videoModel} scanType="video" includeScanName={!scanAudio} />}
-      {scanSubmitError && <p className="form-error" role="alert">{scanSubmitError.message}</p>}
-      <div className="button-row"><button className="btn-secondary" onClick={closeNewScan} disabled={adding}>Cancel</button>
-        {needsAudioTrackRefresh && <button className="btn-secondary" onClick={() => { setScanSubmitError(null); audioTracks.onRetry(); }}>Refresh audio tracks</button>}
-        <button className="btn-primary" onClick={() => void addToQueue()} disabled={adding || needsAudioTrackRefresh || (scanAudio && !audioTracks.ready) || (scanVideo && (coarseScanEnabled && coarseScanInterval <= 0 || qwenSummariesPerSegment < 1 || qwenSegmentJoinGapSeconds < 0))}>{adding ? "Adding…" : "Add to Queue"}</button></div>
-    </section></div>}
+    {mayScan && showNewScan && <NewScanDialog form={newScan} title={item.name} meta={newScanMeta}
+      versions={versions} mediaSourceId={mediaSourceId} onVersionChange={setMediaSourceId} />}
     {stableIdentity && scanToVerify && mayVerify && !showNewScan && <ScanVerificationDialog
       key={`${scanContext}/${scanToVerify.id}`} scan={scanToVerify} itemName={item.name}
       target={{ source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId }}

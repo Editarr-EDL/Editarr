@@ -18,6 +18,7 @@ import { foreignJobs } from "./lib/scan-foreign-jobs.mjs";
 import { verifyConnectionWritesAndRemovedRoutes } from "./lib/scan-connection-probes.mjs";
 import { prepareReviewMedia, verifySourceReviews } from "./lib/review-source-journey.mjs";
 import { verifyModelChoices } from "./lib/scan-model-choices.mjs";
+import { chooseModel, chooseScanType, openAdvancedVideoSettings, openWorkflowStep, refuseUnavailableModel } from "./lib/new-scan-controls.mjs";
 import { SIGN_IN_PATH, addJellyfinUser, fillSignIn } from "./lib/run-jellyfin.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -99,6 +100,7 @@ async function actor(width, username, password) {
   await fillSignIn(page, username, password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Synthetic catalog film", exact: true })).toBeVisible();
+  await openWorkflowStep(page, "Scans", expect);
   return { context, page, paths };
 }
 
@@ -134,31 +136,39 @@ async function storedScan(context, name) {
 }
 
 const videoModels = { video: "nudenet", combined: "d1-3b" };
+const SEVERITY_CHOICE = "qwen3-vl-4b-instruct-4bit";
 const changedModelSelects = new WeakMap();
 
 async function submit(actor, mode, name, width) {
   const { page, context } = actor;
+  await openWorkflowStep(page, "Scans", expect);
   await page.getByRole("button", { name: "New Scan", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New Scan", exact: true });
-  await dialog.getByLabel("Scan type", { exact: true }).selectOption(mode);
+  await chooseScanType(dialog, mode, expect);
   const capabilities = await (await send(context, "GET", "/api/capabilities")).json();
   const changed = changedModelSelects.get(page) ?? new Set();
   changedModelSelects.set(page, changed);
   const fresh = new Set(["qwen", ...(mode === "audio" ? [] : ["video"])].filter(select => !changed.has(select)));
-  await verifyModelChoices({ dialog, capabilities, mode, fresh, expect });
+  const choices = await verifyModelChoices({ dialog, capabilities, mode, fresh, expect });
   for (const select of fresh) changed.add(select);
   if (mode !== "video") {
     await expect(dialog.getByRole("button", { name: "Add to Queue", exact: true })).toBeEnabled();
     await dialog.getByLabel("Audio track", { exact: true }).selectOption("2");
-    await dialog.getByLabel("Transcriber", { exact: true }).selectOption("whisper");
-    await dialog.getByLabel("Filter", { exact: true }).selectOption("better_profanity");
+    await chooseModel(dialog, "Transcriber", "whisper", expect);
+    await chooseModel(dialog, "Filter", "better_profanity", expect);
   }
   if (mode !== "audio") {
-    await dialog.getByLabel("Video model", { exact: true }).selectOption(videoModels[mode]);
+    await chooseModel(dialog, "Video model", videoModels[mode], expect);
+    await openAdvancedVideoSettings(dialog, expect);
     await dialog.getByLabel("Representative frames per flagged segment", { exact: true }).fill("6");
     await dialog.getByLabel("Join flagged segments within (seconds)", { exact: true }).fill("2");
   }
-  await dialog.getByLabel("Severity and Description model", { exact: true }).selectOption("qwen3-vl-4b-instruct-4bit");
+  // Where Qwen3-VL is unavailable (this run simulates Linux) its row is aria-disabled and the default selection stays.
+  const severityChoice = choices.severity.find(option => option.id === SEVERITY_CHOICE);
+  assert.ok(severityChoice, `${SEVERITY_CHOICE} is offered`);
+  if (severityChoice.available) await chooseModel(dialog, "Severity and Description model", SEVERITY_CHOICE, expect);
+  else await refuseUnavailableModel(dialog, "Severity and Description model", SEVERITY_CHOICE, expect);
+  const expectedQwen = severityChoice.available ? SEVERITY_CHOICE : (capabilities.qwen_models.find(model => model.recommended) ?? capabilities.qwen_models[0]).id;
   await dialog.getByLabel("Scan name (optional)", { exact: true }).fill(name);
   const submitButton = dialog.getByRole("button", { name: "Add to Queue", exact: true });
   await submitButton.scrollIntoViewIfNeeded();
@@ -176,6 +186,8 @@ async function submit(actor, mode, name, width) {
   assert.equal(scan.scan_video, mode !== "audio");
   if (mode !== "video") assert.equal(scan.requested_audio_selection.track.stream_index, 2);
   if (mode !== "audio") assert.deepEqual([scan.video_model, scan.qwen_summaries_per_segment, scan.qwen_segment_join_gap_seconds], [videoModels[mode], 6, 2]);
+  if (mode !== "video") assert.deepEqual([scan.audio_model, scan.audio_filter], ["whisper", "better_profanity"]);
+  assert.equal(scan.qwen_model, expectedQwen);
   step("catalog submission persisted its exact options", { width, mode, scan: scan.id });
   return { ...scan, name };
 }
@@ -287,6 +299,7 @@ try {
     await axe(admin.page, `scan-admin-${width}`);
     await deletedSharedScanDraft({ run, member, ownerContext, scan: other, item, width, send, expect, capture, axe });
     step("deleted shared scan refuses Save without losing the accessible workspace or dirty draft", { width });
+    await openWorkflowStep(page, "Scans", expect);
     await page.getByRole("button", { name: "New Scan", exact: true }).click();
     assert.equal((await send(ownerContext, "PATCH", `/api/users/${memberId}/permissions`, { overrides: { "media.browse": "deny" }, reauthentication: { password: owner.password } })).status(), 200);
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));

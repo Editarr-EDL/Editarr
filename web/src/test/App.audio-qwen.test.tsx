@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { AuthenticationGate } from "../auth/auth-gate";
 import { completeScan, installProductionApi, json, mediaItem, signedInStatus } from "./app-test-fixtures";
+import { chooseModel, chooseScanType, expectSelectedModel, infoText, modelPicker, scanTypeRadio, type ScanTypeName } from "./new-scan-test-helpers";
 
 const audioCapabilities = {
   audio_models: [
@@ -52,25 +53,19 @@ describe("Qwen language scan controls", () => {
     await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
-    expect(within(dialog).getByLabelText("Scan type")).toHaveValue("audio");
-    fireEvent.change(within(dialog).getByLabelText("Scan type"), { target: { value: mode } });
+    expect(scanTypeRadio(dialog, "Audio")).toBeChecked();
+    chooseScanType(dialog, ({ audio: "Audio", video: "Video", combined: "Audio and video" } as Record<string, ScanTypeName>)[mode]);
     if (mode !== "video") {
-      const transcriber = within(dialog).getByLabelText("Transcriber");
-      await within(transcriber).findByRole("option", { name: "Apple Speech" });
-      expect(transcriber).toHaveValue("whisper");
-      fireEvent.change(transcriber, { target: { value: "apple_speech" } });
-      expect(within(dialog).getByText(/macOS may download speech assets/)).toBeVisible();
-      await within(dialog).findByRole("option", { name: "Qwen (multilingual)" });
-      fireEvent.change(within(dialog).getByLabelText("Filter"), { target: { value: "qwen" } });
+      await expectSelectedModel(dialog, "Transcriber", "Whisper");
+      await chooseModel(dialog, "Transcriber", "Apple Speech");
+      expect(within(dialog).getByText(/Apple Speech runs on the Editarr server/)).toBeVisible();
+      await chooseModel(dialog, "Filter", "Qwen");
     }
     if (mode !== "audio") {
       fireEvent.change(within(dialog).getByLabelText("Representative frames per flagged segment"), { target: { value: "6" } });
       fireEvent.change(within(dialog).getByLabelText("Join flagged segments within (seconds)"), { target: { value: "2" } });
     }
-    await within(dialog).findByRole("option", { name: "Qwen3-VL 4B" });
-    fireEvent.change(within(dialog).getByLabelText("Severity and Description model"), {
-      target: { value: "qwen3-vl-4b-instruct-4bit" },
-    });
+    await chooseModel(dialog, "Severity and Description model", "Qwen3-VL 4B");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Scan name (optional)" }), {
       target: { value: `Selected ${mode}` },
     });
@@ -130,7 +125,7 @@ describe("Qwen language scan controls", () => {
     })));
     expect(confirm).not.toHaveBeenCalled();
     expect(within(dialog).getByLabelText("Version")).toBeDisabled();
-    expect(within(dialog).getByLabelText("Scan type")).toBeDisabled();
+    for (const name of ["Audio", "Video", "Audio and video", "Credits"] as const) expect(scanTypeRadio(dialog, name)).toBeDisabled();
     await act(async () => { finishFirstSubmit?.(json({ detail: "Configure Jellyfin before creating a scan" }, 409)); });
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Configure Jellyfin before creating a scan");
     expect(dialog).toBeVisible();
@@ -224,14 +219,18 @@ describe("Qwen language scan controls", () => {
     await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
-    fireEvent.change(within(dialog).getByLabelText("Scan type"), { target: { value: "video" } });
-    const videoModel = within(dialog).getByLabelText("Video model");
-    await waitFor(() => expect(videoModel).toHaveValue("qwen3-vl-8b"));
-    expect(within(videoModel).getAllByRole("option").map((option) => option.textContent)).toEqual(["NudeNet", "Qwen3-VL 8B (recommended)", "Qwen3-VL 4B", "d1-3B"]);
-    const severityModel = within(dialog).getByRole("combobox", { name: "Severity and Description model" });
-    expect(severityModel).toHaveValue("qwen3-vl-8b-instruct-4bit");
-    expect(within(severityModel).getByRole("option", { name: "Qwen3-VL 8B (recommended)" })).toBeInTheDocument();
-    expect(severityModel).toHaveAccessibleDescription("Describes flagged scenes and rates their severity when the video model doesn't.");
+    chooseScanType(dialog, "Video");
+    await expectSelectedModel(dialog, "Video model", "Qwen3-VL 8B");
+    fireEvent.click(modelPicker(dialog, "Video model"));
+    const videoModels = screen.getByRole("listbox", { name: "Video model" });
+    expect(within(within(videoModels).getByRole("group", { name: "Recommended" })).getAllByRole("option").map((option) => option.id.split("-option-")[1]))
+      .toEqual(["qwen3-vl-8b"]);
+    expect(within(within(videoModels).getByRole("group", { name: "Other models" })).getAllByRole("option").map((option) => option.id.split("-option-")[1]))
+      .toEqual(["nudenet", "qwen3-vl-4b", "d1-3b"]);
+    fireEvent.keyDown(videoModels, { key: "Escape" });
+    expect(dialog).toBeVisible();
+    await expectSelectedModel(dialog, "Severity and Description model", "Qwen3-VL 8B");
+    expect(infoText(dialog, "About the Severity and Description model")).toContain("Describes flagged scenes and rates their severity when the video model doesn't.");
     fireEvent.click(within(dialog).getByRole("button", { name: "Add to Queue" }));
 
     await waitFor(() => expect(request).not.toBeNull());
@@ -257,15 +256,11 @@ describe("Qwen language scan controls", () => {
     await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
-    expect(within(dialog).getByLabelText("Scan type")).toHaveValue("audio");
-    expect(within(dialog).getByText(/The Qwen filter checks the transcript/)).toBeVisible();
-    await within(dialog).findByRole("option", { name: "Qwen (multilingual)" });
-    expect(within(dialog).getByLabelText("Filter")).toHaveValue("better_profanity");
-    fireEvent.change(within(dialog).getByLabelText("Filter"), { target: { value: filter } });
-    await within(dialog).findByRole("option", { name: "Qwen3-VL 4B" });
-    fireEvent.change(within(dialog).getByLabelText("Severity and Description model"), {
-      target: { value: "qwen3-vl-4b-instruct-4bit" },
-    });
+    expect(scanTypeRadio(dialog, "Audio")).toBeChecked();
+    expect(infoText(dialog, "About filters")).toMatch(/The Qwen filter checks the transcript/);
+    await expectSelectedModel(dialog, "Filter", "better-profanity");
+    await chooseModel(dialog, "Filter", filter === "qwen" ? "Qwen" : "better-profanity");
+    await chooseModel(dialog, "Severity and Description model", "Qwen3-VL 4B");
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Add to Queue" })).toBeEnabled());
     fireEvent.click(within(dialog).getByRole("button", { name: "Add to Queue" }));
 

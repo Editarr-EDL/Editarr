@@ -1,10 +1,22 @@
 # editarr.org
 
-Standalone landing page and documentation. All assets are local; no analytics,
-third-party fonts, runtime Node dependencies, or connection to an Editarr installation.
-The product preview shows the actual app with synthetic example media from the browser
-test fixtures. Refresh it with `EDITARR_CAPTURE_WEBSITE=1 pnpm --dir web exec
-playwright test website-preview.spec.ts`. Website colors match the app shell palette.
+Standalone landing page, handbook (`/docs/`), and API reference (`/api/`). All
+assets are local; no analytics, third-party fonts, runtime Node dependencies, or
+connection to an Editarr installation. Website colors match the app shell palette,
+and `public/_headers` keeps a strict CSP (no inline scripts or styles).
+
+## Screenshots
+
+The landing page shows the actual app with synthetic example media from the browser
+test fixtures. Screens are PNGs in `public/assets/screens/`: the hero `review.png`
+(1440×900) and 1200×800 tour crops such as `review-detail.png`, `library.png`,
+`new-scan.png`, and `publish.png`. Clicking a screenshot opens it in an in-page
+viewer (`assets/site.js`); without JavaScript the link opens the PNG. Refresh all
+of them with:
+
+```sh
+EDITARR_CAPTURE_WEBSITE=1 pnpm --dir web exec playwright test website-preview.spec.ts
+```
 
 ## Cloudflare Workers Static Assets
 
@@ -21,7 +33,7 @@ EDITARR_WEBSITE_URL=https://your-version.workers.dev \
   pnpm --dir web exec playwright test --config playwright.website.config.ts
 ```
 
-Check that `/docs/openapi.json` serves JSON, `/healthz` returns `ok`, and a missing
+Check that `/api/` lists the endpoints, `/docs/openapi.json` serves JSON, `/healthz` returns `ok`, and a missing
 path returns 404. Once the preview passes, promote the tested version with
 `npx wrangler versions deploy --config website/wrangler.toml`.
 
@@ -60,8 +72,9 @@ After changing endpoints or schemas, regenerate the public snapshot:
 ```
 
 The exporter uses an isolated temporary data directory and never opens or migrates
-an existing installation. The searchable reference resolves schema definitions from
-this snapshot; installed versions expose their own protected `/openapi.json`.
+an existing installation. The `/api/` reference page renders this snapshot
+(`/docs/openapi.json`) in the browser; installed versions expose their own protected
+`/openapi.json`.
 
 ## Validate
 
