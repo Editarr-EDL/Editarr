@@ -251,8 +251,10 @@ They resolve in this order, highest first:
 }
 ```
 
-Relative paths in the local config resolve against the config's folder. `films` fails
-without changing the inventory when any listed film has no file.
+Relative paths in the local config resolve against the config's folder. A `--film`
+entry overrides the local config whichever key form either uses. `films` fails without
+changing the inventory when any listed film has no file or a key names no film in
+`films.json`.
 
 ### Models
 

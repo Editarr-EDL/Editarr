@@ -180,12 +180,16 @@ def build_films(
     offsets = tuple(float(value) for value in config.get("frame_offsets", [2.5, 7.5]))
     films_dir = layout.data_root / FILMS_ROOT
 
-    # Resolve every film's file first so a missing one fails before anything changes.
-    resolved = []
-    for film in config["films"]:
-        imdb_id = resolve_imdb_id(film, movies)
-        name = film_folder(film["title"], film["year"])
-        resolved.append((film, imdb_id, name, sources.file_for(imdb_id, name)))
+    # Resolve every film's file first so a bad or missing one fails before anything changes.
+    identified = [
+        (film, resolve_imdb_id(film, movies), film_folder(film["title"], film["year"]))
+        for film in config["films"]
+    ]
+    sources.check_keys((imdb_id, name) for _film, imdb_id, name in identified)
+    resolved = [
+        (film, imdb_id, name, sources.file_for(imdb_id, name))
+        for film, imdb_id, name in identified
+    ]
 
     new_items: list[dict[str, Any]] = []
     report: dict[str, Any] = {}

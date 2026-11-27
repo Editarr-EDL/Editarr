@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -61,7 +62,7 @@ def test_sources_follow_cli_then_environment_then_local_config(monkeypatch, tmp_
     )
     sources = resolve_sources(layout)
     assert sources.ground_truth_dir == local_truth
-    assert sources.files == {"tt1": tmp_path / "data" / "movies" / "a.mkv"}
+    assert sources.config_files == {"tt1": tmp_path / "data" / "movies" / "a.mkv"}
 
     env_truth = _ground_truth(tmp_path / "env")
     monkeypatch.setenv(GROUND_TRUTH_ENV, str(env_truth))
@@ -71,7 +72,7 @@ def test_sources_follow_cli_then_environment_then_local_config(monkeypatch, tmp_
     sources = resolve_sources(
         layout, ground_truth_dir=cli_truth, film_files=parse_film_options(["tt1=/x/b.mkv"])
     )
-    assert sources.ground_truth_dir == cli_truth and sources.files["tt1"] == Path("/x/b.mkv")
+    assert sources.ground_truth_dir == cli_truth and sources.cli_files["tt1"] == Path("/x/b.mkv")
 
 
 def test_sources_fall_back_to_the_copied_ground_truth_and_report_gaps(tmp_path, clean_env):
@@ -134,3 +135,66 @@ def test_films_command_links_local_files_and_keeps_inventory_on_missing_ones(
     monkeypatch.chdir(tmp_path)
     assert folder_eval_cli.main([*base, "--film", "tt1=alpha.mkv", "--film", f"tt2={beta}"]) == 0
     assert (data / "films" / "Alpha (2001)" / "alpha.mkv").read_bytes() == b"a"
+
+
+@pytest.mark.parametrize(
+    ("cli_key", "config_key"), [("Alpha (2001)", "tt1"), ("tt1", "Alpha (2001)")]
+)
+def test_cli_film_beats_the_local_config_whatever_the_key_form(
+    tmp_path, clean_env, cli_key, config_key
+):
+    truth = _ground_truth(tmp_path / "csv")
+    cli_file, config_file = tmp_path / "cli.mkv", tmp_path / "config.mkv"
+    for path in (cli_file, config_file):
+        path.write_bytes(b"x")
+    config = tmp_path / "local.json"
+    config.write_text(json.dumps({"films": {config_key: str(config_file)}}), encoding="utf-8")
+
+    sources = resolve_sources(
+        Layout(tmp_path / "data"),
+        ground_truth_dir=truth,
+        film_files=parse_film_options([f"{cli_key}={cli_file}"]),
+        local_config=config,
+    )
+    assert sources.file_for("tt1", "Alpha (2001)") == cli_file.resolve()
+    assert resolve_sources(
+        Layout(tmp_path / "data"), ground_truth_dir=truth, local_config=config
+    ).file_for("tt1", "Alpha (2001)") == config_file.resolve()
+
+
+def test_environment_selects_the_local_config(monkeypatch, tmp_path, clean_env):
+    truth = _ground_truth(tmp_path / "csv")
+    config = tmp_path / "env.json"
+    config.write_text(
+        json.dumps({"ground_truth_dir": str(truth), "films": {"tt1": "a.mkv"}}), encoding="utf-8"
+    )
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "films.local.json").write_text(
+        json.dumps({"films": {"tt1": "ignored.mkv"}}), encoding="utf-8"
+    )
+    monkeypatch.setenv(LOCAL_CONFIG_ENV, str(config))
+    sources = resolve_sources(Layout(tmp_path / "data"))
+    assert sources.ground_truth_dir == truth and sources.config_files == {"tt1": tmp_path / "a.mkv"}
+
+
+@pytest.mark.parametrize("option", ["tt404", "Gamma (2003)"])
+def test_unknown_film_keys_fail_before_the_inventory_changes(
+    monkeypatch, tmp_path, clean_env, option
+):
+    data = tmp_path / "data"
+    layout = Layout(data)
+    layout.results.mkdir(parents=True)
+    layout.inventory.write_text(json.dumps({"items": []}), encoding="utf-8")
+    truth = _ground_truth(tmp_path / "csv")
+    film = tmp_path / "film.mkv"
+    film.write_bytes(b"x")
+    monkeypatch.setattr(films, "probe_film", lambda _path: (25.0, False))
+
+    sources = resolve_sources(
+        layout,
+        ground_truth_dir=truth,
+        film_files=parse_film_options([f"tt1={film}", f"tt2={film}", f"{option}={film}"]),
+    )
+    with pytest.raises(FilmSourceError, match=f"not in films.json: {re.escape(option)}"):
+        films.build_films(layout, sources, _films_config(tmp_path))
+    assert json.loads(layout.inventory.read_text())["items"] == []

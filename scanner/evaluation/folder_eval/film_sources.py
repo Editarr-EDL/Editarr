@@ -12,6 +12,8 @@ the ground-truth directory are machine-specific and resolve, highest precedence 
 
 The local config is `{"ground_truth_dir": DIR, "films": {KEY: PATH}}`, where KEY is an
 IMDb id or a `Title (Year)` folder name; relative paths resolve against the config file.
+A `--film` entry beats the config for the same film whichever key form either uses, and
+keys that name no film in `films.json` are rejected.
 """
 
 from __future__ import annotations
@@ -37,17 +39,42 @@ class FilmSourceError(ValueError):
 
 @dataclass
 class FilmSources:
-    """Resolved ground-truth directory and film files keyed by IMDb id or folder name."""
+    """Resolved ground-truth directory and film files keyed by IMDb id or folder name.
+
+    `cli_files` (from `--film`) always win over `config_files` (the local config),
+    whichever key form each uses.
+    """
 
     ground_truth_dir: Path
-    files: dict[str, Path] = field(default_factory=dict)
+    cli_files: dict[str, Path] = field(default_factory=dict)
+    config_files: dict[str, Path] = field(default_factory=dict)
+
+    def check_keys(self, films: Iterable[tuple[str, str]]) -> None:
+        """Reject keys that name none of the `(imdb_id, folder name)` films listed."""
+        known = {key for film in films for key in film}
+        for origin, files in (("--film", self.cli_files), (LOCAL_CONFIG_NAME, self.config_files)):
+            unknown = sorted(set(files) - known)
+            if unknown:
+                raise FilmSourceError(
+                    f"{origin} names films not in films.json: {', '.join(unknown)} "
+                    "(use an IMDb id or 'Title (Year)')"
+                )
 
     def file_for(self, imdb_id: str, folder_name: str) -> Path:
-        """The film's absolute file path, looked up by IMDb id then `Title (Year)`.
+        """The film's absolute file path: `--film` before the local config, each looked up
+        by IMDb id then `Title (Year)`.
 
         Resolved so the data-root symlink to it never dangles; the file must exist.
         """
-        path = self.files.get(imdb_id) or self.files.get(folder_name)
+        path = next(
+            (
+                files[key]
+                for files in (self.cli_files, self.config_files)
+                for key in (imdb_id, folder_name)
+                if key in files
+            ),
+            None,
+        )
         if path is None:
             raise FilmSourceError(
                 f"{folder_name} ({imdb_id}): no file configured; pass --film {imdb_id}=PATH "
@@ -103,8 +130,7 @@ def resolve_sources(
 ) -> FilmSources:
     """Combine CLI values, environment and the local config by the documented precedence."""
     config_path = local_config_path(layout, local_config)
-    local_ground_truth, files = _load_local(config_path, required=local_config is not None)
-    files.update(film_files or {})
+    local_ground_truth, config_files = _load_local(config_path, required=local_config is not None)
     copy = layout.data_root / FILMS_ROOT / GROUND_TRUTH_COPY
     candidates = (
         ground_truth_dir,
@@ -122,4 +148,4 @@ def resolve_sources(
         )
     if not (chosen / "movies.csv").is_file():
         raise FilmSourceError(f"{chosen} has no movies.csv")
-    return FilmSources(chosen, files)
+    return FilmSources(chosen, dict(film_files or {}), config_files)
