@@ -59,3 +59,18 @@ def test_only_a_family_level_absent_correction_zeroes_severity():
     token_absent = window_severity(window, {"violence/weapons": False}, severity)
     assert token_absent["violence"] == base
     assert window_severity(window, {"violence": False}, severity)["violence"] == 0
+
+
+def test_cascade_keeps_structured_describer_replies():
+    from scanner.evaluation.folder_eval.decision.cascade import described_fields
+
+    assert described_fields({"transcript": ["A fight."]}) == {
+        "description": "A fight.", "describe": "ok",
+    }
+    assert described_fields(
+        {"scores": {}, "description": "Two men fight.", "describe": "retried"}
+    ) == {"description": "Two men fight.", "describe": "retried"}
+    assert described_fields({"scores": {}, "description": None, "describe": "failed"}) == {
+        "description": None, "describe": "failed",
+    }
+    assert described_fields({"scores": {}}) == {"description": "none", "describe": "ok"}

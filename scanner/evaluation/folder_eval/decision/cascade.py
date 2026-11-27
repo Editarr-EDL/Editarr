@@ -3,7 +3,8 @@
 Two passes over a batch, never both models resident: d1-3b-sev scores every frame
 (its own parallel slots), its server is stopped, then the describer (Qwen3-VL-8B on MLX
 by default; `EDITARR_CASCADE_DESCRIBER` selects another `qwen3vl-8b*` id) writes a
-plain-text description only for frames where d1 flagged a family. `run` hands the whole
+description only for frames where d1 flagged a family (plain text, or the
+`description` field of a one-JSON describer). `run` hands the whole
 pending batch to `score_items`, so a run is one d1 pass plus one describer pass.
 """
 
@@ -34,6 +35,22 @@ def description_only(backend: Any) -> Any:
     )
     backend.questions = []
     return backend
+
+
+def described_fields(described: dict) -> dict:
+    """`description` and `describe` from a describer's frame output.
+
+    Plain-text describers reply in `transcript`; structured one-JSON describers return
+    `description` and their own `describe` status (`ok`, `retried`, or `failed` with a
+    null description, kept so describe-eval counts the failure).
+    """
+    transcript = described.get("transcript")
+    if transcript or "description" not in described:
+        text = (transcript or [""])[0].strip()
+        return {"description": clip_words(text) or "none", "describe": "ok"}
+    text = described["description"]
+    description = (clip_words(text.strip()) or "none") if isinstance(text, str) else None
+    return {"description": description, "describe": described.get("describe") or "ok"}
 
 
 def flagged(frame: dict) -> bool:
@@ -106,9 +123,7 @@ class CascadeBackend:
             try:
                 for i, j, path in wanted:
                     (described,) = describer.score_frames([path])
-                    text = (described.get("transcript") or [""])[0].strip()
-                    outputs[i][j]["description"] = clip_words(text) or "none"
-                    outputs[i][j]["describe"] = "ok"
+                    outputs[i][j].update(described_fields(described))
             finally:
                 describer.close()
         self.stats = {"frames": sum(map(len, items)), "described": len(wanted)}
