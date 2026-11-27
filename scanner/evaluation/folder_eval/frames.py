@@ -35,11 +35,14 @@ def _ffmpeg(
     command += (["-i", str(source)] + seek) if accurate else (seek + ["-i", str(source)])
     command += ["-frames:v", "1", "-vf", video_filter, "-q:v", str(JPEG_QUALITY), "-f", "image2"]
     command += [str(target)]
+    # A partial file left by an interrupted or failed attempt must never pass as this frame.
+    target.unlink(missing_ok=True)
     try:
-        subprocess.run(command, capture_output=True, timeout=120, check=False)
+        result = subprocess.run(command, capture_output=True, timeout=120, check=False)
     except subprocess.TimeoutExpired:
+        target.unlink(missing_ok=True)
         return False
-    return _cached(target)
+    return result.returncode == 0 and _cached(target)
 
 
 def _cached(target: Path) -> bool:

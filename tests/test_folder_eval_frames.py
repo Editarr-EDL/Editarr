@@ -72,14 +72,19 @@ def _item(**extra):
     return item
 
 
+def _failed(command, **_kwargs):
+    return subprocess.CompletedProcess(command, 1, stdout=b"", stderr=b"decode error")
+
+
 @pytest.fixture
 def commands(tmp_path, monkeypatch):
-    """Record ffmpeg commands; every attempt fails."""
+    """Record ffmpeg commands; every attempt fails with a non-zero exit."""
     recorded = []
     (tmp_path / "films/F").mkdir(parents=True)
     (tmp_path / "films/F/a.mp4").write_bytes(b"x")
     monkeypatch.setattr(
-        frames_module.subprocess, "run", lambda command, **_k: recorded.append(command)
+        frames_module.subprocess, "run",
+        lambda command, **kwargs: recorded.append(command) or _failed(command),
     )
     return recorded
 
@@ -128,3 +133,23 @@ def test_frames_limit_applies_to_pending_items(tmp_path, monkeypatch):
     frames_module.extract_frames(layout, limit=2, workers=1)
     frames_module.extract_frames(layout, limit=2, workers=1)
     assert sorted(extracted) == ["a", "b", "c", "d"]
+
+
+def test_stale_or_failed_partial_frames_are_never_promoted(tmp_path, monkeypatch):
+    (tmp_path / "video/x").mkdir(parents=True)
+    (tmp_path / "video/x/a.mp4").write_bytes(b"x")
+    item = clip("a", "video/x", [], frames=1)
+    partial = tmp_path / "_results/frames/a/0.part.jpg"
+    partial.parent.mkdir(parents=True)
+    partial.write_bytes(b"stale")
+
+    def failing_after_writing(command, **_kwargs):
+        if command[-1].endswith("0.part.jpg") and "-ss" in command:
+            assert not partial.exists(), "stale partial was not removed before the attempt"
+            partial.write_bytes(b"half")
+        return _failed(command)
+
+    monkeypatch.setattr(frames_module.subprocess, "run", failing_after_writing)
+    _id, written, errors = frames_module.extract_item(str(tmp_path), item)
+    assert written == 0 and errors
+    assert not (tmp_path / "_results/frames/a/0.jpg").exists()
