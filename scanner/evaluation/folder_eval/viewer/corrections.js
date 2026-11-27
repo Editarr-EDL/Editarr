@@ -1,6 +1,6 @@
 /* Ground-truth corrections: effective expected labels and server sync (serialized POSTs, optimistic display). */
 import { S, fetchJSON } from "./data.js";
-import { $ } from "./ui.js";
+import { $, toast } from "./ui.js";
 import { familyOf } from "./scoring.js";
 
 const API = "../_api/";
@@ -14,7 +14,7 @@ export const C = {
   edits: {}, // item id → [{key, value}] not yet confirmed, applied on top of `confirmed` for display
   note: "", openFamilies: new Set(),
 };
-let pollTimer = null, pollsLeft = 0, toastTimer = null;
+let pollTimer = null, pollsLeft = 0;
 
 export const canEdit = () => C.mode === "edit";
 export const isCorrected = (item, key) => !!item.corr && key in item.corr;
@@ -70,16 +70,6 @@ function refreshItem(id) {
 export function summaryStale() {
   if (C.mode === "none") return false;
   return (S.summary?.corrections?.updated_at ?? null) !== (C.docUpdatedAt ?? null) || busy();
-}
-
-function toast(text) {
-  const el = $("#toast");
-  const dlg = $("#detail");
-  (dlg.open ? dlg : document.body).append(el); // a modal dialog's top layer would hide a body-level toast
-  el.textContent = text;
-  el.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 8000);
 }
 
 export function updateHeader() {

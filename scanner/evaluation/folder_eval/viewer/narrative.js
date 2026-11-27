@@ -60,7 +60,8 @@ function sensitiveText(item, content, what, block) {
   if (known && !isSensitive(item)) return content;
   if (!known && !refreshQueued) {
     refreshQueued = true;
-    loadAllModels().then(() => window.dispatchEvent(new Event("evaldata")));
+    loadAllModels().then(() => window.dispatchEvent(new Event("evaldata")), () => {})
+      .finally(() => { refreshQueued = false; });
   }
   const label = known ? `Show ${what} (sensitive)` : `Show ${what}`;
   const wrap = h("span", { class: `sens-text${block ? " block" : ""}` });

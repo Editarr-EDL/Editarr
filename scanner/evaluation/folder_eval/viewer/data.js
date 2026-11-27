@@ -1,12 +1,12 @@
 /* Shared state plus loading of inventory, summary, model metadata and streamed JSONL results. */
-import { setStatus } from "./ui.js";
+import { setStatus, toast } from "./ui.js";
 import { compactResult, mergeResult } from "./results.js";
 
 const KNOWN_MODELS = ["nudenet", "siglip2", "d1-omni-2b", "clef-flash", "d1-3b"];
 
 export const S = {
   inv: null, items: [], byId: new Map(), families: {}, familyOrder: [],
-  modelIds: [], metas: {}, results: {}, pending: {}, summary: null,
+  modelIds: [], metas: {}, results: {}, pending: {}, loadErrors: {}, summary: null,
   subset: null, askedModels: new Set(), corrections: {},
   trees: {}, folderStats: {}, shell: "", expanded: new Set([""]),
 };
@@ -53,9 +53,13 @@ export async function fetchJSON(url, optional) {
   }
 }
 
-/** Stream a JSONL file line by line, calling onRow per parsed object and onProgress(bytes, total). */
+/**
+ * Stream a JSONL file line by line, calling onRow per parsed object and onProgress(bytes, total). A missing file
+ * (404) reads as empty; any other HTTP error or an interrupted stream rejects.
+ */
 async function streamJsonl(url, onRow, onProgress) {
   const res = await fetch(url, { cache: "no-cache" });
+  if (res.status === 404) return;
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   const total = Number(res.headers.get("content-length")) || 0;
   const reader = res.body.getReader();
@@ -127,7 +131,11 @@ function summaryModelIds(summary) {
   return Object.keys(m).filter((k) => m[k] && typeof m[k] === "object" && !Array.isArray(m[k]));
 }
 
-/** Load (once) a model's results into S.results[id] as Map(item id → compact result). */
+/**
+ * Load (once) a model's results into S.results[id] as Map(item id → compact result). Results are committed only
+ * after a complete read; a failure is shown, recorded in S.loadErrors and rethrown, and the next call retries.
+ * Until every model has loaded, allLoaded() stays false, so sensitive media and text stay protected.
+ */
 export function loadModel(id) {
   if (S.results[id]) return Promise.resolve(S.results[id]);
   if (S.pending[id]) return S.pending[id];
@@ -142,8 +150,14 @@ export function loadModel(id) {
       map.set(row.id, mergeResult(map.get(row.id), next, meta, wanted));
     },
     (b, t) => setStatus(`Loading ${id}: ${(b / 1048576).toFixed(1)}${t ? ` / ${(t / 1048576).toFixed(1)}` : ""} MB`),
-  ).catch((err) => { console.warn(`No results for ${id}:`, err.message); })
-    .then(() => { S.results[id] = map; delete S.pending[id]; setStatus(""); return map; });
+  ).then(
+    () => { S.results[id] = map; delete S.loadErrors[id]; return map; },
+    (err) => {
+      S.loadErrors[id] = String(err?.message || err);
+      toast(`Could not load results for ${id} (${S.loadErrors[id]}). Sensitive media and text stay hidden; reload to retry.`, 15000);
+      throw err;
+    },
+  ).finally(() => { delete S.pending[id]; setStatus(""); });
   return S.pending[id];
 }
 

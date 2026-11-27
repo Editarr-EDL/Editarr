@@ -89,8 +89,9 @@ const imgObserver = new IntersectionObserver((entries) => {
     imgObserver.unobserve(e.target);
     imgQueue.push(e.target);
   }
-  ready ||= loadAllModels();
-  ready.then(pumpImages);
+  // A failed load leaves images unloaded (protected) and is retried on the next intersection.
+  ready ||= loadAllModels().catch((err) => { ready = null; throw err; });
+  ready.then(pumpImages, () => {});
 }, { rootMargin: "300px" });
 
 function lazyImg(item, src, attrs) {

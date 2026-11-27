@@ -63,7 +63,12 @@ export async function syncDetail(itemId) {
   if (!allLoaded()) fill($("#detail-body"), h("p", { class: "loading", text: "Loading model results…" }));
   if (!dlg.open) dlg.showModal();
   // Sensitivity depends on every model's flags: create (or reuse) media only once they are all loaded.
-  await loadAllModels();
+  try {
+    await loadAllModels();
+  } catch (err) {
+    fill($("#detail-body"), h("p", { class: "error", role: "alert", text: `Could not load every model's results (${err.message}), so this item is not shown. Reload to retry.` }));
+    return;
+  }
   if (mediaCache.id !== item.id) mediaCache = { id: item.id, ...mediaSection(item) };
   if (mediaCache.media) protect(mediaCache.media, item);
   const scope = getScope();

@@ -28,6 +28,18 @@ export const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : "–");
 
 export function setStatus(text) { $("#status").textContent = text || ""; }
 
+let toastTimer = null;
+/** Show a transient alert; inside the open detail dialog when there is one (its top layer would hide it). */
+export function toast(text, ms = 8000) {
+  const el = $("#toast");
+  const dlg = $("#detail");
+  (dlg.open ? dlg : document.body).append(el);
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+}
+
 export function debounce(fn, ms) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
