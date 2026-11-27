@@ -251,6 +251,12 @@ They resolve in this order, highest first:
 }
 ```
 
+HDR (PQ or HLG) films are tone-mapped to SDR while extracting frames: with VideoToolbox
+on macOS, else with ffmpeg's `zscale` and `tonemap` filters, else with `libplacebo`. When
+ffmpeg has none of these, `frames` records an error for the HDR windows rather than
+extracting washed-out frames. A film window whose frame cannot be decoded is also
+recorded as an error; only whole clips fall back to their first frame.
+
 Relative paths in the local config resolve against the config's folder. A `--film`
 entry overrides the local config whichever key form either uses. `films` fails without
 changing the inventory when any listed film has no file or a key names no film in

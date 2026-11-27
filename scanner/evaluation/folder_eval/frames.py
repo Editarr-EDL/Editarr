@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .paths import Layout, ensure_allowed, matches_prefix, write_json
+from .tonemap import NO_HDR_PATH, hdr_options, select_hdr_path
 
 log = logging.getLogger(__name__)
 
@@ -22,54 +23,67 @@ _SCALE = (
 )
 
 
-# HDR (PQ/HLG) sources: VideoToolbox decodes and tone-maps to BT.709 SDR; without it
-# frames come out washed out. Assumes landscape sources (films).
-_HDR_INPUT = ["-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"]
-_HDR_FILTER = (
-    f"scale_vt=w='min({LONG_EDGE},iw)':h=-2:color_matrix=bt709:color_primaries=bt709:"
-    "color_transfer=bt709,hwdownload,format=p010le,format=yuv420p"
-)
-
-
-def _ffmpeg(source: Path, target: Path, seconds: float, accurate: bool, hdr: bool = False) -> bool:
+def _ffmpeg(
+    source: Path, target: Path, seconds: float, accurate: bool, hdr_path: str | None = None
+) -> bool:
     seek = ["-ss", f"{seconds:.3f}"]
     command = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y"]
-    if hdr:
-        command += _HDR_INPUT
+    video_filter = _SCALE
+    if hdr_path:
+        hdr_input, video_filter = hdr_options(hdr_path, _SCALE, LONG_EDGE)
+        command += hdr_input
     command += (["-i", str(source)] + seek) if accurate else (seek + ["-i", str(source)])
-    video_filter = _HDR_FILTER if hdr else _SCALE
     command += ["-frames:v", "1", "-vf", video_filter, "-q:v", str(JPEG_QUALITY), "-f", "image2"]
     command += [str(target)]
     try:
         subprocess.run(command, capture_output=True, timeout=120, check=False)
     except subprocess.TimeoutExpired:
         return False
+    return _cached(target)
+
+
+def _cached(target: Path) -> bool:
     return target.is_file() and target.stat().st_size > 0
 
 
-def extract_item(data_root: str, item: dict[str, Any]) -> tuple[str, int, list[str]]:
-    """Extract missing frames for one item; return (id, newly written, errors)."""
+def _attempts(item: dict[str, Any], t: float) -> list[tuple[float, bool]]:
+    """Fast seek first, then decode-accurate and slightly earlier seeks.
+
+    Only whole clips fall back to the first frame: a film window's frame must come from
+    that window, or it would be scored against the wrong labels.
+    """
+    attempts = [(t, False), (t, True), (max(0.0, t - 1.0), True)]
+    if "window" not in item:
+        attempts.append((0.0, True))
+    return attempts
+
+
+def extract_item(
+    data_root: str, item: dict[str, Any], hdr_path: str | None = None
+) -> tuple[str, int, list[str]]:
+    """Extract missing frames for one item; return (id, newly written, errors).
+
+    `hdr_path` is the tone-mapping path from `select_hdr_path()`, required for HDR items.
+    """
     root = Path(data_root)
     ensure_allowed(item["path"], root)
     source = root / item["path"]
     results = root / "_results"
     written = 0
     errors: list[str] = []
-    for frame in item["frames"]:
+    missing = [frame for frame in item["frames"] if not _cached(results / frame["file"])]
+    if missing and item.get("hdr") and hdr_path is None:
+        return item["id"], 0, [NO_HDR_PATH]
+    item_hdr_path = hdr_path if item.get("hdr") else None
+    for frame in missing:
         target = results / frame["file"]
-        if target.is_file() and target.stat().st_size > 0:
-            continue
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_name(f"{target.stem}.part.jpg")
         t = float(frame["t"])
-        # Fast seek first; fall back to decode-accurate and slightly earlier seeks.
-        attempts = [(t, False), (t, True), (max(0.0, t - 1.0), True), (0.0, True)]
-        if item.get("hdr"):
-            # No software fallback: untone-mapped HDR frames would silently skew scores.
-            attempts = [(t, False, True), (t, True, True), (max(0.0, t - 1.0), True, True)]
-        else:
-            attempts = [(*attempt, False) for attempt in attempts]
-        if any(_ffmpeg(source, partial, *attempt) for attempt in attempts):
+        if any(
+            _ffmpeg(source, partial, seconds, accurate, item_hdr_path)
+            for seconds, accurate in _attempts(item, t)
+        ):
             partial.replace(target)
             written += 1
         else:
@@ -92,19 +106,21 @@ def extract_frames(
     """Extract frames for inventory items in parallel; already complete items are skipped."""
     inventory = layout.load_inventory()
     selected = [item for item in inventory["items"] if matches_prefix(item["path"], only_folder)]
-    if limit is not None:
-        selected = selected[:limit]
     pending = [item for item in selected if len(frames_present(layout, item)) < len(item["frames"])]
+    complete = len(selected) - len(pending)
+    if limit is not None:
+        pending = pending[:limit]
+    hdr_path = select_hdr_path() if any(item.get("hdr") for item in pending) else None
     log.info(
         "%d items selected, %d already complete, %d to extract with %d workers",
-        len(selected), len(selected) - len(pending), len(pending), workers,
+        len(selected), complete, len(pending), workers,
     )
     errors: dict[str, list[str]] = {}
     started = time.monotonic()
     written_total = 0
     with ProcessPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = [
-            pool.submit(extract_item, str(layout.data_root), item) for item in pending
+            pool.submit(extract_item, str(layout.data_root), item, hdr_path) for item in pending
         ]
         for done, future in enumerate(as_completed(futures), start=1):
             identifier, written, item_errors = future.result()
