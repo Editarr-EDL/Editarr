@@ -11,8 +11,9 @@ import { getScope, inSampleFrame, resultFor } from "./scope.js";
 
 const PLAYABLE = /\.(mp4|webm|m4v|mov)$/i;
 const IMAGE = /\.(jpe?g|png|webp|gif)$/i;
-/* Media nodes are reused across re-renders (e.g. after a correction) so playback isn't reset. */
-let mediaCache = { id: null, nodes: null };
+/* Media nodes are reused across re-renders (e.g. after a correction) so playback isn't reset; their protection is
+   reapplied on every render because a correction can change whether the item is sensitive. */
+let mediaCache = { id: null, nodes: null, media: null };
 
 /** Best clip score for a key (a family falls back to its best token). */
 function keyScore(r, key) {
@@ -34,7 +35,7 @@ function expectedScores(item, r, id) {
   })));
 }
 
-/** Original media: video player (mp4/webm, seeking to a film window via #t=), image, or a link with the window time. */
+/** Original media ({nodes, media}): video player (mp4/webm, seeking to a film window via #t=), image, or a link with the window time. */
 function mediaSection(item) {
   const base = "../" + encPath(item.path);
   const win = Array.isArray(item.window) ? item.window : null;
@@ -43,14 +44,14 @@ function mediaSection(item) {
   const media = playable ? h("video", { controls: true, preload: "metadata", src: win ? `${base}#t=${win[0]},${win[1]}` : base, class: "media" })
     : IMAGE.test(item.path) ? h("img", { src: base, alt: item.path, class: "media" }) : null;
   const wrap = media ? h("div", { class: "media-wrap media-box" }, media) : null;
-  if (media) protect(media, item);
-  return [
+  const nodes = [
     h("p", {}, h("a", { href, target: "_blank", rel: "noopener", text: "Open original media ↗" }),
       win ? h("span", { text: ` at ${fmtWindow(win)}${playable ? "" : " (seek manually)"}` }) : null,
       item.duration_s ? h("span", { class: "muted", text: ` · ${fmt(item.duration_s, 1)} s` }) : null,
       item.imdb_id ? [" · ", h("a", { href: `https://www.imdb.com/title/${encodeURIComponent(item.imdb_id)}/`, target: "_blank", rel: "noopener", text: item.imdb_id })] : null),
     wrap,
   ];
+  return { nodes, media };
 }
 
 /** Open the dialog for itemId (from the route's item param) or close it when absent. */
@@ -61,8 +62,10 @@ export async function syncDetail(itemId) {
   $("#detail-title").textContent = item.path.split("/").pop() + (item.window ? ` @ ${fmtWindow(item.window)}` : "");
   if (!allLoaded()) fill($("#detail-body"), h("p", { class: "loading", text: "Loading model results…" }));
   if (!dlg.open) dlg.showModal();
-  if (mediaCache.id !== item.id) mediaCache = { id: item.id, nodes: mediaSection(item) };
+  // Sensitivity depends on every model's flags: create (or reuse) media only once they are all loaded.
   await loadAllModels();
+  if (mediaCache.id !== item.id) mediaCache = { id: item.id, ...mediaSection(item) };
+  if (mediaCache.media) protect(mediaCache.media, item);
   const scope = getScope();
   fill($("#detail-body"),
     h("p", {}, h("code", { text: item.path })),

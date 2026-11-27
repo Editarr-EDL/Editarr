@@ -2,7 +2,7 @@
    Text for sensitive (nudity/sex) items stays hidden behind the same reveal controls as images. */
 import { allLoaded, loadAllModels } from "./data.js";
 import { h, chip } from "./ui.js";
-import { isSensitive } from "./media.js";
+import { isSensitive } from "./sensitivity.js";
 
 const CARD_TEXT = 300;
 let refreshQueued = false;

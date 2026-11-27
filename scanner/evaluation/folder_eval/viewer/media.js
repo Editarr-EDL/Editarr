@@ -1,28 +1,16 @@
 /* Lazy, throttled image loading and sensitive-content blurring. */
-import { S, loadAllModels } from "./data.js";
+import { loadAllModels } from "./data.js";
 import { h, encPath } from "./ui.js";
-import { familyOf } from "./scoring.js";
+import { isSensitive } from "./sensitivity.js";
 
-const SENSITIVE_FAMILIES = ["nudity", "sex"];
 const STORAGE_KEY = "folderEval.showSensitive";
 /* python -m http.server has a tiny listen backlog, so images load through a small queue with retries. */
 const IMG_CONCURRENCY = 4;
 
-const isSensitiveKey = (k) => SENSITIVE_FAMILIES.includes(familyOf(k));
 const imgItems = new WeakMap();
 const imgQueue = [];
 let imgActive = 0;
 let ready = null;
-
-/** True when expected labels, film source tags (e.g. immodesty/nudity_without_sex) or any model's flags involve nudity/sex. */
-export function isSensitive(item) {
-  if ((item.expected || []).some(isSensitiveKey)) return true;
-  if ((item.source_tags || []).some((t) => /nud|sex/i.test(t))) return true;
-  return S.modelIds.some((id) => {
-    const r = S.results[id]?.get(item.id);
-    return !!r && (r.flagged.some(isSensitiveKey) || !!r.sample?.flagged.some(isSensitiveKey));
-  });
-}
 
 /** Wire the global "Show sensitive images" checkbox, persisted in localStorage. */
 export function initSensitiveToggle(input) {
@@ -37,12 +25,24 @@ export function initSensitiveToggle(input) {
   });
 }
 
-/** Blur el if the item is sensitive and add a click-to-reveal button to its .media-wrap. */
+const hidden = (el) => el.classList.contains("sensitive") && !el.classList.contains("revealed")
+  && !document.body.classList.contains("show-sensitive");
+
+/**
+ * Apply the item's current sensitivity to el (idempotent, so reused nodes are rechecked on every render): blur it
+ * and add a click-to-reveal button to its .media-wrap, or remove both once the item is no longer sensitive. Only
+ * call it after every model's flags have loaded. While el is hidden, a new-tab link around it reveals instead.
+ */
 export function protect(el, item) {
-  if (!isSensitive(item)) return;
-  el.classList.add("sensitive");
   const wrap = el.closest(".media-wrap");
-  if (!wrap || wrap.querySelector(".reveal")) return;
+  const existing = wrap?.querySelector(".reveal");
+  if (!isSensitive(item)) {
+    el.classList.remove("sensitive", "revealed");
+    existing?.remove();
+    return;
+  }
+  el.classList.add("sensitive");
+  if (!wrap || existing) return;
   const btn = h("button", { type: "button", class: "btn reveal", "aria-pressed": "false", text: "Reveal" });
   btn.addEventListener("click", () => {
     const shown = el.classList.toggle("revealed");
@@ -50,6 +50,14 @@ export function protect(el, item) {
     btn.textContent = shown ? "Hide" : "Reveal";
   });
   wrap.append(btn);
+  const link = el.closest('a[target="_blank"]');
+  if (!link || link.dataset.guarded) return;
+  link.dataset.guarded = "1";
+  link.addEventListener("click", (e) => {
+    if (!hidden(el)) return;
+    e.preventDefault();
+    wrap.querySelector(".reveal")?.click();
+  });
 }
 
 function pumpImages() {
