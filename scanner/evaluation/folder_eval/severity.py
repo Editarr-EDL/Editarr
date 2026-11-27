@@ -2,8 +2,9 @@
 
 Levels come from each window's `source_tags` (the film tags overlapping it, padded like
 the film labels) through the editable ladders in `severity_map.json`; a key's level is
-the max over its tags. Reviewer corrections override presence: a key corrected absent
-is level 0, and a key corrected present without a severity tag is unscored (None).
+the max over its tags. Reviewer corrections override presence: a family corrected
+absent is level 0, and a family (or one of its tokens) corrected present without a
+severity tag is unscored (None). Correcting only a token absent leaves the level as is.
 """
 
 from __future__ import annotations
@@ -54,8 +55,9 @@ def window_severity(
 ) -> dict[str, int | None] | None:
     """Ground-truth levels for a film window (None for non-window items).
 
-    `corrections` is the item's raw `{key: bool}` correction map; any corrected key of a
-    family counts as a correction of that family's presence.
+    `corrections` is the item's raw `{key: bool}` correction map. Only an explicit
+    family-level `false` zeroes a family; a `true` for the family or any of its tokens
+    marks it present.
     """
     if "window" not in item:
         return None
@@ -63,13 +65,10 @@ def window_severity(
     if not corrections:
         return levels
     for key in levels:
-        touched = [value for name, value in corrections.items() if family_of(name) == key]
-        if not touched:
-            continue
-        if any(touched):
-            levels[key] = levels[key] or None  # present but no tag level: unscored
-        else:
+        if corrections.get(key) is False:
             levels[key] = 0
+        elif any(value for name, value in corrections.items() if family_of(name) == key):
+            levels[key] = levels[key] or None  # present but no tag level: unscored
     return levels
 
 

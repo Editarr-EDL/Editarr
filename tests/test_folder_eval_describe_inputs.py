@@ -5,6 +5,7 @@ from __future__ import annotations
 from scanner.evaluation.folder_eval.describe_eval import MENTION_KEYS, evaluate_model
 from scanner.evaluation.folder_eval.paths import Layout
 from scanner.evaluation.folder_eval.scoring import score_item
+from scanner.evaluation.folder_eval.severity import SeverityMap, window_severity
 from tests.folder_eval_support import clip
 
 
@@ -49,3 +50,12 @@ def test_backends_without_descriptions_get_no_description_field(tmp_path):
     )
     assert record["frames"] == [{"n": 0, "scores": {}}]
 
+
+def test_only_a_family_level_absent_correction_zeroes_severity():
+    window = {"id": "w", "window": [0, 10], "source_tags": ["violence/graphic"]}
+    severity = SeverityMap.load()
+    base = window_severity(window, None, severity)["violence"]
+    assert base > 0
+    token_absent = window_severity(window, {"violence/weapons": False}, severity)
+    assert token_absent["violence"] == base
+    assert window_severity(window, {"violence": False}, severity)["violence"] == 0
