@@ -20,6 +20,7 @@ from .paths import (
     is_excluded,
     item_id,
     media_kind,
+    resolves_into_excluded,
     write_json,
 )
 
@@ -32,7 +33,11 @@ MAX_FRAMES = 24
 
 
 def iter_media(data_root: Path) -> Iterator[str]:
-    """Yield data-root-relative media paths, pruning excluded folders before listing them."""
+    """Yield data-root-relative media paths, pruning excluded folders before listing them.
+
+    Symlinked directories are not followed; symlinked files resolving into an excluded
+    folder are skipped.
+    """
     stack = [MEDIA_ROOT]
     while stack:
         relative_dir = stack.pop()
@@ -47,6 +52,8 @@ def iter_media(data_root: Path) -> Iterator[str]:
             if entry.is_dir(follow_symlinks=False):
                 stack.append(relative)
             elif entry.is_file() and media_kind(entry.name):
+                if entry.is_symlink() and resolves_into_excluded(data_root, relative):
+                    continue
                 yield relative
 
 
@@ -118,7 +125,7 @@ def build_inventory(
         if media_kind(path) == "video" and previous.get(path) is None
     ]
     for path in to_probe:
-        ensure_allowed(path)
+        ensure_allowed(path, data_root)
     log.info("Found %d media files; probing %d durations", len(paths), len(to_probe))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         probed = dict(zip(to_probe, pool.map(lambda p: probe(data_root / p), to_probe)))

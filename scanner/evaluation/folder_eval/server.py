@@ -22,7 +22,7 @@ from .corrections import (
     save_correction,
     validate_request,
 )
-from .paths import EXCLUDED_DIRS, Layout
+from .paths import EXCLUDED_DIRS, Layout, excluded_real_paths
 from .server_state import InventoryIndex, Summarizer
 from .summary import summarize
 
@@ -214,10 +214,7 @@ class ReviewServer(ThreadingHTTPServer):
         self.layout = layout
         bound = self.server_address[1]
         self.allowed_hosts = {f"127.0.0.1:{bound}", f"localhost:{bound}"}
-        self.blocked_real_paths = [
-            os.path.realpath(layout.data_root / excluded).casefold()
-            for excluded in EXCLUDED_DIRS
-        ]
+        self.blocked_real_paths = excluded_real_paths(layout.data_root)
         self.inventory = InventoryIndex(layout)
         self.summarizer = Summarizer(self._refresh_summary, debounce_s)
 

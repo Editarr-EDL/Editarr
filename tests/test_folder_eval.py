@@ -92,14 +92,14 @@ def test_file_names_do_not_add_tokens(rules):
     assert rules.label("video/hockey_fight/videos/no_murder.avi").expected == []
 
 
-def test_excluded_folders():
+def test_excluded_folders(tmp_path):
     assert is_excluded("video/nude")
     assert is_excluded("video/nude/sub/a.mp4")
     assert is_excluded("video/Nude/a.mp4")
     assert not is_excluded("video/nsfw_dataset_v1/porn/a.jpg")
     assert not is_excluded("video/nudes_other/a.mp4")
     with pytest.raises(PermissionError):
-        ensure_allowed("video/nude/a.mp4")
+        ensure_allowed("video/nude/a.mp4", tmp_path)
 
 
 def test_inventory_never_scans_nude_folder(tmp_path, monkeypatch, rules):

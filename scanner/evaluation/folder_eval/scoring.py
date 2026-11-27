@@ -41,7 +41,7 @@ def score_item(
 
     `batch` = (outputs, elapsed ms) when a batch backend already scored this item.
     """
-    ensure_allowed(item["path"])
+    ensure_allowed(item["path"], layout.data_root)
     started = time.perf_counter()
     record: dict[str, Any] = {"id": item["id"], "model": backend.model_id}
     runtime = getattr(backend, "runtime", None)

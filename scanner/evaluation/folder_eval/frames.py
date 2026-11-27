@@ -49,8 +49,8 @@ def _ffmpeg(source: Path, target: Path, seconds: float, accurate: bool, hdr: boo
 
 def extract_item(data_root: str, item: dict[str, Any]) -> tuple[str, int, list[str]]:
     """Extract missing frames for one item; return (id, newly written, errors)."""
-    ensure_allowed(item["path"])
     root = Path(data_root)
+    ensure_allowed(item["path"], root)
     source = root / item["path"]
     results = root / "_results"
     written = 0

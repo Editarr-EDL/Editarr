@@ -51,9 +51,25 @@ def is_excluded(relative_path: str) -> bool:
     )
 
 
-def ensure_allowed(relative_path: str) -> None:
-    """Refuse to touch excluded media; called before any decode or model run."""
-    if is_excluded(relative_path):
+def excluded_real_paths(data_root: Path) -> list[str]:
+    """Case-folded real paths of the excluded folders under `data_root`."""
+    return [os.path.realpath(data_root / excluded).casefold() for excluded in EXCLUDED_DIRS]
+
+
+def resolves_into_excluded(data_root: Path, relative_path: str) -> bool:
+    """Return whether a data-root path's real target (after symlinks) is in an excluded
+    folder; links to files outside the data root, such as films, are allowed."""
+    resolved = os.path.realpath(data_root / relative_path).casefold()
+    return any(
+        resolved == blocked or resolved.startswith(blocked + os.sep)
+        for blocked in excluded_real_paths(data_root)
+    )
+
+
+def ensure_allowed(relative_path: str, data_root: Path) -> None:
+    """Refuse to touch excluded media by path spelling or resolved target; called before
+    any probe, decode or model run."""
+    if is_excluded(relative_path) or resolves_into_excluded(data_root, relative_path):
         raise PermissionError(f"Refusing to process excluded path: {relative_path}")
 
 
