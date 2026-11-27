@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .inventory import top_folder
-from .paths import Layout, write_json
+from .paths import Layout, MissingInput, write_json
 from .results import aggregate
 
 log = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def load_subset(layout: Layout, name: str) -> dict[str, list[int]]:
     """Return `{item id: [frame n, ...]}` for a subset written by `sample`."""
     path = subset_path(layout, name)
     if not path.is_file():
-        raise FileNotFoundError(f"Subset {name!r} not found; run `sample` first ({path})")
+        raise MissingInput(f"Subset {name!r} not found; run `sample` first ({path})")
     payload = json.loads(path.read_text(encoding="utf-8"))
     return {entry["id"]: list(entry["frames"]) for entry in payload["items"]}
 

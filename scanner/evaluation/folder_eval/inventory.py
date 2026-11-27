@@ -38,7 +38,7 @@ def iter_media(data_root: Path) -> Iterator[str]:
     Symlinked directories are not followed; symlinked files resolving into an excluded
     folder are skipped.
     """
-    stack = [MEDIA_ROOT]
+    stack = [MEDIA_ROOT] if (data_root / MEDIA_ROOT).is_dir() else []  # film-only roots
     while stack:
         relative_dir = stack.pop()
         if is_excluded(relative_dir):
@@ -158,6 +158,15 @@ def build_inventory(
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "families": FAMILY_TOKENS,
         "items": items,
+    }
+
+
+def empty_inventory() -> dict[str, Any]:
+    """An inventory with no items, for data roots whose first step is `films`."""
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "families": FAMILY_TOKENS,
+        "items": [],
     }
 
 

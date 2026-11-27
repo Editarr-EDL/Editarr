@@ -198,3 +198,36 @@ def test_unknown_film_keys_fail_before_the_inventory_changes(
     with pytest.raises(FilmSourceError, match=f"not in films.json: {re.escape(option)}"):
         films.build_films(layout, sources, _films_config(tmp_path))
     assert json.loads(layout.inventory.read_text())["items"] == []
+
+
+def test_a_film_only_root_works_from_a_fresh_start(monkeypatch, tmp_path, clean_env, caplog):
+    data = tmp_path / "data"
+    layout = Layout(data)
+    truth = _ground_truth(tmp_path / "csv")
+    alpha, beta = tmp_path / "alpha.mkv", tmp_path / "beta.mkv"
+    alpha.write_bytes(b"a")
+    beta.write_bytes(b"b")
+    monkeypatch.setattr(films, "probe_film", lambda _path: (25.0, False))
+    base = ["--data-root", str(data)]
+
+    assert folder_eval_cli.main([*base, "summarize"]) == 2
+    assert "Run `inventory` (or `films`) first" in caplog.text
+    # `run` refuses downloads process-wide; restore the policy after the test.
+    monkeypatch.setenv("EDITARR_WORKER_MODEL_DOWNLOADS", "")
+    monkeypatch.setattr("scanner.evaluation.folder_eval.backends._downloads_allowed", False)
+    assert folder_eval_cli.main([*base, "run", "--model", "x", "--subset", "nope"]) == 2
+
+    code = folder_eval_cli.main([
+        *base, "films", "--config", str(_films_config(tmp_path)), "--ground-truth-dir",
+        str(truth), "--film", f"tt1={alpha}", "--film", f"tt2={beta}",
+    ])
+    assert code == 0 and not (data / "video").exists()
+    windows = json.loads(layout.inventory.read_text())["items"]
+    assert windows and all("window" in item for item in windows)
+
+    # Re-inventorying a root without video/ keeps the film windows.
+    assert folder_eval_cli.main([*base, "inventory"]) == 0
+    assert json.loads(layout.inventory.read_text())["items"] == windows
+    assert folder_eval_cli.main([*base, "sample"]) == 0
+    assert folder_eval_cli.main([*base, "summarize"]) == 0
+    assert json.loads(layout.summary.read_text())["models"] == {}

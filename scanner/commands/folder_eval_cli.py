@@ -32,7 +32,12 @@ from scanner.evaluation.folder_eval.films import DEFAULT_FILMS_PATH, build_films
 from scanner.evaluation.folder_eval.frames import extract_frames
 from scanner.evaluation.folder_eval.inventory import write_inventory
 from scanner.evaluation.folder_eval.labels import DEFAULT_RULES_PATH, LabelRules
-from scanner.evaluation.folder_eval.paths import Layout, default_data_root, normalize_prefix
+from scanner.evaluation.folder_eval.paths import (
+    Layout,
+    MissingInput,
+    default_data_root,
+    normalize_prefix,
+)
 from scanner.evaluation.folder_eval.runner import run_model
 from scanner.evaluation.folder_eval.subsets import (
     DEFAULT_SEED,
@@ -179,7 +184,11 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = _parser().parse_args(argv)
     with _sigterm_exits():
-        return _run(args)
+        try:
+            return _run(args)
+        except MissingInput as exc:
+            log.error("%s", exc)
+            return 2
 
 
 def _run(args: argparse.Namespace) -> int:

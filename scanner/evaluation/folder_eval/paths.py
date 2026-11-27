@@ -101,6 +101,11 @@ def matches_prefix(relative_path: str, prefix: str | None) -> bool:
     return prefix is None or relative_path == prefix or relative_path.startswith(prefix + "/")
 
 
+class MissingInput(FileNotFoundError):
+    """A step's input (inventory or subset) does not exist yet; the message says which
+    command creates it."""
+
+
 class Layout:
     """Resolved locations under one data root."""
 
@@ -120,7 +125,9 @@ class Layout:
 
     def load_inventory(self) -> dict[str, Any]:
         if not self.inventory.is_file():
-            raise FileNotFoundError(f"Run `inventory` first: {self.inventory} is missing")
+            raise MissingInput(
+                f"Run `inventory` (or `films`) first: {self.inventory} is missing"
+            )
         return json.loads(self.inventory.read_text(encoding="utf-8"))
 
 

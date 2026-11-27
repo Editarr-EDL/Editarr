@@ -15,6 +15,7 @@ from typing import Any
 
 from .film_labels import DEFAULT_TAG_MAP_PATH, Tag, TagMap
 from .film_sources import GROUND_TRUTH_COPY, FilmSourceError, FilmSources
+from .inventory import empty_inventory
 from .paths import FILMS_ROOT, Layout, resolves_into_excluded, write_json
 
 log = logging.getLogger(__name__)
@@ -232,7 +233,7 @@ def build_films(
 
     imdb_ids = {entry["imdb_id"] for entry in report.values()}
     _copy_ground_truth(source, films_dir / GROUND_TRUTH_COPY, imdb_ids)
-    inventory = layout.load_inventory()
+    inventory = layout.load_inventory() if layout.inventory.is_file() else empty_inventory()
     kept = [item for item in inventory["items"] if not is_film_item(item)]
     inventory["items"] = kept + new_items
     write_json(layout.inventory, inventory)

@@ -220,7 +220,7 @@ evaluation_data/
 ```
 
 Provision datasets by unpacking them under `video/` with their published folder
-layouts. [`label_rules.json`](../scanner/evaluation/folder_eval/label_rules.json) maps
+layouts; `video/` is optional, and a films-only root can start with `films`. [`label_rules.json`](../scanner/evaluation/folder_eval/label_rules.json) maps
 paths to MCF keys for `ucf_crime`, `hockey_fight`, `movies_fight`, `xd_violence`,
 `Violent Scene Dataset` and `nsfw_dataset_v1`; any folder named after an MCF family,
 token or synonym (for example `video/mine/violence/`) also labels its contents.
