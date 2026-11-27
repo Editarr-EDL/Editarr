@@ -195,6 +195,115 @@ latency, and peak process memory. Keep clean frames as well as reviewed
 positives in the corpus; a corpus made only from prior model flags cannot
 measure false positives.
 
+## Folder-structure evaluation harness
+
+`editarr-evaluate-folder` (also `python -m scanner.evaluation.folder_eval`) scores local
+detectors, decision models and VLMs against labels taken from a folder of public
+datasets and real films, and serves a static viewer for reviewing and correcting them.
+It needs only the project dependencies plus `ffmpeg` and `ffprobe` on `PATH`; it never
+downloads datasets, films or weights.
+
+### Data root
+
+All inputs and outputs live in one data root. Without `--data-root` it is
+`$EDITARR_EVAL_DATA_ROOT`, else `evaluation_data/` at the repository root in a source
+checkout, else `evaluation_data/` in the working directory. `/evaluation_data/` is
+git-ignored: datasets, films, local configuration and results are not redistributable
+and must never be committed.
+
+```text
+evaluation_data/
+  video/<dataset>/...        clips and images; labels come from the folder path
+  films/<Title (Year)>/      symlinks created by `films` (do not add files here)
+  films.local.json           optional local film paths (see below)
+  _results/                  inventory, frames, model results, summary and viewer
+```
+
+Provision datasets by unpacking them under `video/` with their published folder
+layouts. [`label_rules.json`](../scanner/evaluation/folder_eval/label_rules.json) maps
+paths to MCF keys for `ucf_crime`, `hockey_fight`, `movies_fight`, `xd_violence`,
+`Violent Scene Dataset` and `nsfw_dataset_v1`; any folder named after an MCF family,
+token or synonym (for example `video/mine/violence/`) also labels its contents.
+`video/nude/` is unvetted scraped content and is never listed, decoded, scored or served.
+
+### Films and ground truth
+
+Film windows (10 s, frames at 2.5 s and 7.5 s) are labelled from a ground-truth CSV
+directory containing `movies.csv` (`imdb_id`, `name`, `title_main`, `year`,
+`duration_sec`) and `tag_timestamps.csv` (`imdb_id`, `category`, `tag_name`,
+`start_approx`, `end_approx`), plus optional `movie_tags.csv` and `tags.csv`.
+[`films.json`](../scanner/evaluation/folder_eval/films.json) lists the films by title,
+year and IMDb id only; supply your own legally obtained copies and the CSV directory.
+They resolve in this order, highest first:
+
+1. `films --film IMDB_ID=PATH` (repeatable; the key may also be `Title (Year)`) and
+   `films --ground-truth-dir DIR`;
+2. `EDITARR_EVAL_GROUND_TRUTH_DIR` (ground truth only);
+3. a local JSON config: `films --local-config PATH`, else `$EDITARR_EVAL_FILMS_LOCAL`,
+   else `<data root>/films.local.json`;
+4. for the ground truth only, the filtered copy a previous `films` run left in
+   `films/ground_truth/`.
+
+```json
+{
+  "ground_truth_dir": "ground-truth-csv",
+  "films": {"tt1034415": "movies/Suspiria.mkv", "Hardcore Henry (2015)": "movies/hh.mkv"}
+}
+```
+
+Relative paths in the local config resolve against the config's folder. `films` fails
+without changing the inventory when any listed film has no file.
+
+### Models
+
+`run --model ID` accepts `nudenet`, `siglip2`, `siglip2-gore`, the shipped decision
+detectors `scan-d1-3b`, `scan-qwen3-vl-8b` and `scan-qwen3-vl-4b`, and the evaluation-only
+llama.cpp and MLX ids in
+[`decision/`](../scanner/evaluation/folder_eval/decision/) (for example `d1-3b-f512`,
+`qwen3vl-8b`, `qwen3vl-8b-mlx-desc`). Editarr artifacts must already be installed
+(from model settings); a missing model is reported as unavailable and skipped by `all`.
+
+The llama.cpp ids read GGUF weights from `<models dir>/<model>/`, where the models dir is
+`$EDITARR_DECISION_MODELS_DIR`, else `evaluation/llama-cpp` under Editarr's model cache
+(`EDITARR_MODEL_CACHE`, or the platform cache directory). The unavailable message prints
+the `hf download` command for missing weights. `llama-server` is
+`$EDITARR_LLAMA_SERVER`; else, for every id except the original `d1-omni-2b`, `d1-3b`
+and `clef-flash`, the newest `llama.cpp-b<build>/*/llama-server` release unpacked in the
+models dir; else `llama-server` on `PATH`. `EDITARR_DM_STAGE2_THRESHOLD`, `EDITARR_DM_IMAGE_LONG_EDGE`
+and `EDITARR_CASCADE_DESCRIBER` tune the decision ids, as described in their modules.
+
+### Subcommands
+
+| Command | Purpose |
+| --- | --- |
+| `inventory` | List media, probe durations and apply the label rules |
+| `films` | Link films, copy their ground-truth rows and add film windows |
+| `frames` | Extract frames with ffmpeg (resumable; `--only-folder`, `--limit`, `--workers`) |
+| `sample` | Write the stratified `decision_sample` subset |
+| `film-subset` | Write a stratified subset of decision-sample film windows |
+| `run` | Score frames with one model (resumable; `--subset`, `--concurrency`, `--retry-errors`) |
+| `summarize` | Write `summary.json` and `models/index.json` |
+| `describe-eval` | Judge descriptions with d1-3B and compare severity levels |
+| `viewer` | Copy the static viewer into `_results/` |
+| `serve` | Serve the data root with the corrections API |
+| `all` | `inventory`, `frames`, every available model, `summarize` and `viewer` |
+
+```bash
+uv run editarr-evaluate-folder inventory
+uv run editarr-evaluate-folder frames
+uv run editarr-evaluate-folder run --model siglip2
+uv run editarr-evaluate-folder summarize
+uv run editarr-evaluate-folder viewer
+uv run editarr-evaluate-folder serve --port 8765
+```
+
+Open `http://127.0.0.1:8765/_results/index.html`. `serve` binds only to 127.0.0.1
+(`--port 0` picks a free port) and rejects other `Host` headers, cross-site `Origin` or
+`Sec-Fetch-Site` values, non-JSON or oversized correction bodies, and excluded paths,
+including symlinks that resolve into them. Reviewer corrections are stored in
+`_results/corrections.json` and applied when the summary is rebuilt. Any other static
+file server shows the viewer read-only.
+
 ## Closing-credits evaluation
 
 The MTS credits detector has a CC0 authored observation corpus and deterministic generated
