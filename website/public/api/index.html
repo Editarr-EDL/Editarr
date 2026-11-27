@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API reference — Editarr</title>
+  <meta name="description" content="Reference for the local Editarr HTTP API: authentication with personal API keys, endpoints, parameters, request and response schemas.">
+  <link rel="canonical" href="https://editarr.org/api/">
+  <meta property="og:title" content="Editarr API reference">
+  <meta property="og:description" content="Every endpoint of the local Editarr API with request and response schemas.">
+  <meta property="og:url" content="https://editarr.org/api/">
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="stylesheet" href="/assets/site.css">
+  <link rel="stylesheet" href="/assets/api.css">
+  <script src="/assets/site.js" defer></script>
+  <script src="/assets/api-schema.js" defer></script>
+  <script src="/assets/api-reference.js" defer></script>
+</head>
+<body class="api-page">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <a class="brand" href="/" aria-label="Editarr home"><img src="/assets/editarr-icon.png" width="38" height="38" alt="">Editarr</a>
+  <button class="menu-toggle" aria-expanded="false" aria-controls="navigation">Menu <span aria-hidden="true">☰</span></button>
+  <nav id="navigation" aria-label="Main navigation">
+    <a href="/#features">Features</a>
+    <a href="/#community">Community</a>
+    <a href="/docs/">Docs</a>
+    <a href="/api/" aria-current="page">API</a>
+    <a href="https://github.com/Editarr-EDL/Editarr">GitHub <span aria-hidden="true">↗</span></a>
+    <a class="nav-cta" href="/docs/#install">Install <span aria-hidden="true">→</span></a>
+  </nav>
+</header>
+<div class="api-layout">
+  <aside class="api-sidebar" aria-label="Endpoint finder">
+    <label class="api-search-label" for="api-search">Find an endpoint</label>
+    <input id="api-search" class="api-search" type="search" placeholder="Method, path, or tag" autocomplete="off" spellcheck="false">
+    <p id="api-count" class="api-count" role="status" aria-live="polite">Loading endpoints…</p>
+    <button class="api-toc-toggle" type="button" aria-expanded="false" aria-controls="api-nav">Browse endpoints</button>
+    <nav id="api-nav" class="api-nav" aria-label="API reference">
+      <ul class="api-nav-intro">
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#base-url">Base URL</a></li>
+        <li><a href="#authentication">Authentication</a></li>
+        <li><a href="#errors">Errors</a></li>
+        <li><a href="#download">Download OpenAPI JSON</a></li>
+      </ul>
+      <div id="api-toc" class="api-toc"></div>
+    </nav>
+  </aside>
+  <main id="main" class="api-main">
+    <section id="overview" class="api-intro">
+      <p class="eyebrow">API REFERENCE</p>
+      <h1>Editarr API</h1>
+      <p class="api-lede">The Editarr web app runs on this local HTTP API. Automate scans, reviews, exports, and administration with a personal API key.</p>
+      <p class="api-version" id="api-version">OpenAPI 3.1</p>
+      <noscript><p class="api-note">This reference needs JavaScript to render. Read the raw <a href="/docs/openapi.json">OpenAPI JSON</a> instead.</p></noscript>
+    </section>
+    <section id="base-url" class="api-intro">
+      <h2>Base URL</h2>
+      <p>Requests go to your own Editarr server, by default <code>http://localhost:3348</code>. If Editarr runs under a Base URL prefix behind a reverse proxy, put that prefix before every path.</p>
+      <pre class="api-code" tabindex="0"><code>EDITARR_URL=http://localhost:3348
+# with a prefix: EDITARR_URL=https://media.example/editarr
+curl "$EDITARR_URL/api/system/version" -H "X-Api-Key: $EDITARR_API_KEY"</code></pre>
+    </section>
+    <section id="authentication" class="api-intro">
+      <h2>Authentication</h2>
+      <ul class="api-list">
+        <li><strong>API key.</strong> Create one in <em>My Profile → API Key</em> and send it in the <code>X-Api-Key</code> header. A key carries your account's own current permissions, never more.</li>
+        <li><strong>Browser session.</strong> The web app uses a session cookie. Mutations must be same-origin and include the <code>X-CSRF-Token</code> header.</li>
+        <li><strong>Interactive only.</strong> Some account-security operations need a signed-in browser session and return <code>403 interactive_session_required</code> for API keys.</li>
+        <li><strong>Public.</strong> Setup, sign-in, and status endpoints work without credentials and are marked <span class="api-auth api-auth-public">Public</span>.</li>
+      </ul>
+    </section>
+    <section id="errors" class="api-intro">
+      <h2>Errors</h2>
+      <p>Errors return JSON. Access errors include a machine-readable <code>code</code> and a <code>detail</code> message.</p>
+      <div class="api-table-scroll" tabindex="0" role="region" aria-label="Error statuses">
+        <table class="api-table">
+          <thead><tr><th scope="col">Status</th><th scope="col">Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><span class="api-status api-status-4">401</span></td><td>No session, or an invalid or revoked API key.</td></tr>
+            <tr><td><span class="api-status api-status-4">403</span></td><td>Missing permission, disabled account, or the operation needs an interactive session or re-authentication.</td></tr>
+            <tr><td><span class="api-status api-status-4">409</span></td><td>Conflict with the current state, such as a stale permission revision.</td></tr>
+            <tr><td><span class="api-status api-status-4">422</span></td><td>Validation failed; <code>detail</code> lists each invalid field.</td></tr>
+            <tr><td><span class="api-status api-status-4">423</span></td><td>Editarr is not set up yet; finish administrator setup first.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section id="download" class="api-intro">
+      <h2>Download OpenAPI JSON</h2>
+      <p>Use the machine-readable description with code generators and API clients. A signed-in server also serves its own copy at <code>/openapi.json</code>.</p>
+      <p><a class="api-download" href="/docs/openapi.json" download>Download openapi.json <span aria-hidden="true">↓</span></a></p>
+    </section>
+    <div id="api-operations" class="api-operations"></div>
+  </main>
+</div>
+<footer class="site-footer wrap">
+  <a class="brand" href="/"><img src="/assets/editarr-icon.png" width="32" height="32" alt="">Editarr</a>
+  <p>Your media. Your edit.</p>
+  <nav aria-label="Footer"><a href="/docs/">Docs</a><a href="/api/">API reference</a><a href="https://github.com/Editarr-EDL/Editarr">GitHub <span aria-hidden="true">↗</span></a><a href="#main">Back to top <span aria-hidden="true">↑</span></a></nav>
+</footer>
+</body>
+</html>

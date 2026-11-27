@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Editarr — Your media. Your edit.</title>
-  <meta name="description" content="Scan, review, and create personal mute and skip filters for your media. Editarr runs locally and keeps your original files untouched.">
+  <meta name="description" content="Scan your Jellyfin media with local AI, review what to mute or skip, and publish personal EDL and MCF playback filters. Your original files stay untouched.">
   <meta name="theme-color" content="#111318">
   <link rel="canonical" href="https://editarr.org/">
   <meta property="og:title" content="Editarr — Your media. Your edit.">
   <meta property="og:description" content="Local media scanning, personal playback filters, and untouched originals. Meet Editarr.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://editarr.org/">
+  <meta property="og:image" content="https://editarr.org/assets/screens/review.png">
   <link rel="icon" href="/assets/favicon.png">
   <link rel="stylesheet" href="/assets/site.css">
   <script src="/assets/site.js" defer></script>
@@ -21,7 +22,11 @@
   <a class="brand" href="/" aria-label="Editarr home"><img src="/assets/editarr-icon.png" width="38" height="38" alt="">Editarr</a>
   <button class="menu-toggle" aria-expanded="false" aria-controls="navigation">Menu <span aria-hidden="true">☰</span></button>
   <nav id="navigation" aria-label="Main navigation">
-    <a href="#overview">Overview</a><a href="#features">Features</a><a href="#community">Community</a><a href="#contributing">Contributing</a><a href="/docs/">Docs</a>
+    <a href="/#features">Features</a>
+    <a href="/#community">Community</a>
+    <a href="/docs/">Docs</a>
+    <a href="/api/">API</a>
+    <a href="https://github.com/Editarr-EDL/Editarr">GitHub <span aria-hidden="true">↗</span></a>
     <a class="nav-cta" href="/docs/#install">Install <span aria-hidden="true">→</span></a>
   </nav>
 </header>
@@ -30,71 +35,119 @@
   <div class="hero-copy wrap">
     <p class="eyebrow">SELF-HOSTED MEDIA FILTERING</p>
     <h1>Your media. <span>Your edit.</span></h1>
-    <p class="lede">Make movie night your own. Scan your media, review the moments you’d rather mute or skip, and create personal playback filters without changing the original.</p>
+    <p class="lede">Scan your Jellyfin library with local AI, choose what to mute or skip, and publish personal playback filters. Your originals stay untouched.</p>
     <div class="actions">
       <a class="button primary" href="/docs/#install">Install Editarr <span aria-hidden="true">→</span></a>
-      <a class="button secondary" href="/docs/#get-started">Getting started <span aria-hidden="true">→</span></a>
+      <a class="button secondary" href="/docs/#get-started">Getting started</a>
     </div>
-    <p class="hero-note">Runs on your server. Works with your library. You make the final call.</p>
   </div>
-  <figure class="product-preview wrap">
-    <a href="/assets/editarr-review.png" aria-label="View the Editarr review screenshot at full size"><img src="/assets/editarr-review.png" width="1440" height="1080" alt="Editarr’s dark interface showing the Movie night review, cue synchronization, filter results, and included scans." fetchpriority="high"></a>
-    <figcaption>The Editarr review workspace · Example media</figcaption>
+  <figure class="hero-shot wrap">
+    <a class="shot" href="/assets/screens/review.png"><img src="/assets/screens/review.png" width="1440" height="900" alt="Editarr’s Review step for the “Movie night” review, with filter cues grouped by category and mute or skip actions." fetchpriority="high" decoding="async"></a>
+    <figcaption>The Review step · Example media</figcaption>
   </figure>
 </section>
+
+<section class="workflow wrap" id="workflow" aria-labelledby="workflow-title">
+  <h2 class="visually-hidden" id="workflow-title">How it works</h2>
+  <ol class="steps">
+    <li><span class="step-number" aria-hidden="true">1</span><strong>Community</strong><span>Start from shared filters</span></li>
+    <li><span class="step-number" aria-hidden="true">2</span><strong>Scans</strong><span>Analyze audio and video</span></li>
+    <li><span class="step-number" aria-hidden="true">3</span><strong>Review</strong><span>Choose mute or skip</span></li>
+    <li><span class="step-number" aria-hidden="true">4</span><strong>Subtitles</strong><span>Filter the words</span></li>
+    <li><span class="step-number" aria-hidden="true">5</span><strong>Publish</strong><span>Sidecars for every viewer</span></li>
+  </ol>
+</section>
+
 <section class="section wrap" id="features">
   <div class="section-intro centered">
-    <h2>What is Editarr?</h2>
-    <p>A local workspace for the way you want to watch. Bring together automated scans and hands-on editing to build mute and skip filters for your media.</p>
+    <p class="eyebrow">THE TOUR</p>
+    <h2>See what Editarr does</h2>
   </div>
-  <div class="feature-grid">
-    <article class="feature"><span class="feature-symbol" aria-hidden="true">≋</span><h3>Local AI scanning</h3><p>Analyze audio and visuals on your own host to find potentially objectionable moments. Review every suggestion before using it.</p><a href="/docs/#scanning">Explore scanning <span aria-hidden="true">→</span></a></article>
-    <article class="feature"><span class="feature-symbol" aria-hidden="true">✎</span><h3>Personal reviews</h3><p>Choose mute or skip, refine timestamps, and save different reviews for the same movie. Add your own filters at any time.</p><a href="/docs/#reviews">Review and refine <span aria-hidden="true">→</span></a></article>
-    <article class="feature"><span class="feature-symbol" aria-hidden="true">⇥</span><h3>Untouched originals</h3><p>Export EDL or MCF sidecars for compatible playback tools. Your original video stays exactly as it was.</p><a href="/docs/#exporting">See export options <span aria-hidden="true">→</span></a></article>
-    <article class="feature"><span class="feature-symbol" aria-hidden="true">▤</span><h3>One organized queue</h3><p>Name your scans, follow progress, and return to retained history. Cancel work or resume supported checkpoints when needed.</p><a href="/docs/#scanning">Meet the scan queue <span aria-hidden="true">→</span></a></article>
-    <article class="feature"><span class="feature-symbol" aria-hidden="true">⌘</span><h3>Your own workflows</h3><p>Connect scripts and integrations to your local installation with its API. Manage your key in My Profile.</p><a href="/docs/#api">Use the API <span aria-hidden="true">→</span></a></article>
-    <article class="feature"><span class="feature-symbol" aria-hidden="true">◷</span><h3>Keep your work</h3><p>Import existing filters, retain named reviews, and back up your installation. Pick up where you left off.</p><a href="/docs/#settings">Settings and backups <span aria-hidden="true">→</span></a></article>
+  <div class="tour">
+    <article class="tour-row">
+      <a class="shot" href="/assets/screens/library.png"><img src="/assets/screens/library.png" width="1200" height="800" loading="lazy" decoding="async" alt="Editarr’s Movies library: a grid of poster cards with resolution and published-filter badges."></a>
+      <div class="tour-copy">
+        <h3>Your Jellyfin library</h3>
+        <p>Browse the libraries you can see in Jellyfin and pick the exact version to work on.</p>
+      </div>
+    </article>
+    <article class="tour-row">
+      <a class="shot" href="/assets/screens/new-scan.png"><img src="/assets/screens/new-scan.png" width="1200" height="800" loading="lazy" decoding="async" alt="The New Scan dialog with version, scan type, audio track, transcriber, filter, and video model options."></a>
+      <div class="tour-copy">
+        <h3>Scan with local AI</h3>
+        <p>Audio and visual models run on your own host. Nothing leaves your server.</p>
+      </div>
+    </article>
+    <article class="tour-row">
+      <a class="shot" href="/assets/screens/scan-queue.png"><img src="/assets/screens/scan-queue.png" width="1200" height="800" loading="lazy" decoding="async" alt="The Scans panel with a running scan, queued scans, and completed scan history."></a>
+      <div class="tour-copy">
+        <h3>One organized queue</h3>
+        <p>Name your scans and follow them from anywhere in the app.</p>
+      </div>
+    </article>
+    <article class="tour-row">
+      <a class="shot" href="/assets/screens/review-detail.png"><img src="/assets/screens/review-detail.png" width="1200" height="800" loading="lazy" decoding="async" alt="A saved review with cues grouped by category, each set to mute or skip."></a>
+      <div class="tour-copy">
+        <h3>Review and refine</h3>
+        <p>Preview every finding, keep what matters to you, and add your own filters.</p>
+      </div>
+    </article>
+    <article class="tour-row">
+      <a class="shot" href="/assets/screens/subtitles.png"><img src="/assets/screens/subtitles.png" width="1200" height="800" loading="lazy" decoding="async" alt="The Subtitles step with subtitle sources and a preview of original and filtered subtitle lines."></a>
+      <div class="tour-copy">
+        <h3>Filtered subtitles</h3>
+        <p>Redact filtered words from subtitles to match what you mute.</p>
+      </div>
+    </article>
+    <article class="tour-row">
+      <a class="shot" href="/assets/screens/publish.png"><img src="/assets/screens/publish.png" width="1200" height="800" loading="lazy" decoding="async" alt="The Publish step with EDL and MCF formats, plus published personal and item-default files."></a>
+      <div class="tour-copy">
+        <h3>Publish for every viewer</h3>
+        <p>Write sidecar files beside the video. The <a href="https://github.com/Editarr-EDL/jellyfin-edl">Jellyfin EDL plugin</a> serves each viewer their own.</p>
+      </div>
+    </article>
+    <article class="tour-row" id="community">
+      <a class="shot" href="/assets/screens/community.png"><img src="/assets/screens/community.png" width="1200" height="800" loading="lazy" decoding="async" alt="Find Filters comparing community versions by match, filter count, and contributors."></a>
+      <div class="tour-copy">
+        <h3>Community filters</h3>
+        <p>Start from a master filter set shared by others. You approve the alignment before it’s used. Contribute your filters back.</p>
+      </div>
+    </article>
+    <article class="tour-row">
+      <a class="shot" href="/assets/screens/users.png"><img src="/assets/screens/users.png" width="1200" height="800" loading="lazy" decoding="async" alt="Settings → Users listing household accounts with their roles and status."></a>
+      <div class="tour-copy">
+        <h3>Built for households</h3>
+        <p>Everyone signs in with their own Jellyfin account. Reviews and exports stay personal.</p>
+      </div>
+    </article>
   </div>
 </section>
-<section class="section band" id="connections">
-  <div class="wrap centered">
-    <h2>Right at home in your library</h2>
-    <p class="section-lede">Browse the libraries you can access in Jellyfin. Select the physical version you want to work with and let Editarr handle the rest.</p>
-    <div class="integrations" aria-label="Supported media sources">
-      <div><span aria-hidden="true">◈</span>Jellyfin</div>
-    </div>
-    <a class="button secondary" href="/docs/#connections">Connect your library <span aria-hidden="true">→</span></a>
-  </div>
-</section>
-<section class="section wrap" id="how-it-works">
-  <div class="section-intro centered"><h2>From library to movie night</h2><p>Start with a scan, import existing filters, or do it all by hand.</p></div>
-  <div class="steps">
-    <article><span class="step-number">1</span><h3>Choose your media</h3><p>Pick a movie or episode from Jellyfin. Select its version and the audio track you want to analyze.</p></article>
-    <article><span class="step-number">2</span><h3>Make your edits</h3><p>Review findings, preview the moments that matter, and fine-tune your mute and skip filters.</p></article>
-    <article><span class="step-number">3</span><h3>Export and enjoy</h3><p>Save your review and export a sidecar beside the video. Use a player that supports your chosen format.</p></article>
-  </div>
-</section>
-<section class="section band" id="community">
-  <div class="wrap community">
-    <div class="community-visual" aria-hidden="true"><div class="shared-file file-back">.edl</div><div class="shared-file file-front">.mcf<span>✓</span></div><span class="sharing-arrow">⇄</span></div>
-    <div class="section-copy"><p class="eyebrow">COMMUNITY FILTERS</p><h2>A shared starting point.<br>A personal final say.</h2><p>With a configured community service, discover filters shared by others and review them for your version. Share your own work when you choose.</p><a class="button secondary" href="/docs/#community">Explore community filters <span aria-hidden="true">→</span></a></div>
-  </div>
-</section>
+
 <section class="section wrap" id="contributing">
-  <div class="section-intro centered"><p class="eyebrow">HELP SHAPE EDITARR</p><h2>Contribute on GitHub</h2><p>Better movie nights start with people who care. Help improve Editarr through code, documentation, bug reports, or thoughtful feedback.</p></div>
+  <div class="section-intro centered">
+    <p class="eyebrow">OPEN SOURCE</p>
+    <h2>Contribute on GitHub</h2>
+    <p>Code, bug reports, and clearer docs all make movie night better.</p>
+  </div>
   <div class="contribution-grid">
-    <article><span class="contribution-icon" aria-hidden="true">&lt;/&gt;</span><h3>Build something better</h3><p>Explore the source, improve a feature, or open a pull request.</p><a href="https://github.com/Editarr-EDL/Editarr">Explore the repository <span aria-hidden="true">↗</span></a></article>
-    <article><span class="contribution-icon" aria-hidden="true">⊙</span><h3>Share what you find</h3><p>Report a reproducible bug or suggest an improvement to the workflow.</p><a href="https://github.com/Editarr-EDL/Editarr/issues">View GitHub issues <span aria-hidden="true">↗</span></a></article>
-    <article><span class="contribution-icon" aria-hidden="true">▤</span><h3>Make it easier to use</h3><p>Clarify the docs, improve an example, or help explain a feature.</p><a href="https://github.com/Editarr-EDL/Editarr/tree/HEAD/docs">Improve the documentation <span aria-hidden="true">↗</span></a></article>
+    <article><span class="contribution-icon" aria-hidden="true">&lt;/&gt;</span><h3>Code</h3><p>Improve a feature or open a pull request.</p><a href="https://github.com/Editarr-EDL/Editarr">Explore the repository <span aria-hidden="true">↗</span></a></article>
+    <article><span class="contribution-icon" aria-hidden="true">⊙</span><h3>Issues</h3><p>Report a bug or suggest an improvement.</p><a href="https://github.com/Editarr-EDL/Editarr/issues">View GitHub issues <span aria-hidden="true">↗</span></a></article>
+    <article><span class="contribution-icon" aria-hidden="true">▤</span><h3>Docs</h3><p>Clarify a guide or add an example.</p><a href="https://github.com/Editarr-EDL/Editarr/tree/HEAD/docs">Improve the documentation <span aria-hidden="true">↗</span></a></article>
   </div>
 </section>
-<section class="closing band">
-  <div class="wrap centered"><h2>Ready to make it your own?</h2><p>Build Editarr from source and follow the setup guide to get started.</p><div class="actions"><a class="button primary" href="/docs/#install">Install Editarr <span aria-hidden="true">→</span></a><a class="button secondary" href="/docs/">Read the docs <span aria-hidden="true">→</span></a></div></div>
+
+<section class="closing band" aria-labelledby="closing-title">
+  <div class="wrap centered">
+    <h2 id="closing-title">Ready to make it your own?</h2>
+    <p>Install the macOS app or build from source, then follow the handbook.</p>
+    <div class="actions"><a class="button primary" href="/docs/#install">Install Editarr <span aria-hidden="true">→</span></a><a class="button secondary" href="/docs/">Read the docs</a></div>
+  </div>
 </section>
 </main>
 <footer class="site-footer wrap">
-  <a class="brand" href="/"><img src="/assets/editarr-icon.png" width="32" height="32" alt="">Editarr</a><p>Your media. Your edit.</p>
-  <nav aria-label="Footer"><a href="/docs/">Documentation</a><a href="#contributing">Contributing</a><a href="/docs/#install">Install</a><a href="#overview">Back to top ↑</a></nav>
+  <a class="brand" href="/"><img src="/assets/editarr-icon.png" width="32" height="32" alt="">Editarr</a>
+  <p>Your media. Your edit.</p>
+  <nav aria-label="Footer"><a href="/docs/">Docs</a><a href="/api/">API reference</a><a href="https://github.com/Editarr-EDL/Editarr">GitHub <span aria-hidden="true">↗</span></a><a href="#main">Back to top <span aria-hidden="true">↑</span></a></nav>
 </footer>
 </body>
 </html>

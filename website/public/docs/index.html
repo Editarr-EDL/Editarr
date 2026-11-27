@@ -3,255 +3,259 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Editarr Docs — Setup, filters &amp; API</title>
-<meta name="description" content="Learn how to install Editarr, scan local media, review filters, export sidecars, and automate your installation with its API.">
+<title>Editarr Docs — The Editarr handbook</title>
+<meta name="description" content="Install Editarr, connect Jellyfin, scan with local AI, review filters, publish EDL and MCF sidecars and filtered subtitles, and manage accounts and backups.">
 <meta name="theme-color" content="#111318">
 <link rel="canonical" href="https://editarr.org/docs/">
 <link rel="icon" href="/assets/favicon.png">
 <link rel="stylesheet" href="/assets/site.css">
-<script src="/assets/site.js" defer>
-</script>
-<script src="/assets/api-reference.js" defer>
-</script>
+<script src="/assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header">
-<a class="brand" href="/" aria-label="Editarr home"><img src="/assets/editarr-icon.png" width="38" height="38" alt="">Editarr</a>
-<button class="menu-toggle" aria-expanded="false" aria-controls="navigation">Menu <span aria-hidden="true">☰</span>
-</button>
-<nav id="navigation" aria-label="Main navigation">
-<a href="/#overview">Overview</a>
-<a href="/#features">Features</a>
-<a href="/#community">Community</a>
-<a href="/#contributing">Contributing</a>
-<a href="/docs/" aria-current="page">Docs ↗</a>
-<a class="nav-cta" href="#install">Install →</a>
-</nav>
+  <a class="brand" href="/" aria-label="Editarr home"><img src="/assets/editarr-icon.png" width="38" height="38" alt="">Editarr</a>
+  <button class="menu-toggle" aria-expanded="false" aria-controls="navigation">Menu <span aria-hidden="true">☰</span></button>
+  <nav id="navigation" aria-label="Main navigation">
+    <a href="/#features">Features</a>
+    <a href="/#community">Community</a>
+    <a href="/docs/" aria-current="page">Docs</a>
+    <a href="/api/">API</a>
+    <a href="https://github.com/Editarr-EDL/Editarr">GitHub <span aria-hidden="true">↗</span></a>
+    <a class="nav-cta" href="/docs/#install">Install <span aria-hidden="true">→</span></a>
+  </nav>
 </header>
 <div class="docs-layout wrap">
-<aside class="docs-nav" aria-label="Documentation sections">
-<strong>THE EDITARR HANDBOOK</strong>
-<a href="#get-started">Getting started</a>
-<a href="#connections">Connect your library</a>
-<a href="#scanning">Scan your media</a>
-<a href="#reviews">Review &amp; refine</a>
-<a href="#exporting">Import &amp; export</a>
-<a href="#community">Community filters</a>
-<a href="#settings">Settings &amp; backups</a>
-<a href="#api">Use the API</a>
-<a href="#api-reference">API reference</a>
-<a href="#hosting">Host this website</a>
-</aside>
+<nav class="docs-nav" aria-label="Handbook sections">
+  <strong>THE EDITARR HANDBOOK</strong>
+  <a href="#get-started">Getting started</a>
+  <a href="#connections">Connect your library</a>
+  <a href="#workflow">The item workflow</a>
+  <a href="#scanning">Scan your media</a>
+  <a href="#reviews">Review &amp; refine</a>
+  <a href="#subtitles">Filtered subtitles</a>
+  <a href="#exporting">Import &amp; publish</a>
+  <a href="#community">Community filters</a>
+  <a href="#accounts">Accounts &amp; roles</a>
+  <a href="#settings">Settings &amp; backups</a>
+  <a href="#api">Use the API</a>
+  <a href="#hosting">Host this website</a>
+  <a class="docs-nav-api" href="/api/">API reference <span aria-hidden="true">→</span></a>
+</nav>
 <main class="docs-content" id="main">
 <p class="eyebrow">A LITTLE GUIDANCE. A LOT OF CONTROL.</p>
 <h1>Make it your own.</h1>
-<p>From your first connection to a custom automation, here’s how to make Editarr part of your media setup.</p>
+<p class="docs-intro">From your first sign-in to a published filter, here’s how Editarr fits into your Jellyfin setup.</p>
+
 <section id="get-started">
 <h2>Getting started</h2>
 <h3 id="install">Install on macOS</h3>
-<p>Download the Apple Silicon disk image for macOS 26.2 or later. Drag Editarr to Applications and follow the signing steps in the release notes before opening it. <a href="https://github.com/Editarr-EDL/Editarr/releases">GitHub releases</a></p>
+<p>Download the Apple Silicon disk image for macOS 26.2 or later from <a href="https://github.com/Editarr-EDL/Editarr/releases">GitHub releases</a>. Quit Editarr if it’s running, open the disk image, and copy Editarr to Applications.</p>
+<p>The app and disk image are unsigned. Before opening Editarr, apply and verify a local ad-hoc signature in Terminal:</p>
+<pre tabindex="0"><code>xattr -dr com.apple.quarantine /Applications/Editarr.app
+codesign --force --deep --sign - /Applications/Editarr.app
+codesign --verify --deep --strict --verbose=2 /Applications/Editarr.app</code></pre>
+<p>The last command must succeed. These commands create only a local signature; they don’t verify the publisher, so use the same care as with any downloaded software. The app runs from the menu bar.</p>
 <h3>Build and install from source</h3>
 <p>Install Python, uv, Node.js, and pnpm as described in the <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/release-build.md">release build guide</a>, then build the wheel from a checkout.</p>
-<pre tabindex="0">
-<code>git clone https://github.com/Editarr-EDL/Editarr.git
+<pre tabindex="0"><code>git clone https://github.com/Editarr-EDL/Editarr.git
 cd Editarr
 uv sync --extra dev
 uv run python scripts/build_release.py --wheel
 uv venv /absolute/path/editarr-venv
 uv pip install --python /absolute/path/editarr-venv/bin/python \
   dist/editarr-0.1.1-py3-none-any.whl
-/absolute/path/editarr-venv/bin/editarr --host 127.0.0.1</code>
-</pre>
-<p>Open <code>http://localhost:3348/</code> and sign in as a Jellyfin administrator to create the owner account, or restore a backup before setup. Afterwards every person signs in with their own account; see <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/multi-user-guide.md">Run Editarr for several users</a> for roles, Jellyfin sign-in, and upgrades from a single-user release. Use the wheel filename produced by your build if its version differs.</p>
+/absolute/path/editarr-venv/bin/editarr --host 127.0.0.1</code></pre>
+<p>Use the wheel filename produced by your build if its version differs. Run <code>editarr --help</code> for options and <code>editarr paths</code> to see where data, logs, and models live.</p>
+<h3>First run</h3>
+<ul>
+<li>Open <code>http://localhost:3348/</code>.</li>
+<li>Sign in as a Jellyfin administrator to create the <strong>owner</strong> account, or choose <strong>Restore from backup</strong>.</li>
+<li>Afterwards everyone signs in with their own account. See <a href="#accounts">Accounts &amp; roles</a>.</li>
+</ul>
 <div class="callout">
-<p>The website’s Docker image serves this site and documentation. The local Editarr scanner is installed separately using the release workflow above.</p>
+<p>The website’s Docker image serves only this site. Install the Editarr app separately as described above.</p>
 </div>
 </section>
+
 <section id="connections">
 <h2>Connect your library</h2>
 <ol>
-<li>Enter your Jellyfin server address and sign in with a Jellyfin administrator account on the setup screen.</li>
-<li>If the source reports a different file path from the one Editarr can read, add a remote-to-local path mapping under <strong>Settings → General</strong>.</li>
-<li>Browse a downloaded title and select its physical version.</li>
+<li>On the setup screen, enter your Jellyfin server address and sign in with a Jellyfin administrator account.</li>
+<li>If Jellyfin reports a different file path from the one Editarr can read, add a path mapping under <strong>Settings → General</strong> and test it.</li>
+<li>Open a movie or episode from <strong>Jellyfin Libraries</strong> and select its physical version.</li>
+<li>To play your filters in Jellyfin, install the <a href="https://github.com/Editarr-EDL/jellyfin-edl">Jellyfin EDL plugin</a> (v1.0.0 or later) on your Jellyfin server.</li>
 </ol>
-<p>Editarr needs read access to the video, and write access to its containing directory when exporting sidecars. Connection keys remain on the Editarr server.</p>
+<p>Editarr needs read access to the video, and write access to its folder to publish sidecars. Connection keys stay on the Editarr server, and each person sees only the libraries Jellyfin lets them see.</p>
 </section>
+
+<section id="workflow">
+<h2>The item workflow</h2>
+<p>Each media item guides you through five tabs. Use as many as you need; you can also skip scanning and build filters by hand.</p>
+<ol class="docs-steps">
+<li><strong>Community</strong> — find a shared master filter set for this version (optional).</li>
+<li><strong>Scans</strong> — queue audio, video, or credits scans and follow their results.</li>
+<li><strong>Review</strong> — combine scans into a named review and decide what to mute or skip.</li>
+<li><strong>Subtitles</strong> — create filtered subtitles from your saved review.</li>
+<li><strong>Publish</strong> — write EDL or MCF sidecars for yourself or as the item default.</li>
+</ol>
+</section>
+
 <section id="scanning">
 <h2>Scan your media</h2>
-<p>Choose <strong>New Scan</strong>, name the scan, and select audio, video, or credits analysis. The queue runs serially and retains progress and history, with cancellation and supported checkpoint resume.</p>
-<h3>Audio &amp; visual analysis</h3>
-<p>Audio transcription and profanity filters suggest mute ranges; visual models suggest skip ranges. Select the audio track and available models for your installation before starting.</p>
-<p>The optional Qwen multilingual audio filter analyzes the original transcript, while better-profanity remains the default. Accuracy depends on the language, transcript, model, and hardware; always review suggestions.</p>
-<h3>Models &amp; credits</h3>
-<p>
-<strong>Settings → Models → Storage</strong> shows model sources, sizes, and download status. Weights may need an initial download; inference runs on your Editarr host.</p>
-<p><strong>Settings → Models → Scan Settings</strong> controls the audio padding added before and after findings in new audio scans.</p>
-<p>Credits detection is an explicit queued scan with a preview and an editable candidate. Accepting it updates your review only when you choose; optional Qwen acquisition requires consent.</p>
+<p>Choose <strong>New Scan</strong>, name it, pick the audio track, and select audio, video, or credits analysis with the models to use. Scans run one at a time in a queue with live progress, cancellation, checkpoint resume after a restart, and retained history.</p>
+<h3>Audio</h3>
+<ul>
+<li>Transcribe with <strong>Whisper</strong>, or on Apple Silicon with macOS 26 or later, <strong>Apple Speech</strong>.</li>
+<li>The default <strong>better-profanity</strong> filter flags profanity; the optional <strong>Qwen (multilingual)</strong> filter finds profanity and blasphemy in any language.</li>
+<li>Findings become suggested mute ranges.</li>
+</ul>
+<h3>Video</h3>
+<ul>
+<li>Visual models <strong>NudeNet</strong>, <strong>Qwen3-VL</strong>, and <strong>d1-3B</strong> suggest skip ranges. Availability depends on your host.</li>
+<li>Video findings get a <strong>Severity and Description</strong> step using the model you choose in New Scan.</li>
+</ul>
+<h3>Credits</h3>
+<p>Credits detection is an explicit queued scan. It produces a preview and an editable candidate that changes your review only when you accept it.</p>
+<h3>Models</h3>
+<p><strong>Settings → Models</strong> shows each model’s source, size, and download status. Weights may download on first use; inference always runs on your Editarr host. Accuracy depends on language, model, and hardware, so review every suggestion.</p>
 </section>
+
 <section id="reviews">
 <h2>Review &amp; refine</h2>
-<p>Start a review for a physical media version, include completed scans, and inspect the proposed filters. Different reviews can keep different selections for the same file.</p>
-<ol>
-<li>Preview the audio or video around a finding using the draft's current timing, then choose whether to keep its mute or skip action.</li>
-<li>Add manual ranges, assign categories and severity, and adjust your draft’s timestamps and metadata.</li>
-<li>Apply filter defaults if useful, then save before exporting.</li>
-</ol>
-<p>
-<strong>Adjust Cue Times</strong> retimes imported or unverified review cues to a target interval without rewriting original scan evidence. Verified local and manual cues remain fixed.</p>
+<p>Start a named review for a media version and include completed scans. Different reviews can keep different choices for the same file.</p>
+<ul>
+<li><strong>Preview</strong> the audio or video around a cue with the draft’s current timing, then keep its mute or skip action—or drop it.</li>
+<li>Add manual filters, and set categories, subcategories, and severity.</li>
+<li><strong>Apply Filter Defaults</strong> to use your filter preferences, then save.</li>
+<li><strong>Adjust Cue Times</strong> retimes imported or unverified cues to a target interval without rewriting scan evidence. Verified local and manual cues stay fixed.</li>
+</ul>
+<p>Saved reviews are private to their creator, admins, and the owner.</p>
 </section>
+
+<section id="subtitles">
+<h2>Filtered subtitles</h2>
+<p>The <strong>Subtitles</strong> step turns a saved review into a filtered subtitle track for Jellyfin.</p>
+<ul>
+<li>Words matched by your enabled language filters are redacted from the subtitle text.</li>
+<li>Preview the filtered cues, then publish a named subtitle beside the video. Its title is <code>username - review title</code>, visible to everyone who can play that version.</li>
+<li>Each person publishes their own named subtitles; publishing again replaces your earlier track for the same review and source.</li>
+</ul>
+</section>
+
 <section id="exporting">
-<h2>Import &amp; export</h2>
-<p>Import Simple EDL or MCF 1.0.0/1.1.0 from an upload or an absolute host path. For MCF, confirm the target start and before-credits or file-end bounds before reviewing the imported cues.</p>
+<h2>Import &amp; publish</h2>
+<h3>Import</h3>
+<p>Import Simple EDL or MCF 1.0.0/1.1.0 from an upload; admins and the owner can also import from a path on the Editarr host. For MCF, confirm the start and before-credits or file-end bounds before reviewing the imported cues.</p>
+<h3>Formats</h3>
 <div class="table-scroll" tabindex="0">
 <table>
-<thead>
-<tr>
-<th>Format</th>
-<th>Best for</th>
-<th>Before exporting</th>
-</tr>
-</thead>
+<thead><tr><th>Format</th><th>Best for</th><th>Before publishing</th></tr></thead>
 <tbody>
-<tr>
-<td>Simple EDL</td>
-<td>Mute and skip time ranges for compatible Kodi/MPlayer tools.</td>
-<td>Save your review and confirm its selected actions.</td>
-</tr>
-<tr>
-<td>MCF 1.1.0</td>
-<td>Structured categories, severity, channels, and media metadata.</td>
-<td>Resolve missing fields shown by MCF preflight.</td>
-</tr>
+<tr><td>Simple EDL</td><td>Mute and skip ranges for the <a href="https://github.com/Editarr-EDL/jellyfin-edl">Jellyfin EDL plugin</a> and Kodi/MPlayer tools.</td><td>Save your review and confirm its actions.</td></tr>
+<tr><td>MCF 1.1.0</td><td>Structured categories, severity, channels, and media metadata.</td><td>Resolve anything flagged by MCF preflight.</td></tr>
 </tbody>
 </table>
 </div>
-<p>Exports are sidecars in folders beside the selected video; Editarr does not rewrite the media or make every player understand filters. Your personal files go to <code>edl/&lt;id&gt;/Movie.user-&lt;id&gt;.edl</code> and <code>mcf/&lt;id&gt;/Movie.user-&lt;id&gt;.mcf</code>, and an item default goes to <code>edl/Movie.edl</code> or <code>mcf/Movie.mcf</code>. The Jellyfin EDL plugin serves each signed-in user their personal file, or the item default when they have none. EDL and MCF are tracked independently under <strong>Published files</strong>. Older <code>Movie.edl</code> and <code>Movie.mcf</code> files beside the video stay on disk, appear under <strong>Manage exports</strong>, and are no longer served; publish the item default again to replace them.</p>
+<h3>Targets &amp; files</h3>
+<p>Publish for <strong>yourself</strong>, for the <strong>review owner</strong>, or as the <strong>item default</strong>, as your role allows. Sidecars are written beside the video; the media itself is never changed.</p>
+<div class="table-scroll" tabindex="0">
+<table>
+<thead><tr><th>Target</th><th>EDL</th><th>MCF</th></tr></thead>
+<tbody>
+<tr><td>Personal</td><td><code>edl/&lt;id&gt;/Movie.user-&lt;id&gt;.edl</code></td><td><code>mcf/&lt;id&gt;/Movie.user-&lt;id&gt;.mcf</code></td></tr>
+<tr><td>Item default</td><td><code>edl/Movie.edl</code></td><td><code>mcf/Movie.mcf</code></td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>The <a href="https://github.com/Editarr-EDL/jellyfin-edl">Jellyfin EDL plugin</a> serves each signed-in user their personal file, or the item default when they have none.</li>
+<li><strong>Published files</strong> tracks EDL and MCF independently.</li>
+<li>A legacy <code>Movie.edl</code> beside the video is shown under <strong>Manage exports</strong> and is no longer served. Publish the item default again to replace it.</li>
+</ul>
 </section>
+
 <section id="community">
 <h2>Community filters</h2>
-<p>Community features require a configured service and enrollment from your local settings. The public website does not connect to your library or automatically enroll your installation.</p>
+<p>Community features need a configured service and enrollment from your settings. This website never connects to your library or enrolls your installation.</p>
 <ol>
-<li>Open community settings and complete the hosted enrollment flow, then explicitly confirm it in Editarr.</li>
-<li>Use <strong>Find Filters</strong> on a selected media version; compare each community version’s match, filter count, and contributor count before choosing <strong>Use these filters</strong> to link its master filter set.</li>
-<li>Approve alignment for a loosely matched set before it applies, review its filters before exporting, and approve any publication preview before sharing your own work.</li>
+<li>Enroll from community settings and confirm it in Editarr.</li>
+<li>In an item’s <strong>Community</strong> tab, use <strong>Find Filters</strong> to compare community versions by match, filter count, and contributors.</li>
+<li>Choose <strong>Use these filters</strong> to link that version’s master filter set.</li>
+<li>Approve the alignment of a loosely matched set before it applies.</li>
+<li>Approve the publication preview before sharing your own work.</li>
 </ol>
-<p>Linking a master filter set does not automatically modify your saved review or export a sidecar. See the <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/community-service-docker.md#configure-before-activation">operator guide</a> for service configuration.</p>
-<p>For bugs and contributions, visit the <a href="https://github.com/Editarr-EDL/Editarr/issues">project’s GitHub issues</a>.</p>
+<p>Linking never modifies your saved review or exports automatically. See the <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/community-user-guide.md">community user guide</a> and the <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/community-service-docker.md#configure-before-activation">operator guide</a>.</p>
 </section>
-<section id="settings">
-<h2>Settings &amp; backups</h2>
-<p>General settings contain the public Base URL, listening port, path mappings, and diagnostics; your role decides which of them you see. Saving deployment changes shows next-start values; restart Editarr to apply supported listener changes.</p>
-<p>Admins create full backups and the owner downloads them. Keep archives private; they contain every account's credentials and keys, and encryption is optional. A backup restores only into a new, empty installation, from <strong>Restore from backup</strong> on the first-run screen or with <code>editarr backup restore</code> into an empty data directory.</p>
-<p>Schema upgrades preserve data and verify a recoverable safety snapshot before changing an existing database. Restoring an older backup can restore an older API key, so rotate the key after recovery when needed.</p>
-<p>For access beyond a trusted network, put Editarr behind HTTPS and set its public Base URL. See the <a href="https://github.com/Editarr-EDL/Editarr/tree/HEAD/docs/examples/reverse-proxy">reverse proxy examples</a>.</p>
-</section>
-<section id="api">
-<h2>Use the local API</h2>
-<p>Open the <strong>API Key</strong> section under <strong>My Profile</strong> from the sidebar account menu and generate a key. You can show and copy it again later after confirming your identity.</p>
-<p>Send the key in the <code>X-Api-Key</code> header to your installation, including any configured Base URL prefix. The key carries your account's current permissions, never more. Generating a new key or revoking it invalidates the previous key immediately.</p>
-<h3>Read status and scan history</h3>
-<p>Set <code>EDITARR_URL</code> to your local service, then enter the key without echoing it into terminal history. Keep the variable in your shell session or load it from your secret manager.</p>
-<pre tabindex="0">
-<code># Bash: use https://media.example/editarr for a prefixed install.
-EDITARR_URL=http://localhost:3348
-read -r -s -p 'Editarr API key: ' EDITARR_API_KEY; printf '\n'
-curl --fail-with-body "$EDITARR_URL/api/system/version" \
-  -H "X-Api-Key: $EDITARR_API_KEY"
-curl --fail-with-body "$EDITARR_URL/api/scans/history" \
-  -H "X-Api-Key: $EDITARR_API_KEY"</code>
-</pre>
-<h3>Queue an audio scan</h3>
-<p>Scans start from a Jellyfin item. Read its audio tracks first and send the returned <code>selection</code> with the scan. Use <code>GET /api/capabilities</code> and <code>GET /api/models</code> to inspect supported analysis and model readiness first.</p>
-<pre tabindex="0">
-<code>SELECTION=$(curl --fail-with-body "$EDITARR_URL/api/media/audio-tracks?item_id=$ITEM_ID" \
-  -H "X-Api-Key: $EDITARR_API_KEY" | jq -c .selection)
-curl --fail-with-body "$EDITARR_URL/api/scans" \
-  -H "X-Api-Key: $EDITARR_API_KEY" \
-  -H 'Content-Type: application/json' \
-  --data '{"jellyfin_item_id":"'"$ITEM_ID"'", "name":"Audio review",
-           "scan_audio":true, "scan_video":false, "audio_selection":'"$SELECTION"'}'
-curl --fail-with-body "$EDITARR_URL/api/scans/queue" \
-  -H "X-Api-Key: $EDITARR_API_KEY"</code>
-</pre>
-<h3>From scan to sidecar</h3>
-<p>Read findings from <code>GET /api/scans/{scan_id}/findings</code>, create a review through the selected source’s review endpoint, then save it with <code>PUT /api/reviews/{review_id}</code>. Include the current revision to detect concurrent edits.</p>
-<p>Publish with <code>POST /api/reviews/{review_id}/exports/edl</code> or <code>/exports/mcf</code>, sending the review <code>revision</code>, <code>policy_owner_id</code>, and <code>policy_revision</code> from your latest read of the review, and a <code>target</code> of <code>self</code>, <code>review_owner</code>, or <code>item_default</code> as your role allows. Check <code>GET /api/reviews/{review_id}/mcf/preflight</code> before publishing MCF. Publishing writes the sidecar on the server; <code>POST /api/reviews/{review_id}/exports/{format}/download</code> returns the same bytes without writing a file.</p>
-<h3>Key lifecycle &amp; browser sessions</h3>
+
+<section id="accounts">
+<h2>Accounts &amp; roles</h2>
+<p>Every account comes from Jellyfin. Each person signs in with their own Jellyfin password, or Quick Connect where enabled. Editarr has no local passwords.</p>
 <div class="table-scroll" tabindex="0">
 <table>
-<thead>
-<tr>
-<th>Endpoint</th>
-<th>Result</th>
-</tr>
-</thead>
+<thead><tr><th>Role</th><th>Can</th></tr></thead>
 <tbody>
-<tr>
-<td>
-<code>GET /api/auth/api-key</code>
-</td>
-<td>Configured status, creation time, and whether the key can be shown; never the key itself.</td>
-</tr>
-<tr>
-<td>
-<code>POST /api/auth/api-key</code>
-</td>
-<td>Generate or replace the key with your password in <code>reauthentication</code>; the new value is returned in <code>api_key</code>.</td>
-</tr>
-<tr>
-<td>
-<code>DELETE /api/auth/api-key</code>
-</td>
-<td>Revoke the key; browser sessions remain signed in.</td>
-</tr>
-<tr>
-<td>
-<code>POST /api/auth/api-key/reveal</code>
-</td>
-<td>Show the current key with your password in <code>reauthentication</code>.</td>
-</tr>
+<tr><td>Owner</td><td>Everything, including connections, backups, and enforced filter policy.</td></tr>
+<tr><td>Admin</td><td>Manage users and their media access, publish item defaults.</td></tr>
+<tr><td>User</td><td>Browse allowed media, scan, keep private reviews, publish personal exports.</td></tr>
 </tbody>
 </table>
 </div>
-<p>Showing, generating, and replacing a key require a signed-in browser session and your password; a key cannot do them for itself. The key works across the application APIs your account may use, including community operations. Password resets, permission changes, account linking, account deletion, and ownership transfer also need a browser session, and a key gets <code>403 interactive_session_required</code> for them.</p>
-<p>Header-key clients need no cookie or CSRF token; browsers that send origin metadata still must match the installation’s origin. Cookie-authenticated mutations require both the matching Origin and session <code>X-CSRF-Token</code>; never put keys in URLs or public website code.</p>
-<p>Errors use HTTP status codes: <code>401</code> for missing/invalid authentication, <code>403</code> for origin/CSRF rejection, <code>409</code> for conflicts, <code>422</code> for invalid input, and <code>423</code> before setup completes. Key responses are marked <code>no-store</code>.</p>
+<ul>
+<li>Manage people, roles, and permissions under <strong>Settings → Users</strong>.</li>
+<li><strong>Settings → Audit History</strong> lists recorded account and administrative events.</li>
+<li><strong>My Profile</strong> holds your personal API key.</li>
+</ul>
+<p>See <a href="https://github.com/Editarr-EDL/Editarr/blob/HEAD/docs/multi-user-guide.md">Run Editarr for several users</a> for permissions, filter policy, and upgrades from a single-user release.</p>
 </section>
-<section id="api-reference">
-<h2>API reference</h2>
-<p>Search the endpoints and expand their request/response schemas below. This is generated from the application source; your running installation’s authenticated <code>/openapi.json</code> and <code>/docs</code> describe its installed version.</p>
-<p>
-<a href="/docs/openapi.json" download>Download the OpenAPI document ↗</a>
-</p>
-<label for="api-search">Find an endpoint</label>
-<input class="api-search" id="api-search" type="search" placeholder="Try reviews, backup, models, or POST" autocomplete="off">
-<p class="api-count" id="api-count" role="status">Loading endpoints…</p>
-<div id="api-operations">
+
+<section id="settings">
+<h2>Settings &amp; backups</h2>
+<ul>
+<li><strong>Connections</strong> — Jellyfin and community service.</li>
+<li><strong>Filters</strong> — your filter preferences and, for admins, server defaults.</li>
+<li><strong>Models</strong> — model storage and scan settings, including the audio padding added around new audio findings.</li>
+<li><strong>General</strong> — public Base URL, listening port, path mappings, diagnostics, and backups. Restart Editarr to apply listener changes.</li>
+</ul>
+<h3>Backups</h3>
+<p>Admins create full backups and the owner downloads them. Archives contain every account’s credentials and keys; keep them private. Encryption is optional.</p>
+<p>A backup restores only into a new, empty installation: use <strong>Restore from backup</strong> on the first-run screen or <code>editarr backup restore</code> into an empty data directory. Restoring an older backup can bring back an older API key, so rotate keys afterwards when needed.</p>
+<p>Schema upgrades preserve data and verify a recoverable safety snapshot before changing an existing database.</p>
+<h3>Remote access</h3>
+<p>Beyond a trusted network, run Editarr behind HTTPS and set its public Base URL. See the <a href="https://github.com/Editarr-EDL/Editarr/tree/HEAD/docs/examples/reverse-proxy">reverse proxy examples</a>.</p>
+</section>
+
+<section id="api">
+<h2>Use the API</h2>
+<p>Every feature is available through the local REST API.</p>
+<ol>
+<li>Open <strong>My Profile</strong> from the sidebar account menu and generate a key under <strong>API Key</strong>.</li>
+<li>Send it in the <code>X-Api-Key</code> header, including any Base URL prefix.</li>
+<li>The key carries your account’s current permissions, never more. Replacing or revoking it invalidates the old key immediately.</li>
+</ol>
+<pre tabindex="0"><code>EDITARR_URL=http://localhost:3348
+read -r -s -p 'Editarr API key: ' EDITARR_API_KEY; printf '\n'
+curl --fail-with-body "$EDITARR_URL/api/scans/history" \
+  -H "X-Api-Key: $EDITARR_API_KEY"</code></pre>
+<div class="api-cta">
+<p>Endpoints, parameters, schemas, and examples for every operation.</p>
+<a class="button primary" href="/api/">API reference <span aria-hidden="true">→</span></a>
 </div>
-<noscript>
-<p>Enable JavaScript for the searchable reference, or download the OpenAPI JSON above.</p>
-</noscript>
 </section>
+
 <section id="hosting">
 <h2>Host editarr.org with Docker</h2>
-<p>The website is a standalone static Nginx container with no account, database, or connection to a local Editarr installation. Build from the repository’s <code>website</code> directory.</p>
-<pre tabindex="0">
-<code>docker compose -f website/compose.yaml up -d --build
-# Local preview: http://localhost:8088</code>
-</pre>
-<p>Point the domain’s DNS to your host, then configure your HTTPS reverse proxy to forward <code>editarr.org</code> to <code>127.0.0.1:8088</code>. The included Caddy example handles the public HTTPS entry point.</p>
+<p>The website is a standalone static Nginx container with no account, database, or connection to an Editarr installation.</p>
+<pre tabindex="0"><code>docker compose -f website/compose.yaml up -d --build
+# Local preview: http://localhost:8088</code></pre>
+<p>Point the domain’s DNS to your host and forward <code>editarr.org</code> to <code>127.0.0.1:8088</code> from your HTTPS reverse proxy. The included Caddy example handles the public HTTPS entry point.</p>
 </section>
 </main>
 </div>
 <footer class="site-footer wrap">
-<a class="brand" href="/"><img src="/assets/editarr-icon.png" width="32" height="32" alt="">Editarr</a>
-<p>Your media. Your edit.</p>
-<nav aria-label="Footer">
-<a href="/">Overview</a>
-<a href="https://github.com/Editarr-EDL/Editarr">GitHub ↗</a>
-<a href="#main">Back to top ↑</a>
-</nav>
+  <a class="brand" href="/"><img src="/assets/editarr-icon.png" width="32" height="32" alt="">Editarr</a>
+  <p>Your media. Your edit.</p>
+  <nav aria-label="Footer"><a href="/docs/">Docs</a><a href="/api/">API reference</a><a href="https://github.com/Editarr-EDL/Editarr">GitHub <span aria-hidden="true">↗</span></a><a href="#main">Back to top <span aria-hidden="true">↑</span></a></nav>
 </footer>
 </body>
 </html>

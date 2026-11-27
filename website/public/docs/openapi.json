@@ -2,14 +2,14 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Editarr",
-    "description": "Local Editarr API. X-Api-Key grants administrator access. Browser sessions require same-origin CSRF protection for mutations.",
+    "description": "Local Editarr API. Send a personal key in the X-Api-Key header; a key carries the signed-in account's own current permissions, never more. Browser-session mutations must be same-origin and include the X-CSRF-Token header. Some account-security operations require an interactive browser session and return 403 interactive_session_required when called with an API key.",
     "version": "0.1.3"
   },
   "paths": {
     "/api/auth/api-key": {
       "get": {
         "tags": [
-          "authentication"
+          "API keys"
         ],
         "summary": "Own Status",
         "description": "The caller's key metadata; the value itself is only returned by reveal.",
@@ -37,7 +37,7 @@
       },
       "post": {
         "tags": [
-          "authentication"
+          "API keys"
         ],
         "summary": "Own Issue",
         "description": "Create or replace the caller's key; the previous key stops working immediately.",
@@ -85,7 +85,7 @@
       },
       "delete": {
         "tags": [
-          "authentication"
+          "API keys"
         ],
         "summary": "Own Revoke",
         "description": "Disable the caller's key without affecting browser sessions.",
@@ -115,7 +115,7 @@
     "/api/auth/api-key/reveal": {
       "post": {
         "tags": [
-          "authentication"
+          "API keys"
         ],
         "summary": "Own Reveal",
         "description": "Show the caller's current key after password confirmation.",
@@ -165,7 +165,7 @@
     "/api/auth/setup": {
       "post": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Auth Setup",
         "description": "Make a Jellyfin administrator the owner, store Editarr's minted key, and sign in.",
@@ -208,7 +208,7 @@
     "/api/auth/status": {
       "get": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Auth Status",
         "description": "Return safe setup/authentication state without exposing credentials.",
@@ -231,7 +231,7 @@
     "/api/auth/logout": {
       "post": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Auth Logout",
         "description": "Revoke only this browser's session and clear exactly its cookie.",
@@ -261,7 +261,7 @@
     "/api/auth/jellyfin/login": {
       "post": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Jellyfin Login",
         "description": "Issue a session for a valid Jellyfin user, creating its account when admission allows.",
@@ -304,7 +304,7 @@
     "/api/auth/jellyfin/quick-connect": {
       "get": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Quick Connect Availability",
         "description": "Whether sign-in offers Quick Connect: Jellyfin is configured, reachable, and allows it.\n\nOne request at a time asks Jellyfin; the answer is reused for ten seconds,\nor three after Jellyfin did not answer.",
@@ -327,7 +327,7 @@
     "/api/auth/jellyfin/quick-connect/initiate": {
       "post": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Quick Connect Initiate",
         "description": "Start a Quick Connect sign-in for this browser, replacing its earlier one.",
@@ -350,7 +350,7 @@
     "/api/auth/jellyfin/quick-connect/status": {
       "get": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Quick Connect Status",
         "description": "Ask Jellyfin whether this browser's code was approved, and report the attempt's state.\n\nJellyfin is asked at most once a second per attempt; between asks the last\nknown state is reported. A code Jellyfin no longer knows, or one left when\nQuick Connect was turned off, is expired. An outage leaves the attempt pending and answers 503.",
@@ -373,7 +373,7 @@
     "/api/auth/jellyfin/quick-connect/complete": {
       "post": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Quick Connect Complete",
         "description": "Spend this browser's approved code and sign its Jellyfin user in, as password sign-in does.\n\nThe code is spent before Jellyfin is asked, so it signs in at most once.",
@@ -416,7 +416,7 @@
     "/api/auth/jellyfin/quick-connect/cancel": {
       "post": {
         "tags": [
-          "authentication"
+          "Authentication"
         ],
         "summary": "Quick Connect Cancel",
         "description": "Cancel this browser's Quick Connect sign-in; its code can no longer sign in here.",
@@ -432,7 +432,7 @@
     "/api/users/{user_id}/api-key": {
       "post": {
         "tags": [
-          "auth"
+          "API keys"
         ],
         "summary": "User Issue",
         "description": "Create or replace another account's key (owner only).",
@@ -491,7 +491,7 @@
       },
       "delete": {
         "tags": [
-          "auth"
+          "API keys"
         ],
         "summary": "User Revoke",
         "description": "Revoke another account's key: the owner any, an admin an ordinary user's.",
@@ -542,7 +542,7 @@
     "/api/users/{user_id}/api-key/reveal": {
       "post": {
         "tags": [
-          "auth"
+          "API keys"
         ],
         "summary": "User Reveal",
         "description": "Show another account's key (owner only).",
@@ -603,7 +603,7 @@
     "/api/audit": {
       "get": {
         "tags": [
-          "audit"
+          "Audit history"
         ],
         "summary": "Audit List",
         "operationId": "audit_list_api_audit_get",
@@ -801,7 +801,7 @@
     "/api/audit/{event_id}": {
       "get": {
         "tags": [
-          "audit"
+          "Audit history"
         ],
         "summary": "Audit Detail",
         "operationId": "audit_detail_api_audit__event_id__get",
@@ -852,7 +852,7 @@
     "/api/archive": {
       "get": {
         "tags": [
-          "archive"
+          "Library"
         ],
         "summary": "Archive List",
         "description": "One page of archived items; paths appear only for callers who may see media paths.",
@@ -917,7 +917,7 @@
     "/api/settings/filters/default-mode": {
       "get": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Get Default Mode",
         "description": "The mode new accounts start in.",
@@ -945,7 +945,7 @@
       },
       "put": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Put Default Mode",
         "description": "Change the mode new accounts start in; existing accounts keep theirs.",
@@ -995,7 +995,7 @@
     "/api/settings/filters/personal": {
       "get": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Get Own",
         "description": "The caller's effective defaults; every account may read its own.",
@@ -1023,7 +1023,7 @@
       },
       "put": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Put Own",
         "description": "Replace the caller's values for their current mode.",
@@ -1088,7 +1088,7 @@
     "/api/settings/filters/personal/mode": {
       "put": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Put Own Mode",
         "description": "Choose the caller's mode; refused while a policy is enforced on the caller.",
@@ -1138,7 +1138,7 @@
     "/api/settings/filters/users/{user_id}": {
       "get": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Get User",
         "description": "Another account's effective defaults, for those who manage its values, mode, or policy.",
@@ -1187,7 +1187,7 @@
       },
       "put": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Put User",
         "description": "Replace another account's values (owner by default).",
@@ -1263,7 +1263,7 @@
     "/api/settings/filters/users/{user_id}/mode": {
       "put": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Put User Mode",
         "description": "Assign an account's mode; enforcement still applies in either mode.",
@@ -1324,7 +1324,7 @@
     "/api/settings/filters/users/{user_id}/policy": {
       "put": {
         "tags": [
-          "settings"
+          "Settings"
         ],
         "summary": "Put User Policy",
         "description": "Replace the rules and severities enforced on an account (owner, fresh password).",
@@ -1385,7 +1385,7 @@
     "/api/users/{user_id}/status": {
       "put": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Change Status",
         "description": "Disable or re-enable another account. Disabling ends its sessions and keeps its data.\n\nAn account without a Jellyfin link stays disabled (`account_link_required`).",
@@ -1446,7 +1446,7 @@
     "/api/users/{user_id}/sessions": {
       "delete": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Revoke Sessions",
         "description": "End every browser session of another account; its API key keeps working.",
@@ -1497,7 +1497,7 @@
     "/api/users/{user_id}/role": {
       "put": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Assign Role",
         "description": "Make another account an admin or an ordinary user (owner only).",
@@ -1558,7 +1558,7 @@
     "/api/users/bulk": {
       "post": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Bulk",
         "description": "Apply one operation to each listed account, checking every target on its own.\n\nTargets are processed in order and each change commits alone. A wrong or\nthrottled password stops the request with that refusal; changes already\napplied stay applied.",
@@ -1608,7 +1608,7 @@
     "/api/users": {
       "get": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "List Users",
         "description": "One page of the directory with the approved columns, for admins and the owner.",
@@ -1690,7 +1690,7 @@
     "/api/users/{user_id}": {
       "get": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Read User",
         "description": "One account's profile: the caller's own, or any account for directory readers.",
@@ -1739,7 +1739,7 @@
       },
       "patch": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Edit User",
         "description": "Change the listed profile fields.",
@@ -1800,7 +1800,7 @@
     "/api/users/{user_id}/avatar": {
       "put": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Upload Avatar",
         "description": "Replace a local account's avatar with an uploaded PNG, JPEG, WebP, or GIF image.",
@@ -1849,7 +1849,7 @@
       },
       "delete": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Remove Avatar",
         "description": "Remove a local account's avatar.",
@@ -1898,7 +1898,7 @@
       },
       "get": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Read Avatar",
         "description": "The stored avatar as PNG; its digest is the ETag.",
@@ -1945,7 +1945,7 @@
     "/api/users/{user_id}/ownership": {
       "post": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Transfer Ownership",
         "description": "Make another account the owner; the caller becomes an admin.\n\nRefusals: 409 `own_account`, 409 `successor_disabled`, 409\n`successor_credentials_required`, 409 `permission_revision_stale` when the\ncaller's permissions changed during the request, and the access codes.",
@@ -2006,7 +2006,7 @@
     "/api/users/{user_id}/permissions": {
       "get": {
         "tags": [
-          "permissions"
+          "Users & permissions"
         ],
         "summary": "Read Overrides",
         "description": "Another account's role, stored overrides, and effective capabilities (owner only).",
@@ -2055,7 +2055,7 @@
       },
       "patch": {
         "tags": [
-          "permissions"
+          "Users & permissions"
         ],
         "summary": "Change Overrides",
         "description": "Allow, deny, or inherit the listed capabilities for another account (owner only).",
@@ -2116,7 +2116,7 @@
     "/api/roles/defaults": {
       "get": {
         "tags": [
-          "permissions"
+          "Users & permissions"
         ],
         "summary": "Read Role Defaults",
         "description": "Every delegable capability's default for admins and users (owner only).",
@@ -2146,7 +2146,7 @@
     "/api/roles/{role}/defaults": {
       "patch": {
         "tags": [
-          "permissions"
+          "Users & permissions"
         ],
         "summary": "Change Role Defaults",
         "description": "Change the listed defaults; accounts of that role without an override follow live.",
@@ -2211,7 +2211,7 @@
     "/api/media-access/default": {
       "get": {
         "tags": [
-          "media access"
+          "Users & permissions"
         ],
         "summary": "Read Default",
         "description": "The live local default every local account without its own selection follows.",
@@ -2239,7 +2239,7 @@
       },
       "put": {
         "tags": [
-          "media access"
+          "Users & permissions"
         ],
         "summary": "Change Default",
         "description": "Replace the live local default; it cannot be `inherit`.",
@@ -2289,7 +2289,7 @@
     "/api/users/{user_id}/media-access": {
       "get": {
         "tags": [
-          "media access"
+          "Users & permissions"
         ],
         "summary": "Read User Access",
         "description": "Another account's own selection, or the default it follows.",
@@ -2338,7 +2338,7 @@
       },
       "put": {
         "tags": [
-          "media access"
+          "Users & permissions"
         ],
         "summary": "Change User Access",
         "description": "Store a local account's own selection, or return it to the default with `inherit`.",
@@ -2399,7 +2399,7 @@
     "/api/users/{user_id}/link/proof": {
       "post": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Prove Link",
         "description": "Prove the target account and a Jellyfin identity; return a proof and the preview.\n\nThe proof expires after ten minutes, works once, and only for this caller's\nsession and this account.",
@@ -2460,7 +2460,7 @@
     "/api/users/{user_id}/link": {
       "post": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Link Account",
         "description": "Link or relink an account with a proof from `/link/proof` and its confirmation.\n\nNew export files are written first; the identity and publications change in\none transaction; old files are removed only after that commits. A failure\nbefore the commit leaves the old identity and files. `removing` reports old\nfiles that recovery removes later.",
@@ -2521,7 +2521,7 @@
     "/api/users/{user_id}/deletion": {
       "get": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Preview Account Deletion",
         "description": "Describe what deleting another account in `mode` does to each of its resources.",
@@ -2602,7 +2602,7 @@
       },
       "post": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Delete Account",
         "description": "Delete another account exactly as previewed; the request carries the caller's password.",
@@ -2663,7 +2663,7 @@
     "/api/users/bulk-deletion": {
       "post": {
         "tags": [
-          "users"
+          "Users & permissions"
         ],
         "summary": "Bulk Delete Accounts",
         "description": "Delete each listed account with its own confirmation, committing each alone.\n\nEvery target is authorized and confirmed on its own, and the password is\nverified once. A refusal or an operational failure of one target names its\ncode after that target rolls back; earlier targets stay applied and later ones\nstill run. A wrong or throttled password stops the request.",
@@ -2713,7 +2713,7 @@
     "/api/jellyfin/users": {
       "get": {
         "tags": [
-          "jellyfin accounts"
+          "Jellyfin accounts"
         ],
         "summary": "List Jellyfin Users",
         "description": "Jellyfin users that may be imported, with any linked account.",
@@ -2743,7 +2743,7 @@
     "/api/jellyfin/users/import": {
       "post": {
         "tags": [
-          "jellyfin accounts"
+          "Jellyfin accounts"
         ],
         "summary": "Import Jellyfin Users",
         "description": "Create accounts for the selected or all Jellyfin users; report each one.",
@@ -2793,7 +2793,7 @@
     "/api/jellyfin/sync": {
       "get": {
         "tags": [
-          "jellyfin accounts"
+          "Jellyfin accounts"
         ],
         "summary": "Read Jellyfin Sync",
         "description": "The last sync run and every linked account's verification state.",
@@ -2821,7 +2821,7 @@
       },
       "post": {
         "tags": [
-          "jellyfin accounts"
+          "Jellyfin accounts"
         ],
         "summary": "Sync Jellyfin Accounts",
         "description": "Refresh every linked account now and return each account's result.",
@@ -2851,7 +2851,7 @@
     "/api/jellyfin/blocks": {
       "get": {
         "tags": [
-          "jellyfin accounts"
+          "Jellyfin accounts"
         ],
         "summary": "List Blocked Jellyfin Users",
         "description": "Jellyfin users kept out when their accounts were deleted, newest first.",
@@ -2881,7 +2881,7 @@
     "/api/jellyfin/blocks/unblock": {
       "post": {
         "tags": [
-          "jellyfin accounts"
+          "Jellyfin accounts"
         ],
         "summary": "Unblock Jellyfin User",
         "description": "Let a blocked Jellyfin user sign in or be imported again; their next sign-in\ncreates a fresh account.",
@@ -2931,7 +2931,7 @@
     "/api/backups/jobs": {
       "post": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Start Backup",
         "description": "Start a full export.",
@@ -2979,7 +2979,7 @@
     "/api/backups/jobs/{job_id}": {
       "get": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Backup Status",
         "operationId": "backup_status_api_backups_jobs__job_id__get",
@@ -3025,7 +3025,7 @@
       },
       "delete": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Cancel Backup",
         "operationId": "cancel_backup_api_backups_jobs__job_id__delete",
@@ -3073,7 +3073,7 @@
     "/api/backups/jobs/{job_id}/download": {
       "get": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Download Backup",
         "operationId": "download_backup_api_backups_jobs__job_id__download_get",
@@ -3119,7 +3119,7 @@
       },
       "head": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Check Download",
         "operationId": "check_download_api_backups_jobs__job_id__download_head",
@@ -3167,7 +3167,7 @@
     "/api/backups/schedule": {
       "get": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Get Schedule",
         "operationId": "get_schedule_api_backups_schedule_get",
@@ -3192,7 +3192,7 @@
       },
       "put": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Configure Schedule",
         "operationId": "configure_schedule_api_backups_schedule_put",
@@ -3237,7 +3237,7 @@
       },
       "delete": {
         "tags": [
-          "backups"
+          "Backups & restore"
         ],
         "summary": "Stop Schedule",
         "operationId": "stop_schedule_api_backups_schedule_delete",
@@ -3264,7 +3264,7 @@
     "/api/community/publications/{operation_id}": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Publication Status",
         "operationId": "publication_status_api_community_publications__operation_id__get",
@@ -3310,7 +3310,7 @@
       },
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Publication Cancel",
         "operationId": "publication_cancel_api_community_publications__operation_id__delete",
@@ -3358,7 +3358,7 @@
     "/api/community/publications/{operation_id}/check": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Publication Check",
         "operationId": "publication_check_api_community_publications__operation_id__check_post",
@@ -3406,7 +3406,7 @@
     "/api/community/publications/{operation_id}/retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Publication Retry",
         "operationId": "publication_retry_api_community_publications__operation_id__retry_post",
@@ -3464,7 +3464,7 @@
     "/api/community/import-receipts/recover": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Recover Receipts",
         "operationId": "recover_receipts_api_community_import_receipts_recover_post",
@@ -3491,7 +3491,7 @@
     "/api/community/import-receipts/{import_id}/retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Retry Receipt",
         "operationId": "retry_receipt_api_community_import_receipts__import_id__retry_post",
@@ -3539,7 +3539,7 @@
     "/api/community/connection": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_connection_get",
@@ -3564,7 +3564,7 @@
       },
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_connection_delete",
@@ -3591,7 +3591,7 @@
     "/api/community/connection/status": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_connection_status_get",
@@ -3618,7 +3618,7 @@
     "/api/community/enrollment/start": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_enrollment_start_post",
@@ -3645,7 +3645,7 @@
     "/api/community/enrollment/complete": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_enrollment_complete_post",
@@ -3692,7 +3692,7 @@
     "/api/community/enrollment": {
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_enrollment_delete",
@@ -3719,7 +3719,7 @@
     "/api/community/profile": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_profile_get",
@@ -3744,7 +3744,7 @@
       },
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_profile_delete",
@@ -3769,7 +3769,7 @@
       },
       "patch": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_profile_patch",
@@ -3816,7 +3816,7 @@
     "/api/community/keys/rotate": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_rotate_post",
@@ -3863,7 +3863,7 @@
     "/api/community/keys/rotation-status": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_rotation_status_post",
@@ -3890,7 +3890,7 @@
     "/api/community/keys/rotation-retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_rotation_retry_post",
@@ -3937,7 +3937,7 @@
     "/api/community/keys/recovery": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_recovery_get",
@@ -3964,7 +3964,7 @@
     "/api/community/keys/recovery/start": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_recovery_start_post",
@@ -4011,7 +4011,7 @@
     "/api/community/keys/recovery/complete": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_recovery_complete_post",
@@ -4058,7 +4058,7 @@
     "/api/community/keys/recovery/check": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_recovery_check_post",
@@ -4085,7 +4085,7 @@
     "/api/community/keys/recovery/retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Own",
         "operationId": "own_api_community_keys_recovery_retry_post",
@@ -4132,7 +4132,7 @@
     "/api/users/{user_id}/community/connection": {
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_connection_delete",
@@ -4178,7 +4178,7 @@
       },
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_connection_get",
@@ -4226,7 +4226,7 @@
     "/api/users/{user_id}/community/connection/status": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_connection_status_get",
@@ -4274,7 +4274,7 @@
     "/api/users/{user_id}/community/enrollment/start": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_enrollment_start_post",
@@ -4322,7 +4322,7 @@
     "/api/users/{user_id}/community/enrollment/complete": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_enrollment_complete_post",
@@ -4380,7 +4380,7 @@
     "/api/users/{user_id}/community/enrollment": {
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_enrollment_delete",
@@ -4428,7 +4428,7 @@
     "/api/users/{user_id}/community/profile": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_profile_get",
@@ -4474,7 +4474,7 @@
       },
       "patch": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_profile_patch",
@@ -4530,7 +4530,7 @@
       },
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_profile_delete",
@@ -4578,7 +4578,7 @@
     "/api/users/{user_id}/community/keys/rotate": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_rotate_post",
@@ -4636,7 +4636,7 @@
     "/api/users/{user_id}/community/keys/rotation-status": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_rotation_status_post",
@@ -4684,7 +4684,7 @@
     "/api/users/{user_id}/community/keys/rotation-retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_rotation_retry_post",
@@ -4742,7 +4742,7 @@
     "/api/users/{user_id}/community/keys/recovery": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_recovery_get",
@@ -4790,7 +4790,7 @@
     "/api/users/{user_id}/community/keys/recovery/start": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_recovery_start_post",
@@ -4848,7 +4848,7 @@
     "/api/users/{user_id}/community/keys/recovery/complete": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_recovery_complete_post",
@@ -4906,7 +4906,7 @@
     "/api/users/{user_id}/community/keys/recovery/check": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_recovery_check_post",
@@ -4954,7 +4954,7 @@
     "/api/users/{user_id}/community/keys/recovery/retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Named",
         "operationId": "named_api_users__user_id__community_keys_recovery_retry_post",
@@ -5012,7 +5012,7 @@
     "/api/community/sharing/sources/{kind}/{source_id}": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Source Context",
         "operationId": "source_context_api_community_sharing_sources__kind___source_id__get",
@@ -5073,7 +5073,7 @@
     "/api/community/sharing/sources/{kind}/{source_id}/preview": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Prepare Preview",
         "operationId": "prepare_preview_api_community_sharing_sources__kind___source_id__preview_post",
@@ -5144,7 +5144,7 @@
     "/api/community/sharing/previews/{preview_id}/approve": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Approve Preview",
         "operationId": "approve_preview_api_community_sharing_previews__preview_id__approve_post",
@@ -5202,7 +5202,7 @@
     "/api/community/sharing/previews/{preview_id}": {
       "delete": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Discard Preview",
         "operationId": "discard_preview_api_community_sharing_previews__preview_id__delete",
@@ -5250,7 +5250,7 @@
     "/api/community/lookup": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Lookup",
         "operationId": "lookup_api_community_lookup_post",
@@ -5277,7 +5277,7 @@
     "/api/community/downloads": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Download",
         "operationId": "download_api_community_downloads_post",
@@ -5304,7 +5304,7 @@
     "/api/community/downloads/status": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Status",
         "operationId": "status_api_community_downloads_status_post",
@@ -5331,7 +5331,7 @@
     "/api/community/votes/{revision_id}": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Feedback",
         "operationId": "feedback_api_community_votes__revision_id__get",
@@ -5377,7 +5377,7 @@
       },
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Change Vote",
         "operationId": "change_vote_api_community_votes__revision_id__post",
@@ -5425,7 +5425,7 @@
     "/api/community/votes/{revision_id}/retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Retry Vote",
         "operationId": "retry_vote_api_community_votes__revision_id__retry_post",
@@ -5473,7 +5473,7 @@
     "/api/community/find": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Find",
         "description": "Match the target's keys against the service and remember them under a `findKey`.",
@@ -5521,7 +5521,7 @@
     "/api/community/aliases": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Aliases",
         "description": "The approved aliases for the version picker: Theatrical first, Other last.",
@@ -5549,7 +5549,7 @@
     "/api/community/masters": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Apply Master",
         "description": "Download, verify and link a found version to the target's local version.",
@@ -5595,7 +5595,7 @@
       },
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "List Masters",
         "description": "The caller's links for one item version.",
@@ -5663,7 +5663,7 @@
     "/api/community/masters/{link_id}": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "View Master",
         "description": "The master view: the link, the saved preferences and every row in the local set.",
@@ -5714,7 +5714,7 @@
     "/api/community/masters/{link_id}/active-filters": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Active Filters",
         "description": "The link's filters that start enabled in a review, on the local timeline now,\nand their merged Simple EDL; `clipped=false` returns them unclipped.",
@@ -5775,7 +5775,7 @@
     "/api/community/masters/{link_id}/alignment/preview": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Preview",
         "description": "Fit a transform and show every row on the local timeline; nothing is stored.",
@@ -5836,7 +5836,7 @@
     "/api/community/masters/{link_id}/alignment/approve": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Approve",
         "description": "Store the previewed transform for `for_revision` and return the link.",
@@ -5897,7 +5897,7 @@
     "/api/community/preferences": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Read Preferences",
         "description": "The account's master-set display preferences, or the defaults.",
@@ -5923,7 +5923,7 @@
       },
       "patch": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Save Preferences",
         "description": "Save any preference. The threshold and Low Confidence toggle decide which community\nfilters start enabled when a review includes or refreshes them; hiding downvoted\nrows affects only the list.",
@@ -5971,7 +5971,7 @@
     "/api/community/masters/{link_id}/filters/{filter_id}/vote": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Vote",
         "description": "Persist the vote intent, send it with the link's receipt and record `myVote`.",
@@ -6043,7 +6043,7 @@
     "/api/community/masters/{link_id}/filters/{filter_id}/vote/retry": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Retry Vote",
         "description": "Resend a saved vote intent's exact bytes.",
@@ -6115,7 +6115,7 @@
     "/api/community/masters/{link_id}/reports": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Report",
         "description": "Report the link's version or one of its served filters to moderators.",
@@ -6176,7 +6176,7 @@
     "/api/community/masters/{link_id}/check": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Check",
         "description": "Download and apply a newer revision without using the daily sync allowance.",
@@ -6237,7 +6237,7 @@
     "/api/community/sync": {
       "get": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Read Sync",
         "description": "The account's sync state and its newest notifications.",
@@ -6265,7 +6265,7 @@
     "/api/community/sync/run": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Run Sync",
         "description": "Run the daily sync when due; otherwise report the status with `ran: false`.",
@@ -6313,7 +6313,7 @@
     "/api/community/sync/notifications/read": {
       "post": {
         "tags": [
-          "community"
+          "Community"
         ],
         "summary": "Read Notifications",
         "description": "Mark the account's notifications read; `204`.",
@@ -6361,7 +6361,7 @@
     "/api/setup-restore/flow": {
       "post": {
         "tags": [
-          "setup-restore"
+          "Backups & restore"
         ],
         "summary": "Begin Flow",
         "description": "Start a restore flow, refusing an installation that is not empty.\n\nThe new cookie replaces the browser's previous flow cookie, so that flow and its\nunfinished jobs are ended rather than left holding a slot until they expire.",
@@ -6382,7 +6382,7 @@
     "/api/setup-restore/jobs": {
       "post": {
         "tags": [
-          "setup-restore"
+          "Backups & restore"
         ],
         "summary": "Start Job",
         "operationId": "start_job_api_setup_restore_jobs_post",
@@ -6402,7 +6402,7 @@
     "/api/setup-restore/jobs/{job_id}": {
       "get": {
         "tags": [
-          "setup-restore"
+          "Backups & restore"
         ],
         "summary": "Status",
         "operationId": "status_api_setup_restore_jobs__job_id__get",
@@ -6441,7 +6441,7 @@
       },
       "delete": {
         "tags": [
-          "setup-restore"
+          "Backups & restore"
         ],
         "summary": "Cancel",
         "operationId": "cancel_api_setup_restore_jobs__job_id__delete",
@@ -6482,7 +6482,7 @@
     "/api/setup-restore/jobs/{job_id}/archive": {
       "put": {
         "tags": [
-          "setup-restore"
+          "Backups & restore"
         ],
         "summary": "Upload",
         "description": "Stream one bounded archive into the job's private staging.",
@@ -6524,7 +6524,7 @@
     "/api/setup-restore/jobs/{job_id}/preflight": {
       "post": {
         "tags": [
-          "setup-restore"
+          "Backups & restore"
         ],
         "summary": "Preflight",
         "description": "Validate the archive and stage it; the job becomes ready with a redacted plan.",
@@ -6587,7 +6587,7 @@
     "/api/setup-restore/jobs/{job_id}/activate": {
       "post": {
         "tags": [
-          "setup-restore"
+          "Backups & restore"
         ],
         "summary": "Activate",
         "description": "Restore the previewed archive. Activation checks the target is still empty.",
@@ -6653,6 +6653,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6698,6 +6701,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6733,6 +6739,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6778,6 +6787,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6804,6 +6816,9 @@
             }
           }
         },
+        "tags": [
+          "System"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6827,6 +6842,9 @@
             }
           }
         },
+        "tags": [
+          "System"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6853,6 +6871,9 @@
             }
           }
         },
+        "tags": [
+          "System"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6879,6 +6900,9 @@
             }
           }
         },
+        "tags": [
+          "System"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6923,6 +6947,9 @@
             }
           }
         },
+        "tags": [
+          "System"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -6980,6 +7007,9 @@
             }
           }
         },
+        "tags": [
+          "System"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7006,6 +7036,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7051,6 +7084,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7075,6 +7111,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7122,6 +7161,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7148,6 +7190,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7203,6 +7248,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7250,6 +7298,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7297,6 +7348,9 @@
             }
           }
         },
+        "tags": [
+          "Community"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7344,6 +7398,9 @@
             }
           }
         },
+        "tags": [
+          "Community"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7384,6 +7441,9 @@
             }
           }
         },
+        "tags": [
+          "Community"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7415,6 +7475,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7559,6 +7622,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7607,6 +7673,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7659,6 +7728,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7711,6 +7783,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7773,6 +7848,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7835,6 +7913,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7891,6 +7972,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7922,6 +8006,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -7980,6 +8067,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8038,6 +8128,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8096,6 +8189,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8175,6 +8271,9 @@
             }
           }
         },
+        "tags": [
+          "Subtitles"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8222,6 +8321,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8252,6 +8354,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8297,6 +8402,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8343,6 +8451,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8388,6 +8499,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8418,6 +8532,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8485,6 +8602,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8549,6 +8669,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8607,6 +8730,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8654,6 +8780,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8721,6 +8850,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8768,6 +8900,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8909,6 +9044,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -8994,6 +9132,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9050,6 +9191,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9117,6 +9261,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9203,6 +9350,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9279,6 +9429,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9347,6 +9500,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9435,6 +9591,9 @@
             "description": "Bad Gateway"
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9523,6 +9682,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9608,6 +9770,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9693,6 +9858,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9781,6 +9949,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9859,6 +10030,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -9957,6 +10131,9 @@
             "description": "Bad Gateway"
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10022,6 +10199,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10086,6 +10266,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10133,6 +10316,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10190,6 +10376,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10237,6 +10426,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10294,6 +10486,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10352,6 +10547,9 @@
             }
           }
         },
+        "tags": [
+          "Subtitles"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10410,6 +10608,9 @@
             }
           }
         },
+        "tags": [
+          "Subtitles"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10468,6 +10669,9 @@
             }
           }
         },
+        "tags": [
+          "Subtitles"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10516,6 +10720,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10572,6 +10779,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10659,6 +10869,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10747,6 +10960,9 @@
             }
           }
         },
+        "tags": [
+          "Reviews"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10824,6 +11040,9 @@
             }
           }
         },
+        "tags": [
+          "Credits"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10901,6 +11120,9 @@
             }
           }
         },
+        "tags": [
+          "Credits"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -10989,6 +11211,9 @@
             }
           }
         },
+        "tags": [
+          "Credits"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11097,6 +11322,9 @@
             "description": "Service Unavailable"
           }
         },
+        "tags": [
+          "Credits"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11203,6 +11431,9 @@
             "description": "Service Unavailable"
           }
         },
+        "tags": [
+          "Credits"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11298,6 +11529,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11393,6 +11627,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11455,6 +11692,9 @@
             }
           }
         },
+        "tags": [
+          "Scans"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11529,6 +11769,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11624,6 +11867,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11686,6 +11932,9 @@
             }
           }
         },
+        "tags": [
+          "Library"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11716,6 +11965,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11760,6 +12012,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11817,6 +12072,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11860,6 +12118,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11910,6 +12171,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11956,6 +12220,9 @@
             }
           }
         },
+        "tags": [
+          "Settings"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -11983,6 +12250,9 @@
             }
           }
         },
+        "tags": [
+          "System"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -12010,6 +12280,9 @@
             }
           }
         },
+        "tags": [
+          "Exports & imports"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -12037,6 +12310,9 @@
             }
           }
         },
+        "tags": [
+          "Models"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -12082,6 +12358,9 @@
             }
           }
         },
+        "tags": [
+          "Models"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -12109,6 +12388,9 @@
             }
           }
         },
+        "tags": [
+          "Models"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -12156,6 +12438,9 @@
             }
           }
         },
+        "tags": [
+          "Models"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -12203,6 +12488,9 @@
             }
           }
         },
+        "tags": [
+          "Models"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -12251,6 +12539,9 @@
             }
           }
         },
+        "tags": [
+          "Models"
+        ],
         "security": [
           {
             "ApiKey": []
@@ -26952,5 +27243,71 @@
         "name": "editarr_session"
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "Setup, Jellyfin sign-in, Quick Connect, session status, and sign-out."
+    },
+    {
+      "name": "API keys",
+      "description": "Personal API keys for your account and keys managed for other users."
+    },
+    {
+      "name": "Users & permissions",
+      "description": "Accounts, roles, permission overrides, and media access."
+    },
+    {
+      "name": "Jellyfin accounts",
+      "description": "Jellyfin users known to Editarr, sync, and sign-in blocks."
+    },
+    {
+      "name": "Audit history",
+      "description": "Security and administration events."
+    },
+    {
+      "name": "Library",
+      "description": "Jellyfin libraries, items, media versions, audio tracks, and the archive."
+    },
+    {
+      "name": "Scans",
+      "description": "Start, queue, follow, and cancel scans."
+    },
+    {
+      "name": "Models",
+      "description": "Local AI models, downloads, and scan model settings."
+    },
+    {
+      "name": "Reviews",
+      "description": "Saved reviews, cue edits, previews, and retiming."
+    },
+    {
+      "name": "Subtitles",
+      "description": "Filtered subtitle sources, previews, and Jellyfin publications."
+    },
+    {
+      "name": "Exports & imports",
+      "description": "EDL and MCF exports, publications, and file imports."
+    },
+    {
+      "name": "Credits",
+      "description": "Credits detection results."
+    },
+    {
+      "name": "Community",
+      "description": "Community connection, master filter sets, sharing, and keys."
+    },
+    {
+      "name": "Settings",
+      "description": "Deployment, Jellyfin, filter defaults, path mappings, and macOS settings."
+    },
+    {
+      "name": "Backups & restore",
+      "description": "Optionally encrypted backups, schedules, and fresh-install restore."
+    },
+    {
+      "name": "System",
+      "description": "Version, capabilities, logs, and restart."
+    }
+  ]
 }

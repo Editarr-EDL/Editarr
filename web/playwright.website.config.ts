@@ -5,7 +5,9 @@ const localURL = "http://127.0.0.1:8088";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "website.spec.ts",
+  testMatch: ["website.spec.ts", "website-api.spec.ts"],
+  // python3 -m http.server drops connections under parallel load.
+  workers: 1,
   use: { baseURL: targetURL ?? localURL },
   webServer: targetURL ? undefined : {
     command: "python3 -m http.server 8088 --bind 127.0.0.1 --directory ../website/public",
