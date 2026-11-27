@@ -1,0 +1,40 @@
+{
+  "description": "Real films with timestamped ground truth. Lists films only: file paths and the ground-truth CSV directory are local (see film_sources.py and docs/model-development.md). offset_s is added to CSV tag times to align them with the local file (default 0). imdb_id is verified against movies.csv by title + year.",
+  "window_seconds": 10,
+  "frame_offsets": [
+    2.5,
+    7.5
+  ],
+  "films": [
+    {
+      "title": "Suspiria",
+      "year": 2018,
+      "imdb_id": "tt1034415"
+    },
+    {
+      "title": "John Wick: Chapter 4",
+      "year": 2023,
+      "imdb_id": "tt10366206"
+    },
+    {
+      "title": "The Voyeurs",
+      "year": 2021,
+      "imdb_id": "tt11235772"
+    },
+    {
+      "title": "Fifty Shades of Grey",
+      "year": 2015,
+      "imdb_id": "tt2322441"
+    },
+    {
+      "title": "RRR",
+      "year": 2022,
+      "imdb_id": "tt8178634"
+    },
+    {
+      "title": "Hardcore Henry",
+      "year": 2015,
+      "imdb_id": "tt3072482"
+    }
+  ]
+}

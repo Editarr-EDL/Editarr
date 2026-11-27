@@ -1,0 +1,34 @@
+{
+  "description": "Severity ladders per key from film tag names (category/tag). A window's level is the max over its overlapping tags (source_tags, already padded like film labels). Any overlapping ambiguous tag for a key makes that key unscored for the window. Corrections: a key corrected absent is 0; corrected present without a severity tag is unscored.",
+  "levels": {
+    "violence": {
+      "violence/non_graphic": 1,
+      "violence/graphic": 2,
+      "violence/gore": 3
+    },
+    "sex": {
+      "sexual/kissing_normal": 1,
+      "sexual/kissing_passion": 1,
+      "sexual/sex_without_nudity": 2,
+      "sexual/sex_with_nudity": 3,
+      "sexual/sexual_assault": 3
+    },
+    "nudity": {
+      "immodesty/immodesty": 1,
+      "immodesty/nudity_without_sex": 2,
+      "immodesty/nudity_implied": 2,
+      "sexual/sex_with_nudity": 3
+    },
+    "drugs": {
+      "drugs/drugs_legal": 1,
+      "drugs/drugs_illegal": 2
+    }
+  },
+  "max_level": {"violence": 3, "sex": 3, "nudity": 3, "drugs": 2},
+  "ambiguous": {
+    "violence": ["violence/violence_implied"],
+    "sex": ["sexual/sexually_suggestive", "sexual/sex_implied"],
+    "nudity": ["immodesty/nudity_art"],
+    "drugs": ["drugs/drugs_implied"]
+  }
+}

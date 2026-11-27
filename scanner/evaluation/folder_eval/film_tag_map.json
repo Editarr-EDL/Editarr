@@ -1,0 +1,28 @@
+{
+  "description": "Maps tag_timestamps.csv category/tag_name to MCF keys. A tag interval [start - padding, end + padding] that intersects a window applies to it. Windows overlapping an ambiguous tag and no positive tag are scored=false. Ignored categories are display-only.",
+  "padding_seconds": 3,
+  "positive": {
+    "immodesty/nudity_without_sex": ["nudity"],
+    "sexual/sex_with_nudity": ["sex/coitus", "nudity"],
+    "sexual/sex_without_nudity": ["sex/coitus"],
+    "sexual/kissing_normal": ["sex/kissing"],
+    "sexual/kissing_passion": ["sex/kissing"],
+    "sexual/sexual_assault": ["violence/rape"],
+    "violence/non_graphic": ["violence"],
+    "violence/graphic": ["violence", "fear/hemophobia"],
+    "violence/gore": ["violence", "fear/hemophobia"],
+    "violence/disturbing_images": ["violence", "fear/death"],
+    "drugs/drugs_legal": ["drugs"],
+    "drugs/drugs_illegal": ["drugs"]
+  },
+  "ambiguous": [
+    "immodesty/immodesty",
+    "immodesty/nudity_implied",
+    "immodesty/nudity_art",
+    "sexual/sexually_suggestive",
+    "sexual/sex_implied",
+    "violence/violence_implied",
+    "drugs/drugs_implied"
+  ],
+  "ignored_categories": ["language", "other"]
+}

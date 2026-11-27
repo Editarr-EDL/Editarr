@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Folder evaluation results</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <h1>Folder evaluation</h1>
+    <nav aria-label="Views">
+      <a id="nav-model" href="#/model">Models</a>
+      <a id="nav-folder" href="#/folder/">Folders</a>
+    </nav>
+    <label class="scope-switch">Scope
+      <select id="scope">
+        <option value="all">All items</option>
+        <option value="sample">Decision sample</option>
+      </select>
+    </label>
+    <label class="check sensitive-toggle"><input type="checkbox" id="show-sensitive"> Show sensitive images</label>
+    <span id="corr-status" class="corr-status" hidden></span>
+    <span id="summary-status" class="summary-status" role="status" hidden>Summary updating…</span>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+  </header>
+  <main id="main" tabindex="-1"></main>
+  <dialog id="detail" aria-labelledby="detail-title">
+    <div class="detail-head">
+      <h2 id="detail-title">Item</h2>
+      <button type="button" id="detail-close" class="btn">Close</button>
+    </div>
+    <div id="detail-body"></div>
+  </dialog>
+  <div id="toast" class="toast" role="alert" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
