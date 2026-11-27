@@ -55,8 +55,68 @@ function clipNarrative(frames) {
   return { severity: Object.keys(severity).length ? severity : null, description };
 }
 
-/** Aggregate compact frames (their full `scores` and `askedKeys`) like the harness's aggregate. */
-const aggregateCompact = (frames, meta) => aggregate(frames.map((f) => ({ n: f.n, scores: f.scores, asked: f.askedKeys })), meta);
+/*
+ * Compact per-frame scores: each model (keyed by its meta object) has one shared key table, and a frame stores its
+ * scores as a Float32Array over that table's columns (NaN = key absent from the frame; frames made before the table
+ * grew are shorter, and missing columns are absent too). Asked-key lists are interned per model.
+ */
+const TABLES = new WeakMap();
+const NO_META = {};
+const EMPTY = Object.freeze([]);
+
+function tableFor(meta) {
+  const owner = meta && typeof meta === "object" ? meta : NO_META;
+  let table = TABLES.get(owner);
+  if (!table) TABLES.set(owner, (table = { keys: [], index: new Map(), asked: new Map() }));
+  return table;
+}
+
+function packScores(table, scores) {
+  const entries = Object.entries(scores || {});
+  for (const [k] of entries) if (!table.index.has(k)) { table.index.set(k, table.keys.length); table.keys.push(k); }
+  const values = new Float32Array(table.keys.length).fill(NaN);
+  for (const [k, v] of entries) values[table.index.get(k)] = v;
+  return values;
+}
+
+function internAsked(table, asked) {
+  if (!Array.isArray(asked)) return undefined;
+  const id = asked.join("\u0000");
+  let shared = table.asked.get(id);
+  if (!shared) table.asked.set(id, (shared = Object.freeze([...asked])));
+  return shared;
+}
+
+/** A compact frame's scores as [key, value] pairs (value as stored, i.e. float32 precision). */
+export function frameScores(frame, meta) {
+  const { keys } = tableFor(meta), out = [];
+  for (let i = 0; i < frame.v.length; i++) if (!Number.isNaN(frame.v[i])) out.push([keys[i], frame.v[i]]);
+  return out;
+}
+
+/** A compact frame's n highest scores, computed on demand for rendering. */
+export const frameTop = (frame, meta, n = 5) => frameScores(frame, meta).sort((a, b) => b[1] - a[1]).slice(0, n);
+
+/**
+ * Aggregate compact frames like the harness's aggregate. Scores are float32, so thresholds are compared at float32
+ * precision too; only a score within float32 rounding (~1e-7 relative) of its threshold can flag differently.
+ */
+function aggregateCompact(frames, meta) {
+  const { keys } = tableFor(meta);
+  const scores = {}, best = {};
+  let asked = null;
+  for (const fr of frames) {
+    for (let i = 0; i < fr.v.length; i++) {
+      const v = fr.v[i];
+      if (Number.isNaN(v)) continue;
+      const k = keys[i];
+      if (!(k in scores) || v > scores[k]) { scores[k] = v; best[k] = fr.n; }
+    }
+    if (fr.askedKeys) { asked ||= new Set(); fr.askedKeys.forEach((k) => asked.add(k)); }
+  }
+  const flagged = withFamilies(Object.keys(scores).filter((k) => scores[k] >= Math.fround(threshold(meta, k))));
+  return { scores, best, asked, flagged };
+}
 
 /** Sample view: re-aggregated over exactly the subset frames (null if any is missing), like restrict_results. */
 function withSample(base, meta, wanted) {
@@ -72,22 +132,20 @@ function withSample(base, meta, wanted) {
 }
 
 /**
- * Compact one JSONL row: clip scores/flags, best frame per key and per frame its scores, top-5 and narrative.
- * Frames keep every score so merged rows and the decision sample (`wanted` = Set of subset frame numbers)
- * can be re-aggregated.
+ * Compact one JSONL row: clip scores/flags and best frame per key (from the row's exact values), and per frame its
+ * packed scores (see frameScores/frameTop), interned asked keys, labels and narrative. Frames keep every score so
+ * merged rows and the decision sample (`wanted` = Set of subset frame numbers) can be re-aggregated.
  */
 export function compactResult(row, meta, wanted) {
   const raw = row.frames || [];
   const agg = aggregate(raw, meta);
-  const frames = raw.map((fr) => ({
-    n: fr.n,
-    scores: fr.scores || {},
-    top: Object.entries(fr.scores || {}).sort((a, b) => b[1] - a[1]).slice(0, 5),
-    labels: (fr.labels || []).slice(0, 8),
-    asked: Array.isArray(fr.asked) ? fr.asked.length : null,
-    askedKeys: Array.isArray(fr.asked) ? fr.asked : undefined,
-    ...frameNarrative(fr),
-  }));
+  const table = tableFor(meta);
+  const frames = raw.map((fr) => {
+    const frame = { n: fr.n, v: packScores(table, fr.scores), labels: fr.labels?.length ? fr.labels.slice(0, 8) : EMPTY };
+    const askedKeys = internAsked(table, fr.asked);
+    if (askedKeys) frame.askedKeys = askedKeys;
+    return Object.assign(frame, frameNarrative(fr));
+  });
   const base = {
     status: row.status || "ok", error: row.error, elapsed_ms: row.elapsed_ms, scores: row.scores || agg.scores,
     flagged: withFamilies(row.flagged || []), best: agg.best, asked: agg.asked, frames, ...clipNarrative(frames),

@@ -3,6 +3,7 @@ import { S, allLoaded, loadAllModels } from "./data.js";
 import { h, $, fill, fmt, fmtTime, fmtWindow, encPath, expectedChips, itemExtras } from "./ui.js";
 import { parseHash, withParams } from "./router.js";
 import { frameBlock, protect } from "./media.js";
+import { frameTop } from "./results.js";
 import { modelCell } from "./folder-view.js";
 import { outcomeFor, supportsKey, wasAsked } from "./scoring.js";
 import { correctable, truthEditor } from "./correction-controls.js";
@@ -92,8 +93,8 @@ export async function syncDetail(itemId) {
       h("div", { class: "muted", text: `#${fr.n} · ${item.window ? `${fmtTime(fr.t)} in film` : `${fmt(fr.t, 1)} s`}${inSampleFrame(item, fr.n) ? " · in sample" : ""}` }),
       h("dl", {}, S.modelIds.map((id) => {
         const f = S.results[id].get(item.id)?.frames.find((x) => x.n === fr.n);
-        const txt = f ? f.top.slice(0, 3).map(([k, v]) => `${k} ${fmt(v)}`).join(", ") || "no scores" : "not run";
-        const extra = (f && f.labels.length ? ` [${f.labels.join(", ")}]` : "") + (f && f.asked != null ? ` · asked ${f.asked} keys` : "");
+        const txt = f ? frameTop(f, S.metas[id], 3).map(([k, v]) => `${k} ${fmt(v)}`).join(", ") || "no scores" : "not run";
+        const extra = (f && f.labels.length ? ` [${f.labels.join(", ")}]` : "") + (f?.askedKeys ? ` · asked ${f.askedKeys.length} keys` : "");
         return [h("dt", { text: S.metas[id].display_name || id }), h("dd", { class: f ? null : "muted" }, txt + extra, frameNarrative(item, f))];
       }))))));
 }
