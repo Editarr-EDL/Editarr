@@ -224,7 +224,8 @@ layouts. [`label_rules.json`](../scanner/evaluation/folder_eval/label_rules.json
 paths to MCF keys for `ucf_crime`, `hockey_fight`, `movies_fight`, `xd_violence`,
 `Violent Scene Dataset` and `nsfw_dataset_v1`; any folder named after an MCF family,
 token or synonym (for example `video/mine/violence/`) also labels its contents.
-`video/nude/` is unvetted scraped content and is never listed, decoded, scored or served.
+`video/nude/` is unvetted scraped content and is never listed, decoded, scored or served,
+including through symlinks or film paths that resolve into it.
 
 ### Films and ground truth
 

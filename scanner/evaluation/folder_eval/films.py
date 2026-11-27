@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from .film_labels import DEFAULT_TAG_MAP_PATH, Tag, TagMap
-from .film_sources import GROUND_TRUTH_COPY, FilmSources
-from .paths import FILMS_ROOT, Layout, write_json
+from .film_sources import GROUND_TRUTH_COPY, FilmSourceError, FilmSources
+from .paths import FILMS_ROOT, Layout, resolves_into_excluded, write_json
 
 log = logging.getLogger(__name__)
 
@@ -190,6 +190,12 @@ def build_films(
         (film, imdb_id, name, sources.file_for(imdb_id, name))
         for film, imdb_id, name in identified
     ]
+    for _film, imdb_id, name, file_path in resolved:
+        if resolves_into_excluded(layout.data_root, file_path):
+            raise FilmSourceError(
+                f"{name} ({imdb_id}): {file_path} is in an excluded folder and is never "
+                "linked, probed or scored"
+            )
 
     new_items: list[dict[str, Any]] = []
     report: dict[str, Any] = {}

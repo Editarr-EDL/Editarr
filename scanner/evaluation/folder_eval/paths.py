@@ -56,9 +56,10 @@ def excluded_real_paths(data_root: Path) -> list[str]:
     return [os.path.realpath(data_root / excluded).casefold() for excluded in EXCLUDED_DIRS]
 
 
-def resolves_into_excluded(data_root: Path, relative_path: str) -> bool:
+def resolves_into_excluded(data_root: Path, relative_path: str | Path) -> bool:
     """Return whether a data-root path's real target (after symlinks) is in an excluded
-    folder; links to files outside the data root, such as films, are allowed."""
+    folder; links to files outside the data root, such as films, are allowed. An
+    absolute `relative_path` (e.g. a configured film file) is checked as is."""
     resolved = os.path.realpath(data_root / relative_path).casefold()
     return any(
         resolved == blocked or resolved.startswith(blocked + os.sep)

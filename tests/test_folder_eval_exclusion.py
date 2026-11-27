@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from scanner.evaluation.folder_eval import frames as frames_module
@@ -59,3 +61,63 @@ def test_frame_extraction_refuses_symlinks_into_excluded_folder(root, monkeypatc
     with pytest.raises(PermissionError):
         extract_item(str(root), item)
     assert not (root / "_results/frames/x").exists()
+
+
+@pytest.mark.parametrize("via_link", [False, True])
+def test_films_in_the_excluded_folder_fail_before_linking_or_probing(
+    root, tmp_path, monkeypatch, via_link
+):
+    from scanner.evaluation.folder_eval import films
+    from scanner.evaluation.folder_eval.film_sources import FilmSourceError, FilmSources
+    from scanner.evaluation.folder_eval.paths import Layout
+
+    layout = Layout(root)
+    layout.results.mkdir(parents=True)
+    layout.inventory.write_text('{"items": []}', encoding="utf-8")
+    truth = tmp_path / "csv"
+    truth.mkdir()
+    (truth / "movies.csv").write_text(
+        "imdb_id,name,title_main,year,duration_sec\ntt1,Alpha,Alpha,2001,30\n", encoding="utf-8"
+    )
+    (truth / "tag_timestamps.csv").write_text(
+        "imdb_id,category,tag_name,start_approx,end_approx\n", encoding="utf-8"
+    )
+    config = tmp_path / "films.json"
+    config.write_text('{"films": [{"title": "Alpha", "year": 2001}]}', encoding="utf-8")
+    film = root / "video/nude/a.mp4"
+    if via_link:
+        film = tmp_path / "outside.mp4"
+        film.symlink_to(root / "video/nude/a.mp4")
+    monkeypatch.setattr(films, "probe_film", lambda _path: pytest.fail("probed"))
+
+    sources = FilmSources(truth, {"tt1": film}, {})
+    with pytest.raises(FilmSourceError, match="excluded folder"):
+        films.build_films(layout, sources, config)
+    assert not (root / "films/Alpha (2001)").exists()
+    assert layout.inventory.read_text() == '{"items": []}'
+
+
+def test_a_refused_item_is_recorded_without_aborting_the_batch(root, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from scanner.evaluation.folder_eval.paths import Layout
+
+    layout = Layout(root)
+    layout.results.mkdir(parents=True)
+    items = [
+        {"id": "bad", "path": "video/clips/alias.mp4", "frames": [
+            {"n": 0, "t": 1.0, "file": "frames/bad/0.jpg"}]},
+        {"id": "good", "path": "video/clips/real.mp4", "frames": [
+            {"n": 0, "t": 1.0, "file": "frames/good/0.jpg"}]},
+    ]
+    layout.inventory.write_text(json.dumps({"items": items}), encoding="utf-8")
+
+    def fake_ffmpeg(_source, target, *_args):
+        target.write_bytes(b"x")
+        return True
+
+    monkeypatch.setattr(frames_module, "ProcessPoolExecutor", ThreadPoolExecutor)
+    monkeypatch.setattr(frames_module, "_ffmpeg", fake_ffmpeg)
+    errors = frames_module.extract_frames(layout, workers=1)
+    assert list(errors) == ["bad"] and errors["bad"][0].startswith("PermissionError")
+    assert (layout.results / "frames/good/0.jpg").is_file()

@@ -119,11 +119,17 @@ def extract_frames(
     started = time.monotonic()
     written_total = 0
     with ProcessPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = [
-            pool.submit(extract_item, str(layout.data_root), item, hdr_path) for item in pending
-        ]
+        futures = {
+            pool.submit(extract_item, str(layout.data_root), item, hdr_path): item
+            for item in pending
+        }
         for done, future in enumerate(as_completed(futures), start=1):
-            identifier, written, item_errors = future.result()
+            item = futures[future]
+            # A refused (PermissionError) or crashed item is recorded, never aborting the batch.
+            try:
+                identifier, written, item_errors = future.result()
+            except Exception as exc:  # noqa: BLE001
+                identifier, written, item_errors = item["id"], 0, [f"{type(exc).__name__}: {exc}"]
             written_total += written
             if item_errors:
                 errors[identifier] = item_errors
