@@ -114,7 +114,7 @@ def test_a_refused_item_is_recorded_without_aborting_the_batch(root, monkeypatch
 
     def fake_ffmpeg(_source, target, *_args):
         target.write_bytes(b"x")
-        return True
+        return True, None
 
     monkeypatch.setattr(frames_module, "ProcessPoolExecutor", ThreadPoolExecutor)
     monkeypatch.setattr(frames_module, "_ffmpeg", fake_ffmpeg)

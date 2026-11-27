@@ -255,8 +255,12 @@ They resolve in this order, highest first:
 HDR (PQ or HLG) films are tone-mapped to SDR while extracting frames: with VideoToolbox
 on macOS, else with ffmpeg's `zscale` and `tonemap` filters, else with `libplacebo`. When
 ffmpeg has none of these, `frames` records an error for the HDR windows rather than
-extracting washed-out frames. A film window whose frame cannot be decoded is also
-recorded as an error; only whole clips fall back to their first frame.
+extracting washed-out frames. Each film-window frame is decoded with input seeking that
+keeps source timestamps, and its actual time must fall inside the window: an overshooting
+seek is retried from earlier seek points, and a frame that cannot be decoded within its
+window is recorded as an error. Only whole clips fall back to their first frame. Decoded
+frame times are kept in `_results/frame_times.json`; frames cached by earlier versions
+are not rechecked, so delete a film's frames to re-extract them.
 
 Relative paths in the local config resolve against the config's folder. A `--film`
 entry overrides the local config whichever key form either uses. `films` fails without
