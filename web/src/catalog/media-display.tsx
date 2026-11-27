@@ -5,7 +5,7 @@ export function formatRating(item: JellyfinMediaItem): string {
   return item.official_rating || "—";
 }
 
-function formatMediaDuration(seconds: number | null): string {
+export function formatMediaDuration(seconds: number | null): string {
   if (seconds === null || seconds === undefined) return "—";
   const rounded = Math.max(0, Math.round(seconds));
   const hours = Math.floor(rounded / 3600);

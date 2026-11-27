@@ -1,7 +1,6 @@
-import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { defaultModelId, ModelOptions, modelOptionLabel, resolveModelChoice } from "./model-options";
+import { defaultModelId, resolveModelChoice } from "./model-options";
 
 const models = [
   { id: "nudenet", display_name: "NudeNet", recommended: false },
@@ -9,12 +8,6 @@ const models = [
 ];
 
 describe("model options", () => {
-  it("marks only recommended models in option labels", () => {
-    expect(models.map(modelOptionLabel)).toEqual(["NudeNet", "Qwen3-VL 8B (recommended)"]);
-    render(<select aria-label="Model"><ModelOptions models={models} /></select>);
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["NudeNet", "Qwen3-VL 8B (recommended)"]);
-  });
-
   it("defaults to the recommended model, otherwise the first offered", () => {
     expect(defaultModelId(models)).toBe("qwen3-vl-8b");
     expect(defaultModelId([{ id: "nudenet", display_name: "NudeNet" }, { id: "shieldstral", display_name: "Shieldstral" }])).toBe("nudenet");

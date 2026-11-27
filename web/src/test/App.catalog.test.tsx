@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { AuthenticationGate } from "../auth/auth-gate";
 import { mediaItem, json, installProductionApi, completeScan, savedReview, reviewFilter } from "./app-test-fixtures";
+import { chooseModel, chooseScanType } from "./new-scan-test-helpers";
 
 describe("production saved-review UI authority", () => {
   afterEach(() => {
@@ -414,12 +415,9 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open Example Movie" }));
     await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
-    fireEvent.change(await screen.findByLabelText("Scan type"), {
-      target: { value: "video" },
-    });
-    fireEvent.change(await screen.findByLabelText("Severity and Description model"), {
-      target: { value: "qwen3-vl-4b-instruct-4bit" },
-    });
+    const dialog = screen.getByRole("dialog", { name: "New Scan" });
+    chooseScanType(dialog, "Video");
+    await chooseModel(dialog, "Severity and Description model", "Qwen3-VL 4B");
     const scanName = await screen.findByLabelText("Scan name (optional)");
     const emojiName = "😀".repeat(100);
     expect(scanName).not.toHaveAttribute("maxlength");
@@ -481,9 +479,10 @@ describe("production saved-review UI authority", () => {
     await openWorkflowStep("Scans");
     fireEvent.click(await screen.findByRole("button", { name: "New Scan" }));
     const dialog = screen.getByRole("dialog", { name: "New Scan" });
-    fireEvent.change(within(dialog).getByLabelText("Scan type"), { target: { value: "credits" } });
+    chooseScanType(dialog, "Credits");
     expect(within(dialog).getByText(/local chapter and visual analysis/)).toBeVisible();
-    expect(within(dialog).queryByLabelText("Video model")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^Video model: / })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("textbox", { name: "Scan name (optional)" })).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Add to Queue" }));
 
     await waitFor(() => expect(requestBody).toEqual({

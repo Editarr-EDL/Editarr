@@ -1,0 +1,125 @@
+/* New Scan dialog: header, scan type cards, model sections, advanced settings, and sticky footer. */
+.new-scan-dialog { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; box-sizing: border-box; width: min(720px, 100%); max-height: calc(100dvh - 40px); overflow: hidden; border: 1px solid #46516a; border-radius: 12px; background: #1b2029; box-shadow: 0 24px 70px #0008; }
+.new-scan-dialog * { box-sizing: border-box; }
+.new-scan-dialog p { margin: 0; overflow-wrap: anywhere; }
+
+.new-scan-header { display: flex; align-items: flex-start; gap: 16px; padding: 20px 24px 16px; border-bottom: 1px solid #2c3340; }
+.new-scan-title { flex: 1 1 auto; min-width: 0; }
+.new-scan-title .eyebrow { margin: 0 0 3px; }
+.new-scan-item { color: #fbfcff; font-size: 22px; font-weight: 750; letter-spacing: -.02em; line-height: 1.2; }
+.new-scan-meta { margin-top: 3px !important; overflow: hidden; color: #a4adbb; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.new-scan-version { display: grid; flex: 0 1 250px; gap: 5px; min-width: 0; color: #a6afbd; font-size: 12px; font-weight: 650; }
+.new-scan-version select { padding: 7px 10px; font-size: 13px; font-weight: 650; }
+.new-scan-close { display: grid; flex: none; place-items: center; width: 32px; height: 32px; margin: -4px -8px 0 0; padding: 0; border: 0; border-radius: 7px; color: #aab5c5; background: transparent; }
+.new-scan-close:hover:not(:disabled) { color: #fff; background: #252a34; }
+.new-scan-close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+.new-scan-body { display: grid; align-content: start; gap: 22px; min-height: 0; padding: 20px 24px 24px; overflow-y: auto; overscroll-behavior: contain; }
+.new-scan-body > * { min-width: 0; }
+.new-scan-types { min-width: 0; margin: 0; padding: 0; border: 0; }
+.new-scan-types legend { margin-bottom: 8px; padding: 0; color: #c6cdd9; font-size: 13px; font-weight: 650; }
+
+.new-scan-type-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.new-scan-type-card { position: relative; display: grid; align-content: start; justify-items: start; gap: 6px; min-height: 108px; padding: 13px 13px 12px; border: 1px solid #3a4659; border-radius: 10px; background: #181e28; cursor: pointer; transition: background .12s, border-color .12s; }
+.new-scan-type-card:hover { background: #202b3b; }
+.new-scan-type-card input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; pointer-events: none; }
+.new-scan-type-card strong { color: #e6ebf4; font-size: 14px; }
+.new-scan-type-card small { color: #9fa9b8; font-size: 12px; line-height: 1.35; }
+.new-scan-type-check { position: absolute; top: 12px; right: 12px; width: 16px; height: 16px; border: 1.5px solid #4f5b70; border-radius: 50%; }
+.new-scan-type-card:has(input:checked) { border-color: #859fd0; background: #24314a; box-shadow: inset 0 0 0 1px #859fd0; }
+.new-scan-type-card:has(input:checked) .new-scan-icon { color: #06101f; background: #8dafef; }
+.new-scan-type-card:has(input:checked) strong { color: #eaf1ff; }
+.new-scan-type-card:has(input:checked) small { color: #b5c4dc; }
+.new-scan-type-card:has(input:checked) .new-scan-type-check { border: 5px solid #8dafef; background: #1b2029; }
+.new-scan-type-card:has(input:focus-visible) { outline: 3px solid #80a7ff; outline-offset: 3px; }
+.new-scan-types:disabled .new-scan-type-card { cursor: not-allowed; }
+.new-scan-types:disabled .new-scan-type-card:not(:has(input:checked)) { opacity: .55; }
+.new-scan-types:disabled .new-scan-type-card:hover:not(:has(input:checked)) { background: #181e28; }
+
+.new-scan-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 2px; border-radius: 8px; color: #9fb7e4; background: #222b3a; }
+.new-scan-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.new-scan-section { display: grid; gap: 16px; padding-top: 18px; border-top: 1px solid #2c3340; }
+.new-scan-section > * { min-width: 0; }
+.new-scan-section-head { display: flex; align-items: center; gap: 10px; }
+.new-scan-section-head .new-scan-icon { width: 26px; height: 26px; margin: 0; border-radius: 7px; }
+.new-scan-section-head .new-scan-icon svg { width: 15px; height: 15px; stroke-width: 1.9; }
+.new-scan-section-head h3 { margin: 0; color: #f2f5fa; font-size: 15px; letter-spacing: -.01em; }
+.new-scan-section-head p { margin: 0 0 0 auto !important; color: #8f99a9; font-size: 12px; }
+
+.new-scan-two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
+.new-scan-two-col > * { min-width: 0; }
+.new-scan-field { display: grid; gap: 7px; color: #c6cdd9; font-size: 13px; font-weight: 650; }
+.new-scan-field em { color: #8f99a9; font-style: normal; font-weight: 500; }
+.new-scan-field input, .new-scan-dialog select { min-width: 0; font-size: 13px; }
+.new-scan-hint { color: #8f99a9; font-size: 12px; font-weight: 500; line-height: 1.4; }
+.new-scan-link { padding: 0; border: 0; color: #b9d1ff; background: none; font-size: 12px; font-weight: 700; }
+.new-scan-link:hover:not(:disabled) { color: #fff; text-decoration: underline; }
+.new-scan-link:disabled { color: #6d7685; cursor: not-allowed; }
+
+.new-scan-track { display: grid; gap: 7px; }
+.new-scan-track > div { display: grid; gap: 7px; }
+.new-scan-track > div > p { color: #a4adbb; font-size: 12px; line-height: 1.4; }
+.new-scan-track > div > p[role="alert"] { color: #ffaaa3; }
+.new-scan-track > div > button { justify-self: start; }
+
+.new-scan-dialog .scan-capability-disclosure { gap: 4px; padding: 9px 11px 9px 32px; font-size: 12.5px; background: #182536 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238dafef' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5M12 8h.01'/%3E%3C/svg%3E") no-repeat 11px 10px / 15px 15px; }
+
+.new-scan-dialog .scan-capability-disclosure:empty { display: none; }
+
+.new-scan-advanced { border: 1px solid #343c4b; border-radius: 9px; background: #161b23; }
+.new-scan-advanced summary { display: flex; align-items: center; gap: 8px; padding: 11px 12px; border-radius: 9px; color: #d8e0ec; font-size: 13px; font-weight: 700; list-style: none; cursor: pointer; }
+.new-scan-advanced summary::-webkit-details-marker { display: none; }
+.new-scan-advanced summary:focus-visible { outline: 3px solid #80a7ff; outline-offset: 2px; }
+.new-scan-chevron { flex: none; width: 14px; height: 14px; fill: none; stroke: #aab5c5; stroke-width: 2; transition: transform .15s; }
+.new-scan-advanced[open] .new-scan-chevron { transform: rotate(90deg); }
+.new-scan-advanced-summary { min-width: 0; margin-left: auto; overflow: hidden; color: #8f99a9; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.new-scan-advanced-summary.invalid { color: #ffaaa3; font-weight: 650; }
+.new-scan-advanced-body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; padding: 4px 12px 14px; }
+.new-scan-advanced-body .new-scan-hint { grid-column: 1 / -1; }
+.new-scan-toggle { display: flex; align-items: center; gap: 8px; }
+.new-scan-toggle input { width: auto; margin: 0; accent-color: #8dafef; }
+.new-scan-unit { position: relative; display: block; }
+.new-scan-unit input { padding-right: 32px; font-variant-numeric: tabular-nums; }
+.new-scan-unit input:disabled { color: #6d7685; background: #151920; }
+.new-scan-unit > span { position: absolute; top: 50%; right: 10px; color: #8f99a9; font-size: 12px; font-weight: 600; pointer-events: none; transform: translateY(-50%); }
+
+.new-scan-credits { color: #c1c8d3; font-size: 13px; line-height: 1.5; }
+
+.new-scan-error { padding: 10px 24px; border-top: 1px solid #5a3433; background: #2a1c1f; }
+.new-scan-footer { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid #2c3340; background: #171b23; }
+.new-scan-summary { flex: 1 1 auto; min-width: 0; }
+.new-scan-summary small { display: block; margin-bottom: 1px; color: #8f99a9; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.new-scan-summary > span { display: block; overflow: hidden; color: #dfe7f4; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.new-scan-summary b { padding: 0 2px; color: #8dafef; font-weight: 700; }
+.new-scan-footer .button-row { flex: none; }
+
+@media (max-width: 760px) {
+  .new-scan-type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .new-scan-type-card { min-height: 0; }
+}
+
+@media (max-width: 640px) {
+  .modal-backdrop.new-scan-backdrop { place-items: end stretch; padding: 0; }
+  .new-scan-dialog { width: 100%; max-height: calc(100dvh - 24px); border-bottom: 0; border-radius: 14px 14px 0 0; }
+  .new-scan-header { flex-wrap: wrap; gap: 10px; padding: 14px 16px 12px; }
+  .new-scan-item { font-size: 19px; }
+  .new-scan-meta { display: none; }
+  .new-scan-version { flex: 1 1 100%; order: 3; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+  .new-scan-dialog select, .new-scan-field input { font-size: 16px; }
+  .new-scan-body { gap: 18px; padding: 16px; }
+  .new-scan-type-grid { gap: 8px; }
+  .new-scan-type-card { grid-template-columns: 28px minmax(0, 1fr); align-items: center; column-gap: 9px; padding: 9px 10px; }
+  .new-scan-type-card .new-scan-icon { width: 28px; height: 28px; margin: 0; }
+  .new-scan-type-card strong { font-size: 13.5px; }
+  .new-scan-type-card small { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .new-scan-type-check { display: none; }
+  .new-scan-two-col, .new-scan-advanced-body { grid-template-columns: minmax(0, 1fr); }
+  .new-scan-section-head p { display: none; }
+  .new-scan-advanced summary { flex-wrap: wrap; row-gap: 2px; }
+  .new-scan-advanced-summary { flex-basis: 100%; margin-left: 22px; }
+  .new-scan-error { padding-inline: 16px; }
+  .new-scan-footer { flex-wrap: wrap; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .new-scan-footer .button-row { width: 100%; }
+  .new-scan-footer .button-row button { flex: 1 1 0; padding-block: 11px; }
+}
