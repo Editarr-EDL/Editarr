@@ -4,7 +4,7 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.models import ScanName
@@ -114,6 +114,20 @@ class ScanOptions(BaseModel):
 
 
 class ScanRequest(ScanOptions):
+    """Queue a scan of one Jellyfin item.
+
+    Audio scans also need an `audio_selection` from GET /api/media/audio-tracks;
+    the published example is video-only, which needs none.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {"jellyfin_item_id": "JELLYFIN_ITEM_ID", "scan_audio": False, "scan_video": True}
+            ]
+        }
+    )
+
     jellyfin_item_id: str
     media_source_id: str | None = None
 

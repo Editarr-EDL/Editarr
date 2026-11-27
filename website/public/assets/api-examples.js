@@ -4,11 +4,24 @@
     public: 'Public',
     key: 'API key or browser session',
     browser: 'Browser session only',
+    cookie: 'Browser session cookie only',
+    setup: 'First-run browser flow',
   };
-  const BROWSER_GUIDANCE = 'Use a signed-in browser session; API keys receive 403 interactive_session_required.';
+  /** Why browser-only operations have no curl example, keyed by auth mode. */
+  const GUIDANCE = {
+    browser: 'Use a signed-in browser session; API keys receive 403 interactive_session_required.',
+    cookie: 'Use a signed-in browser session; this reads only its session cookie, so a request with just an API key receives 401 authentication_required.',
+    setup: 'Restore runs from the first-run setup page in a browser (Restore from backup) before an administrator exists. Each request needs a same-origin Origin or Referer, the editarr_setup_restore cookie from POST /api/setup-restore/flow, and that response\'s token in X-Setup-Restore-Token on every change.',
+  };
+  const BROWSER_KINDS = { interactive: 'browser', session_cookie: 'cookie', setup_restore: 'setup' };
 
-  /** Classify an operation by its OpenAPI `security`: public, API key allowed, or browser session only. */
+  /**
+   * Classify an operation from its OpenAPI `security` and `x-editarr-browser-session` marker:
+   * public, API key allowed, or one of the browser-only modes in GUIDANCE.
+   */
   function authMode(operation) {
+    const browserKind = BROWSER_KINDS[operation['x-editarr-browser-session']];
+    if (browserKind) return browserKind;
     const security = operation.security;
     if (Array.isArray(security) && security.length === 0) return 'public';
     if (Array.isArray(security) && !security.some((requirement) => 'ApiKey' in requirement)) return 'browser';
@@ -53,7 +66,7 @@
 
     /** Build a curl example for an operation, or only guidance when API keys cannot call it. */
     function curlExample(entry) {
-      if (entry.auth === 'browser') return { text: null, notes: [`No curl example. ${BROWSER_GUIDANCE}`] };
+      if (GUIDANCE[entry.auth]) return { text: null, notes: [`No curl example. ${GUIDANCE[entry.auth]}`] };
       const { method, path, operation } = entry;
       const notes = [];
       const query = (operation.parameters ?? []).filter((parameter) => parameter.in === 'query' && parameter.required);
@@ -74,5 +87,5 @@
     return { curlExample };
   }
 
-  globalThis.EditarrApiExamples = { AUTH_LABELS, BROWSER_GUIDANCE, authMode, create };
+  globalThis.EditarrApiExamples = { AUTH_LABELS, GUIDANCE, authMode, create };
 })();

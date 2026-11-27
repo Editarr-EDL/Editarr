@@ -233,10 +233,30 @@
       return box;
     }
 
-    /** Produce a small example value from a schema for curl request bodies. */
+    /** A number within the schema's minimum/maximum bounds, as close to 0 as they allow. */
+    function numberSample(schema) {
+      const integer = schema.type === 'integer';
+      let value = 0;
+      if (schema.minimum !== undefined && value < schema.minimum) value = schema.minimum;
+      if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) value = schema.exclusiveMinimum + 1;
+      if (schema.maximum !== undefined && value > schema.maximum) value = schema.maximum;
+      if (schema.exclusiveMaximum !== undefined && value >= schema.exclusiveMaximum) {
+        const low = schema.exclusiveMinimum ?? schema.minimum ?? schema.exclusiveMaximum - 2;
+        value = integer ? schema.exclusiveMaximum - 1 : (low + schema.exclusiveMaximum) / 2;
+      }
+      return integer ? Math.ceil(value) : value;
+    }
+
+    function stringSample(schema) {
+      const text = 'string'.padEnd(schema.minLength ?? 0, 'x');
+      return schema.maxLength !== undefined ? text.slice(0, schema.maxLength) : text;
+    }
+
+    /** Produce a small example value from a schema for curl request bodies, within its bounds. */
     function sample(schema, depth = 0, seen = new Set()) {
       if (!schema || depth > 4) return null;
       if (schema.example !== undefined) return schema.example;
+      if (Array.isArray(schema.examples) && schema.examples.length) return schema.examples[0];
       if (schema.default !== undefined) return schema.default;
       if (schema.$ref) {
         const name = refName(schema.$ref);
@@ -247,13 +267,18 @@
       if (alternatives) return alternatives.nonNull.length ? sample(alternatives.nonNull[0], depth, seen) : null;
       if (schema.enum) return schema.enum[0];
       if (schema.const !== undefined) return schema.const;
-      if (schema.type === 'array') return [];
+      if (schema.type === 'array') {
+        const length = Math.min(schema.minItems ?? 0, schema.maxItems ?? Infinity, 10);
+        return Array.from({ length }, () => sample(schema.items, depth + 1, seen));
+      }
       if (schema.type === 'object' || schema.properties) {
         const result = {};
         for (const name of schema.required ?? []) result[name] = sample(schema.properties?.[name], depth + 1, seen);
         return result;
       }
-      return { integer: 0, number: 0, boolean: false, string: 'string' }[schema.type] ?? null;
+      if (schema.type === 'integer' || schema.type === 'number') return numberSample(schema);
+      if (schema.type === 'string') return stringSample(schema);
+      return schema.type === 'boolean' ? false : null;
     }
 
     return { typeLabel, parameterType, resolve, expandable, schemaTree, sample };

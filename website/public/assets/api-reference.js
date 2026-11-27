@@ -14,6 +14,7 @@
   let parameterType, schemaTree, curlExample;
 
   let spec = null;
+  let loaded = false;
   let total = 0;
   const operations = [];
   const sections = [];
@@ -178,6 +179,7 @@
   }
 
   function applyFilter() {
+    if (!loaded) return;
     const terms = search.value.toLowerCase().split(/\s+/).filter(Boolean);
     let shown = 0;
     for (const entry of operations) {
@@ -238,6 +240,7 @@
       ({ parameterType, schemaTree } = schemas);
       ({ curlExample } = globalThis.EditarrApiExamples.create(schemas));
       render();
+      loaded = true;
       applyFilter();
       reveal(location.hash);
     })

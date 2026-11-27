@@ -99,7 +99,7 @@
 .api-auth { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 12px; font-weight: 650; }
 .api-auth-public { color: #7ad7a0; background: #12271c; }
 .api-auth-key { color: #c3d4f2; background: #222b3b; }
-.api-auth-browser { color: #f4c76f; background: #2a2212; }
+.api-auth-browser, .api-auth-cookie, .api-auth-setup { color: #f4c76f; background: #2a2212; }
 .api-example-note { margin: 10px 0 0; font-size: 14px; color: #e6dcc0; }
 .api-status { display: inline-block; min-width: 44px; padding: 2px 7px; border-radius: 5px; font-family: var(--api-mono); font-size: 12px; font-weight: 750; text-align: center; color: #c3cad5; background: #20242c; }
 .api-status-2 { color: #7ad7a0; background: #12271c; }

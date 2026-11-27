@@ -78,7 +78,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       },
       "delete": {
         "tags": [
@@ -153,7 +154,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/auth/setup": {
@@ -228,7 +230,7 @@
           "Authentication"
         ],
         "summary": "Auth Logout",
-        "description": "Revoke only this browser's session and clear exactly its cookie.",
+        "description": "Revoke only this browser's session and clear exactly its cookie.\n\nActs on the caller's own browser session and reads only its session cookie; a request with just an API key receives 401 authentication_required.",
         "operationId": "auth_logout_api_auth_logout_post",
         "responses": {
           "200": {
@@ -244,12 +246,10 @@
         },
         "security": [
           {
-            "ApiKey": []
-          },
-          {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "session_cookie"
       }
     },
     "/api/auth/jellyfin/login": {
@@ -478,7 +478,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       },
       "delete": {
         "tags": [
@@ -585,7 +586,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/audit": {
@@ -1364,7 +1366,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/{user_id}/status": {
@@ -1534,7 +1537,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/bulk": {
@@ -1979,7 +1983,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/{user_id}/permissions": {
@@ -2027,7 +2032,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       },
       "patch": {
         "tags": [
@@ -2083,7 +2089,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/roles/defaults": {
@@ -2110,7 +2117,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/roles/{role}/defaults": {
@@ -2172,7 +2180,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/media-access/default": {
@@ -2199,7 +2208,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       },
       "put": {
         "tags": [
@@ -2244,7 +2254,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/{user_id}/media-access": {
@@ -2292,7 +2303,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       },
       "put": {
         "tags": [
@@ -2348,7 +2360,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/{user_id}/link/proof": {
@@ -2406,7 +2419,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/{user_id}/link": {
@@ -2464,7 +2478,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/{user_id}/deletion": {
@@ -2544,7 +2559,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       },
       "post": {
         "tags": [
@@ -2600,7 +2616,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/users/bulk-deletion": {
@@ -2647,7 +2664,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/jellyfin/users": {
@@ -2862,7 +2880,8 @@
           {
             "BrowserSession": []
           }
-        ]
+        ],
+        "x-editarr-browser-session": "interactive"
       }
     },
     "/api/backups/jobs": {
@@ -6301,7 +6320,7 @@
           "Backups & restore"
         ],
         "summary": "Begin Flow",
-        "description": "Start a restore flow, refusing an installation that is not empty.\n\nThe new cookie replaces the browser's previous flow cookie, so that flow and its\nunfinished jobs are ended rather than left holding a slot until they expire.",
+        "description": "Start a restore flow, refusing an installation that is not empty.\n\nThe new cookie replaces the browser's previous flow cookie, so that flow and its\nunfinished jobs are ended rather than left holding a slot until they expire.\n\nPart of the first-run browser restore flow, available only before an administrator exists. Requests must be same-origin (Origin or Referer), carry the editarr_setup_restore cookie from POST /api/setup-restore/flow, and send that response's token in X-Setup-Restore-Token on every change.",
         "operationId": "begin_flow_api_setup_restore_flow_post",
         "responses": {
           "200": {
@@ -6313,7 +6332,8 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "x-editarr-browser-session": "setup_restore"
       }
     },
     "/api/setup-restore/jobs": {
@@ -6333,7 +6353,9 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "x-editarr-browser-session": "setup_restore",
+        "description": "Part of the first-run browser restore flow, available only before an administrator exists. Requests must be same-origin (Origin or Referer), carry the editarr_setup_restore cookie from POST /api/setup-restore/flow, and send that response's token in X-Setup-Restore-Token on every change."
       }
     },
     "/api/setup-restore/jobs/{job_id}": {
@@ -6374,7 +6396,9 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "x-editarr-browser-session": "setup_restore",
+        "description": "Part of the first-run browser restore flow, available only before an administrator exists. Requests must be same-origin (Origin or Referer), carry the editarr_setup_restore cookie from POST /api/setup-restore/flow, and send that response's token in X-Setup-Restore-Token on every change."
       },
       "delete": {
         "tags": [
@@ -6413,7 +6437,9 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "x-editarr-browser-session": "setup_restore",
+        "description": "Part of the first-run browser restore flow, available only before an administrator exists. Requests must be same-origin (Origin or Referer), carry the editarr_setup_restore cookie from POST /api/setup-restore/flow, and send that response's token in X-Setup-Restore-Token on every change."
       }
     },
     "/api/setup-restore/jobs/{job_id}/archive": {
@@ -6422,7 +6448,7 @@
           "Backups & restore"
         ],
         "summary": "Upload",
-        "description": "Stream one bounded archive into the job's private staging.",
+        "description": "Stream one bounded archive into the job's private staging.\n\nPart of the first-run browser restore flow, available only before an administrator exists. Requests must be same-origin (Origin or Referer), carry the editarr_setup_restore cookie from POST /api/setup-restore/flow, and send that response's token in X-Setup-Restore-Token on every change.",
         "operationId": "upload_api_setup_restore_jobs__job_id__archive_put",
         "parameters": [
           {
@@ -6455,7 +6481,8 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "x-editarr-browser-session": "setup_restore"
       }
     },
     "/api/setup-restore/jobs/{job_id}/preflight": {
@@ -6464,7 +6491,7 @@
           "Backups & restore"
         ],
         "summary": "Preflight",
-        "description": "Validate the archive and stage it; the job becomes ready with a redacted plan.",
+        "description": "Validate the archive and stage it; the job becomes ready with a redacted plan.\n\nPart of the first-run browser restore flow, available only before an administrator exists. Requests must be same-origin (Origin or Referer), carry the editarr_setup_restore cookie from POST /api/setup-restore/flow, and send that response's token in X-Setup-Restore-Token on every change.",
         "operationId": "preflight_api_setup_restore_jobs__job_id__preflight_post",
         "parameters": [
           {
@@ -6518,7 +6545,8 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "x-editarr-browser-session": "setup_restore"
       }
     },
     "/api/setup-restore/jobs/{job_id}/activate": {
@@ -6527,7 +6555,7 @@
           "Backups & restore"
         ],
         "summary": "Activate",
-        "description": "Restore the previewed archive. Activation checks the target is still empty.",
+        "description": "Restore the previewed archive. Activation checks the target is still empty.\n\nPart of the first-run browser restore flow, available only before an administrator exists. Requests must be same-origin (Origin or Referer), carry the editarr_setup_restore cookie from POST /api/setup-restore/flow, and send that response's token in X-Setup-Restore-Token on every change.",
         "operationId": "activate_api_setup_restore_jobs__job_id__activate_post",
         "parameters": [
           {
@@ -6570,7 +6598,8 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "x-editarr-browser-session": "setup_restore"
       }
     },
     "/api/settings/deployment": {
@@ -25476,7 +25505,15 @@
         "required": [
           "jellyfin_item_id"
         ],
-        "title": "ScanRequest"
+        "title": "ScanRequest",
+        "description": "Queue a scan of one Jellyfin item.\n\nAudio scans also need an `audio_selection` from GET /api/media/audio-tracks;\nthe published example is video-only, which needs none.",
+        "examples": [
+          {
+            "jellyfin_item_id": "JELLYFIN_ITEM_ID",
+            "scan_audio": false,
+            "scan_video": true
+          }
+        ]
       },
       "ScanStageCoverage": {
         "properties": {

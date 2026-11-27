@@ -70,24 +70,52 @@ def test_published_openapi_matches_routes_and_authentication():
         assert saved["paths"][path][method]["security"] == [{"ApiKey": []}, {"BrowserSession": []}]
 
 
-def test_interactive_only_operations_are_published_as_browser_session_only():
-    from scanner.security.access.route_match import route_interactive_only
+def test_browser_only_operations_follow_the_route_policy():
+    from scanner.security.access.route_match import (
+        route_interactive_only,
+        route_session_cookie_only,
+    )
+    from scanner.security.auth_routes import SETUP_RESTORE_PATHS
 
     saved = json.loads((PUBLIC / "docs/openapi.json").read_text())
-    browser_only = set()
+    kinds = {}
     for path, operations in saved["paths"].items():
         for method, operation in operations.items():
-            if route_interactive_only((method.upper(), path)):
-                browser_only.add((method, path))
-                assert operation["security"] == [{"BrowserSession": []}], (method, path)
-                assert "interactive_session_required" in operation["description"]
+            key = (method.upper(), path)
+            kind = operation.get("x-editarr-browser-session")
+            kinds[(method, path)] = kind
+            description = operation.get("description", "")
+            if route_interactive_only(key):
+                assert kind == "interactive", key
+                assert operation["security"] == [{"BrowserSession": []}], key
+                assert "403 interactive_session_required" in description
+            elif route_session_cookie_only(key):
+                assert kind == "session_cookie", key
+                assert operation["security"] == [{"BrowserSession": []}], key
+                assert "401 authentication_required" in description
+                assert "interactive_session_required" not in description
+            elif path in SETUP_RESTORE_PATHS:
+                assert kind == "setup_restore", key
+                assert operation["security"] == []
+                assert "X-Setup-Restore-Token" in description
             else:
+                assert kind is None, key
                 assert operation["security"] in ([], [{"ApiKey": []}, {"BrowserSession": []}])
-    assert {
-        ("post", "/api/auth/api-key"),
-        ("post", "/api/auth/api-key/reveal"),
-        ("patch", "/api/roles/{role}/defaults"),
-    } <= browser_only
+    assert kinds[("post", "/api/auth/api-key")] == "interactive"
+    assert kinds[("post", "/api/auth/api-key/reveal")] == "interactive"
+    assert kinds[("patch", "/api/roles/{role}/defaults")] == "interactive"
+    assert kinds[("post", "/api/auth/logout")] == "session_cookie"
+    assert kinds[("post", "/api/setup-restore/flow")] == "setup_restore"
+
+
+def test_scan_request_example_is_video_only():
+    from scanner.http.api_system import ScanRequest
+
+    saved = json.loads((PUBLIC / "docs/openapi.json").read_text())
+    (example,) = saved["components"]["schemas"]["ScanRequest"]["examples"]
+    assert example["scan_audio"] is False and example["scan_video"] is True
+    assert "audio_selection" not in example
+    assert ScanRequest.model_fields.keys() >= example.keys()
 
 
 def test_import_upload_options_are_documented_as_json_text():

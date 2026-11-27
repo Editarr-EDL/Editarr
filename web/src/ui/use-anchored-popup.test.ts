@@ -13,9 +13,16 @@ it("finds the list that scrolls, skipping wrappers that only clip", () => {
 
 it("fits a popup below when it can, otherwise on the roomier side, capped to that space", () => {
   const bounds = { top: 100, bottom: 800 };
-  expect(fitPopupVertically({ top: 200, bottom: 250 }, 300, bounds)).toEqual({ top: 256, maxHeight: 544, room: 544 });
+  expect(fitPopupVertically({ top: 200, bottom: 250 }, 300, bounds)).toEqual({ top: 256, maxHeight: 300, room: 544 });
   expect(fitPopupVertically({ top: 600, bottom: 650 }, 560, bounds)).toEqual({ top: 100, maxHeight: 494, room: 494 });
   expect(fitPopupVertically({ top: 400, bottom: 450 }, 560, bounds)).toEqual({ top: 456, maxHeight: 344, room: 344 });
+});
+
+it("keeps an above placement at its CSS-capped height in a tall window", () => {
+  // 1,494px of room above, but the list measured at its 560px cap: it must end just above the anchor.
+  const placement = fitPopupVertically({ top: 1500, bottom: 1550 }, 560, { top: 0, bottom: 2000 });
+  expect(placement).toEqual({ top: 934, maxHeight: 560, room: 1494 });
+  expect(placement.top + placement.maxHeight).toBe(1500 - 6);
 });
 
 it("narrows popup bounds to the trigger's scroll container", () => {

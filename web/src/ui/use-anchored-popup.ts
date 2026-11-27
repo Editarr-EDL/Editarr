@@ -34,14 +34,17 @@ export function popupBounds(trigger: Element): PopupBounds {
 }
 
 /**
- * Place a popup of natural `height` below `anchor` when it fits, otherwise on the side with more room,
- * capping `maxHeight` to that side's space so the popup scrolls internally instead of overflowing.
+ * Place a popup of natural `height` below `anchor` when it fits, otherwise on the side with more room.
+ * `maxHeight` is the smaller of `height` and that side's space, and an above placement is positioned by that
+ * same value, so the popup scrolls internally instead of overflowing or overlapping its anchor.
  */
 export function fitPopupVertically(anchor: { top: number; bottom: number }, height: number, bounds: PopupBounds) {
   const below = Math.max(0, bounds.bottom - anchor.bottom - popupGap);
   const above = Math.max(0, anchor.top - popupGap - bounds.top);
-  if (height <= below || below >= above) return { top: anchor.bottom + popupGap, maxHeight: Math.floor(below), room: below };
-  return { top: anchor.top - popupGap - Math.min(height, above), maxHeight: Math.floor(above), room: above };
+  // Never exceed the measured (CSS-capped) height, so the popup can't grow past where it was placed.
+  if (height <= below || below >= above) return { top: anchor.bottom + popupGap, maxHeight: Math.floor(Math.min(height, below)), room: below };
+  const maxHeight = Math.floor(Math.min(height, above));
+  return { top: anchor.top - popupGap - maxHeight, maxHeight, room: above };
 }
 
 /** Below this much room on either side, a `fit` popup first scrolls its trigger up in its scroll container. */

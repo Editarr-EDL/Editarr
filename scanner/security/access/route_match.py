@@ -18,7 +18,7 @@ from starlette.routing import compile_path
 
 from .catalog import CAPABILITIES
 from .route_table import ROUTE_RULES
-from .routes import Gated, RouteKey
+from .routes import AnyPrincipal, Gated, PrincipalReason, RouteKey
 from .vocabulary import Authentication
 
 
@@ -62,6 +62,17 @@ def route_interactive_only(key: RouteKey | None) -> bool:
         CAPABILITIES[capability].authentication is Authentication.FRESH_INTERACTIVE
         for capability in rule.capabilities
     )
+
+
+def route_session_cookie_only(key: RouteKey | None) -> bool:
+    """Whether the route `key` acts on the caller's own browser session.
+
+    Such handlers read the session cookie itself, so an API key is admitted by
+    the middleware but finds no session to act on.
+    """
+
+    rule = ROUTE_RULES.get(key) if key is not None else None
+    return isinstance(rule, AnyPrincipal) and rule.reason is PrincipalReason.OWN_SESSION
 
 
 def interactive_only(application: Any, scope: Mapping[str, Any]) -> bool:
