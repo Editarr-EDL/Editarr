@@ -53,13 +53,14 @@ def score_item(
 
     `batch` = (outputs, elapsed ms) when a batch backend already scored this item.
     """
-    ensure_allowed(item["path"], layout.data_root)
     started = time.perf_counter()
     record: dict[str, Any] = {"id": item["id"], "model": backend.model_id}
     runtime = getattr(backend, "runtime", None)
     if runtime:
         record["runtime"] = runtime
     try:
+        # Inside the try: a refused (excluded) item is recorded as an error, never scored.
+        ensure_allowed(item["path"], layout.data_root)
         if batch is not None:
             outputs = batch[0]
         else:
@@ -139,10 +140,37 @@ def scored(
                 future.cancel()
 
 
+def _error_record(backend: Backend, item: dict[str, Any], error: Exception, elapsed_ms: float):
+    return {
+        "id": item["id"],
+        "model": backend.model_id,
+        "status": "error",
+        "error": f"{type(error).__name__}: {error}",
+        "frames": [],
+        "scores": {},
+        "flagged": [],
+        "elapsed_ms": round(elapsed_ms, 1),
+    }
+
+
 def _scored_batch(backend, layout, pending, thresholds, done):
     """Batch backends (e.g. the cascade) score every pending item in one call; each line
-    gets an equal share of the batch's wall time."""
-    paths = [[layout.results / frame["file"] for frame in frames] for _item, frames in pending]
+    gets an equal share of the batch's wall time.
+
+    Every source is checked with `ensure_allowed()` first; refused items are recorded as
+    errors and never handed to the backend.
+    """
+    allowed = []
+    for item, frames in pending:
+        try:
+            ensure_allowed(item["path"], layout.data_root)
+        except PermissionError as exc:
+            yield item, frames, _error_record(backend, item, exc, 0.0)
+            continue
+        allowed.append((item, frames))
+    if not allowed:
+        return
+    paths = [[layout.results / frame["file"] for frame in frames] for _item, frames in allowed]
     started = time.perf_counter()
     try:
         outputs = backend.score_items(paths)
@@ -151,19 +179,10 @@ def _scored_batch(backend, layout, pending, thresholds, done):
         raise
     except Exception as exc:  # noqa: BLE001 - recorded per item like single-item failures
         outputs, error = None, exc
-    share = (time.perf_counter() - started) * 1000 / max(1, len(pending))
-    for index, (item, frames) in enumerate(pending):
+    share = (time.perf_counter() - started) * 1000 / len(allowed)
+    for index, (item, frames) in enumerate(allowed):
         if error is not None:
-            record = {
-                "id": item["id"],
-                "model": backend.model_id,
-                "status": "error",
-                "error": f"{type(error).__name__}: {error}",
-                "frames": [],
-                "scores": {},
-                "flagged": [],
-                "elapsed_ms": round(share, 1),
-            }
+            record = _error_record(backend, item, error, share)
         else:
             record = score_item(
                 backend,

@@ -121,3 +121,55 @@ def test_a_refused_item_is_recorded_without_aborting_the_batch(root, monkeypatch
     errors = frames_module.extract_frames(layout, workers=1)
     assert list(errors) == ["bad"] and errors["bad"][0].startswith("PermissionError")
     assert (layout.results / "frames/good/0.jpg").is_file()
+
+
+def _scoring_items(root):
+    from scanner.evaluation.folder_eval.paths import Layout
+
+    layout = Layout(root)
+    items = []
+    for identifier, path in (("bad", "video/clips/alias.mp4"), ("good", "video/clips/real.mp4")):
+        frame = {"n": 0, "t": 1.0, "file": f"frames/{identifier}/0.jpg"}
+        (layout.results / frame["file"]).parent.mkdir(parents=True, exist_ok=True)
+        (layout.results / frame["file"]).write_bytes(b"x")
+        items.append(({"id": identifier, "path": path}, [frame]))
+    return layout, items
+
+
+def test_batch_backends_never_receive_excluded_items(root):
+    from scanner.evaluation.folder_eval.scoring import scored
+
+    layout, pending = _scoring_items(root)
+    batches = []
+
+    class Batch:
+        model_id = "batch"
+
+        def score_items(self, paths):
+            batches.append([[path.parent.name for path in frames] for frames in paths])
+            return [[{"scores": {"violence": 0.9}}] for _ in paths]
+
+    results = scored(Batch(), layout, pending, {}, {}, 1)
+    records = {item["id"]: record for item, _f, record in results}
+    assert batches == [[["good"]]]
+    assert records["bad"]["status"] == "error"
+    assert records["bad"]["error"].startswith("PermissionError")
+    assert records["good"]["status"] == "ok"
+
+
+def test_single_item_backends_record_excluded_items_as_errors(root):
+    from scanner.evaluation.folder_eval.scoring import scored
+
+    layout, pending = _scoring_items(root)
+    seen = []
+
+    class Single:
+        model_id = "single"
+
+        def score_frames(self, paths):
+            seen.extend(path.parent.name for path in paths)
+            return [{"scores": {}} for _ in paths]
+
+    results = scored(Single(), layout, pending, {}, {}, 1)
+    records = {item["id"]: record for item, _f, record in results}
+    assert seen == ["good"] and records["bad"]["status"] == "error"
