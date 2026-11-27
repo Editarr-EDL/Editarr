@@ -26,6 +26,18 @@ FRAME_EXTRAS = (
 )
 # Extras kept even when empty, so an empty list still records "measured, none".
 KEEP_EMPTY = {"logprob_fallback"}
+# Extras kept when a backend explicitly returns null: a failed description turn still
+# counts as an attempt for describe-eval.
+KEEP_NULL = {"description"}
+
+
+def _keep_extra(output: dict[str, Any], extra: str) -> bool:
+    if extra not in output:
+        return False
+    value = output[extra]
+    if value is None:
+        return extra in KEEP_NULL
+    return value != [] or extra in KEEP_EMPTY
 
 
 def score_item(
@@ -60,7 +72,7 @@ def score_item(
         for frame, output in zip(frames, outputs, strict=True):
             entry = {"n": frame["n"], "scores": output.get("scores", {})}
             for extra in FRAME_EXTRAS:
-                if output.get(extra) is not None and (output[extra] != [] or extra in KEEP_EMPTY):
+                if _keep_extra(output, extra):
                     entry[extra] = output[extra]
             by_n[frame["n"]] = entry
         frame_records = [by_n[n] for n in sorted(by_n)]
