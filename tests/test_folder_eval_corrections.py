@@ -313,3 +313,15 @@ def test_server_close_stops_the_summarizer(server):
     server.shutdown()
     server.server_close()
     assert not server.summarizer._thread.is_alive()
+
+
+def test_port_in_use_raises_the_bind_error(data_root):
+    import socket
+
+    from scanner.evaluation.folder_eval.server import ReviewServer
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        with pytest.raises(OSError):
+            ReviewServer(Layout(data_root), port=taken.getsockname()[1])

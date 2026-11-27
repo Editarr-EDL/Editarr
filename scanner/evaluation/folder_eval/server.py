@@ -228,7 +228,11 @@ class ReviewServer(ThreadingHTTPServer):
     def server_close(self) -> None:
         """Close the socket, cancel pending summaries and wait for an active one to end."""
         super().server_close()
-        self.summarizer.stop()
+        # TCPServer.__init__ calls server_close() when bind or listen fails, before the
+        # summarizer exists; let that OSError propagate.
+        summarizer = getattr(self, "summarizer", None)
+        if summarizer is not None:
+            summarizer.stop()
 
     @property
     def port(self) -> int:
