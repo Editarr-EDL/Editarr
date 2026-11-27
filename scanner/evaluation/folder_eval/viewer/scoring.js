@@ -18,11 +18,20 @@ export function predicted(res, key) {
   return res.flagged.some((k) => k === key || k.startsWith(key + "/"));
 }
 
+/**
+ * Whether a model scores a key, as in summary.py: a family or token must be listed in meta.supports, so a model
+ * supporting only fear/hemophobia scores that token but not the fear family. Empty/missing supports means every key.
+ */
 export function supportsKey(meta, key) {
   const sup = meta && meta.supports;
   if (!Array.isArray(sup) || !sup.length) return true;
-  if (sup.includes(key)) return true;
-  return !key.includes("/") && sup.some((k) => k.startsWith(key + "/"));
+  return sup.includes(key);
+}
+
+/** Keys a model is judged on: its supported families and tokens (every family when supports is unknown). */
+export function scorableKeys(meta) {
+  const sup = meta && meta.supports;
+  return Array.isArray(sup) && sup.length ? sup : S.familyOrder;
 }
 
 /** Decision models record the keys they were asked; a family counts as asked if it or any of its tokens was. */
@@ -45,12 +54,12 @@ export function outcomeFor(item, res, key, meta) {
   return p ? (e ? "TP" : "FP") : (e ? "FN" : "TN");
 }
 
-/** Item-level correctness: every supported family agrees with ground truth (null when not scorable). */
+/** Item-level correctness: every scorable key agrees with ground truth (null when not scorable). */
 export function itemCorrect(item, res, meta) {
   if (!item.scored || !res || res.status !== "ok") return null;
-  const fams = S.familyOrder.filter((f) => supportsKey(meta, f));
-  if (!fams.length) return null;
-  return fams.every((f) => predicted(res, f) === expectedPositive(item, f));
+  const keys = scorableKeys(meta);
+  if (!keys.length) return null;
+  return keys.every((k) => predicted(res, k) === expectedPositive(item, k));
 }
 
 export function maxScore(res) {

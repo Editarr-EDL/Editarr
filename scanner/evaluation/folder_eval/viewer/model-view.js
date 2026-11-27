@@ -2,7 +2,7 @@
 import { S, loadModel } from "./data.js";
 import { h, $, fill, fmt, chip, expectedChips, itemExtras, field, select, pager, debounce, syncControl, PAGE_SIZE } from "./ui.js";
 import { buildHash, hashWith, parseHash, withParams } from "./router.js";
-import { OUTCOMES, maxScore, outcomeClass, outcomeFor, predicted, supportsKey, wasAsked } from "./scoring.js";
+import { OUTCOMES, maxScore, outcomeClass, outcomeFor, predicted, scorableKeys, supportsKey, wasAsked } from "./scoring.js";
 import { defaultFrame, getScope, resultFor, scopedItems } from "./scope.js";
 import { frameBlock } from "./media.js";
 import { correctable } from "./correction-controls.js";
@@ -48,8 +48,7 @@ function modelRows(id, p, scope) {
     let o, score, frame;
     if (cat === "__none") {
       if (r.status !== "ok" || r.flagged.length) continue;
-      const fams = S.familyOrder.filter((f) => supportsKey(meta, f));
-      o = !item.scored ? "unscored" : fams.some((f) => outcomeFor(item, r, f, meta) === "FN") ? "FN" : "TN";
+      o = !item.scored ? "unscored" : scorableKeys(meta).some((k) => outcomeFor(item, r, k, meta) === "FN") ? "FN" : "TN";
       score = maxScore(r);
     } else {
       o = outcomeFor(item, r, cat, meta);

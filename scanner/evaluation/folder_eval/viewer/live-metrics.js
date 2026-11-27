@@ -1,6 +1,6 @@
 /* Browser-side metrics with the same rules as the harness's summary.py, from effective (corrected) labels. */
 import { S } from "./data.js";
-import { expectedPositive, familyOf } from "./scoring.js";
+import { expectedPositive } from "./scoring.js";
 import { resultFor, scopedItems } from "./scope.js";
 
 /** Confusion counts and P/R/F1 like summary.py's metric_row. */
@@ -18,12 +18,13 @@ function metricRow(pairs, key) {
 }
 
 /**
- * Family rows for the model's supported families plus token rows for supported tokens with ground truth here.
- * Empty/missing `supports` (e.g. no meta.json yet) means every family and token, as in scoring.supportsKey.
+ * Family rows for the families the model explicitly supports (a token-only model gets none, as in summary.py) plus
+ * token rows for supported tokens with ground truth here. Empty/missing `supports` (e.g. no meta.json yet) means
+ * every family and token, as in scoring.supportsKey.
  */
 function group(pairs, supports) {
   const any = supports.size === 0;
-  const families = any ? [...S.familyOrder].sort() : [...new Set([...supports].map(familyOf))].sort();
+  const families = any ? [...S.familyOrder].sort() : [...supports].filter((k) => !k.includes("/")).sort();
   const tokens = new Set();
   for (const [item] of pairs) for (const k of item.expected || []) if (k.includes("/") && (any || supports.has(k))) tokens.add(k);
   const rows = (keys) => Object.fromEntries(keys.map((k) => [k, metricRow(pairs, k)]));
