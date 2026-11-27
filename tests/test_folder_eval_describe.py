@@ -371,7 +371,8 @@ def test_runner_hands_batch_backends_every_pending_item(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "create_backend", lambda _model_id: Batch())
     runner.run_model(layout, "batch")
 
-    lines = [json.loads(line) for line in layout.model_jsonl("batch").read_text().splitlines()]
+    text = layout.model_jsonl("batch").read_text()
+    lines = [json.loads(line) for line in text.splitlines() if line]
     assert calls == [2] and len(lines) == 2
     frame = lines[0]["frames"][0]
     assert frame["description"] == "A fight." and frame["severity"] == {"violence": 1}

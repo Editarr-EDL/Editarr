@@ -71,8 +71,12 @@ def load_results(path: Path) -> dict[str, dict[str, Any]]:
 
 
 def append_line(descriptor: int, record: dict[str, Any]) -> None:
-    """Append one JSON line with a single O_APPEND write so concurrent runs never interleave."""
-    data = (json.dumps(record, separators=(",", ":")) + "\n").encode("utf-8")
+    """Append one JSON line with a single O_APPEND write so concurrent runs never interleave.
+
+    The record starts with a newline too, so a fragment left by an interrupted write ends
+    there instead of absorbing this record; readers skip the resulting blank lines.
+    """
+    data = ("\n" + json.dumps(record, separators=(",", ":")) + "\n").encode("utf-8")
     written = os.write(descriptor, data)
     if written != len(data):
         raise OSError(f"short append ({written}/{len(data)} bytes)")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -217,7 +218,8 @@ def test_run_concurrency_scores_items_in_parallel_with_one_line_each(tmp_path, m
 
     stats = runner.run_model(layout, "fake", concurrency=3)
 
-    lines = layout.model_jsonl("fake").read_text(encoding="utf-8").splitlines()
+    text = layout.model_jsonl("fake").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if line]
     assert sorted(json.loads(line)["id"] for line in lines) == [f"i{n}" for n in range(9)]
     assert backend.peak == 3 and stats["concurrency"] == 3 and stats["frames"] == 9
     assert json.loads(lines[0])["frames"][0]["asked"] == ["violence"]
@@ -301,5 +303,20 @@ def test_run_records_backend_runtime_on_every_line(tmp_path, monkeypatch):
 
     runner.run_model(layout, "fake")
 
-    lines = layout.model_jsonl("fake").read_text(encoding="utf-8").splitlines()
+    text = layout.model_jsonl("fake").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if line]
     assert [json.loads(line)["runtime"] for line in lines] == ["llama.cpp b12556"] * 3
+
+
+def test_append_after_a_torn_line_keeps_the_next_record(tmp_path):
+    from scanner.evaluation.folder_eval.results import append_line
+
+    path = tmp_path / "m.jsonl"
+    path.write_text(json.dumps({"id": "a", "status": "ok"}) + '\n{"id": "b", "sta')
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND)
+    try:
+        append_line(descriptor, {"id": "c", "status": "ok"})
+    finally:
+        os.close(descriptor)
+    assert set(load_results(path)) == {"a", "c"}
+

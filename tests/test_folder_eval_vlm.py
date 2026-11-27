@@ -252,7 +252,7 @@ def test_run_keeps_frame_transcripts(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "create_backend", lambda _model_id: Fake())
     runner.run_model(layout, "fake")
 
-    line = json.loads(Path(layout.model_jsonl("fake")).read_text().splitlines()[0])
+    line = json.loads(Path(layout.model_jsonl("fake")).read_text().strip().splitlines()[0])
     assert line["frames"][0]["transcript"] == ["a", "b"]
 
 
