@@ -51,6 +51,7 @@ LOCAL_REPLAY_SITES = {
 FOLDER_EVALUATION_SITES = {
     (f"scanner/evaluation/folder_eval/{path}", function, primitive): (1, FOLDER_EVALUATION)
     for path, function, primitive in (
+        ("decision/llama_server.py", "LlamaServerProcess._start", "Popen"),
         ("frames.py", "extract_frames", "submit"),
         ("scoring.py", "scored.submit", "submit"),
         ("server_state.py", "Summarizer.__init__", "Thread"),
