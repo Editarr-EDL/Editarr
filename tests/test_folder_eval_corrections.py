@@ -275,3 +275,41 @@ def test_summary_scores_general_token_aliases_as_their_family():
     summary = summarize_model(items, results, {"supports": ["violence", "violence/violence"]})
     assert summary["families"]["violence"]["tp"] == 1 and summary["tokens"] == {}
     assert set(summary["by_folder"]["video/x"]) == {"violence"}
+
+
+def test_summarizer_stop_cancels_pending_waits_for_active_and_joins():
+    import time
+
+    from scanner.evaluation.folder_eval.server_state import Summarizer
+
+    runs, release = [], threading.Event()
+    pending = Summarizer(lambda: runs.append("pending"), delay_s=60)
+    pending.request()
+    pending.stop(timeout_s=5)
+    assert runs == [] and not pending._thread.is_alive()
+    pending.request()
+    assert not pending.busy
+
+    def slow():
+        runs.append("started")
+        release.wait(5)
+        runs.append("finished")
+
+    active = Summarizer(slow, delay_s=0)
+    active.request()
+    while runs != ["started"]:
+        time.sleep(0.01)
+    stopper = threading.Thread(target=active.stop)
+    stopper.start()
+    time.sleep(0.05)
+    assert stopper.is_alive()  # waits for the active run
+    release.set()
+    stopper.join(5)
+    assert runs == ["started", "finished"] and not active._thread.is_alive()
+
+
+def test_server_close_stops_the_summarizer(server):
+    server.summarizer.request()
+    server.shutdown()
+    server.server_close()
+    assert not server.summarizer._thread.is_alive()

@@ -35,7 +35,8 @@ class InventoryIndex:
 
 class Summarizer:
     """Runs `job` on a single background thread, debounced; requests during a run
-    schedule exactly one follow-up run, so two never overlap."""
+    schedule exactly one follow-up run, so two never overlap. `stop()` cancels pending
+    work, waits for an active run and joins the thread."""
 
     def __init__(self, job: Callable[[], Any], delay_s: float = 2.0) -> None:
         self._job = job
@@ -43,8 +44,10 @@ class Summarizer:
         self._cond = threading.Condition()
         self._due: float | None = None
         self._running = False
+        self._stopped = False
         self.last_error: str | None = None
-        threading.Thread(target=self._loop, name="summarizer", daemon=True).start()
+        self._thread = threading.Thread(target=self._loop, name="summarizer", daemon=True)
+        self._thread.start()
 
     @property
     def busy(self) -> bool:
@@ -53,8 +56,18 @@ class Summarizer:
 
     def request(self) -> None:
         with self._cond:
+            if self._stopped:
+                return
             self._due = time.monotonic() + self._delay
             self._cond.notify()
+
+    def stop(self, timeout_s: float | None = None) -> None:
+        """Cancel any pending run, let an active run finish, and join the thread."""
+        with self._cond:
+            self._stopped = True
+            self._due = None
+            self._cond.notify_all()
+        self._thread.join(timeout_s)
 
     def wait_idle(self, timeout_s: float = 30.0) -> bool:
         """Block until no run is pending or active (used by tests)."""
@@ -65,16 +78,22 @@ class Summarizer:
             time.sleep(0.05)
         return False
 
+    def _next_run(self) -> bool:
+        """Wait until a run is due; False once stopped."""
+        with self._cond:
+            while not self._stopped and (self._due is None or time.monotonic() < self._due):
+                if self._due is None:
+                    self._cond.wait()
+                else:
+                    self._cond.wait(max(0.0, self._due - time.monotonic()))
+            if self._stopped:
+                return False
+            self._due = None
+            self._running = True
+            return True
+
     def _loop(self) -> None:
-        while True:
-            with self._cond:
-                while self._due is None or time.monotonic() < self._due:
-                    if self._due is None:
-                        self._cond.wait()
-                    else:
-                        self._cond.wait(max(0.0, self._due - time.monotonic()))
-                self._due = None
-                self._running = True
+        while self._next_run():
             started = time.monotonic()
             try:
                 self._job()

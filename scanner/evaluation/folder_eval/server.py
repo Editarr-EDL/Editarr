@@ -225,6 +225,11 @@ class ReviewServer(ThreadingHTTPServer):
         if load_corrections(self.layout).get("updated_at") != used:
             self.summarizer.request()
 
+    def server_close(self) -> None:
+        """Close the socket, cancel pending summaries and wait for an active one to end."""
+        super().server_close()
+        self.summarizer.stop()
+
     @property
     def port(self) -> int:
         return self.server_address[1]
