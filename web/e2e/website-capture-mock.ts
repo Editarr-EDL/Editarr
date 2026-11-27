@@ -122,7 +122,8 @@ const history = [
 
 /** A flat-color poster drawn as SVG, so no external artwork is needed and screenshots compress well. */
 export function posterSvg(title: string, sky = "#1d3b72", hills = "#7a2e5b") {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="200" height="300" fill="${sky}"/><circle cx="148" cy="72" r="32" fill="#ffffff" fill-opacity="0.22"/><path d="M0 200 L55 140 L100 185 L150 120 L200 175 L200 300 L0 300Z" fill="${hills}"/><path d="M0 245 L70 200 L130 235 L200 205 L200 300 L0 300Z" fill="#000" fill-opacity="0.3"/><text x="16" y="276" fill="#fff" font-family="sans-serif" font-weight="800" font-size="22">${title}</text></svg>`;
+  const text = title.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="200" height="300" fill="${sky}"/><circle cx="148" cy="72" r="32" fill="#ffffff" fill-opacity="0.22"/><path d="M0 200 L55 140 L100 185 L150 120 L200 175 L200 300 L0 300Z" fill="${hills}"/><path d="M0 245 L70 200 L130 235 L200 205 L200 300 L0 300Z" fill="#000" fill-opacity="0.3"/><text x="16" y="276" fill="#fff" font-family="sans-serif" font-weight="800" font-size="22">${text}</text></svg>`;
 }
 
 /** Owner fields the server adds to a saved review read by its owner. */
