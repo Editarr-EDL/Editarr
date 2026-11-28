@@ -13,7 +13,7 @@ RUN pnpm --dir community-service build:container
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=8787 COMMUNITY_DATABASE=/data/community.sqlite
 WORKDIR /app
-RUN mkdir /data /backups && chown node:node /data /backups && chmod 700 /data /backups
+RUN mkdir /data /backups /online-backups && chown node:node /data /backups /online-backups && chmod 700 /data /backups /online-backups
 COPY --from=build --chown=node:node /build/community-service/dist/runtime ./dist/runtime
 COPY --chown=node:node community-service/migrations ./migrations
 USER node

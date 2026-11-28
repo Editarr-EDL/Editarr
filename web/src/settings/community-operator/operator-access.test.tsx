@@ -11,17 +11,18 @@ function sessionResponse(subject = "fixture-operator") {
 
 describe("isolated operator runtime", () => {
   it("uses only the same-origin Access session endpoint without local bootstrap or tokens", async () => {
-    const fetcher = vi.fn().mockResolvedValue(sessionResponse());
+    // A fresh Response per call: the verified app also issues data reads, and a body can be read only once.
+    const fetcher = vi.fn(() => Promise.resolve(sessionResponse()));
     vi.stubGlobal("fetch", fetcher);
     render(<OperatorAccess />);
-    expect(await screen.findByText("Access verified")).toBeInTheDocument();
+    expect(await screen.findByText("Access verified", {}, { timeout: 2000 })).toBeInTheDocument();
     expect(screen.getByText("fixture-operator")).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledWith("/admin/v1/session", expect.objectContaining({
       credentials: "same-origin", cache: "no-store", redirect: "error", headers: { Accept: "application/json" },
     }));
-    fetcher.mockResolvedValue(sessionResponse("fresh-operator"));
+    fetcher.mockImplementation(() => Promise.resolve(sessionResponse("fresh-operator")));
     fireEvent.click(screen.getByRole("button", { name: "Refresh access" }));
-    expect(await screen.findByText("fresh-operator")).toBeInTheDocument();
+    expect(await screen.findByText("fresh-operator", {}, { timeout: 2000 })).toBeInTheDocument();
   });
   it.each([[401, "Sign-in required"], [403, "Operator access denied"], [503, "Access verification unavailable"]])(
     "shows honest access failure %s", async (status, label) => {

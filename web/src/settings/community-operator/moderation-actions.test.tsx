@@ -63,10 +63,11 @@ it("retries the identical saved intent after uncertain response and never silent
   const writes = fetcher.mock.calls.filter(([, options]) => options?.method === "POST"); expect(writes).toHaveLength(2);
   expect(writes[0][1]?.body).toBe(writes[1][1]?.body);
 });
-it.each([409, 403])("forces review on conflict or policy refusal %s without clearing Access", async status => {
+it.each([[409, "moderation_conflict"], [403, "moderation_ineligible"], [403, "operator_csrf_denied"]] as const)(
+  "forces review on conflict or request refusal %s %s without clearing Access", async (status, code) => {
   const { fetcher, applied, denied } = mount(); fireEvent.click(screen.getByRole("button", { name: "Quarantine filter" }));
   await screen.findByRole("dialog"); fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: intent.reason } });
-  fetcher.mockImplementationOnce(() => Promise.resolve(Response.json({ error: { code: status === 409 ? "moderation_conflict" : "moderation_ineligible" } }, { status })));
+  fetcher.mockImplementationOnce(() => Promise.resolve(Response.json({ error: { code } }, { status })));
   fireEvent.click(screen.getByRole("button", { name: "Confirm action" })); await waitFor(() => expect(applied).toHaveBeenCalledTimes(1));
   expect(denied).not.toHaveBeenCalled(); expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
@@ -75,10 +76,11 @@ it("refuses changed fresh state before any mutation", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Quarantine filter" })); await screen.findByText(/State changed/);
   expect(applied).toHaveBeenCalledTimes(1); expect(fetcher).toHaveBeenCalledTimes(1); expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
-it.each([401, 403])("clears protected UI on mutation Access denial %s", async status => {
+it.each([[401, "operator_authentication_required"], [403, "operator_not_allowed"], [403, "operator_token_invalid"]] as const)(
+  "clears protected UI on mutation Access denial %s %s", async (status, code) => {
   const { fetcher, denied } = mount(); fireEvent.click(screen.getByRole("button", { name: "Quarantine filter" }));
   await screen.findByRole("dialog"); fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: intent.reason } });
-  fetcher.mockImplementationOnce(() => Promise.resolve(Response.json({ error: { code: "operator_denied" } }, { status })));
+  fetcher.mockImplementationOnce(() => Promise.resolve(Response.json({ error: { code } }, { status })));
   fireEvent.click(screen.getByRole("button", { name: "Confirm action" })); await waitFor(() => expect(denied).toHaveBeenCalledWith(status));
 });
 it("validates exact action result and filter vote inspection; rejects private extras", async () => {

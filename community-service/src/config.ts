@@ -24,6 +24,12 @@ export interface Env {
   OPERATOR_ORIGIN?: string;
   OPERATOR_SUBJECTS?: string;
   OPERATOR_ASSETS?: Pick<AssetFetcher, 'fetch'>;
+  /** Directory that confines online backups and staged restores; unset disables backups (self-hosted runtime only). */
+  COMMUNITY_BACKUP_ROOT?: string;
+  /** Verification worker module; defaults to `runtime/backup-verify.mjs` beside the service bundle. */
+  BACKUP_VERIFIER?: URL;
+  /** Size of the SQLite WAL file in bytes, or null when unavailable (self-hosted runtime only). */
+  DATABASE_WAL_BYTES?: () => number | null;
 }
 
 export function missingConfig(env: Env): string[] {

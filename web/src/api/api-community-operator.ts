@@ -53,27 +53,35 @@ const usage = fields({ version, contributorId: identifier, observedAt: number, p
   observations: array(fields({ resource: oneOf("worker_requests", "d1_writes"), outcome: oneOf("allowed", "denied", "retried"),
     occurrences: number, units: number, observedAt: number }), 6) });
 
-/** Fetch one bounded operator JSON response and validate its exact shape; `intent` makes it a CSRF-guarded POST. */
-export async function operatorRequest<T>(path: string, check: Check, signal: AbortSignal, intent?: object): Promise<T> {
-  const response = await fetch(path, { method: intent ? "POST" : "GET", credentials: "same-origin", cache: "no-store", redirect: "error",
-    headers: intent ? { Accept: "application/json", "Content-Type": "application/json", "X-Community-Operator": "1" } : { Accept: "application/json" },
-    body: intent ? JSON.stringify(intent) : undefined, signal });
+export interface OperatorRequestOptions { method?: "POST" | "PUT"; maxBytes?: number }
+/**
+ * Fetch one bounded operator JSON response and validate its exact shape. `intent` makes it a CSRF-guarded
+ * mutation (POST unless `options.method` says otherwise); `options.maxBytes` raises the 128 KiB body bound.
+ */
+export async function operatorRequest<T>(path: string, check: Check, signal: AbortSignal, intent?: object,
+  options: OperatorRequestOptions = {}): Promise<T> {
+  const limit = options.maxBytes ?? 131072;
+  // An empty intent is a body-less mutation such as starting a backup run.
+  const body = intent && Object.keys(intent).length ? JSON.stringify(intent) : undefined;
+  const response = await fetch(path, { method: intent ? options.method ?? "POST" : "GET", credentials: "same-origin", cache: "no-store", redirect: "error",
+    headers: intent ? { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), "X-Community-Operator": "1" } :
+      { Accept: "application/json" }, body, signal });
   if (!response.ok && (!intent || response.status === 401)) throw new OperatorAccessError(response.status);
   if (!response.headers.get("Content-Type")?.startsWith("application/json") || !response.body)
     throw new OperatorAccessError(response.status === 403 ? 403 : 503);
   const reader = response.body.getReader(), decoder = new TextDecoder("utf-8", { fatal: true });
-  let size = 0, body = "";
+  let size = 0, raw = "";
   let value: unknown;
   try {
     while (true) {
       const chunk = await reader.read();
       if (chunk.done) break;
       size += chunk.value.length;
-      if (size > 131072) throw new OperatorAccessError(503);
-      body += decoder.decode(chunk.value, { stream: true });
+      if (size > limit) throw new OperatorAccessError(503);
+      raw += decoder.decode(chunk.value, { stream: true });
     }
-    body += decoder.decode();
-    value = JSON.parse(body);
+    raw += decoder.decode();
+    value = JSON.parse(raw);
   } catch { throw new OperatorAccessError(response.status === 403 ? 403 : 503); }
   finally { await reader.cancel(); reader.releaseLock(); }
   if (!response.ok) {
@@ -87,6 +95,17 @@ export async function operatorRequest<T>(path: string, check: Check, signal: Abo
 
 export class OperatorMutationError extends OperatorAccessError {
   constructor(status: number, public readonly code: string) { super(status); }
+}
+/** 403 codes that refuse one request (CSRF/origin checks, ineligible moderation) without revoking the operator session. */
+const requestRefusals = new Set(["operator_csrf_denied", "operator_origin_denied", "moderation_ineligible"]);
+/**
+ * The access-failure status (401 or 403) when `error` means the operator session is missing or no longer authorised,
+ * or null for anything a page should report inline (request-level refusals, backup_* codes, conflicts, network errors).
+ */
+export function accessFailureStatus(error: unknown): 401 | 403 | null {
+  if (!(error instanceof OperatorAccessError) || (error.status !== 401 && error.status !== 403)) return null;
+  if (error.status === 403 && error instanceof OperatorMutationError && (requestRefusals.has(error.code) || error.code.startsWith("backup_"))) return null;
+  return error.status;
 }
 const read = operatorRequest;
 const query = (values: Record<string, string | null | undefined>) => {

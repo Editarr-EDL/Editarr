@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["website.spec.ts", "website-api.spec.ts", "production.spec.ts", "operator-access.spec.ts"],
+  testIgnore: ["website.spec.ts", "website-api.spec.ts", "production.spec.ts", "operator-access.spec.ts", "operator-pages.spec.ts"],
   fullyParallel: true,
   use: {
     baseURL: "http://127.0.0.1:4173",

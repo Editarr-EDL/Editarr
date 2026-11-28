@@ -5,6 +5,7 @@ import { deriveVersionState } from '../versions/acceptance';
 import { isCatalogWriteConflict, workWriteGuard } from '../versions/works';
 import { recomputeStatements } from '../master/recompute';
 import { loadVersionState, type VersionState } from '../master/state';
+import { moderatedVoteEventStatement } from '../master/vote-events';
 import { inspection, ModerationError, type ModerationInput, type ModerationOptions, type ModerationPlanner } from './moderation';
 
 export interface MasterModerationContext { service: string; policy: MasterPolicy; now: number }
@@ -110,6 +111,7 @@ async function votePlan(db: SqlDatabase, input: ModerationInput, context: Master
   if ((row.excluded === 1) === exclude) throw new ModerationError('moderation_ineligible');
   return [db.prepare('UPDATE filter_votes SET excluded = ? WHERE filter_id = ? AND contributor_id = ?')
     .bind(Number(exclude), input.targetId, input.contributorId!),
+  moderatedVoteEventStatement(db, input.targetId, input.contributorId!, exclude ? 'excluded' : 'restored', context.now),
   ...await recomputeAffected(db, [row.version_id], context, state => {
     for (const vote of state.votes) if (vote.filterId === input.targetId && vote.contributorId === input.contributorId) vote.excluded = exclude;
   })];

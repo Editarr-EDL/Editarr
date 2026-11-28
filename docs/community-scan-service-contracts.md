@@ -1263,6 +1263,27 @@ carries `contributorCount`, `filterCount` and `servedFilterCount`.
 - `all` runs in bounded batches and returns `{"version":1,"jobId":"…"}`.
 - The operator uses it after config changes.
 
+System reads (milliseconds; strict queries, unknown or repeated parameters are `400`):
+
+- `GET /admin/v1/health` → `{version, observedAt, ready, checks:[{id,label,ok,detail}],
+  database:{bytes,walBytes,pageSize}, storage:{payloadBytes,quotaBytes}, lastRetention,
+  lastRecomputeAll}`. Checks are `schema`, `retention` (a successful run within 2 hours),
+  `storage` (below 90% of quota), `wal` (below 64 MiB) and `backups` (enabled with a
+  verified backup within twice the interval); `ready` is true only when all pass.
+  `400 invalid_health_query` for any parameter.
+- `GET /admin/v1/trends?metric=db|storage|denials|requests|uploads_votes|downloads&period=24h|7d|30d|90d`
+  (period defaults to `7d`) → `{version, observedAt, metric, period, unit, bucketMs,
+  points:[{t,v,v2?}], total, previousTotal, total2, previousTotal2, provenance}`. Buckets are
+  hourly for 24h and 7d and daily for 30d, 90d and the usage rollups (`denials`,
+  `requests`). Gauges (`db`: database/WAL bytes, `storage`: payload/quota bytes) report
+  their latest sample as the total (null without samples); counters sum, fill empty
+  buckets with 0 and compare with the previous period. `uploads_votes` has uploads in `v`
+  and cast or changed votes in `v2`; `requests` has denials in `v2`.
+  `400 invalid_trends_query`.
+- `GET /admin/v1/maintenance/runs?kind=retention|recompute_all&after=` → 20 runs per page,
+  newest first: `{runId, kind, startedAt, durationMs, outcome, detail}`.
+  `400 invalid_maintenance_query`.
+
 **Clarifications.** The service resolves these admin details as follows:
 
 - The envelope always carries `resource`. A vote action uses `resource: "vote"`,
@@ -1323,7 +1344,13 @@ The service migrations are **rebased** to a new baseline,
 - Later migrations return to verified-backup-first upgrades. The first,
   `0002_filter_expressions.sql`, adds the nullable expression columns below;
   existing rows keep their values. `0003` and `0004` add only the retention
-  indexes below.
+  indexes below. `0005_external_seed_submissions.sql` adds the immutable
+  `external_seed_submissions` provenance table for offline seed imports.
+  `0006_operator_insights.sql` adds the operator insight tables
+  below, backfills one `cast` vote event per existing `filter_votes` row at its
+  `updated_at`, rebuilds `moderation_actions` (rows, index and triggers kept) so its
+  audit accepts the backup commands, and adds read-path indexes for the operator
+  console.
 
 **Kept tables (adapted from 0001–0008 and 0014):**
 
@@ -1359,6 +1386,12 @@ The service migrations are **rebased** to a new baseline,
 | `master_revision_filters` | **version_id**, **revision**, **filter_id** | Kept for every revision with an issued receipt. Used for vote and report eligibility |
 | `download_receipts` | **receipt_id**, contributor_id, version_id, revision, snapshot_digest, service_key_id, issued_at | Index on `(contributor_id, version_id)` and `(version_id, revision, issued_at)` |
 | `sync_runs` | **run_id**, installation_id, started_at, batches | Index on `(installation_id, started_at)` and `started_at` |
+| `vote_events` | **event_id** (autoincrement), filter_id, contributor_id, vote (`up`\|`down`), kind (`cast`\|`changed`\|`removed`\|`excluded`\|`restored`), receipt_id, created_at (seconds) | Append-only (updates refused). Index on `created_at`, `(filter_id, created_at)` and `(contributor_id, created_at)`. `removed` holds the withdrawn vote |
+| `service_metrics_hourly` | **hour** (ms, hour start), db_bytes, wal_bytes, payload_bytes, payload_quota_bytes, source | Written by the hourly maintenance; rows older than 90 days are pruned |
+| `usage_daily` | **day**, **resource**, **outcome**, occurrences, units, contributors | Daily totals of `usage_observations`, rolled up by the hourly maintenance before any pruning |
+| `maintenance_runs` | **run_id**, kind (`retention`\|`recompute_all`\|`metrics`), started_at (ms), duration_ms, outcome (`ok`\|`batch_limit`\|`skipped`\|`failed`), detail_json | Index on `(kind, started_at)`. A recompute-all run uses its action ID |
+| `backup_config` | **singleton** (1), enabled, frequency, at_utc, keep_last, keep_weekly, destination, integrity_check, updated_at, updated_by | One row, inserted disabled |
+| `backup_runs` | **run_id**, started_at, trigger, actor, file_name, bytes, duration_ms, integrity, sha256, status, error_code, note | Index on `started_at` |
 
 Each raw submission is stored exactly once, as BLOBs, with no expanded copies
 except `submission_entries`. Those rows are derived from the artifact and can
@@ -1408,6 +1441,16 @@ conservatively; none changes a wire format:
   not the revision history.
 - **Expiry scans:** maintenance finds expired `rate_counters` and `sync_runs` rows
   through their `window_start` and `started_at` indexes, a bounded batch per run.
+- **Operator insights (0006):** casting, changing or removing a vote and excluding or
+  restoring one append a `vote_events` row in the same batch as the change. The
+  hourly maintenance samples `service_metrics_hourly` and refreshes `usage_daily`
+  before its prunes, then records a `retention` run; `all` recomputes record a
+  `recompute_all` run. Backup audit rows (`backup_configure`, `backup_run`,
+  `backup_stage`) never advance a moderation revision. Read-path indexes cover
+  `submissions(created_at)`, `reports(created_at)` and `(target_type, target_id, state)`,
+  both audit tables' `created_at`, `master_revisions(generated_at)`,
+  `filter_attestations(contributor_id)`, `download_receipts(issued_at)` and partial
+  indexes for quarantined filters, versions and acceptances and disputed filters.
 
 ### 8.1 Operator configuration
 

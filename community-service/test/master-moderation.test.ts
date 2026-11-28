@@ -6,6 +6,8 @@ import { contributor, support, type Contributor } from './helpers/submissions';
 import { download, eligible, post, reply, submitWork } from './helpers/master';
 import { contributorVotes } from '../src/http/votes';
 import { db, now, policy, setupVersionCatalog } from './helpers/versions';
+import { recomputeAction } from '../src/admin/recompute';
+import type { SqlDatabase } from '../src/runtime/contracts';
 
 const env = { APP_ENV: 'local', TRUSTED_ACTOR_KEY: tunnelActor, CATALOG_DB: db, OPERATOR_ORIGIN: 'https://operator.example.test',
   PUBLIC_ORIGIN: 'https://community.example', ACCESS_ISSUER: 'https://test.cloudflareaccess.com', ACCESS_AUDIENCE: 'operator-app',
@@ -109,6 +111,9 @@ describe('master-set moderation (§7.8)', () => {
     expect(await upvotes()).toBe(0);
     await act('restore_vote', 'vote', filterId, { contributorId: carol.contributorId });
     expect(await upvotes()).toBe(1);
+    expect((await db.prepare(`SELECT vote, kind FROM vote_events WHERE filter_id = ? AND contributor_id = ? ORDER BY event_id`)
+      .bind(filterId, carol.contributorId).all()).results).toEqual([{ vote: 'up', kind: 'cast' }, { vote: 'up', kind: 'excluded' },
+      { vote: 'up', kind: 'restored' }]);
   });
 });
 
@@ -175,5 +180,34 @@ describe('POST /admin/v1/recompute', () => {
       reason: 'Continue' })).status).toBe(400);
     expect((await content(versionId)).served.filters).toHaveLength(1);
     expect(await db.prepare("SELECT count(*) AS n FROM moderation_actions WHERE command = 'recompute'").first()).toEqual({ n: 4 });
+    const runs = await db.prepare(`SELECT run_id AS runId, outcome, detail_json AS detail FROM maintenance_runs
+      WHERE kind = 'recompute_all' ORDER BY started_at, run_id`).all<{ runId: string; outcome: string; detail: string }>();
+    expect(runs.results.map(run => run.outcome)).toEqual(['ok', 'ok']);
+    expect(runs.results.map(run => run.runId)).toContain(all.body.jobId);
+    expect(JSON.parse(runs.results.find(run => run.runId === all.body.jobId)!.detail)).toMatchObject({ after: null, nextAfter: null });
+  });
+
+  it('replaces a failed recompute-all run with the retried attempt of the same saved action', async () => {
+    const actionId = crypto.randomUUID(), body = { version: 1, actionId, versionIds: 'all', reason: 'Retry saved batch' };
+    const context = { service: env.PUBLIC_ORIGIN, policy, now };
+    const failing = new Proxy(db, { get(target, property) {
+      if (property === 'prepare') return (sql: string) => {
+        if (sql.includes('ORDER BY version_id LIMIT')) throw new Error('synthetic_batch_failure');
+        return target.prepare(sql);
+      };
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } }) as SqlDatabase;
+    await expect(recomputeAction(failing, 'operator-subject', body, context)).rejects.toThrow('synthetic_batch_failure');
+    const run = () => db.prepare(`SELECT outcome, detail_json AS detail FROM maintenance_runs WHERE run_id = ?`).bind(actionId)
+      .first<{ outcome: string; detail: string }>();
+    expect(await run()).toMatchObject({ outcome: 'failed' });
+    expect(await recomputeAction(db, 'operator-subject', body, context)).toMatchObject({ jobId: actionId, complete: true, nextAfter: null });
+    const retried = (await run())!;
+    expect(retried.outcome).toBe('ok');
+    expect(JSON.parse(retried.detail)).toMatchObject({ nextAfter: null, versions: expect.any(Number) });
+    expect(JSON.parse(retried.detail).versions).toBeGreaterThan(0);
+    const health = await admin('/admin/v1/health');
+    expect(health.body.lastRecomputeAll).toMatchObject({ runId: actionId, outcome: 'ok', detail: { nextAfter: null } });
   });
 });
