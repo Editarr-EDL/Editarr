@@ -20,6 +20,11 @@ test.beforeEach(async ({ page }) => {
     ...scan, id: "complete-scan", scan_id: 2, item_name: "Completed film",
     status: "complete", finding_count: 3, scan_video: true, video_model: "nudenet",
     qwen_summaries_per_segment: 4, qwen_segment_join_gap_seconds: 2,
+    stage_coverage: [
+      { stage: "visual", status: "unknown" },
+      { stage: "visual_qwen", status: "unknown" },
+      { stage: "visual_qwen:scene_0005", status: "complete", scanner_behavior_version: "scanner-1" },
+    ],
   }]));
   await page.goto("/#/settings");
   await page.getByRole("button", { name: "Open scans queue and history" }).click();
@@ -75,6 +80,8 @@ test("queue and history show hover options outside their scrolling containers", 
   await expect(tooltip).toHaveCount(1);
   await expect(tooltip).toContainText("nudenet video");
   await expect(tooltip).toContainText("Fine scan every frame");
+  await expect(tooltip).toContainText("Scanner scanner-1");
+  await expect(tooltip).not.toContainText(/visual: unknown|visual_qwen|Scanner unknown/i);
   await expect(activeOptions).toHaveAttribute("aria-expanded", "false");
   await expectUnclipped(tooltip, panel);
 });
