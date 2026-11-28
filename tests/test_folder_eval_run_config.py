@@ -121,3 +121,37 @@ def test_summary_flags_results_that_mix_configurations(tmp_path):
     assert stored_fingerprints(layout.model_jsonl("fake")) == {"aaa", "bbb"}
     model = summarize(layout)["models"]["fake"]
     assert model["mixed_configs"] is True and model["config_fingerprints"] == ["aaa", "bbb"]
+
+
+def test_restarts_in_the_same_instant_keep_every_archive(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+
+    from scanner.evaluation.folder_eval import run_config
+    from scanner.evaluation.folder_eval.paths import Layout
+
+    frozen = datetime(2026, 11, 27, 12, 0, 0, 123456, tzinfo=timezone.utc)
+    clock = type("Frozen", (), {"now": staticmethod(lambda tz: frozen)})
+    monkeypatch.setattr(run_config, "datetime", clock)
+    layout = Layout(tmp_path)
+    layout.models.mkdir(parents=True)
+    archives = []
+    for run in range(3):
+        layout.model_jsonl("m").write_text(f"lines {run}\n")
+        layout.model_meta("m").write_text(f"meta {run}")
+        archives.append(run_config.archive_results(layout, "m"))
+    names = [[path.name for path in pair] for pair in archives]
+    stem = "20261127T120000.123456Z"
+    assert names[0] == [f"m.jsonl.{stem}.bak", f"m.meta.json.{stem}.bak"]
+    assert names[1][0].endswith(".123456Z-1.bak") and names[2][1].endswith(".123456Z-2.bak")
+    for run, (jsonl, meta) in enumerate(archives):  # matched pairs, none overwritten
+        assert jsonl.read_text() == f"lines {run}\n" and meta.read_text() == f"meta {run}"
+    assert not layout.model_jsonl("m").exists() and not layout.model_meta("m").exists()
+
+    # A taken meta name must not split the pair: both move to the next stem.
+    layout.model_jsonl("m").write_text("lines 3\n")
+    layout.model_meta("m").write_text("meta 3")
+    (layout.models / "m.meta.json.20261127T120000.123456Z-3.bak").write_text("unrelated")
+    jsonl, meta = run_config.archive_results(layout, "m")
+    assert jsonl.name.endswith("-4.bak") and meta.name.endswith("-4.bak")
+    assert (layout.models / "m.meta.json.20261127T120000.123456Z-3.bak").read_text() == "unrelated"
+    assert not (layout.models / "m.jsonl.20261127T120000.123456Z-3.bak").exists()

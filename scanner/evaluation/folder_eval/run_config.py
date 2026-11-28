@@ -11,7 +11,9 @@ choice is to start again with `--restart`.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -76,13 +78,44 @@ def check_resume(path: Path, model_id: str, current: str) -> None:
     )
 
 
+def _move_no_replace(source: Path, target: Path) -> bool:
+    """Move `source` to `target` unless `target` exists; False if it does.
+
+    A hard link fails atomically when the name is taken, so an archive is never
+    overwritten; without hard-link support, fall back to a rename after an existence
+    check (Windows' rename refuses to replace anyway).
+    """
+    try:
+        os.link(source, target)
+    except FileExistsError:
+        return False
+    except OSError:
+        if target.exists():
+            return False
+        source.rename(target)
+        return True
+    source.unlink()
+    return True
+
+
 def archive_results(layout: Layout, model_id: str) -> list[Path]:
-    """Rename a model's jsonl and meta.json to `<name>.<UTC time>.bak`; return the archives."""
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    archived = []
-    for path in (layout.model_jsonl(model_id), layout.model_meta(model_id)):
-        if path.exists():
-            target = path.with_name(f"{path.name}.{stamp}.bak")
-            path.rename(target)
-            archived.append(target)
-    return archived
+    """Move a model's jsonl and meta.json to `<name>.<UTC time>[-n].bak`, a matched pair
+    under one unused stem; never overwrite an earlier archive. Return the archives."""
+    sources = [
+        path for path in (layout.model_jsonl(model_id), layout.model_meta(model_id))
+        if path.exists()
+    ]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    for attempt in itertools.count():
+        suffix = stamp if attempt == 0 else f"{stamp}-{attempt}"
+        moved: list[tuple[Path, Path]] = []
+        for source in sources:
+            target = source.with_name(f"{source.name}.{suffix}.bak")
+            if not _move_no_replace(source, target):
+                break
+            moved.append((source, target))
+        else:
+            return [target for _source, target in moved]
+        for source, target in reversed(moved):  # name taken: put back and try the next
+            target.rename(source)
+    raise AssertionError("unreachable")
