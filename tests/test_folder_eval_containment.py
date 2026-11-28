@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -130,3 +131,40 @@ def test_server_refuses_a_linked_results_tree(tmp_path, outside):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_a_planted_lock_link_is_refused_without_touching_its_target(tmp_path, outside):
+    from scanner.evaluation.folder_eval.run_lock import lock_path, model_lock
+
+    layout = _root(tmp_path)
+    layout.models.mkdir(parents=True)
+    lock_path(layout, "m").symlink_to(outside / "keep.txt")
+    with pytest.raises(PermissionError), model_lock(layout, "m"):
+        pytest.fail("locked through a link")
+    assert (outside / "keep.txt").read_text() == "original"
+
+
+def test_open_regular_without_o_nofollow(tmp_path, outside, monkeypatch):
+    from scanner.evaluation.folder_eval import paths
+
+    layout = _root(tmp_path)
+    layout.models.mkdir(parents=True)
+    target = layout.model_jsonl("m")
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    target.symlink_to(outside / "keep.txt")
+    with pytest.raises(PermissionError):
+        paths.open_append(target)
+    # A swap between the check and the open (simulated by replacing os.open) is caught
+    # before anything is written.
+    target.unlink()
+    real_open = os.open
+
+    def swapping_open(path, flags, mode=0o777):
+        Path(path).unlink(missing_ok=True)
+        Path(path).symlink_to(outside / "keep.txt")
+        return real_open(path, flags, mode)
+
+    monkeypatch.setattr(paths.os, "open", swapping_open)
+    with pytest.raises(PermissionError):
+        paths.open_append(target)
+    assert (outside / "keep.txt").read_text() == "original"

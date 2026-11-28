@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 from scanner.runtime.maintenance import _lock, _unlock
 
-from .paths import Layout, ensure_results_destination
+from .paths import Layout, ensure_results_destination, open_regular
 
 
 class ModelBusy(RuntimeError):
@@ -37,8 +37,7 @@ def model_lock(layout: Layout, model_id: str) -> Iterator[None]:
     path = lock_path(layout, model_id)
     ensure_results_destination(path)
     layout.models.mkdir(parents=True, exist_ok=True)
-    ensure_results_destination(path)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o644)
+    fd = open_regular(path, os.O_RDWR | os.O_CREAT)  # never a planted link's target
     try:
         if os.fstat(fd).st_size == 0:
             os.write(fd, b"\0")

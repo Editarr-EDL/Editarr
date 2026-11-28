@@ -191,13 +191,29 @@ def ensure_results_destination(path: Path) -> None:
         raise PermissionError(f"Refusing to write through a symlink in {RESULTS_DIR}: {path}")
 
 
-def open_append(path: Path) -> int:
-    """Open `path` for single-write appends without following a symlink at `path`."""
+def open_regular(path: Path, flags: int) -> int:
+    """Open (or create) `path` as a regular file inside a contained `_results` tree, never
+    through a symlink, even where O_NOFOLLOW is missing (Windows): the name must not be a
+    link beforehand, and after opening it must still name the very file opened (same
+    device and inode) before the caller writes anything."""
     ensure_results_destination(path)
-    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    if os.path.islink(path):  # platforms without O_NOFOLLOW
-        raise PermissionError(f"Refusing to append through a symlink: {path}")
-    return os.open(path, flags, 0o644)
+    if os.path.islink(path):
+        raise PermissionError(f"Refusing to open through a symlink: {path}")
+    descriptor = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o644)
+    try:
+        opened, named = os.fstat(descriptor), os.lstat(path)
+        same = (opened.st_dev, opened.st_ino) == (named.st_dev, named.st_ino)
+        if not stat.S_ISREG(opened.st_mode) or stat.S_ISLNK(named.st_mode) or not same:
+            raise PermissionError(f"Refusing to open {path}: not the regular file checked")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def open_append(path: Path) -> int:
+    """Open `path` for single-write appends (see `open_regular`)."""
+    return open_regular(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
 
 
 def write_json(path: Path, payload: Any) -> None:
