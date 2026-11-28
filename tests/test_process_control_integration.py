@@ -8,6 +8,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from time import monotonic, sleep
 
 from scanner.runtime import process_control
 from scanner.runtime.process_control import ProcessControl
@@ -109,20 +110,31 @@ def test_actual_subprocess_force_stop_uses_platform_owned_process_tree(tmp_path:
     scan_id = str(uuid.uuid4())
     token = "test-token-" + uuid.uuid4().hex
     environment = _worker_environment(tmp_path)
+    child_ready = tmp_path / "child-pid.txt"
     worker_program = """
+import os
+import subprocess
+import sys
+from pathlib import Path
 from threading import Event
 from scanner.runtime.process_control import WorkerControlServer, assign_current_worker_job
-from pathlib import Path
-import os
-import sys
-scan_id, token = sys.argv[1:]
+
+scan_id, token, child_ready = sys.argv[1:]
 stop = Event()
 worker_job = None
+child = None
 try:
     worker_job = assign_current_worker_job(scan_id, token)
+    if os.name == "nt":
+        # Use the base interpreter to avoid recording the PID of a venv redirector.
+        child = subprocess.Popen([sys._base_executable, "-c", "import time; time.sleep(20)"])
+        Path(child_ready).write_text(str(child.pid), encoding="ascii")
     server = WorkerControlServer(scan_id, token, stop)
     server.start()
 except BaseException as error:
+    if child:
+        child.terminate()
+        child.wait(timeout=3)
     if worker_job:
         worker_job.close()
     Path(os.environ['EDITARR_TEST_CONTROL_DIAGNOSTIC']).write_text(
@@ -133,12 +145,15 @@ try:
     stop.wait(20)
 finally:
     server.close()
+    if child:
+        child.terminate()
+        child.wait(timeout=3)
     if worker_job:
         worker_job.close()
 """
     control = ProcessControl()
     worker = control.launch_worker(
-        [sys.executable, "-c", worker_program, scan_id, token],
+        [sys.executable, "-c", worker_program, scan_id, token, str(child_ready)],
         scan_id,
         token,
         environment=environment,
@@ -156,10 +171,22 @@ finally:
             assert isinstance(endpoint, Path) and endpoint.exists()
         else:
             assert isinstance(endpoint, str) and endpoint.startswith(r"\\.\pipe\EditarrWorker-")
+            child_pid = int(child_ready.read_text(encoding="ascii"))
+            assert control.worker_may_be_running(identity.pid, None)
+            assert control.worker_may_be_running(child_pid, None)
         assert control.force_stop(identity)
         worker.wait(timeout=3)
         if isinstance(endpoint, Path):
             assert not endpoint.exists()
+        else:
+            # TerminateJobObject must drain the child too. A closed worker pipe
+            # alone is insufficient liveness evidence during pause recovery.
+            deadline = monotonic() + 3
+            while any(
+                control.worker_may_be_running(pid, None) for pid in (identity.pid, child_pid)
+            ):
+                assert monotonic() < deadline, "Owned Windows worker tree did not exit"
+                sleep(0.05)
     finally:
         if worker.poll() is None:
             worker.terminate()

@@ -72,9 +72,15 @@ export async function cancelScanQueueItem(queueId: number): Promise<void> {
   notifyScansChanged();
 }
 
-export async function resumeOrphanedScan(queueId: number): Promise<void> {
+export async function pauseScanQueueItem(queueId: number): Promise<void> {
+  const response = await fetch(`${runtimeApiBasePath()}/scans/queue/${queueId}/pause`, { method: "POST" });
+  if (!response.ok) throw await responseError(response, "Unable to pause Editarr scan");
+  notifyScansChanged();
+}
+
+export async function resumeScanQueueItem(queueId: number): Promise<void> {
   const response = await fetch(`${runtimeApiBasePath()}/scans/queue/${queueId}/resume`, { method: "POST" });
-  if (!response.ok) throw await responseError(response, "Unable to resume orphaned Editarr scan");
+  if (!response.ok) throw await responseError(response, "Unable to resume Editarr scan");
   notifyScansChanged();
 }
 

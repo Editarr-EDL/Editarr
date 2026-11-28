@@ -24,9 +24,8 @@ plugin—to use during playback. Editarr never modifies your media files.
 - **Filter preferences.** Each account sets which categories and severities it
   filters by default to help speed up the review process. The owner account can require
   a minimum level of filtering for other accounts.
-- **Import and export.** Import existing EDL or MCF files. Publish `.edl` and
-  `.mcf` sidecars next to the media, either for yourself or as the default for
-  everyone.
+- **Import and export.** Import existing EDL, MCF, or VideoSkip files. Download
+  `.skp` skip files or publish `.edl` and `.mcf` sidecars next to the media.
 - **Several users.** Owner, admin, and user roles. Reviews and exports are
   private to each person, and each account has its own API key.
 - **Community sharing (optional).** Share scans and reviews with the Editarr
@@ -109,13 +108,15 @@ stores its data, logs, and model cache.
 4. **Review.** Start a review and include the finished scans. Use **Preview**
    to check filter timing in the draft. Add manual filters or use **Apply Filter
    Defaults** to apply your preferences, then save the review.
-5. **Export.** Choose **Export**, then **Publish EDL** or **Publish MCF**.
+5. **Export.** Publish EDL or MCF beside your media, or choose **VideoSkip (.skp)**
+   in the saved review’s **Publish** step to download a skip file.
 6. **Watch.** Install the [jellyfin-edl](https://github.com/Editarr-EDL/jellyfin-edl)
    plugin on your Jellyfin server. A compatible player can then request the user's
    own exported filters, or the default filters when they have none.
 
 You can also skip scanning and create filters by hand, or **Import** an existing
-EDL or MCF file.
+EDL, MCF, or VideoSkip file. [Editarr MCF 1.1.1 specification](docs/mcf-1.1.1.md) ·
+[VideoSkip import, export, and local seed datasets](docs/videoskip-integration.md).
 
 ## Users and roles
 

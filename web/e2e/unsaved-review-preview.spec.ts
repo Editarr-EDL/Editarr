@@ -47,8 +47,13 @@ test("previews an unselected evidence filter with its unsaved timing", async ({ 
   await expect(preview).toBeEnabled();
   await video.getByRole("checkbox", { name: /^Include / }).uncheck();
   await chooseFilterAction(page, video, /^Edit /);
-  await video.getByLabel(/^Filter .* start seconds$/).fill("11.5");
-  await video.getByLabel(/^Filter .* end seconds$/).fill("16.5");
+  const startTime = video.getByLabel(/^Filter .* start time$/);
+  await expect(startTime).toHaveValue("00:00:10.00");
+  await startTime.fill("00:00:19.50");
+  await expect(startTime).toHaveAttribute("aria-invalid", "true");
+  await expect(panel.getByRole("button", { name: "Save Review" })).toBeDisabled();
+  await expect(preview).toBeDisabled();
+  await video.getByLabel(/^Filter .* end time$/).fill("00:00:22.25");
   const [request] = await Promise.all([
     page.waitForRequest((candidate) => new URL(candidate.url()).pathname === previewPath),
     preview.click(),
@@ -58,8 +63,8 @@ test("previews an unselected evidence filter with its unsaved timing", async ({ 
     media_source_id: "source-1",
     source_scan_id: "scan-history",
     source_finding_id: 10,
-    start_seconds: 11.5,
-    end_seconds: 16.5,
+    start_seconds: 19.5,
+    end_seconds: 22.25,
     source: "visual",
     edit_action: "skip",
   });
@@ -88,9 +93,9 @@ test("previews manual audio timing before adding the filter or saving the review
   const dialog = page.getByRole("dialog", { name: "Add Manual Filter" });
   const preview = dialog.getByRole("button", { name: "Preview", exact: true });
   const addFilter = dialog.getByRole("button", { name: "Add Filter", exact: true });
-  await dialog.getByLabel("Manual filter start seconds").fill("8");
+  await dialog.getByLabel("Manual filter start time").fill("00:00:08.00");
   await expect(preview).toBeDisabled();
-  await dialog.getByLabel("Manual filter end seconds").fill("9.5");
+  await dialog.getByLabel("Manual filter end time").fill("00:00:09.50");
   await expect(addFilter).toBeDisabled();
   await preview.click();
   await expect(dialog.getByRole("alert")).toHaveText(failedMessage);

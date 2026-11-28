@@ -71,7 +71,8 @@ COMMUNITY_MASTER_REVISION = "0037_community_master_sets"
 RECEIPT_CAPABILITIES_REVISION = "0038_retire_receipt_capabilities"
 REVIEW_COMMUNITY_SOURCES_REVISION = "0039_review_community_sources"
 REVIEW_COMMUNITY_FILTERS_REVISION = "0040_review_community_filters"
-HEAD_REVISION = REVIEW_COMMUNITY_FILTERS_REVISION
+MCF_1_1_1_REVISION = "0041_mcf_1_1_1"
+HEAD_REVISION = MCF_1_1_1_REVISION
 JOURNAL_NAME = "migration-upgrade.json"
 
 
@@ -162,6 +163,7 @@ def _inspect_database(path: Path) -> str | None:
                 [(COMMUNITY_MASTER_REVISION,)],
                 [(RECEIPT_CAPABILITIES_REVISION,)],
                 [(REVIEW_COMMUNITY_SOURCES_REVISION,)],
+                [(REVIEW_COMMUNITY_FILTERS_REVISION,)],
                 [(HEAD_REVISION,)],
             ):
                 raise ValueError(f"Unsupported database revision: {revisions!r}")

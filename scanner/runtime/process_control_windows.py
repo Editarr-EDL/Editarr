@@ -162,6 +162,23 @@ def _windows_api():
     )
 
 
+def windows_worker_may_be_running(pid: int) -> bool:
+    """Read process liveness without issuing a signal to an unverified PID."""
+    api = _windows_api()
+    c = api.ctypes
+    synchronize = 0x00100000
+    process = api.kernel32.OpenProcess(synchronize, False, pid)
+    if not process:
+        return c.get_last_error() != 87  # ERROR_INVALID_PARAMETER: no such process.
+    try:
+        wait = api.kernel32.WaitForSingleObject
+        wait.argtypes = [c.c_void_p, c.c_ulong]
+        wait.restype = c.c_ulong
+        return wait(process, 0) != 0
+    finally:
+        api.kernel32.CloseHandle(process)
+
+
 def _windows_logon_sid(api: _WindowsApi) -> str:
     """Return this process token's logon SID for Terminal Services isolation."""
 

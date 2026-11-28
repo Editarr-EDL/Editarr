@@ -37,6 +37,7 @@ from scanner.modeling.community_review_filters import (
     served,
     starts_enabled,
 )
+from scanner.modeling.model_review_filters import ReviewCommunityDraft, SavedReviewFilter
 
 from .community_master_filters import get_preferences, master_values
 from .community_master_links import alignment_of, latest_snapshot
@@ -56,6 +57,8 @@ class SourcePlan:
     row: ReviewCommunitySourceRow
     mode: str
     previous: list[dict] | None = None
+    draft: ReviewCommunityDraft | None = None
+    draft_defaults: dict[str, SavedReviewFilter] | None = None
 
 
 def entries_of(row: ReviewCommunitySourceRow) -> list[dict]:
@@ -193,6 +196,36 @@ def _default_rows(review_id: str, row: ReviewCommunitySourceRow, runtime_ms: int
     return [_row(review_id, row.id, entry) for entry in entries if not entry.get("outside")]
 
 
+def _draft_rows(review_id: str, plan: SourcePlan, runtime_ms: int | None):
+    """Keep explicit edits and omissions, using the review runtime for untouched bounds."""
+    assert plan.draft is not None and plan.draft_defaults is not None
+    entries = _with_initial(entries_of(plan.row), runtime_ms)
+    _store_entries(plan.row, entries)
+    by_id = {entry["filter_id"]: entry for entry in entries}
+    rows = []
+    for value in plan.draft.filters:
+        fid = value.community_filter_id
+        entry, original = by_id[fid], plan.draft_defaults[fid]
+        values = _values(value)
+        original_bounds = original.start_seconds, original.end_seconds
+        if (value.start_seconds, value.end_seconds) == original_bounds:
+            if entry.get("outside"):
+                continue
+            defaults = filter_values(entry)
+            values.update(
+                start_seconds=defaults["start_seconds"], end_seconds=defaults["end_seconds"]
+            )
+        elif runtime_ms is not None and (
+            value.start_seconds * 1000 >= runtime_ms
+            or (value.end_seconds is not None and value.end_seconds * 1000 > runtime_ms + 1e-6)
+        ):
+            raise _membership_error("An edited community filter exceeds the review's media runtime")
+        rows.append(
+            _row(review_id, plan.row.id, entry, values, edited=bool(value.community_edited))
+        )
+    return rows
+
+
 def _check_provenance(current: list, entries: Mapping, previous: Mapping) -> None:
     """Each submitted filter must name one snapshot entry, with unchanged provenance."""
     for value in current:
@@ -312,7 +345,10 @@ def community_rows(
     for plan in plans:
         current = by_source.get(plan.row.id, [])
         if plan.mode == "new":
-            rows.extend(_default_rows(review.id, plan.row, runtime_ms))
+            rows.extend(
+                _draft_rows(review.id, plan, runtime_ms) if plan.draft is not None
+                else _default_rows(review.id, plan.row, runtime_ms)
+            )
         elif plan.mode == "refresh":
             rows.extend(_refreshed_rows(db, review.id, plan, current, previous, runtime_ms))
         else:

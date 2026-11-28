@@ -51,7 +51,7 @@ def test_fresh_schema_seeds_survive_file_backed_restart(tmp_path):
         settings = first.get(FilterSettingsRow, 1)
         assert settings is not None
         assert settings.revision == 0
-        assert len(settings.severity_defaults) == 97
+        assert len(settings.severity_defaults) == 105
     engine.dispose()
 
     reopened = create_engine(f"sqlite:///{database_path}")
@@ -60,7 +60,7 @@ def test_fresh_schema_seeds_survive_file_backed_restart(tmp_path):
         settings = second.get(FilterSettingsRow, 1)
         assert settings is not None
         assert settings.severity_defaults[0].subcategory == "commercial"
-        assert settings.severity_defaults[-1].subcategory == "weapons"
+        assert settings.severity_defaults[-1].subcategory == "abuse"
     reopened.dispose()
 
 

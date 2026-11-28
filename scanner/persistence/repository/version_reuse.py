@@ -226,6 +226,7 @@ def stage_verified_reuse(
     from .media_identity_store import bind_scan_version
 
     mapped = [cue for cue in preview.cues if cue.target_start is not None]
+    source_metadata = reuse_state(source).get("videoskip_source")
     state = _canonical(
         {
             "identity_reuse": {
@@ -241,7 +242,8 @@ def stage_verified_reuse(
                 "alignment_audio_scan_id": preview.alignment_audio_scan_id,
                 "anchors": [anchor.model_dump() for anchor in preview.anchors],
                 "cues": [cue.model_dump() for cue in mapped],
-            }
+            },
+            **({"videoskip_source": source_metadata} if source_metadata is not None else {}),
         }
     )
     existing = (
@@ -298,9 +300,12 @@ def stage_verified_reuse(
     return scan, False
 
 
-def stage_reuse_source(db, scan, version_id: str) -> None:
+def stage_reuse_source(db, scan, version_id: str, *, videoskip_source=None) -> None:
     """Record an uploaded source for target verification without creating a review."""
     from .media_identity_store import bind_scan_version
 
-    scan.checkpoint_state = '{"identity_reuse_pending":true}'
+    state = {"identity_reuse_pending": True}
+    if videoskip_source is not None:
+        state["videoskip_source"] = videoskip_source.model_dump(mode="json")
+    scan.checkpoint_state = _canonical(state)
     bind_scan_version(db, scan.id, version_id)

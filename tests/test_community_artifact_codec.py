@@ -141,6 +141,7 @@ def test_manual_derived_and_partial_artifacts():
         lambda item: item.update(schema_version="community-artifact-2"),
         lambda item: item["findings"][0].update(confidence=float("nan")),
         lambda item: item["findings"][0].update(subcategory="murder"),
+        lambda item: item["findings"][0].update(subcategory="innuendo"),
         lambda item: item["findings"][0].update(end_seconds=13),
         lambda item: item["findings"][1].update(event_id="event-1"),
         lambda item: item["coverage"][0].update(

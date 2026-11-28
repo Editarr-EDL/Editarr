@@ -265,10 +265,10 @@ def test_filter_settings_have_stable_ordered_medium_defaults(session):
     assert settings is not None
     assert settings.revision == 0
     assert settings.selection_rules == []
-    assert len(settings.severity_defaults) == 97
-    assert [item.position for item in settings.severity_defaults] == list(range(97))
+    assert len(settings.severity_defaults) == 105
+    assert [item.position for item in settings.severity_defaults] == list(range(105))
     assert settings.severity_defaults[0].subcategory == "commercial"
-    assert settings.severity_defaults[-1].subcategory == "weapons"
+    assert settings.severity_defaults[-1].subcategory == "abuse"
     assert {item.severity.value for item in settings.severity_defaults} == {"medium"}
 
     rule_id = str(uuid4())

@@ -2,11 +2,12 @@
 
 from fastapi import APIRouter
 
-from . import credits_api, review_import_helpers_api, review_import_routes_api
+from . import credits_api, review_import_helpers_api, review_import_routes_api, videoskip_import_api
 
 router = APIRouter()
 router.include_router(credits_api.router)
 router.include_router(review_import_routes_api.router)
+router.include_router(videoskip_import_api.router)
 
 _safe_import_basename = review_import_helpers_api._safe_import_basename
 _safe_mcf_import_basename = review_import_helpers_api._safe_mcf_import_basename

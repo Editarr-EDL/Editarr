@@ -44,7 +44,7 @@ for (const width of [320, 1440]) {
     await expect(entry).toBeFocused();
     await expect(entry).not.toBeChecked();
     await entry.check();
-    await expect(included.getByText(/Saving the review adds these community filters to the results/)).toBeVisible();
+    await expect(included.getByText(/Edit and preview these filters in the draft/)).toBeVisible();
     await expect(sourcesButton).toHaveAccessibleName("Sources · 1 of 1");
     // The popover fits the window and passes axe; Escape closes it and returns focus to the button.
     await expectNoHorizontalPageOverflow(page);
@@ -56,8 +56,31 @@ for (const width of [320, 1440]) {
     await page.keyboard.press("Escape");
     await expect(included).toHaveCount(0);
     await expect(sourcesButton).toBeFocused();
+    await page.getByRole("combobox", { name: "Group by" }).selectOption("time");
+    await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(3);
+    await expect(row(page, "20:00").getByRole("checkbox")).not.toBeChecked();
+    await expect(byTime(page).getByRole("button", { name: /^Your vote:/ })).toHaveCount(0);
+    await chooseFilterAction(page, row(page, "15:00"), /^Edit /);
+    const endTime = page.getByRole("textbox", { name: /end time/ });
+    await expect(endTime).toHaveValue("00:15:05.05");
+    await endTime.fill("00:15:10.00");
+    await check(page, "review-community-edit", width);
+    await page.getByRole("button", { name: "Done" }).click();
+    await page.route("**/api/library-items/movie-1/reviews/preview", async (route) => {
+      expect(route.request().postDataJSON()).toMatchObject({
+        review_id: "review-c", community_link_id: "link-v_extended",
+        community_filter_id: "f_lang", end_seconds: 910, edit_action: "skip",
+      });
+      return route.fulfill({ contentType: "video/mp4", body: Buffer.from([0]) });
+    });
+    await row(page, "15:00").getByRole("button", { name: /^Preview / }).click();
+    await expect(row(page, "15:00").locator("video")).toBeVisible();
+    expect(saves).toHaveLength(0);
+    await check(page, "review-community-preview", width);
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect.poll(() => saves[0]?.community_memberships).toEqual([{ link_id: "link-v_extended" }]);
+    await expect.poll(() => saves[0]?.community_drafts?.[0]?.filters.find((filter) =>
+      filter.community_filter_id === "f_lang")?.end_seconds).toBe(910);
 
     await page.getByRole("combobox", { name: "Group by" }).selectOption("time");
     await expect(byTime(page).getByText("Community · Extended Edition")).toHaveCount(3);
@@ -116,7 +139,7 @@ for (const width of [320, 1440]) {
     // Disable one and adjust another exactly like a scan filter.
     await row(page, "10:00").getByRole("checkbox").uncheck();
     await chooseFilterAction(page, row(page, "15:00"), /^Edit /);
-    await page.getByRole("spinbutton", { name: /start seconds/ }).fill("905");
+    await page.getByRole("textbox", { name: /start time/ }).fill("00:15:05.00");
     await page.getByRole("button", { name: "Done" }).click();
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect.poll(() => saves[1]?.filters.find((filter) => filter.community_filter_id === "f_lang")?.start_seconds).toBe(905);

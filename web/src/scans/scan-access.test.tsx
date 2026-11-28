@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Scan } from "../api/api-scan-types";
 import { knownCapabilities } from "../auth/capabilities";
@@ -95,4 +95,23 @@ it("shows own queue actions and acquisition feedback without global controls or 
   expect(screen.queryByText("Hidden job")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Move.*up|Move.*down/ })).not.toBeInTheDocument();
   expect(requests.mock.calls.every(([input]) => /\/scans\/(queue|history)$/.test(String(input)))).toBe(true);
+});
+
+it("scopes pause and resume controls to the caller's queue job grant", async () => {
+  state.principal = { capabilities: knownCapabilities(["scan_jobs.view.own", "scan_jobs.view.other", "scan_jobs.resume.own"]) } as Principal;
+  const jobs = [
+    { ...scan, id: "mine", item_name: "My running job", queue_id: 1, is_own: true, status: "scanning" },
+    { ...scan, id: "peer", item_name: "Peer running job", queue_id: 2, status: "scanning" },
+    { ...scan, id: "paused", item_name: "My paused job", queue_id: 3, is_own: true, status: "paused" },
+  ];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => new Response(
+    JSON.stringify(String(input).endsWith("/queue") ? jobs : []), { status: 200 },
+  )));
+  render(<ScansFloatingPanel />);
+  fireEvent.click(screen.getByRole("button", { name: "Open scans queue and history" }));
+  const peer = await screen.findByRole("row", { name: /Peer running job/ });
+  expect(within(peer).queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+  expect(within(screen.getByRole("row", { name: /My running job/ })).getByRole("button", { name: "Pause" })).toBeVisible();
+  expect(within(screen.getByRole("row", { name: /My paused job/ })).getByRole("button", { name: "Resume" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
 });

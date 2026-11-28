@@ -33,7 +33,7 @@ export function decideVersion(input: VersionDecisionInput, versions: readonly Ex
 
 /** One row of `version_acceptances`, the bookkeeping behind counted inputs, runtime and promotion. */
 export interface AcceptanceRow {
-  submissionId?: string; contributorId: string; acceptedSeq: number; tier: EvidenceTier | null; durationMs: number; quarantined: boolean;
+  submissionId?: string; contributorId: string; acceptedSeq: number; tier: EvidenceTier | null; durationMs: number | null; quarantined: boolean;
 }
 
 /** Counted rows (§6.1): the latest unquarantined acceptance per contributor. */
@@ -83,7 +83,7 @@ export function deriveVersionState(rows: readonly AcceptanceRow[], status: strin
   promotionContributors: number): DerivedVersionState {
   const counted = countedAcceptances(rows);
   const evidenceContributors = new Set(counted.filter(row => row.tier !== null).map(row => row.contributorId)).size;
-  return { runtimeMs: integerMedian(counted.map(row => row.durationMs)), evidenceContributors,
+  return { runtimeMs: integerMedian(counted.flatMap(row => row.durationMs === null ? [] : [row.durationMs])), evidenceContributors,
     trust: versionTrust(counted.map(row => row.contributorId)),
     promote: status === 'candidate' && evidenceContributors >= promotionContributors };
 }

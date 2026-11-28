@@ -270,6 +270,10 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
         _gated(C.SCAN_JOBS_CANCEL_OWN, C.SCAN_JOBS_CANCEL_OTHER, *_SEEN),
     ),
     (
+        "POST /api/scans/queue/{queue_id}/pause",
+        _gated(C.SCAN_JOBS_RESUME_OWN, C.SCAN_JOBS_RESUME_OTHER, *_SEEN),
+    ),
+    (
         "POST /api/scans/queue/{queue_id}/resume",
         _gated(C.SCAN_JOBS_RESUME_OWN, C.SCAN_JOBS_RESUME_OTHER, *_SEEN),
     ),
@@ -330,6 +334,14 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
     ("POST /api/reviews/{review_id}/subtitles/publish", _SUBTITLE_EXPORT),
     ("POST /api/reviews/{review_id}/exports/{format}", _PUBLISH_EXPORT),
     (
+        "POST /api/reviews/{review_id}/exports/videoskip/preflight",
+        _gated(C.EXPORTS_PERSONAL_DOWNLOAD_OWN, C.REVIEWS_EXPORT_OTHER),
+    ),
+    (
+        "POST /api/reviews/{review_id}/exports/videoskip/download",
+        _gated(C.EXPORTS_PERSONAL_DOWNLOAD_OWN, C.REVIEWS_EXPORT_OTHER),
+    ),
+    (
         "POST /api/reviews/{review_id}/exports/{format}/download",
         _gated(C.EXPORTS_PERSONAL_DOWNLOAD_OWN, C.REVIEWS_EXPORT_OTHER),
     ),
@@ -367,6 +379,7 @@ _ENTRIES: tuple[tuple[str, RouteRule], ...] = (
     ("GET /api/reviews/{review_id}/mcf/preflight", _gated(*_REVIEW_VIEW)),
     ("POST /api/edl-imports/upload", _gated(C.REVIEWS_IMPORT_UPLOAD)),
     ("POST /api/mcf-imports/upload", _gated(C.REVIEWS_IMPORT_UPLOAD)),
+    ("POST /api/videoskip-imports/upload", _gated(C.REVIEWS_IMPORT_UPLOAD)),
     ("GET /api/community/connection", _IDENTITY_VIEW),
     ("GET /api/community/connection/status", _IDENTITY_VIEW),
     ("GET /api/community/profile", _IDENTITY_VIEW),

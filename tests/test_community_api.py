@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from scanner.db import AuthSettingsRow, Base, UserCapabilityOverrideRow, UserRow, get_db
 from scanner.formats.export_layout import new_local_export_id
-from scanner.http import community_api, community_identity_api
+from scanner.http import community_api, community_identity_api, community_sharing_api
 from scanner.security import auth_policy
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.request_access import install_access_errors
@@ -26,7 +26,9 @@ def context(tmp_path, monkeypatch, request):
     )
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
-    configuration = Settings(data_dir=tmp_path)
+    configuration = Settings(
+        data_dir=tmp_path, community_service_url=None, community_service_audience=None
+    )
     with factory() as db:
         add_linked_owner(db, "Admin")
         issued = issue_session(db, remember_me=False, configuration=configuration)
@@ -81,6 +83,36 @@ def test_privileged_routes_require_session_even_with_local_bypass(context):
     assert local.status_code == 200
     assert local.headers["Cache-Control"] == "no-store"
     assert local.json() == safe.json()
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "audience", "expected"),
+    [
+        (None, None, "https://community.editarr.org"),
+        ("https://community.example", "community.example", "https://community.example"),
+        ("", "", None),
+    ],
+)
+def test_connection_status_uses_service_defaults_or_environment_overrides(
+    context, monkeypatch, endpoint, audience, expected
+):
+    client, issued, _, configuration = context
+    for name, value in (
+        ("EDITARR_COMMUNITY_SERVICE_URL", endpoint),
+        ("EDITARR_COMMUNITY_SERVICE_AUDIENCE", audience),
+    ):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    resolved = Settings(data_dir=configuration.data_dir)
+    monkeypatch.setattr(community_identity_api, "settings", resolved)
+
+    response = client.get("/editarr/api/community/connection/status", headers=headers(issued))
+    assert response.status_code == 200
+    assert response.json()["configured"] is (expected is not None)
+    assert response.json()["connected"] is False
+    assert response.json().get("serviceUrl") == expected
 
 
 @pytest.mark.parametrize(
@@ -249,8 +281,13 @@ def test_publication_requires_real_admin_csrf_and_confirmation(context, method, 
         ("DELETE", "/previews/preview-1"),
     ],
 )
-def test_sharing_preview_routes_require_admin_and_csrf(context, method, path):
-    client, issued, *_ = context
+def test_unconfigured_sharing_routes_require_admin_and_csrf(context, monkeypatch, method, path):
+    client, issued, _, configuration = context
+    monkeypatch.setattr(
+        community_sharing_api, "settings", configuration.model_copy(
+            update={"community_preview_bounds": None, "community_publication_request_bytes": None}
+        ),
+    )
     target = "/editarr/api/community/sharing" + path
     body = (
         {
@@ -280,6 +317,21 @@ def test_sharing_preview_routes_require_admin_and_csrf(context, method, path):
         client.request(method, target, headers=valid, **body).json()["code"]
         == "preview_not_configured"
     )
+
+
+def test_sharing_limits_allow_operator_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("EDITARR_COMMUNITY_PUBLICATION_REQUEST_BYTES", "100000")
+    monkeypatch.setenv("EDITARR_COMMUNITY_PREVIEW_SOURCE_LIMIT", "2")
+    monkeypatch.setenv(
+        "EDITARR_COMMUNITY_PREVIEW_BOUNDS",
+        '{"compressed_bytes":64000,"expanded_bytes":128000,"events":100,"text":512,"depth":8}',
+    )
+    configuration = Settings(data_dir=tmp_path)
+    monkeypatch.setattr(community_sharing_api, "settings", configuration)
+
+    assert configuration.community_publication_request_bytes == 100_000
+    assert configuration.community_preview_source_limit == 2
+    assert community_sharing_api.sharing_bounds().events == 100
 
 
 @pytest.mark.parametrize(

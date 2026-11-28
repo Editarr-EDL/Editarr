@@ -49,8 +49,12 @@ export async function loadVersionState(db: SqlDatabase, versionId: string, absor
   const ids = JSON.stringify([versionId, ...absorb]);
   const [references, submissions, entries, coverage, registry, votes, quarantined, latest, labels] = await db.batch<Row>([
     db.prepare(`SELECT type, algorithm, value, size_bytes FROM version_match_keys WHERE version_id = ? AND is_reference = 1`).bind(versionId),
-    db.prepare(`SELECT s.submission_id, s.digest, s.contributor_id, a.accepted_seq, a.duration_ms, a.quarantined, s.match_keys_json
-      FROM version_acceptances a JOIN submissions s USING (submission_id) WHERE a.version_id IN (SELECT value FROM json_each(?))`).bind(ids),
+    db.prepare(`SELECT s.submission_id, s.digest, s.contributor_id, a.accepted_seq, a.quarantined, s.match_keys_json,
+      CASE WHEN seed.submission_id IS NULL THEN a.duration_ms ELSE seed.source_runtime_ms END AS duration_ms,
+      seed.submission_id IS NOT NULL AS external_seed
+      FROM version_acceptances a JOIN submissions s USING (submission_id)
+      LEFT JOIN external_seed_submissions seed USING (submission_id)
+      WHERE a.version_id IN (SELECT value FROM json_each(?))`).bind(ids),
     db.prepare(`SELECT e.submission_id, e.entry_id, e.kind, e.proposed_filter_id, e.start_ms, e.end_ms, e.category, e.subcategory,
       e.severity, e.action, e.expression, e.origin, e.locally_verified, e.quarantined, f.prior_filter_id FROM submission_entries e
       JOIN version_acceptances a USING (submission_id)
@@ -96,7 +100,8 @@ export async function loadVersionState(db: SqlDatabase, versionId: string, absor
     labels: new Map(labels.results.map(row => [row.alias_id as string, row.label as string])),
     referenceKeys: references.results.map(storedMatchKey),
     submissions: submissions.results.map(row => ({ submissionId: row.submission_id as string, digest: row.digest as string,
-      contributorId: row.contributor_id as string, acceptedSeq: row.accepted_seq as number, durationMs: row.duration_ms as number,
+      contributorId: row.contributor_id as string, acceptedSeq: row.accepted_seq as number, durationMs: row.duration_ms as number | null,
+      externalSeed: row.external_seed === 1,
       matchKeys: JSON.parse(row.match_keys_json as string) as MatchKey[],
       coverage: [...(byCoverage.get(row.submission_id as string) ?? new Map()).entries()].map(([category, intervals]) => ({ category, intervals })),
       entries: byEntry.get(row.submission_id as string) ?? [] })),

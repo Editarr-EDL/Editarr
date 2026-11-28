@@ -6,7 +6,7 @@ export const ACTIVE_SCAN_POLL_MS = 1_500;
 export const IDLE_SCAN_POLL_MS = 30_000;
 
 export function scanPollDelay(scans: readonly { status: string }[]): number {
-  return scans.some((scan) => ["queued", "scanning", "cancelling", "acquiring_model"].includes(scan.status))
+  return scans.some((scan) => ["queued", "scanning", "pausing", "cancelling", "acquiring_model"].includes(scan.status))
     ? ACTIVE_SCAN_POLL_MS : IDLE_SCAN_POLL_MS;
 }
 

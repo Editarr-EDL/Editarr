@@ -48,6 +48,7 @@ from scanner.persistence.migrations.preflight import (  # noqa: E402
     require_supported_schema,
 )
 from scanner.persistence.repository.scan_jobs import fail_refused_scan_job  # noqa: E402
+from scanner.persistence.repository.scan_pause import is_scan_pause_requested  # noqa: E402
 from scanner.pipeline.processes import ScanCancelledError  # noqa: E402
 from scanner.repository import (  # noqa: E402
     clear_scan_worker,
@@ -57,9 +58,8 @@ from scanner.repository import (  # noqa: E402
     get_scan_queue_item_by_scan_id,
     heartbeat_scan_worker,
     is_scan_cancellation_requested,
-    mark_scan_checkpoint,
     mark_scan_orphaned,
-    record_scan_stage,
+    record_scan_worker_process,
     remove_scan_queue_item,
     scan_checkpoint_stages,
     update_scan_duration,
@@ -78,7 +78,13 @@ from scanner.runtime.scan_version import (  # noqa: E402
     require_scan_generation,
     scan_digest_progress,
 )
-from scanner.runtime.worker_quit import FullApplicationQuitRequested  # noqa: E402
+from scanner.runtime.worker_quit import (  # noqa: E402
+    FullApplicationQuitRequested,
+    ScanPauseRequested,
+    ScanReservationLost,
+)
+from scanner.runtime.worker_stage import commit_worker_stage_results  # noqa: E402
+from scanner.runtime.worker_stage import record_worker_stage as _record_stage  # noqa: E402
 from scanner.security.scan_jobs.authority import (  # noqa: E402
     REFUSAL_MESSAGES,
     JobGate,
@@ -190,16 +196,23 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         # this actual interpreter is in the token-derived Job before exposing its
         # authenticated control endpoint to the launcher.
         worker_job = assign_current_worker_job(scan_id, worker_token)
+        if not record_scan_worker_process(
+            db, scan_id, token=worker_token, pid=os.getpid(),
+            pgid=os.getpgrp() if os.name == "posix" else None,
+        ):
+            return 0
         control_server = WorkerControlServer(scan_id, worker_token, quit_stop)
         control_server.start()
         logger.info("Worker control endpoint ready for scan %s", scan_id)
+        if is_scan_pause_requested(db, scan_id):
+            raise ScanPauseRequested
         heartbeat_thread = Thread(
             target=_heartbeat_loop,
             args=(scan_id, worker_token, heartbeat_stop),
             daemon=True,
         )
         heartbeat_thread.start()
-        gate = JobGate(factory, scan_id)
+        gate = JobGate(factory, scan_id, worker_token=worker_token)
         acquisition_scope.enter_context(scoped_job_acquisition(gate, children=True))
         allowed = gate.require()
         if allowed is not None and not allowed.may_download_models:
@@ -220,6 +233,10 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         )
 
         def commit_status(session, item_id, status):
+            if is_scan_pause_requested(session, item_id):
+                raise ScanPauseRequested
+            if is_scan_cancellation_requested(session, item_id):
+                raise ScanCancelledError("Scan cancelled")
             if status == "complete":
                 require_scan_generation(local_path, media_proof)
             return update_scan_status(session, item_id, status)
@@ -228,6 +245,10 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
             return gate.run(session, commit_status, item_id, status)
 
         def commit_credits(session, **result):
+            if is_scan_pause_requested(session, scan_id):
+                raise ScanPauseRequested
+            if is_scan_cancellation_requested(session, scan_id):
+                raise ScanCancelledError("Scan cancelled")
             require_scan_generation(local_path, media_proof)
             return complete_credits_detection(session, **result)
 
@@ -319,8 +340,10 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                         session, update_scan_duration, *args
                     ),
                     completed_stages=checkpoints,
-                    checkpoint_callback=lambda stage: gate.run(
-                        db, mark_scan_checkpoint, item.id, stage, execution_id=worker_token
+                    checkpoint_worker_token=worker_token,
+                    stage_results_writer=lambda stage, findings, effective: gate.run(
+                        db, commit_worker_stage_results, item.id, worker_token, stage, findings,
+                        effective=effective,
                     ),
                     stage_callback=partial(
                         gate.run,
@@ -340,6 +363,12 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         db.rollback()
         fail_refused_scan_job(db, scan_id, str(exc))
         logger.info("Scan %s stopped because its source could not be verified", scan_id)
+    except ScanReservationLost:
+        db.rollback()
+        logger.info("Scan %s stopped because its worker reservation changed", scan_id)
+    except ScanPauseRequested:
+        db.rollback()
+        logger.info("Scan %s stopped for its requested pause", scan_id)
     except FullApplicationQuitRequested:
         # Full Quit retains the queue row and checkpoints so a future launch can
         # resume it.  Cancellation is intentionally a separate user request.
@@ -354,11 +383,20 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         db.rollback()
         logger.info("Scan %s paused while database maintenance is pending", scan_id)
     except ScanCancelledError:
+        from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints
+        from scanner.runtime.worker_checkpoint_lease import checkpoint_writer_may_be_running
+
+        if checkpoint_writer_may_be_running(settings.data_dir, scan_id, worker_token):
+            db.rollback()
+            logger.info("Scan %s is cancelling while its checkpoint writer stops", scan_id)
+            return 0
+
         update_scan_status(db, scan_id, "cancelled")
         queue_item = get_scan_queue_item_by_scan_id(db, scan_id)
         if queue_item:
             remove_scan_queue_item(db, queue_item.queue_id)
         clear_scan_worker(db, scan_id)
+        discard_visual_checkpoints(settings.data_dir, scan_id)
         logger.info("Scan %s cancelled", scan_id)
     except Exception as exc:
         logger.exception("Dedicated Editarr worker failed for %s", scan_id)
@@ -367,6 +405,8 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         # otherwise SQLAlchemy rejects the recovery write and masks the real
         # worker error with PendingRollbackError.
         db.rollback()
+        if is_scan_pause_requested(db, scan_id):
+            return 0
         if DOWNLOADS_REFUSED_DETAIL in str(exc):
             # Retrying cannot install the model, so end the job instead of orphaning it.
             fail_refused_scan_job(db, scan_id, REFUSAL_MESSAGES[JobRefusal.CAPABILITY_DENIED])
@@ -403,6 +443,8 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
 
 
 def _should_stop_scan(db, scan_id: str, quit_stop: Event, gate: JobGate) -> bool:
+    if is_scan_pause_requested(db, scan_id):
+        raise ScanPauseRequested
     if quit_stop.is_set() or DatabaseMaintenance(settings.data_dir).requested():
         raise FullApplicationQuitRequested
     gate.require()
@@ -412,68 +454,6 @@ def _should_stop_scan(db, scan_id: str, quit_stop: Event, gate: JobGate) -> bool
 def _write_findings(gate: JobGate, db, scan_id: str, findings) -> None:
     """Write a batch only while the initiator may still run the job."""
     gate.run(db, create_scan_findings_batch, scan_id, findings)
-
-
-def _record_stage(db, scan_id, execution_id, stage, state, effective):
-    from scanner.pipeline.provenance import stage_model_identity
-
-    duration_seconds = effective.get("duration_seconds")
-    tail_window = effective.get("tail_window_seconds")
-    if stage == "credits_detection" and isinstance(duration_seconds, (int, float)):
-        intervals = (
-            [
-                {
-                    "start_seconds": max(0.0, duration_seconds - tail_window),
-                    "end_seconds": duration_seconds,
-                }
-            ]
-            if isinstance(tail_window, (int, float)) and tail_window > 0
-            else None
-        )
-    elif stage == "credits_cache":
-        intervals = None
-    else:
-        intervals = (
-            [{"start_seconds": 0.0, "end_seconds": duration_seconds}]
-            if state == "complete"
-            and stage in {"visual", "audio_extract", "audio_scan"}
-            and isinstance(duration_seconds, (int, float))
-            and duration_seconds > 0
-            and not (
-                stage == "visual"
-                and (
-                    effective.get("coarse_scan_enabled")
-                    or effective.get("cached_scene_findings_reused")
-                )
-            )
-            else None
-        )
-    record_scan_stage(
-        db,
-        scan_id,
-        stage,
-        execution_id,
-        state,
-        effective,
-        **(
-            stage_model_identity(stage, effective)
-            if state not in {"reused", "no_inputs"}
-            else {
-                "model_id": None,
-                "model_revision": None,
-                "model_digest": None,
-                "quantization": None,
-            }
-        ),
-        intervals=intervals if state == "complete" else None,
-        sampling_seconds=(
-            effective.get("coarse_scan_interval_seconds")
-            if stage == "visual" and effective.get("coarse_scan_enabled")
-            else effective.get("frame_sample_interval_seconds")
-            if stage == "credits_detection"
-            else None
-        ),
-    )
 
 
 def main() -> None:

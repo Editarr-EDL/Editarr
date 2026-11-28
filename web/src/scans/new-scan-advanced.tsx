@@ -33,7 +33,10 @@ export function NewScanAdvanced({ video }: { video: NewScanForm["video"] }) {
           value={video.qwenSegmentJoinGapSeconds}
           onChange={(event) => video.setQwenSegmentJoinGapSeconds(Number(event.target.value))} /><span aria-hidden="true">s</span></span>
       </label>
-      <p className="new-scan-hint">Fine scans analyze every source frame. Qwen receives evenly spaced representative flagged frames together after the scene scan; short clean gaps can be joined into one segment.</p>
+      <p className="new-scan-hint">{video.coarseScanEnabled
+        ? "Coarse scanning samples each scene first. Fine scanning analyzes every frame in flagged scenes and scenes without samples."
+        : "Fine scanning analyzes every source frame."}{" "}
+        Qwen receives evenly spaced representative frames after the scene scan. Short clean gaps can be joined into one segment.</p>
     </div>
   </details>;
 }

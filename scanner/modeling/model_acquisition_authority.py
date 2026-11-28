@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 _DOWNLOADS = "EDITARR_WORKER_MODEL_DOWNLOADS"
 _SCAN_ID = "EDITARR_WORKER_SCAN_ID"
+_WORKER_TOKEN = "EDITARR_MODEL_ACQUISITION_WORKER_TOKEN"
 _JOB: ContextVar[Gate | None] = ContextVar("model_acquisition_job", default=None)
 DOWNLOADS_REFUSED_DETAIL = "the account that started this scan may not download models"
 UNBOUND_DETAIL = "model acquisition in the server needs the account that started it"
@@ -56,8 +57,13 @@ def scoped_job_acquisition(gate: Gate, *, children: bool = False) -> Iterator[No
     """Bind acquisition to one job without changing concurrent API threads."""
     token = _JOB.set(gate)
     previous = os.environ.get(_SCAN_ID)
+    previous_worker = os.environ.get(_WORKER_TOKEN)
     if children:
         os.environ[_SCAN_ID] = gate.scan_id
+        if worker_token := getattr(gate, "worker_token", None):
+            os.environ[_WORKER_TOKEN] = worker_token
+        else:
+            os.environ.pop(_WORKER_TOKEN, None)
     try:
         yield
     finally:
@@ -67,6 +73,10 @@ def scoped_job_acquisition(gate: Gate, *, children: bool = False) -> Iterator[No
                 os.environ.pop(_SCAN_ID, None)
             else:
                 os.environ[_SCAN_ID] = previous
+            if previous_worker is None:
+                os.environ.pop(_WORKER_TOKEN, None)
+            else:
+                os.environ[_WORKER_TOKEN] = previous_worker
 
 
 def _job() -> Gate | None:
@@ -78,14 +88,14 @@ def _job() -> Gate | None:
         return None
     from scanner.db import get_session_factory
 
-    return _inherited_job(get_session_factory(), scan_id)
+    return _inherited_job(get_session_factory(), scan_id, os.environ.get(_WORKER_TOKEN))
 
 
 @lru_cache(maxsize=1)
-def _inherited_job(factory, scan_id):
+def _inherited_job(factory, scan_id, worker_token):
     from scanner.security.scan_jobs.authority import JobGate
 
-    return JobGate(factory, scan_id)
+    return JobGate(factory, scan_id, worker_token=worker_token)
 
 
 def require_acquisition(*, download: bool = False) -> None:

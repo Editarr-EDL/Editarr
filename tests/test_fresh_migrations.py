@@ -32,7 +32,7 @@ def test_fresh_migration_matches_supported_schema(tmp_path):
         assert inspect(engine).get_table_names().count("alembic_version") == 1
         with engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-                "0040_review_community_filters"
+                "0041_mcf_1_1_1"
             )
     finally:
         engine.dispose()
@@ -78,7 +78,7 @@ def test_repeat_upgrade_and_explicit_seeding_are_idempotent(tmp_path):
             assert connection.execute(text("SELECT count(*) FROM filter_settings")).scalar() == 1
             assert (
                 connection.execute(text("SELECT count(*) FROM mcf_severity_defaults")).scalar()
-                == 97
+                == 105
             )
             assert connection.execute(text("SELECT count(*) FROM alembic_version")).scalar() == 1
     finally:

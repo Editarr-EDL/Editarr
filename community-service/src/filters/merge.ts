@@ -66,7 +66,8 @@ export function mergeVersion(input: MergeInput, policy: MergePolicy = DEFAULT_ME
   }).sort(compareSnapshot);
   capServed(filters, policy.maxServedFilters);
 
-  const runtimeMs = counted.length ? integerMedian(counted.map(submission => submission.input.durationMs)) : null;
+  const durations = counted.flatMap(({ input }) => input.durationMs === null ? [] : [input.durationMs]);
+  const runtimeMs = durations.length ? integerMedian(durations) : null;
   const trust = versionTrust(input, counted.map(submission => submission.input.contributorId), rows, quarantinedContributors);
   const content = (served: readonly MasterFilter[]) => servedContent(input.versionId, input.header, runtimeMs, trust, served);
   const computed = fitServedSize(filters, content);

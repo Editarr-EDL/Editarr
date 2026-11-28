@@ -37,7 +37,7 @@ from .export_identity_moves import PlannedMove
 from .review_disposition import DeletionPlan
 from .scan_jobs import ScanJobFacts
 
-WORKER_HELD = frozenset({"acquiring_model", "scanning", "orphaned", "cancelling"})
+WORKER_HELD = frozenset({"acquiring_model", "scanning", "orphaned", "cancelling", "pausing"})
 TERMINAL = frozenset({"complete", "failed", "cancelled"})
 PENDING_COMMUNITY = ("pending", "submitted")
 

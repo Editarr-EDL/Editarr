@@ -40,9 +40,11 @@ export async function workVersions(db: SqlDatabase, workId: string): Promise<Exi
 }
 
 export async function acceptanceRows(db: SqlDatabase, versionIds: readonly string[]): Promise<AcceptanceRow[]> {
-  const rows = await db.prepare(`SELECT submission_id, contributor_id, accepted_seq, tier, duration_ms, quarantined
-    FROM version_acceptances WHERE version_id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(versionIds))
-    .all<{ submission_id: string; contributor_id: string; accepted_seq: number; tier: EvidenceTier | null; duration_ms: number; quarantined: number }>();
+  const rows = await db.prepare(`SELECT a.submission_id, a.contributor_id, a.accepted_seq, a.tier, a.quarantined,
+    CASE WHEN seed.submission_id IS NULL THEN a.duration_ms ELSE seed.source_runtime_ms END AS duration_ms
+    FROM version_acceptances a LEFT JOIN external_seed_submissions seed USING (submission_id)
+    WHERE a.version_id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(versionIds))
+    .all<{ submission_id: string; contributor_id: string; accepted_seq: number; tier: EvidenceTier | null; duration_ms: number | null; quarantined: number }>();
   return rows.results.map(row => ({ submissionId: row.submission_id, contributorId: row.contributor_id, acceptedSeq: row.accepted_seq, tier: row.tier,
     durationMs: row.duration_ms, quarantined: row.quarantined === 1 }));
 }

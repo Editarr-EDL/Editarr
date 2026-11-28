@@ -13,7 +13,6 @@ from scanner.db import (
     JellyfinSettingsRow,
 )
 from scanner.models import (
-    MCF_CATEGORY_TO_FAMILY,
     FilterDefaultsSettings,
     FilterDefaultsUpdate,
     FilterSelectionRule,
@@ -156,10 +155,10 @@ def replace_filter_defaults(
         selection_rules=settings_update.selection_rules,
         severity_defaults=[
             McfSeverityDefault(
-                subcategory=subcategory,
-                severity=severity_by_subcategory[subcategory],
+                subcategory=default.subcategory,
+                severity=severity_by_subcategory[default.subcategory],
             )
-            for subcategory in MCF_CATEGORY_TO_FAMILY
+            for default in current.severity_defaults
         ],
     )
     if normalized == current:
@@ -214,10 +213,8 @@ def replace_filter_defaults(
         for position, rule in enumerate(normalized.selection_rules)
     )
     defaults_by_subcategory = {default.subcategory: default for default in row.severity_defaults}
-    for position, default in enumerate(normalized.severity_defaults):
-        persisted = defaults_by_subcategory[default.subcategory.value]
-        persisted.position = position
-        persisted.severity = default.severity
+    for default in normalized.severity_defaults:
+        defaults_by_subcategory[default.subcategory.value].severity = default.severity
     if stage_changes is not None and changes:
         stage_changes(changes)
     db.commit()

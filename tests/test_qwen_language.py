@@ -135,6 +135,7 @@ def test_qwen_language_batches_unique_contexts_and_preserves_finding_fields(monk
     assert selected_models == ["qwen3-vl-4b-instruct-4bit"]
     assert len(prompts) == 2
     assert "nameCalling" in prompts[0] and "sexualDialogue" in prompts[0]
+    assert "Use innuendo for speech" in prompts[0]
     assert "low for words that are not generally considered vulgar or swearing" in prompts[0]
     assert "permutation of the word 'fuck'" in prompts[0]
     assert "blasphemous references to named deities" in prompts[0]

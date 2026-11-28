@@ -12,6 +12,8 @@ test.beforeEach(async ({ page }) => {
     ...scan, id: "active-scan", scan_id: 1, queue_id: 1, sort_order: 0,
     item_name: "Active film", status: "scanning",
     scan_audio: true, audio_model: "whisper", audio_filter: "better_profanity",
+    scan_video: true, video_model: "nudenet", coarse_scan_enabled: true, coarse_scan_interval: 2.5,
+    qwen_summaries_per_segment: 4, qwen_segment_join_gap_seconds: 2,
     progress_percent: 35, progress_message: "Analyzing audio",
   }]));
   await page.route("**/api/scans/history", (route) => json(route, [{
@@ -51,6 +53,9 @@ test("queue and history show hover options outside their scrolling containers", 
   await expect(queue.getByRole("progressbar", { name: "Scan #1 progress" })).toHaveJSProperty("value", 35);
   await activeOptions.hover();
   await expect(tooltip).toContainText("whisper transcriber");
+  await expect(tooltip).toContainText("Coarse scan every 2.5 s");
+  await expect(tooltip).toContainText("Fine scan for flagged scenes or scenes without samples");
+  await expect(tooltip).not.toContainText("Fine scan every frame");
   await expectUnclipped(tooltip, queue.getByLabel("Queued scans table"));
   await tooltip.hover();
   await expect(tooltip).toBeVisible();
@@ -69,6 +74,7 @@ test("queue and history show hover options outside their scrolling containers", 
   await row.getByRole("button", { name: "Show options for Scan #2" }).hover();
   await expect(tooltip).toHaveCount(1);
   await expect(tooltip).toContainText("nudenet video");
+  await expect(tooltip).toContainText("Fine scan every frame");
   await expect(activeOptions).toHaveAttribute("aria-expanded", "false");
   await expectUnclipped(tooltip, panel);
 });

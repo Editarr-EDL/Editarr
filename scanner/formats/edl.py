@@ -18,6 +18,7 @@ MAX_CONTENT_BYTES = 1_048_576
 MAX_LINE_CODEPOINTS = 4_096
 MAX_ACTION_ROWS = 10_000
 _NUMBER = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$")
+_CLASSIFIED_OTHER_EDL_TAG = "dispensable_scenes/other"
 _LEGACY_CATEGORY_ALIASES = {
     "profanity": (McfCategoryFamily.LANGUAGE, "swearing"),
     "nudity": (McfCategoryFamily.NUDITY, "nudity"),
@@ -179,7 +180,10 @@ def _comment_lines(contributors: list[ScanFinding], action: int) -> list[str]:
     fallback = "Imported skip" if action == 3 else "Imported mute"
     lines: list[str] = []
     for finding in contributors:
-        category = finding.subcategory.value if finding.subcategory is not None else "other"
+        if finding.subcategory == "other":
+            category = _CLASSIFIED_OTHER_EDL_TAG
+        else:
+            category = finding.subcategory.value if finding.subcategory is not None else "other"
         label = finding.label or fallback
         lines.append(f"## {_sanitize_comment(category)}: {_sanitize_comment(label)}")
     return lines
@@ -296,6 +300,11 @@ def _metadata_comment(value: str) -> tuple[str, str] | None:
 def _classification_for_comment(
     category: str,
 ) -> tuple[McfCategoryFamily | None, str | None]:
+    if category == _CLASSIFIED_OTHER_EDL_TAG:
+        return McfCategoryFamily.DISPENSABLE_SCENES, "other"
+    if category == "other":
+        # Earlier EDLs used this tag for cues without a classification.
+        return None, None
     if category in MCF_CATEGORY_TO_FAMILY:
         return MCF_CATEGORY_TO_FAMILY[category], category
     return _LEGACY_CATEGORY_ALIASES.get(category, (None, None))

@@ -131,7 +131,9 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
     assert second_row.media_source_id == "source-2"
     assert second_row.media_source_name == "Alternate cut"
     assert second.media_source_name == "Alternate cut"
-    assert [item.id for item in api.api_list_scan_queue(owner_caller(db))] == [first.id, second.id]
+    queued = api.api_list_scan_queue(owner_caller(db))
+    assert [item.id for item in queued] == [first.id, second.id]
+    assert all(item.coarse_scan_enabled and item.coarse_scan_interval == 2.0 for item in queued)
     for item, path in ((first, video), (second, alternate_video)):
         assert scan_version_id(db, item.id) is None
         prepare_scan_fingerprint(
@@ -282,9 +284,9 @@ def test_legacy_scan_authority_routes_are_not_available(
     monkeypatch.setattr(api, "init_db", lambda: None)
     _isolate_api_runtime(monkeypatch, tmp_path)
     monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
-    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db: 0)
+    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db, **_: 0)
     monkeypatch.setattr(api, "scanning_scan_worker_processes", lambda _db: [])
-    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids: [])
+    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids, **_: [])
     monkeypatch.setattr(api, "get_session_factory", lambda: sessionmaker(bind=db.get_bind()))
     monkeypatch.setattr(
         "scanner.security.auth_policy.get_session_factory", lambda: sessionmaker(bind=db.get_bind())

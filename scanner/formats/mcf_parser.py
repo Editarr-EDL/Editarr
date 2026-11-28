@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from scanner.models import (
     MAX_PERSISTED_INTEGER,
+    MCF_1_1_1_CATEGORIES,
     MCF_CATEGORY_TO_FAMILY,
     McfCategory,
     McfChannel,
@@ -33,7 +34,7 @@ from .mcf_types import (
 
 
 def parse_mcf_content(content: bytes, *, duration_seconds: float | None = None) -> McfParseResult:
-    """Parse a strict MCF 1.0.0 or 1.1.0 document without external side effects."""
+    """Parse a strict MCF 1.0.0, 1.1.0, or 1.1.1 document."""
     lines = _decode_lines(content)
     if not lines:
         raise McfParseError("invalid_mcf_document", "MCF header is required", 1)
@@ -53,7 +54,7 @@ def parse_mcf_content(content: bytes, *, duration_seconds: float | None = None) 
 
     cursor = 2
     metadata: dict[str, object] = {}
-    if source_version == McfSourceVersion.V1_1_0 and _starts_metadata_block(lines, cursor):
+    if source_version != McfSourceVersion.V1_0_0 and _starts_metadata_block(lines, cursor):
         metadata, cursor = _parse_metadata(lines, cursor)
     cursor, material_start, material_end = _parse_material_bounds(lines, cursor)
     if duration_seconds is not None and material_end > duration_seconds:
@@ -62,7 +63,7 @@ def parse_mcf_content(content: bytes, *, duration_seconds: float | None = None) 
             "MCF material bounds exceed media duration",
             cursor - 1,
         )
-    entries = _parse_cues(lines, cursor, duration_seconds)
+    entries = _parse_cues(lines, cursor, duration_seconds, source_version)
     source_metadata = ScanMcfDocument(
         source_version=source_version,
         material_start_seconds=material_start,
@@ -227,6 +228,7 @@ def _parse_cues(
     lines: list[str],
     cursor: int,
     duration_seconds: float | None,
+    source_version: McfSourceVersion,
 ) -> list[McfCueEntry]:
     """Parse ordered cue timings and payloads from the remaining lines."""
     entries: list[McfCueEntry] = []
@@ -256,7 +258,9 @@ def _parse_cues(
                     "mcf_import_too_large", "MCF payload-entry limit exceeded", cursor + 1
                 )
             entries.append(
-                _parse_payload(lines[cursor], cursor + 1, cue_index, payload_index, start, end)
+                _parse_payload(
+                    lines[cursor], cursor + 1, cue_index, payload_index, start, end, source_version
+                )
             )
             payload_index += 1
             cursor += 1
@@ -279,6 +283,7 @@ def _parse_payload(
     payload_index: int,
     start: float,
     end: float,
+    source_version: McfSourceVersion,
 ) -> McfCueEntry:
     """Validate one cue payload and build its categorized entry."""
     payload, marker, comment = line.partition(" # ")
@@ -287,6 +292,10 @@ def _parse_payload(
     parts = payload.split("=")
     if len(parts) not in {2, 3} or any(not part for part in parts):
         raise McfParseError("invalid_mcf_document", "MCF cue payload is invalid", line_number)
+    if source_version != McfSourceVersion.V1_1_1 and parts[0] in MCF_1_1_1_CATEGORIES:
+        raise McfParseError(
+            "invalid_mcf_document", f"MCF category {parts[0]} requires version 1.1.1", line_number
+        )
     try:
         subcategory = McfCategory(parts[0])
         severity = Severity(parts[1])

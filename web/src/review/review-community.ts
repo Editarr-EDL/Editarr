@@ -1,6 +1,6 @@
 import type { MasterLinkSummary } from "../api/api-community-master-types";
 import type { ReviewCommunityMembership, ReviewCommunitySource, ReviewFilter, SavedReview } from "../api/api-review-types";
-import type { ReviewDraft } from "./review-draft";
+import { reviewDraftFilters, type ReviewDraft } from "./review-draft";
 
 /** One "Community filters" entry under Included scans: a stored snapshot, a linkable master set, or both. */
 export interface CommunityEntry {
@@ -53,7 +53,15 @@ export function setCommunityIncluded(draft: ReviewDraft, entry: CommunityEntry, 
   const rest = draft.communityMemberships.filter((value) => value !== membershipFor(draft, entry));
   const sourceId = entry.source?.source_id;
   if (!included) {
-    if (!sourceId) return { ...draft, communityMemberships: rest };
+    if (!sourceId) {
+      const linkId = entry.link!.linkId;
+      const { [linkId]: _removed, ...communityDraftTokens } = draft.communityDraftTokens;
+      const filterBases = Object.fromEntries(Object.entries(draft.filterBases).filter(
+        ([, pair]) => pair.base.community_source_id !== linkId,
+      ));
+      return { ...draft, communityMemberships: rest, communityDraftTokens,
+        filterBases, filters: draft.filters.filter((filter) => filter.community_source_id !== linkId) };
+    }
     const removed = draft.filters.filter((filter) => filter.community_source_id === sourceId);
     return {
       ...draft, communityMemberships: rest,
@@ -65,6 +73,25 @@ export function setCommunityIncluded(draft: ReviewDraft, entry: CommunityEntry, 
   if (!sourceId) return { ...draft, communityMemberships: [...rest, next] };
   const { [removedKey(sourceId)]: restored = [], ...removedSnapshots } = draft.removedSnapshots;
   return { ...draft, communityMemberships: [...rest, next], filters: [...draft.filters, ...restored], removedSnapshots };
+}
+
+/** Materialize the newly included link only if this response still belongs to the active draft. */
+export function loadCommunityDraft(draft: ReviewDraft, linkId: string, token: string, filters: ReviewFilter[]): ReviewDraft {
+  if (draft.communityDraftTokens[linkId] || !draft.communityMemberships.some((item) => item.link_id === linkId)) return draft;
+  return { ...draft, filters: [...draft.filters, ...filters],
+    communityDraftTokens: { ...draft.communityDraftTokens, [linkId]: token } };
+}
+
+/** Keep draft link IDs out of the stored-snapshot field of the save request. */
+export function communitySaveFilters(draft: ReviewDraft) {
+  const filters = reviewDraftFilters(draft);
+  const communityDrafts = Object.entries(draft.communityDraftTokens).map(([linkId, token]) => ({
+    link_id: linkId, token, filters: filters.filter((filter) => filter.community_source_id === linkId),
+  }));
+  return {
+    filters: filters.filter((filter) => !filter.community_source_id || !draft.communityDraftTokens[filter.community_source_id]),
+    ...(communityDrafts.length ? { community_drafts: communityDrafts } : {}),
+  };
 }
 
 /** Stage refreshing an included stored entry: saving takes a new snapshot and merges it into the review's filters. */

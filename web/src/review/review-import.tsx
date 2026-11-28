@@ -7,6 +7,7 @@ import {
 import {
   importEdlUpload,
   importMcfUpload,
+  importVideoSkipUpload,
   acceptCreditsDetection,
   creditsDetectionClipUrl,
 } from "../api/api-reviews";
@@ -154,7 +155,13 @@ function McfImportTimingFields({
   </fieldset>;
 }
 
-/** Import an EDL or MCF into the target Jellyfin item version and report the created review. */
+const importFormats = {
+  edl: { label: "EDL", accept: ".edl,text/plain", description: "Simple EDL (.edl)" },
+  mcf: { label: "MCF", accept: ".mcf,text/plain,text/mcf+vtt", description: "Movie Content Filter 1.0.0, 1.1.0, or 1.1.1 (.mcf)" },
+  videoskip: { label: "VideoSkip", accept: ".skp,text/plain", description: "VideoSkip (.skp). Verify timing on the selected cut before using the cues." },
+};
+
+/** Import a filter file for the selected Jellyfin version. */
 export function ImportDialog({
   target,
   itemName = null,
@@ -175,7 +182,9 @@ export function ImportDialog({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [format, setFormat] = useState<"edl" | "mcf">("edl");
+  const [format, setFormat] = useState<keyof typeof importFormats>("edl");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [uploader, setUploader] = useState("");
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -187,7 +196,7 @@ export function ImportDialog({
   const [endMode, setEndMode] = useState<SynchronizationEndMode>("before_credits");
   const [acceptedCredits, setAcceptedCredits] = useState<AcceptedCreditsReference | null>(null);
   const nameValidation = validateDisplayName(name, true);
-  const formatLabel = format.toUpperCase();
+  const { label: formatLabel, accept, description } = importFormats[format];
   const trigger = useRef<HTMLButtonElement>(null);
   const access = useReviewAccess(null);
   const mayUpload = access.allowed("reviews.import.upload");
@@ -200,7 +209,7 @@ export function ImportDialog({
   const submit = async (ignoreErrors = false) => {
     if (busy || disabled || !isCurrent() || !mayUpload) return;
     if (nameValidation.error || !nameValidation.normalized || !file) {
-      setError(nameValidation.error || `Enter a review name and choose an ${formatLabel} file.`);
+      setError(nameValidation.error || `Enter a review name and choose a file for ${formatLabel}.`);
       return;
     }
     const startSeconds = parseMcfTimestamp(startTimestamp);
@@ -224,11 +233,17 @@ export function ImportDialog({
         mcf_material_end_seconds: stageForVerification ? null : endMode === "before_credits" ? endSeconds : materialEndSeconds,
         accepted_credits: acceptedCredits,
       };
-      const result = format === "edl"
-        ? await importEdlUpload(file, options)
-        : await importMcfUpload(file, mcfOptions);
+      const result = await {
+        edl: () => importEdlUpload(file, options),
+        mcf: () => importMcfUpload(file, mcfOptions),
+        videoskip: () => importVideoSkipUpload(file, {
+          name: options.name, target,
+          attribution: { source_url: sourceUrl.trim() || null, uploader: uploader.trim() || null },
+        }),
+      }[format]();
       if (!isCurrent()) return;
       onImported?.(result);
+      setSourceUrl(""); setUploader("");
       setName(""); setFile(null); setImportIssues([]); setStartTimestamp("00:00:00.000"); setBeforeCreditsEnd(""); setFileEnd(formatMcfTimestamp(durationSeconds)); setEndMode("before_credits"); setAcceptedCredits(null); setOpen(false);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : `Unable to import ${formatLabel}.`;
@@ -251,13 +266,21 @@ export function ImportDialog({
     {open && <ModalDialog labelledBy="import-heading" className="modal-dialog" onClose={busy ? undefined : close}>
       <h2 id="import-heading">Import</h2>
       <p>Imports into Jellyfin item {itemName || target.item_id}{target.media_source_id ? `, version ${versionName || target.media_source_id}` : ""}</p>
-      <div className="segmented-control" role="group" aria-label="Import format"><button type="button" className={format === "edl" ? "selected" : ""} aria-pressed={format === "edl"} onClick={() => { setFormat("edl"); setFile(null); setError(null); }} disabled={busy}>EDL</button><button type="button" className={format === "mcf" ? "selected" : ""} aria-pressed={format === "mcf"} onClick={() => { setFormat("mcf"); setFile(null); setError(null); }} disabled={busy}>MCF</button></div>
-      <p className="muted-copy">{format === "edl" ? "Simple EDL (.edl, text/plain)" : "Movie Content Filter 1.0.0 or 1.1.0 (.mcf, text/plain or text/mcf+vtt)"}</p>
+      <div className="segmented-control" role="group" aria-label="Import format">
+        {(Object.keys(importFormats) as (keyof typeof importFormats)[]).map((choice) =>
+          <button key={choice} type="button" className={format === choice ? "selected" : ""} aria-pressed={format === choice}
+            onClick={() => { setFormat(choice); setFile(null); setError(null); }} disabled={busy}>{importFormats[choice].label}</button>)}
+      </div>
+      <p className="muted-copy">{description}</p>
       {format === "mcf" && !stageForVerification && <McfImportTimingFields startTimestamp={startTimestamp} beforeCreditsEnd={beforeCreditsEnd} fileEnd={fileEnd} endMode={endMode} busy={busy} onStartChange={setStartTimestamp} onBeforeCreditsEndChange={setBeforeCreditsEnd} onFileEndChange={setFileEnd} onEndModeChange={setEndMode} />}
       {format === "mcf" && !stageForVerification && <div className="mcf-detect-row"><CreditsResultDialog scans={creditsScans} context={{ kind: "import", target }} disabled={busy} onAccepted={(result) => { setAcceptedCredits(result.accepted_credits); setBeforeCreditsEnd(formatMcfTimestamp(result.accepted_credits.accepted_boundary_seconds)); }} />{acceptedCredits && <span className="form-status" role="status">Accepted credits boundary {formatMcfTimestamp(acceptedCredits.accepted_boundary_seconds)}</span>}</div>}
       <label className="field"><span>Review name</span><input aria-label="Import review name" value={name} aria-invalid={Boolean(name && nameValidation.error)} onChange={(event) => setName(event.target.value)} disabled={busy} /></label>
+      {format === "videoskip" && <fieldset className="mcf-import-timing"><legend>Source attribution (optional)</legend>
+        <label className="field"><span>Exchange file URL</span><input type="url" value={sourceUrl} maxLength={512} onChange={(event) => setSourceUrl(event.target.value)} disabled={busy} /></label>
+        <label className="field"><span>Uploader</span><input value={uploader} maxLength={120} onChange={(event) => setUploader(event.target.value)} disabled={busy} /></label>
+      </fieldset>}
       <p className="muted-copy">Created scan: {nameValidation.normalized || "Enter a review name"}</p>
-      <label className="field"><span>{formatLabel} file</span><input key={format} aria-label={`${formatLabel} file`} type="file" accept={format === "edl" ? ".edl,text/plain" : ".mcf,text/plain,text/mcf+vtt"} onChange={(event) => setFile(event.target.files?.[0] || null)} disabled={busy} /></label>
+      <label className="field"><span>{formatLabel} file</span><input key={format} aria-label={`${formatLabel} file`} type="file" accept={accept} onChange={(event) => setFile(event.target.files?.[0] || null)} disabled={busy} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="button-row"><button type="button" className="btn-secondary" onClick={close} disabled={busy}>Cancel</button><button type="button" className="btn-primary" onClick={() => void submit()} disabled={busy}>{busy ? "Importing…" : `Import ${formatLabel}`}</button></div>
     </ModalDialog>}

@@ -27,7 +27,7 @@ it("keeps a steady timer across polls that sample the same attempt at different 
     scan_duration_as_of: new Date(start + 5_100).toISOString(),
   });
   const { rerender } = render(<ScanDuration scan={scanning} now={start + 7_200} />);
-  expect(screen.getByText("0:07")).toBeInTheDocument();
+  expect(screen.getByText("00:00:07")).toBeInTheDocument();
 
   const refreshed = {
     ...scanning,
@@ -35,21 +35,21 @@ it("keeps a steady timer across polls that sample the same attempt at different 
     scan_duration_as_of: new Date(start + 6_800).toISOString(),
   };
   rerender(<ScanDuration scan={refreshed} now={start + 7_200} />);
-  expect(screen.getByText("0:07")).toBeInTheDocument();
+  expect(screen.getByText("00:00:07")).toBeInTheDocument();
   rerender(<ScanDuration scan={refreshed} now={start + 8_200} />);
-  expect(screen.getByText("0:08")).toBeInTheDocument();
+  expect(screen.getByText("00:00:08")).toBeInTheDocument();
 });
 
-it("holds duration while stopped or waiting for a retry worker", () => {
-  const paused = queueItem({ status: "orphaned", scan_duration_seconds: 8 });
+it("holds duration while paused or waiting for a retry worker", () => {
+  const paused = queueItem({ status: "paused", scan_duration_seconds: 8 });
   const { rerender } = render(<ScanDuration scan={paused} now={start + 3_600_000} />);
-  expect(screen.getByText("0:08")).toBeInTheDocument();
+  expect(screen.getByText("00:00:08")).toBeInTheDocument();
 
   rerender(<ScanDuration scan={{ ...paused, status: "queued" }} now={start + 3_630_000} />);
-  expect(screen.getByText("0:08")).toBeInTheDocument();
+  expect(screen.getByText("00:00:08")).toBeInTheDocument();
 
   rerender(<ScanDuration scan={{ ...paused, status: "scanning" }} now={start + 3_631_000} />);
-  expect(screen.getByText("0:08")).toBeInTheDocument();
+  expect(screen.getByText("00:00:08")).toBeInTheDocument();
 
   const running = {
     ...paused,
@@ -58,5 +58,14 @@ it("holds duration while stopped or waiting for a retry worker", () => {
     scan_duration_as_of: new Date(start + 3_634_000).toISOString(),
   };
   rerender(<ScanDuration scan={running} now={start + 3_636_000} />);
-  expect(screen.getByText("0:12")).toBeInTheDocument();
+  expect(screen.getByText("00:00:12")).toBeInTheDocument();
+});
+
+it("keeps accumulating during pausing and rolls over the hour", () => {
+  const scan = queueItem({ status: "pausing", scan_duration_seconds: 3599,
+    scan_duration_as_of: new Date(start + 3_599_000).toISOString() });
+  const { rerender } = render(<ScanDuration scan={scan} now={start + 3_599_000} />);
+  expect(screen.getByText("00:59:59")).toBeInTheDocument();
+  rerender(<ScanDuration scan={scan} now={start + 3_600_000} />);
+  expect(screen.getByText("01:00:00")).toBeInTheDocument();
 });

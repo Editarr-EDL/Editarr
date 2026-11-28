@@ -7,7 +7,7 @@ import pytest
 from scanner.persistence.migrations import adoption
 from tests import upgrade_matrix_support as state
 from tests.activity_migration_support import _clone, _upgrade
-from tests.explicit_filter_modes_support import drop_0031_additions
+from tests.explicit_filter_modes_support import drop_filter_migration_additions
 from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_upgrade_matrix import SOURCES as MATRIX_SOURCES
@@ -106,7 +106,7 @@ def test_every_supported_revision_archives_arr_records_and_keeps_every_row(tmp_p
     assert generation.is_dir()
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     after = _counts(upgraded)
     assert {name: after.get(name) for name in _counts(original)} == _counts(original) | {
         "scan_queue": 0
@@ -134,7 +134,7 @@ def test_the_previous_revision_changes_only_archived_work(tmp_path):
     original, columns = _snapshot(path)
     adoption.upgrade_existing_database(path, path.parent)
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     assert without_stable_media_identity(upgraded) == _expected(original, columns)
 
 

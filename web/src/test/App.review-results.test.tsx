@@ -242,7 +242,7 @@ describe("production saved-review UI authority", () => {
       scans: [{ scan, role: "both" }, { scan: generated, role: "video" }],
       filters: [
         { id: "visual-1", source_scan_id: "scan-1", source_finding_id: 1, source: "visual", category: "violence", subcategory: "violence", severity: "medium", mcf_channel: "video", mcf_comment: null, label: "Fight", details: "Fight in hallway", group_key: "violence", start_seconds: 10, end_seconds: 20, confidence: 0.9, edit_action: "skip", selected: true },
-        { id: "visual-2", source_scan_id: "scan-1", source_finding_id: 2, source: "visual", category: "violence", subcategory: "violence", severity: "high", mcf_channel: "video", mcf_comment: null, label: "Weapon", details: "Weapon visible", group_key: "violence", start_seconds: 15, end_seconds: 25, confidence: 0.8, edit_action: "skip", selected: false },
+        { id: "visual-2", source_scan_id: "scan-1", source_finding_id: 2, source: "visual", category: "violence", subcategory: "violence", severity: "high", mcf_channel: "video", mcf_comment: null, label: "Fight", details: "Weapon visible", group_key: "weapon", start_seconds: 15, end_seconds: 25, confidence: 0.8, edit_action: "skip", selected: false },
         { id: "visual-clean", source_scan_id: generated.id, source_finding_id: 4, source: "visual", category: "violence", subcategory: "violence", severity: "low", mcf_channel: "video", mcf_comment: null, label: "d1_violence", details: null, group_key: "No objectionable content", start_seconds: 30, end_seconds: 35, confidence: 0.9, edit_action: "skip", selected: false },
         { id: "audio-1", source_scan_id: "scan-1", source_finding_id: 3, source: "audio", category: "language", subcategory: "swearing", severity: "low", mcf_channel: "audio", mcf_comment: null, label: "swearing", details: "A line with swearing", group_key: null, start_seconds: 40, end_seconds: 42, confidence: 0.95, edit_action: "mute", selected: true },
       ],
@@ -308,8 +308,8 @@ describe("production saved-review UI authority", () => {
     const violenceSubcategory = within(videoSection).getByRole("button", { name: /^Violence \(General\) subcategory, 1 result, 0 selected$/i });
     expect(violenceSubcategory).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(violenceSubcategory);
-    const violenceGroup = within(videoSection).getByRole("button", { name: /^violence finding group, 1 result, 0 selected$/i });
-    const violenceUse = within(videoSection).getByRole("checkbox", { name: "Use all video filters in violence finding group" });
+    const violenceGroup = within(videoSection).getByRole("button", { name: /^Fight finding group, 1 result, 0 selected$/ });
+    const violenceUse = within(videoSection).getByRole("checkbox", { name: "Use all video filters in Fight finding group" });
     expect(violenceUse).toHaveAttribute("aria-checked", "mixed");
     expect(violenceUse).toHaveProperty("indeterminate", true);
     expect(violenceGroup).toHaveAttribute("aria-expanded", "false");
@@ -337,15 +337,15 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(previewButton).toBeEnabled();
     fireEvent.click(await findFilterAction("Edit Fight in hallway at 0:10"));
-    fireEvent.change(screen.getByLabelText("Filter visual-1 start seconds"), { target: { value: "10.5" } });
+    fireEvent.change(screen.getByLabelText("Filter visual-1 start time"), { target: { value: "00:00:10.50" } });
     expect(previewButton).toBeEnabled();
   });
 
   it("renders ordered MCF tiers with independent row sorting and synchronized linked instances", async () => {
     const scan = completeScan();
     const visual = (id: string, details: string, start: number, severity: ReviewFilter["severity"], overrides: Partial<ReviewFilter> = {}): ReviewFilter => ({
-      ...reviewFilter(id, "visual"), details, label: details, start_seconds: start, end_seconds: start + 1,
-      severity, group_key: "common", selected: false, ...overrides,
+      ...reviewFilter(id, "visual"), details, label: "Common", start_seconds: start, end_seconds: start + 1,
+      severity, group_key: "old-group", selected: false, ...overrides,
     });
     const audio = (id: string, details: string, start: number, severity: ReviewFilter["severity"]): ReviewFilter => ({
       ...reviewFilter(id, "audio"), label: id === "audio-alpha" ? "swearing" : "murder", details,
@@ -360,9 +360,9 @@ describe("production saved-review UI authority", () => {
         visual("visual-low", "Low severity", 30, "low"),
         visual("visual-medium", "Medium severity", 20, "medium"),
         visual("visual-high", "High severity", 10, "high"),
-        visual("visual-linked-a", "Linked fight", 60, "medium", { group_key: "alpha", end_seconds: 70 }),
-        visual("visual-linked-b", "Linked weapon", 65, "high", { subcategory: "weapons", group_key: "zulu", end_seconds: 75 }),
-        visual("visual-legacy", "Legacy finding", 80, null, { category: null, subcategory: null, group_key: "legacy" }),
+        visual("visual-linked-a", "Linked fight", 60, "medium", { label: "Alpha", end_seconds: 70 }),
+        visual("visual-linked-b", "Linked weapon", 65, "high", { subcategory: "weapons", label: "Zulu", end_seconds: 75 }),
+        visual("visual-legacy", "Legacy finding", 80, null, { category: null, subcategory: null, label: "Legacy" }),
         audio("audio-alpha", "Alpha audio", 10, "low"),
         audio("audio-zulu", "Zulu audio", 30, "high"),
       ],
@@ -395,7 +395,7 @@ describe("production saved-review UI authority", () => {
     const unclassifiedSubcategory = within(screen.getByRole("region", { name: "Video review filters" })).getByRole("button", { name: /Unclassified subcategory/ });
     expect(unclassifiedSubcategory).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(unclassifiedSubcategory);
-    const legacyGroup = within(screen.getByRole("region", { name: "Video review filters" })).getByRole("button", { name: /legacy finding group/ });
+    const legacyGroup = within(screen.getByRole("region", { name: "Video review filters" })).getByRole("button", { name: /Legacy finding group/ });
     fireEvent.click(legacyGroup);
     expect(within(screen.getByRole("region", { name: "Video review filters" })).getByRole("checkbox", { name: "Include Legacy finding at 1:20" })).toBeVisible();
     fireEvent.click(legacyGroup);
@@ -404,8 +404,8 @@ describe("production saved-review UI authority", () => {
     const weapons = within(videoSection).getByRole("button", { name: /Weapons subcategory/ });
     expect(violenceGeneral.compareDocumentPosition(weapons)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     fireEvent.click(violenceGeneral);
-    const alphaGroup = within(videoSection).getByRole("button", { name: /alpha finding group/ });
-    const commonGroup = within(videoSection).getByRole("button", { name: /common finding group/ });
+    const alphaGroup = within(videoSection).getByRole("button", { name: /Alpha finding group/ });
+    const commonGroup = within(videoSection).getByRole("button", { name: /Common finding group/ });
     expect(commonGroup.compareDocumentPosition(alphaGroup)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     fireEvent.click(sortButton(videoSection, "Time"));
     expect(alphaGroup.compareDocumentPosition(commonGroup)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -460,7 +460,7 @@ describe("production saved-review UI authority", () => {
 
     fireEvent.click(alphaGroup);
     fireEvent.click(weapons);
-    const zuluGroup = within(videoSection).getByRole("button", { name: /zulu finding group/ });
+    const zuluGroup = within(videoSection).getByRole("button", { name: /Zulu finding group/ });
     fireEvent.click(zuluGroup);
     const linkedRows = within(videoSection).getAllByRole("checkbox", { name: /^Include Linked fight; Linked weapon at 1:00/ });
     expect(linkedRows).toHaveLength(2);

@@ -10,7 +10,7 @@ import pytest
 from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _clone, _upgrade
 from tests.community_master_migration_support import retire_publications
-from tests.explicit_filter_modes_support import drop_0031_additions
+from tests.explicit_filter_modes_support import drop_filter_migration_additions
 from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_review_policy_migration import _built
@@ -132,7 +132,7 @@ def test_every_json_job_moves_exactly_and_snapshot_keeps_other_evidence(tmp_path
         assert json.loads(stored[export_id]) == expected
     assert stored[ids["untouched"]] == documents[ids["untouched"]]
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     assert upgraded.pop("media_item_export_regenerations")
     assert upgraded.pop("account_link_transitions") == []
     assert upgraded.pop("account_link_export_moves") == []
@@ -214,7 +214,7 @@ def test_older_supported_revision_reaches_head_with_an_empty_queue(tmp_path):
     original, _ = _snapshot(path)
     adoption.upgrade_existing_database(path, path.parent)
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     assert upgraded.pop("media_item_export_regenerations") == []
     assert upgraded.pop("account_link_transitions") == []
     assert upgraded.pop("account_link_export_moves") == []

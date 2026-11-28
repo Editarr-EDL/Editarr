@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useMcfRegistry } from "../shared/mcf-registry";
 import { retimeSavedReview, reviewPolicyToken } from "../api/api-reviews";
 import { useReviewLifetime } from "./review-access";
+import { communitySaveFilters } from "./review-community";
+import { validManualDraft } from "./review-manual-draft";
+import { ReviewFilterTimeFields } from "./review-filter-time-fields";
 import type { PreviewFilter } from "./review-preview";
 import type {
   ExportFormat,
@@ -13,7 +16,6 @@ import type {
 } from "../api/api-review-types";
 import {
   createReviewDraft,
-  reviewDraftFilters,
 } from "./review-draft";
 import {
   ModalDialog,
@@ -52,26 +54,28 @@ export function ManualReviewFilterDialog({
   const { registry, error: registryError } = useMcfRegistry();
   const [source, setSource] = useState<"audio" | "visual">("audio");
   const [label, setLabel] = useState("");
-  const [category, setCategory] = useState<NonNullable<NewManualReviewFilter["category"]>>("language");
-  const [subcategory, setSubcategory] = useState("swearing");
+  const [category, setCategory] = useState<NewManualReviewFilter["category"] | null>("language");
+  const [subcategory, setSubcategory] = useState<NewManualReviewFilter["subcategory"] | null>("swearing");
   const [severity, setSeverity] = useState<NewManualReviewFilter["severity"]>(null);
   const [details, setDetails] = useState("");
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(1);
-  const invalidTiming = !Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)
-    || startSeconds < 0 || endSeconds <= startSeconds;
+  const [invalidTiming, setInvalidTiming] = useState(false);
   const action = source === "audio" ? "mute" : "skip";
   const previewId = `manual-preview:${source}:${startSeconds}:${endSeconds}`;
-  const invalid = disabled || !label.trim() || invalidTiming
-    || !classificationIsValid(registry, category, subcategory);
+  const valid = category && subcategory && classificationIsValid(registry, category, subcategory);
   return <ModalDialog labelledBy="manual-review-filter-heading" className="finding-editor" onClose={onClose}>
     <h2 id="manual-review-filter-heading">Add Manual Filter</h2>
     <p>This filter will be created with the saved review when changes are saved.</p>
     <label className="field"><span>Filter type</span><select aria-label="Manual filter type" value={source} onChange={(event) => { const next = event.target.value as "audio" | "visual"; setSource(next); setCategory(next === "audio" ? "language" : "violence"); setSubcategory(next === "audio" ? "swearing" : "violence"); }}><option value="audio">Audio mute</option><option value="visual">Video skip</option></select></label>
     <label className="field"><span>{source === "audio" ? "Word or label" : "Label"}</span><input aria-label="Manual filter label" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
-    {registry ? <McfClassificationFields controlId="Manual filter" registry={registry} value={{ category, subcategory, severity }} onChange={(patch) => { if (patch.category !== undefined) setCategory(patch.category || "language"); if (patch.subcategory !== undefined) setSubcategory(patch.subcategory || ""); if (patch.severity !== undefined) setSeverity(patch.severity); }} /> : <McfRegistryStatus error={registryError} />}
+    {registry ? <McfClassificationFields controlId="Manual filter" registry={registry} value={{ category, subcategory, severity }} onChange={(patch) => { if (patch.category !== undefined) setCategory(patch.category); if (patch.subcategory !== undefined) setSubcategory(patch.subcategory); if (patch.severity !== undefined) setSeverity(patch.severity); }} /> : <McfRegistryStatus error={registryError} />}
     <label className="field"><span>Description</span><textarea aria-label="Manual filter description" value={details} onChange={(event) => setDetails(event.target.value)} rows={3} /></label>
-    <div className="finding-timing-fields"><label className="field"><span>Start seconds</span><input aria-label="Manual filter start seconds" type="number" min="0" step="0.1" value={startSeconds} onChange={(event) => setStartSeconds(Number(event.target.value))} /></label><label className="field"><span>End seconds</span><input aria-label="Manual filter end seconds" type="number" min="0.1" step="0.1" value={endSeconds} onChange={(event) => setEndSeconds(Number(event.target.value))} /></label></div>
+    <ReviewFilterTimeFields controlId="Manual filter" value={{ start_seconds: startSeconds, end_seconds: endSeconds }}
+      onInvalidChange={setInvalidTiming} requireEnd onChange={({ start_seconds, end_seconds }) => {
+        setStartSeconds(start_seconds);
+        if (end_seconds !== null) setEndSeconds(end_seconds);
+      }} />
     {preview?.filterId === previewId && <div className="finding-preview">{source === "audio"
       ? <audio controls src={preview.url} aria-label="Manual audio preview" />
       : <video controls src={preview.url} aria-label="Manual video preview" />}</div>}
@@ -79,7 +83,10 @@ export function ManualReviewFilterDialog({
     <div className="button-row">{onPreview && <button type="button" className="btn-secondary"
       disabled={disabled || invalidTiming} onClick={() => onPreview({
         id: previewId, source, edit_action: action, start_seconds: startSeconds, end_seconds: endSeconds,
-      })}>Preview</button>}<button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={invalid} onClick={() => onAdd({ id: "", source, category, subcategory, severity, mcf_channel: source === "audio" ? "audio" : "video", mcf_comment: null, label: label.trim(), details: details.trim() || null, group_key: null, start_seconds: startSeconds, end_seconds: endSeconds, confidence: null, edit_action: action, selected: true })}>Add Filter</button></div>
+      })}>Preview</button>}<button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={disabled || !label.trim() || invalidTiming || !valid} onClick={() => {
+        if (!category || !subcategory) return;
+        onAdd({ id: "", source, category, subcategory, severity, mcf_channel: source === "audio" ? "audio" : "video", mcf_comment: null, label: label.trim(), details: details.trim() || null, group_key: null, start_seconds: startSeconds, end_seconds: endSeconds, confidence: null, edit_action: action, selected: true });
+      }}>Add Filter</button></div>
   </ModalDialog>;
 }
 
@@ -150,10 +157,10 @@ export function AdjustCueTimesDialog({
         current_synchronization: draft.synchronization,
         proposed_synchronization: { start_seconds: startSeconds, end_seconds: endSeconds, end_mode: mode },
         mcf_document: draft.mcfDocument,
-        filters: reviewDraftFilters(draft),
+        filters: communitySaveFilters(draft).filters,
         filter_basis: "base",
         accepted_credits: draft.acceptedCredits,
-        new_manual_filters: draft.newManualFilters,
+        new_manual_filters: draft.newManualFilters.filter(validManualDraft),
       });
       if (!isCurrent()) return;
       onApply(mode === "file_end" ? { ...result, mcf_document: { ...result.mcf_document, material_end_seconds: materialEndSeconds } } : result);
@@ -168,7 +175,7 @@ export function AdjustCueTimesDialog({
     <button type="button" className="btn-secondary" onClick={openDialog} disabled={disabled}>Adjust Cue Times</button>
     {open && <ModalDialog labelledBy="adjust-cue-times-heading" className="modal-dialog" onClose={busy ? undefined : () => setOpen(false)}>
       <h2 id="adjust-cue-times-heading">Adjust Cue Times</h2>
-      <p>Only imported or unverified cues are adjusted. Verified local scan cues and staged manual cues keep their times.</p>
+      <p>Only cues from imported or unverified scans are adjusted. Aligned community cues keep their times.</p>
       <dl className="timing-summary"><div><dt>Current START</dt><dd>{formatMcfTimestamp(draft.synchronization.start_seconds)}</dd></div><div><dt>Current END</dt><dd>{formatMcfTimestamp(draft.synchronization.end_seconds)} · {draft.synchronization.end_mode === "before_credits" ? "Before credits" : "File end"}</dd></div></dl>
       <p>{times.length ? `${draft.filters.length + draft.newManualFilters.length} cues spanning ${formatMcfTimestamp(Math.min(...times))}–${formatMcfTimestamp(Math.max(...times))}` : "No cues are currently staged."}</p>
       <label className="field"><span>Proposed START</span><input aria-label="Proposed START" inputMode="numeric" value={start} onChange={(event) => setStart(event.target.value)} disabled={busy} /></label>

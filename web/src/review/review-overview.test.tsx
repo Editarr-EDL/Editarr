@@ -61,7 +61,7 @@ it("keeps an expanded review tier open when category labels load", async () => {
   const section = screen.getByRole("region", { name: "Video review filters" });
   const subcategory = within(section).getByRole("button", { name: /subcategory, 1 result/ });
   fireEvent.click(subcategory);
-  expect(within(section).getByRole("button", { name: /fight finding group/ })).toBeVisible();
+  expect(within(section).getByRole("button", { name: /Fight finding group/ })).toBeVisible();
 
   await act(async () => {
     resolveRegistry(new Response(JSON.stringify({ families: [{
@@ -71,7 +71,7 @@ it("keeps an expanded review tier open when category labels load", async () => {
   });
 
   expect(within(section).getByRole("button", { name: /Violence \(General\) subcategory/ })).toHaveAttribute("aria-expanded", "true");
-  expect(within(section).getByRole("button", { name: /fight finding group/ })).toBeVisible();
+  expect(within(section).getByRole("button", { name: /Fight finding group/ })).toBeVisible();
 });
 
 it("renders server-decided selection and severity locks without disabling permitted metadata", async () => {
@@ -91,10 +91,12 @@ it("renders server-decided selection and severity locks without disabling permit
   expect(within(menu).getByRole("menuitem", { name: "Edit Fight at 0:01" })).toBeEnabled();
   expect(within(menu).getByRole("menuitem", { name: "Delete Fight at 0:01" })).toBeDisabled();
   fireEvent.keyDown(menu, { key: "Escape" });
-  expect(screen.getByRole("checkbox", { name: /Selected.*required by instance policy/ })).toBeDisabled();
+  expect(screen.queryByRole("checkbox", { name: /^Selected/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: "Include Fight at 0:01" })).toBeDisabled();
   expect(await screen.findByRole("radio", { name: "High" })).toBeChecked();
   expect(screen.getByRole("radio", { name: "Low" })).toBeDisabled();
   expect(screen.getByLabelText("Filter required label")).toBeEnabled();
+  expect(screen.queryByLabelText("Filter required group")).not.toBeInTheDocument();
   // The rows fit their width, so the table isn't a sideways-scrolling region.
   expect(screen.getByRole("table", { name: "Video review filters table" })).toBeVisible();
   expect(screen.queryByRole("region", { name: "Video review filters table" })).not.toBeInTheDocument();
@@ -160,6 +162,7 @@ it("names manual visual filters by their label beside undescribed model findings
   const section = screen.getByRole("region", { name: "Video review filters" });
   const mixed = await within(section).findByRole("checkbox", { name: "Include Bar fight at 0:10" });
   expect(mixed.closest("tr")).toHaveTextContent("Bar fight");
+  fireEvent.click(within(section).getByRole("button", { name: /Car chase finding group/ }));
   const manual = within(section).getByRole("checkbox", { name: "Include Car chase at 0:30" });
   expect(manual.closest("tr")).toHaveTextContent("Car chase");
   const model = within(section).getByRole("checkbox", { name: "Include violence at 0:50" });
@@ -180,21 +183,33 @@ it("shows a relabelled generated finding's label and follows a relabel in the ed
   ];
   const scans = [{ id: "scan-generated", scan_id: 1, origin: "generated", name: "Scan" }] as Scan[];
   function Editable() {
-    const [draft, setDraft] = useState({ filters: initial, filterBases: {} } as unknown as ReviewDraft);
-    return <SavedReviewOverview filters={draft.filters} memberships={[]} scans={scans} busy={false} metadataEditable focusFilterId="untouched"
+    const [draft, setDraft] = useState({ filters: initial, filterBases: {}, newManualFilters: [] } as unknown as ReviewDraft);
+    return <SavedReviewOverview filters={draft.filters} memberships={[]} scans={scans} busy={false} metadataEditable
       onToggleFilters={vi.fn()} onChangeFilter={(id, patch) => setDraft((current) => updateReviewFilter(current, id, patch))} onDeleteFilter={vi.fn()}
       onApplyDefaults={vi.fn()} onPreviewFilter={vi.fn()} preview={null} previewDisabled />;
   }
   render(<Editable />);
 
   const section = screen.getByRole("region", { name: "Video review filters" });
-  const relabelled = await within(section).findByRole("checkbox", { name: "Include Bar fight at 0:10" });
+  fireEvent.click(within(section).getByRole("button", { name: /subcategory/ }));
+  fireEvent.click(within(section).getByRole("button", { name: /Bar fight finding group/ }));
+  fireEvent.click(within(section).getByRole("button", { name: /violence finding group/ }));
+  const relabelled = within(section).getByRole("checkbox", { name: "Include Bar fight at 0:10" });
   expect(relabelled.closest("tr")).toHaveTextContent("Bar fight");
   const untouched = within(section).getByRole("checkbox", { name: "Include violence at 0:30" });
   expect((untouched.closest("tr") as HTMLElement).querySelector(".merged-descriptions")).toBeNull();
   expect(untouched.closest("tr")).not.toHaveTextContent("d1_violence");
 
-  fireEvent.change(await screen.findByLabelText("Filter untouched label"), { target: { value: "Car chase" } });
+  fireEvent.click(within(section).getByRole("button", { name: "More actions for violence at 0:30" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Edit violence at 0:30" }));
+  const label = await screen.findByLabelText("Filter untouched label");
+  label.focus();
+  fireEvent.change(label, { target: { value: "Car" } });
+  fireEvent.change(label, { target: { value: "Car chase" } });
+  expect(label).toHaveFocus();
+  expect(label).toHaveValue("Car chase");
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  expect(within(section).getByRole("button", { name: /Car chase finding group/ })).toHaveAttribute("aria-expanded", "true");
   const renamed = within(section).getByRole("checkbox", { name: "Include Car chase at 0:30" });
   expect(renamed.closest("tr")).toHaveTextContent("Car chase");
 });
@@ -234,7 +249,7 @@ it("sorts mixed review filters by time and restores the collapsible categories",
   const category = await within(list).findByRole("button", { name: /Violence \(General\) subcategory/ });
   expect(category).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(category);
-  expect(await within(list).findByRole("button", { name: /fight finding group/ })).toBeVisible();
+  expect(await within(list).findByRole("button", { name: /Fight finding group/ })).toBeVisible();
   expect(within(list).queryByRole("region", { name: "Audio review filters" })).not.toBeInTheDocument();
 });
 

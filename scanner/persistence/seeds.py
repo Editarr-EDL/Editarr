@@ -5,7 +5,7 @@ import secrets
 from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
-from scanner.models import MCF_CATEGORY_REGISTRY, Severity
+from scanner.models import MCF_1_1_1_CATEGORIES, MCF_CATEGORY_TO_FAMILY, Severity
 
 from .rows.db_catalog import FilterSettingsRow, McfSeverityDefaultRow
 from .rows.db_community import CommunityIdentityRow
@@ -35,6 +35,10 @@ def seed_filter_defaults(connection: Connection) -> None:
         FilterSettingsRow.__table__.insert().prefix_with("OR IGNORE"),
         {"id": 1, "revision": 0},
     )
+    # Persisted default positions are stable across taxonomy extensions.
+    subcategories = sorted(
+        MCF_CATEGORY_TO_FAMILY, key=lambda subcategory: subcategory in MCF_1_1_1_CATEGORIES
+    )
     defaults = [
         {
             "settings_id": 1,
@@ -42,8 +46,6 @@ def seed_filter_defaults(connection: Connection) -> None:
             "position": position,
             "severity": Severity.MEDIUM,
         }
-        for position, (subcategory, _label) in enumerate(
-            entry for categories in MCF_CATEGORY_REGISTRY.values() for entry in categories
-        )
+        for position, subcategory in enumerate(subcategories)
     ]
     connection.execute(McfSeverityDefaultRow.__table__.insert().prefix_with("OR IGNORE"), defaults)

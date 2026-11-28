@@ -5,7 +5,12 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 from scanner.api import api_mcf_registry
-from scanner.models import MCF_CATEGORY_REGISTRY, McfCategory
+from scanner.models import (
+    MCF_1_1_1_CATEGORIES,
+    MCF_CATEGORY_REGISTRY,
+    McfCategory,
+    McfSourceVersion,
+)
 
 REGISTRY_PATH = Path(__file__).parent / "fixtures" / "mcf" / "category-registry-v1.json"
 CLASSIFICATION_PATH = (
@@ -13,7 +18,7 @@ CLASSIFICATION_PATH = (
 )
 
 
-def test_mcf_supported_versions_share_one_complete_category_registry():
+def test_mcf_extended_registry_preserves_the_frozen_legacy_registry():
     registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     canonical_registry = json.dumps(
         registry, ensure_ascii=True, separators=(",", ":"), sort_keys=True
@@ -23,6 +28,10 @@ def test_mcf_supported_versions_share_one_complete_category_registry():
         "31c026d28649e08e86036324ef6170a70c2463b469d0d13836bc0dc06540bcc2"
     )
     assert registry["source_versions"] == ["1.0.0", "1.1.0"]
+    assert [version.value for version in McfSourceVersion] == [
+        *registry["source_versions"],
+        "1.1.1",
+    ]
     assert [family["token"] for family in registry["families"]] == [
         "commercial_content",
         "discrimination",
@@ -46,21 +55,21 @@ def test_mcf_supported_versions_share_one_complete_category_registry():
         17,
     ]
 
-    categories = [
-        category
-        for family in registry["families"]
-        for category in family["categories"]
-    ]
+    categories = [category for family in registry["families"] for category in family["categories"]]
     tokens = [token for token, _label in categories]
     assert len(categories) == 97
     assert len(tokens) == len(set(tokens))
     assert all(token and label for token, label in categories)
     assert {"advertBreak", "nameCalling", "crueltyToAnimals", "weapons"} <= set(tokens)
-    assert TypeAdapter(McfCategory).json_schema()["enum"] == tokens
+    extended_tokens = TypeAdapter(McfCategory).json_schema()["enum"]
+    assert [token for token in extended_tokens if token not in MCF_1_1_1_CATEGORIES] == tokens
+    assert len(extended_tokens) == len(set(extended_tokens)) == 105
     assert [
         {
             "token": family.value,
-            "categories": [list(category) for category in categories],
+            "categories": [
+                [token, label] for token, label in categories if token not in MCF_1_1_1_CATEGORIES
+            ],
         }
         for family, categories in MCF_CATEGORY_REGISTRY.items()
     ] == [
@@ -119,13 +128,9 @@ def test_frontend_registry_contract_uses_the_single_backend_authority():
     registry = api_mcf_registry()
 
     assert [family.token for family in registry.families] == list(MCF_CATEGORY_REGISTRY)
-    assert sum(len(family.categories) for family in registry.families) == 97
+    assert sum(len(family.categories) for family in registry.families) == 105
     assert [
         (category.token.value, category.label)
         for family in registry.families
         for category in family.categories
-    ] == [
-        category
-        for categories in MCF_CATEGORY_REGISTRY.values()
-        for category in categories
-    ]
+    ] == [category for categories in MCF_CATEGORY_REGISTRY.values() for category in categories]

@@ -28,6 +28,7 @@ from .model_review_community import (
     ReviewCommunitySource,
 )
 from .model_review_filters import (
+    ReviewCommunityDraft,
     ReviewFilter,
     ReviewFilterInput,
     SavedReviewFilter,
@@ -43,6 +44,7 @@ from .model_scans import (
     SavedReviewSummary,
     Scan,
 )
+from .model_videoskip import VideoSkipAttribution, VideoSkipImportIssue
 
 
 class ReviewScanMembership(ReviewWriteModel):
@@ -220,6 +222,7 @@ class ReviewCreate(ReviewWriteModel):
     community_memberships: list[ReviewCommunityMembership] = Field(
         default_factory=list, max_length=32
     )
+    community_drafts: list[ReviewCommunityDraft] = Field(default_factory=list, max_length=32)
 
 
 class ReviewSave(ReviewPolicyToken):
@@ -236,6 +239,7 @@ class ReviewSave(ReviewPolicyToken):
     community_memberships: list[ReviewCommunityMembership] | None = Field(
         default=None, max_length=32
     )
+    community_drafts: list[ReviewCommunityDraft] = Field(default_factory=list, max_length=32)
 
 
 class ReviewRetimeRequest(ReviewPolicyToken):
@@ -321,6 +325,18 @@ class EdlImportResult(BaseModel):
     review: SavedReview | None
     scan: Scan
     warning: EdlImportWarning | None
+
+
+class VideoSkipImportOptions(EdlImportOptions):
+    stage_for_verification: Literal[True] = True
+    attribution: VideoSkipAttribution = Field(default_factory=VideoSkipAttribution)
+
+
+class VideoSkipImportResult(BaseModel):
+    review: None = None
+    scan: Scan
+    issue_count: int
+    issues: list[VideoSkipImportIssue]
 
 
 class McfImportOptions(ReviewWriteModel):

@@ -129,7 +129,7 @@ def _active_model_backends(db: Session) -> set[str]:
 
     active: set[str] = set()
     for scan in root.list_scan_queue(db):
-        if scan.status not in {"acquiring_model", "scanning", "cancelling"}:
+        if scan.status not in {"acquiring_model", "scanning", "cancelling", "pausing"}:
             continue
         if scan.scan_audio and scan.audio_model:
             active.add(scan.audio_model)
@@ -156,7 +156,7 @@ def _active_description_artifacts(db: Session) -> set[str]:
 
     held: set[str] = set()
     for scan in root.list_scan_queue(db):
-        if scan.status not in {"acquiring_model", "scanning", "cancelling"}:
+        if scan.status not in {"acquiring_model", "scanning", "cancelling", "pausing"}:
             continue
         if scan.scan_mode == ScanMode.CREDITS_DETECTION:
             continue

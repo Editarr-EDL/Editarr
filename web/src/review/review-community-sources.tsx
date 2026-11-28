@@ -16,7 +16,7 @@ function blockedReason(entry: CommunityEntry, maySearch: boolean): string | null
 
 function entryStatus(entry: CommunityEntry, blocked: string | null): string | null {
   if (!entry.included) return entry.source ? "Removed with its filters when you save." : blocked;
-  if (!entry.source) return "Saving the review adds these community filters to the results. Low-confidence ones start disabled.";
+  if (!entry.source) return "Edit and preview these filters in the draft. Save to keep your changes.";
   if (entry.refreshStaged) return "Refresh staged. Save the review to bring in the community changes; your edits are kept.";
   if (entry.changed && !blocked) return "Community filters changed since included.";
   return blocked;
@@ -38,7 +38,7 @@ export const communityEntryChanged = (entry: CommunityEntry) => entry.included &
 
 /**
  * The community entries of the Included scans popover. Including one adds the master set's filters to the
- * review's results as normal filters when the review is saved; later community changes only show a "changed"
+ * draft's results as normal editable filters; later community changes only show a "changed"
  * notice until the user refreshes. Merged or unavailable sets can still be included.
  */
 export function ReviewCommunityEntries({ entries, draft, disabled, maySearch, onChange, votesFailed, onRetryVotes }: {

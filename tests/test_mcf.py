@@ -76,7 +76,7 @@ def test_parse_mcf_1_0_crlf_and_bounds_only_documents():
 @pytest.mark.parametrize("token", list(McfCategory))
 def test_all_category_tokens_parse_and_registry_helpers_are_canonical(token):
     content = (
-        "WEBVTT MovieContentFilter 1.0.0\n\n"
+        "WEBVTT MovieContentFilter 1.1.1\n\n"
         "NOTE\nSTART 00:00:00.000\nEND 00:00:02.000\n\n"
         f"00:00:00.000 --> 00:00:01.000\n{token.value}=low=audio\n"
     ).encode()

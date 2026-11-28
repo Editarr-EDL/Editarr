@@ -385,6 +385,8 @@ def find_active_credits_detection(
                     "acquiring_model",
                     "queued",
                     "scanning",
+                    "pausing",
+                    "paused",
                     "cancelling",
                     "orphaned",
                 )

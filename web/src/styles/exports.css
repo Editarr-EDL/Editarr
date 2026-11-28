@@ -9,6 +9,8 @@
 .export-section { display: grid; gap: 10px; min-width: 0; }
 .export-section h3, .export-confirmation h4, .published-files h3 { margin: 0; }
 .export-section .muted-copy, .published-files .muted-copy { margin: 0; font-size: 14px; }
+.videoskip-export-issues { margin: 0; padding-inline-start: 22px; overflow-wrap: anywhere; }
+.videoskip-export-issues > li + li { margin-block-start: 6px; }
 
 .export-destinations,
 .review-deletion-files {

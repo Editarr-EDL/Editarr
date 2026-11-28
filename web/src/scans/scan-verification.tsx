@@ -42,8 +42,12 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
   const options: VerificationRequest["channels"] = [];
   if (scan.scan_audio) options.push("audio");
   if (scan.scan_video) options.push("video");
+  const videoSkip = scan.videoskip_source;
+  const sourceReference = videoSkip?.sync.reference_seconds;
   const [channels, setChannels] = useState(initialChannels ?? options);
-  const [method, setMethod] = useState<VerificationRequest["method"]>(scan.scan_audio || initialChannels ? "transcript" : "manual");
+  const [method, setMethod] = useState<VerificationRequest["method"]>(
+    !videoSkip && (scan.scan_audio || initialChannels) ? "transcript" : "manual",
+  );
   const [step, setStep] = useState<Step>("align");
   const [showQueue, setShowQueue] = useState(!!submittedAudioScan);
   const needsAudioTrack = method === "transcript" || channels.includes("audio");
@@ -52,7 +56,10 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
     source: method === "transcript" ? scan.id : null, target, selection: tracks.selection, channels,
     scans: currentScans, submittedScan: submittedAudioScan,
   });
-  const [anchors, setAnchors] = useState([emptyAnchor(), emptyAnchor()]);
+  const [anchors, setAnchors] = useState(() => [
+    sourceReference != null && sourceReference >= 0 ? { source: String(sourceReference), target: "" } : emptyAnchor(),
+    emptyAnchor(),
+  ]);
   const [preview, setPreview] = useState<{ request: VerificationRequest; result: VerificationPreview } | null>(null);
   const [viewedVideo, setViewedVideo] = useState<number[]>([]);
   const [activity, setActivity] = useState<"preview" | "verify" | "approve" | null>(null);
@@ -193,6 +200,12 @@ export function ScanVerificationDialog({ scan, originalName, target, itemName, t
     </nav>
     <div className="verification-body" tabIndex={-1} ref={bodyRef} role="group"
       aria-label={steps.find(({ id }) => id === step)?.label}>
+      {step === "align" && videoSkip && <p className="muted-copy">
+        VideoSkip source{videoSkip.uploader ? ` by ${videoSkip.uploader}` : ""}
+        {sourceReference != null && ` · Reference at ${sourceReference} s`}
+        {videoSkip.sync.reference_description && ` · ${videoSkip.sync.reference_description}`}
+        {Object.keys(videoSkip.sync.platform_offsets_seconds).length > 0 && ` · Platforms: ${Object.keys(videoSkip.sync.platform_offsets_seconds).join(", ")}`}
+      </p>}
       {step === "align" && <VerificationTiming options={options} channels={channels} method={method} anchors={anchors}
         tracks={tracks} busy={busy} transcript={{ ...transcript, active: transcriptActive }} mayStartAudioScan={mayStartAudioScan}
         onChannels={(updated) => { setChannels(updated); resetPreview(); }}
