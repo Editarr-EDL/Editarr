@@ -5,9 +5,11 @@ import {
 } from "react";
 import { fetchScanReferences, renameScan } from "../api/api-scans";
 import { audioTrackLabel } from "./audio-track-field";
+import { MODEL_COPY } from "./model-catalog-copy";
 import { ShareAction } from "./sharing-dialog";
 import { usePrincipal } from "../auth/auth-gate";
 import { scanActionAllowed } from "./scan-access";
+import { scanProvenanceSummary } from "./scan-provenance";
 import type {
   Scan,
   ScanMatch,
@@ -77,8 +79,11 @@ function scanAnalysisDetails(scan: Scan | ScanQueueItem): string {
       ? `End Credits · ${candidate.method.replace(/_/g, " ")} · ${Math.round(candidate.confidence * 100)}% confidence (${candidate.confidence_band})`
       : `End Credits · ${scan.credits_detection?.detector_version || "credits detector"}`;
   }
+  const qwenModel = scan.qwen_model ?? "qwen3-vl-8b-instruct-4bit";
+  const qwenName = MODEL_COPY[qwenModel]?.name ?? qwenModel;
+  const audioFilter = scan.audio_filter === "qwen" ? qwenName : scan.audio_filter || "better_profanity";
   const analyses = [
-    scan.scan_audio ? `${scan.audio_model || "whisper"} transcriber · ${scan.audio_filter || "better_profanity"} filter` : null,
+    scan.scan_audio ? `${scan.audio_model || "whisper"} transcriber · ${audioFilter} filter` : null,
     scan.scan_audio ? (scan.analyzed_audio_selection
       ? `Analyzed audio: ${audioTrackLabel(scan.analyzed_audio_selection.track)}`
       : scan.requested_audio_selection && ["queued", "scanning", "orphaned", "pausing", "paused", "cancelling"].includes(scan.status)
@@ -91,19 +96,21 @@ function scanAnalysisDetails(scan: Scan | ScanQueueItem): string {
     ? `Coarse scan${interval && interval > 0 ? ` every ${interval} s` : ""} · Fine scan for flagged scenes or scenes without samples`
     : "Fine scan every frame";
   const videoOptions = scan.scan_video
-    ? ` · ${visualPass} · ${scan.qwen_model?.includes("-4b-") ? "Qwen3-VL 4B" : "Qwen3-VL 8B"} · ${scan.qwen_summaries_per_segment} representative frames · Join gaps ${scan.qwen_segment_join_gap_seconds}s`
+    ? ` · ${visualPass} · ${qwenName} · ${scan.qwen_summaries_per_segment} representative frames · Join gaps ${scan.qwen_segment_join_gap_seconds}s`
     : "";
   return `${analyses || "No analyses"}${videoOptions}`;
 }
 
 export function scanOptionsSummary(scan: Scan | ScanQueueItem): string {
-  const mcf = scan.mcf_document
-    ? ` · MCF ${scan.mcf_document.source_version} · ${scan.mcf_document.title || "Untitled"} · ${scan.mcf_document.material_start_seconds}–${scan.mcf_document.material_end_seconds}s`
-    : "";
-  const coverage = scan.stage_coverage?.length
-    ? scan.stage_coverage.map((stage) => `${stage.stage}: ${stage.status}`).join(", ")
-    : "Unknown coverage";
-  return `${scanAnalysisDetails(scan)}${scan.media_source_name ? ` · ${scan.media_source_name}` : ""}${mcf} · ${coverage} · Scanner ${scan.scanner_behavior_version || "unknown"}`;
+  const mcf = scan.mcf_document;
+  const { scannerVersion, stages } = scanProvenanceSummary(scan);
+  return [
+    scanAnalysisDetails(scan),
+    scan.media_source_name,
+    mcf && `MCF ${mcf.source_version} · ${mcf.title || "Untitled"} · ${mcf.material_start_seconds}–${mcf.material_end_seconds}s`,
+    stages.map((stage) => `${stage.stage}: ${stage.status}`).join(", "),
+    scannerVersion && `Scanner ${scannerVersion}`,
+  ].filter(Boolean).join(" · ");
 }
 
 /** Edit a scan name and report a successful save.

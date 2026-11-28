@@ -70,7 +70,6 @@ _detector: NudeDetector | None = None
 _SEVERITY_ORDER = {Severity.LOW: 1, Severity.MEDIUM: 2, Severity.HIGH: 3}
 
 SUPPORTED_VIDEO_MODELS = set(CAPABILITY_VIDEO_MODELS)
-_DECISION_VIDEO_MODELS = ("qwen3-vl-8b", "qwen3-vl-4b", "d1-3b")
 _VIDEO_MODEL_ALIASES = {
     "image-safety-gate": "image_safety_gate",
     "comfyui-image-safety-gate": "image_safety_gate",
@@ -369,6 +368,8 @@ def scan_frame(
     video_model: str | None = None,
 ) -> list[VisualDetection]:
     """Scan a single frame using the selected visual model."""
+    from . import decision_detection
+
     selected_model = normalize_video_model(video_model)
     if selected_model == "image_safety_gate":
         return _scan_frame_image_safety_gate(frame_path, timestamp)
@@ -376,9 +377,7 @@ def scan_frame(
         from scanner.pipeline import shieldstral
 
         return shieldstral.scan_frame(frame_path, timestamp)
-    if selected_model in _DECISION_VIDEO_MODELS:
-        from scanner.pipeline import decision_detection
-
+    if selected_model in decision_detection.DECISION_VIDEO_MODELS:
         return decision_detection.scan_frame(frame_path, timestamp, selected_model)
     if selected_model.startswith("siglip2_moderation_"):
         return _scan_frame_siglip2_moderation(
@@ -403,10 +402,11 @@ def scan_frames(
     ``progress_callback(done, total)`` and ``should_cancel`` run once per frame
     as soon as its result is known, even if the backend emits it later.
 
-    Qwen is deliberately not called here.  A scene's complete set of safety
-    findings is needed before representative frames can be selected for a
-    much smaller, deferred Qwen pass.
+    Scene descriptions happen after detection. They use representative frames
+    selected from the complete set of safety findings.
     """
+    from . import decision_detection
+
     findings: list[FindingCreate] = []
     interval = frame_interval_seconds or settings.frame_interval_seconds
     selected_model = normalize_video_model(video_model)
@@ -432,9 +432,7 @@ def scan_frames(
         # Shieldstral delays sexual runs for smoothing, so report on resolution.
         detection_lists = shieldstral.scan_frames(frames, interval, on_resolved=frame_done)
         report_on_yield = False
-    elif selected_model in _DECISION_VIDEO_MODELS:
-        from scanner.pipeline import decision_detection
-
+    elif selected_model in decision_detection.DECISION_VIDEO_MODELS:
         detection_lists = decision_detection.scan_frames(
             frames, interval, selected_model, on_resolved=frame_done
         )

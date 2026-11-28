@@ -11,6 +11,7 @@ from scanner.models import FindingCreate, McfCategoryFamily, Severity
 from scanner.pipeline import d1_detector, detector_memory, pending_scenes, qwen_summary
 from scanner.pipeline.runner import _scan_visual_by_scene
 from scanner.pipeline.scenes import Scene
+from scanner.settings.capabilities import QWEN38_27B_MODEL, QWEN38_27B_VIDEO_MODEL
 
 QWEN_8B = "qwen3-vl-8b-instruct-4bit"
 QWEN_4B = "qwen3-vl-4b-instruct-4bit"
@@ -24,6 +25,9 @@ QWEN_4B = "qwen3-vl-4b-instruct-4bit"
         ("shieldstral", QWEN_4B, True),
         ("qwen3-vl-8b", QWEN_8B, False),
         ("qwen3-vl-4b", QWEN_4B, False),
+        (QWEN38_27B_VIDEO_MODEL, QWEN38_27B_MODEL, False),
+        (QWEN38_27B_VIDEO_MODEL, QWEN_8B, True),
+        ("qwen3-vl-8b", QWEN38_27B_MODEL, True),
         ("nudenet", QWEN_8B, False),
         (None, QWEN_8B, False),
     ],
@@ -229,16 +233,23 @@ def test_failed_description_leaves_no_pending_scene_files(monkeypatch, tmp_path)
     assert sorted(path.name for path in results.glob("*.json")) == ["scene_0000.json"]
 
 
-def test_release_drops_only_the_separate_detector_model(monkeypatch):
+@pytest.mark.parametrize(
+    ("video_model", "artifact"),
+    [("qwen3-vl-4b", QWEN_4B), (QWEN38_27B_VIDEO_MODEL, QWEN38_27B_MODEL)],
+)
+def test_release_drops_only_the_separate_detector_model(monkeypatch, video_model, artifact):
     cleared = []
     monkeypatch.setattr(detector_memory, "_clear_mlx_cache", lambda: cleared.append(True))
-    monkeypatch.setattr(qwen_summary, "_CACHE", {QWEN_4B: "detector", QWEN_8B: "description"})
+    monkeypatch.setattr(qwen_summary, "_CACHE", {artifact: "detector", QWEN_8B: "description"})
 
-    detector_memory.release_detector("qwen3-vl-4b")
+    detector_memory.release_detector(video_model)
 
     assert qwen_summary._CACHE == {QWEN_8B: "description"}
     assert cleared == [True]
 
+
+def test_release_drops_the_d1_detector(monkeypatch):
+    monkeypatch.setattr(detector_memory, "_clear_mlx_cache", lambda: None)
     monkeypatch.setattr(d1_detector, "_CACHE", {"model": object()})
     detector_memory.release_detector("d1-3b")
     assert d1_detector._CACHE == {}

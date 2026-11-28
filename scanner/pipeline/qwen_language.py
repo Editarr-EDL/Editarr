@@ -16,7 +16,7 @@ from scanner.models import (
     McfCategoryFamily,
     Severity,
 )
-from scanner.settings.capabilities import QWEN35_9B_MODEL, qwen_enrichment_capability
+from scanner.settings.capabilities import qwen_enrichment_capability
 
 from . import qwen_summary
 from .qwen_language_detection import detect_language_findings, transcript_windows
@@ -135,8 +135,7 @@ def load_language_generator(qwen_model: str) -> LanguageGenerator:
     mlx_vlm = qwen_summary._require_dependency("mlx_vlm", "mlx-vlm")
     prompt_utils = qwen_summary._require_dependency("mlx_vlm.prompt_utils", "mlx-vlm")
     model, processor, config = qwen_summary._load_model(qwen_model)
-    # Qwen3.5's reasoning output would break the strict JSON response parsers.
-    template_options = {"enable_thinking": False} if qwen_model == QWEN35_9B_MODEL else {}
+    template_options = qwen_summary._qwen_chat_template_options(qwen_model)
 
     def generate(prompt: str, max_tokens: int = DETECTION_MAX_TOKENS) -> str:
         formatted = prompt_utils.apply_chat_template(

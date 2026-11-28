@@ -7,6 +7,12 @@ import { AuthenticationGate } from "../auth/auth-gate";
 import { completeScan, installProductionApi, json, mediaItem, signedInStatus } from "./app-test-fixtures";
 import { chooseModel, chooseScanType, expectSelectedModel, infoText, modelPicker, scanTypeRadio, type ScanTypeName } from "./new-scan-test-helpers";
 
+const qwen38 = {
+  name: "Qwen3.8-27B",
+  qwenId: "qwen38-27b-instruct-4bit",
+  videoId: "qwen38-27b",
+};
+
 const audioCapabilities = {
   audio_models: [
     { id: "whisper", display_name: "Whisper" },
@@ -16,10 +22,14 @@ const audioCapabilities = {
     { id: "better_profanity", display_name: "better-profanity" },
     { id: "qwen", display_name: "Qwen (multilingual)" },
   ],
-  video_models: [{ id: "nudenet", display_name: "NudeNet" }],
+  video_models: [
+    { id: "nudenet", display_name: "NudeNet" },
+    { id: qwen38.videoId, display_name: qwen38.name },
+  ],
   qwen_models: [
     { id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B" },
     { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B" },
+    { id: qwen38.qwenId, display_name: qwen38.name },
   ],
   model_capabilities: [],
 };
@@ -30,7 +40,12 @@ describe("Qwen language scan controls", () => {
     vi.restoreAllMocks();
   });
 
-  it.each(["audio", "video", "combined"])("submits a path-free catalog %s scan with its selected options", async (mode) => {
+  it.each([
+    ...["audio", "video", "combined"].map((mode) => ({
+      mode, qwenName: "Qwen3-VL 4B", qwenId: "qwen3-vl-4b-instruct-4bit", videoName: "NudeNet", videoId: "nudenet",
+    })),
+    { mode: "combined", qwenName: qwen38.name, qwenId: qwen38.qwenId, videoName: qwen38.name, videoId: qwen38.videoId },
+  ])("submits a path-free catalog $mode scan with $qwenName", async ({ mode, qwenName, qwenId, videoName, videoId }) => {
     let request: Record<string, unknown> | null = null;
     const baseApi = installProductionApi();
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -62,10 +77,11 @@ describe("Qwen language scan controls", () => {
       await chooseModel(dialog, "Filter", "Qwen");
     }
     if (mode !== "audio") {
+      await chooseModel(dialog, "Video model", videoName);
       fireEvent.change(within(dialog).getByLabelText("Representative frames per flagged segment"), { target: { value: "6" } });
       fireEvent.change(within(dialog).getByLabelText("Join flagged segments within (seconds)"), { target: { value: "2" } });
     }
-    await chooseModel(dialog, "Severity and Description model", "Qwen3-VL 4B");
+    await chooseModel(dialog, "Severity and Description model", qwenName);
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Scan name (optional)" }), {
       target: { value: `Selected ${mode}` },
     });
@@ -80,10 +96,10 @@ describe("Qwen language scan controls", () => {
       scan_video: mode !== "audio",
       audio_model: mode === "video" ? null : "apple_speech",
       audio_filter: mode === "video" ? null : "qwen",
-      qwen_model: "qwen3-vl-4b-instruct-4bit",
+      qwen_model: qwenId,
     });
     if (mode !== "video") expect(request).toMatchObject({ audio_selection: { file_version: "a".repeat(64), track: { stream_index: 1, title: "Main" } } });
-    if (mode !== "audio") expect(request).toMatchObject({ video_model: "nudenet", qwen_summaries_per_segment: 6, qwen_segment_join_gap_seconds: 2 });
+    if (mode !== "audio") expect(request).toMatchObject({ video_model: videoId, qwen_summaries_per_segment: 6, qwen_segment_join_gap_seconds: 2 });
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("path-mappings"))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.some(([input]) => /\/models(?:[/?]|$)|\/settings\//.test(String(input)))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("audio-tracks")).every(([input, init]) => !String(input).includes("video_path") && !String(init?.body).includes("video_path"))).toBe(true);

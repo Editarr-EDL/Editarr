@@ -8,7 +8,24 @@ import { completeScan, installProductionApi, json, mediaItem, savedReview } from
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("recovers local scans for Jellyfin and the selected review version", async () => {
-  const scan = completeScan({ id: "found-scan", name: "Found local evidence", media_source_id: "source-2", library_id: "movies" });
+  const stage = {
+    execution_id: "worker-1", source: "generated" as const, release_version: null,
+    scanner_behavior_version: "scanner-1", build_revision: null, model_id: null,
+    model_revision: null, model_digest: null, quantization: null,
+    effective_settings: null, intervals: null, sampling_seconds: null,
+  };
+  const scan = completeScan({
+    id: "found-scan", name: "Found local evidence", media_source_id: "source-2", library_id: "movies",
+    stage_coverage: [
+      { ...stage, stage: "visual", status: "unknown", model_id: "unverified-detector" },
+      { ...stage, stage: "visual_qwen", status: "unknown" },
+      {
+        ...stage, stage: "visual_qwen:scene_0005", status: "complete", model_id: "qwen3-vl-8b",
+        model_revision: "revision-5", effective_settings: { representative_frames: 4 },
+      },
+      { ...stage, stage: "visual_qwen:scene_0006", status: "complete", effective_settings: {} },
+    ],
+  });
   const review = savedReview();
   const baseApi = installProductionApi();
   const searches: unknown[] = [];
@@ -51,11 +68,26 @@ it("recovers local scans for Jellyfin and the selected review version", async ()
     scene_name: "Alternate.Scene", release_group: "OTHER", media_format: "MP4", media_provider_id: null,
   }]);
   expect(within(dialog).getByRole("checkbox", { name: /Associate Found local evidence/ })).toBeChecked();
+  const recovered = within(dialog).getByRole("list", { name: "Recoverable scans" });
+  expect(recovered).toHaveTextContent("Scanner scanner-1");
+  expect(recovered).not.toHaveTextContent(/visual: unknown|visual_qwen|Scanner unknown/i);
+  const provenance = within(dialog).getByText(/Local provenance: Found local evidence/);
+  fireEvent.click(provenance);
+  const recorded = provenance.closest("details");
+  expect(recorded).toHaveTextContent("Scanner scanner-1");
+  expect(recorded).toHaveTextContent("visual_qwen:scene_0005");
+  expect(recorded).toHaveTextContent("Model: qwen3-vl-8b");
+  expect(recorded).toHaveTextContent("Revision: revision-5");
+  expect(recorded).toHaveTextContent('Effective settings: {"representative_frames":4}');
+  expect(recorded).not.toHaveTextContent(/Coverage:|: complete|unverified-detector|scene_0006|Scanner unknown/i);
   fireEvent.click(within(dialog).getByRole("button", { name: "Associate Selected" }));
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "Recover Scans" })).not.toBeInTheDocument());
   expect(associations).toEqual([{ media_item_id: "resolved-media", scan_ids: [scan.id] }]);
   expect(await screen.findByRole("status")).toHaveTextContent("Associated 1 scan.");
-  expect(await within(screen.getByRole("list", { name: "Scan history" })).findByText(/Found local evidence/)).toBeVisible();
+  const history = screen.getByRole("list", { name: "Scan history" });
+  expect(await within(history).findByText(/Found local evidence/)).toBeVisible();
+  expect(history).toHaveTextContent("Scanner scanner-1");
+  expect(history).not.toHaveTextContent(/visual: unknown|visual_qwen|Scanner unknown/i);
   expect(historyPaths.at(-1)).toBeNull();
   await openWorkflowStep("Review");
   expect(screen.getByRole("button", { name: "Open review Existing review" })).toBeVisible();

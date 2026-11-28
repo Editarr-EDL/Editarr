@@ -70,6 +70,12 @@ export const MODEL_COPY: Record<string, ModelCopy> = {
     detects: videoFamilies, reports: ["Flagged scenes by family"],
     bestFor: "Pairing with the 4B description model, which shares its weights", badges: ["Apple silicon"],
   },
+  "qwen38-27b": {
+    name: "Qwen3.8-27B", variant: "MLX 4-bit",
+    description: "Vision-language model that asks yes/no questions about each frame.",
+    detects: videoFamilies, reports: ["Flagged scenes by family"],
+    bestFor: "Pairing with the Qwen3.8-27B description model, which shares its weights", badges: ["Apple silicon"],
+  },
   nudenet: {
     name: "NudeNet",
     description: "Detector bundled with its package that flags nudity in each frame.",
@@ -117,6 +123,12 @@ export const MODEL_COPY: Record<string, ModelCopy> = {
     description: "Describes flagged scenes and rates their severity with a smaller download.",
     detects: ["Flagged scenes"], reports: descriptionReports,
     bestFor: "Pairing with the Qwen3-VL 4B video model, which shares its weights", badges: ["Apple silicon"],
+  },
+  "qwen38-27b-instruct-4bit": {
+    name: "Qwen3.8-27B", variant: "MLX 4-bit",
+    description: "Checks transcripts for objectionable language, describes flagged scenes, and rates severity.",
+    detects: ["Flagged scenes", "Objectionable language"], reports: descriptionReports,
+    bestFor: "Pairing with the Qwen3.8-27B video model, which shares its weights", badges: ["Apple silicon"],
   },
 };
 

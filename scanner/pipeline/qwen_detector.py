@@ -1,11 +1,11 @@
-"""Qwen3-VL as a yes/no video detector on MLX (mlx-vlm), Apple silicon only.
+"""Qwen yes/no video detectors on MLX (mlx-vlm), Apple silicon only.
 
 Each frame is one conversation: the image is encoded once with the first question,
-then every later family question feeds only its new text tokens into the same KV
+then every later family question feeds only its new text tokens into the same
 cache. A family's score is P(yes) / (P(yes) + P(no)) over the first answer token's top
 log-probabilities at temperature 0, and the greedy answer token stays in the
-conversation before the next question. Prompts, chaining and scoring match the
-evaluation harness's ``qwen3vl-8b-mlx`` backend.
+conversation before the next question. Qwen3.8 uses its non-thinking assistant
+prefix for each decision.
 
 The model is loaded through :mod:`scanner.pipeline.qwen_summary`, so a scan whose
 Severity and Description model is the same artifact reuses one loaded instance.
@@ -20,7 +20,11 @@ from pathlib import Path
 from threading import Lock
 
 from scanner.modeling.model_acquisition_manifest import manifest
-from scanner.settings.capabilities import require_available
+from scanner.settings.capabilities import (
+    QWEN38_27B_MODEL,
+    QWEN38_27B_VIDEO_MODEL,
+    require_available,
+)
 
 from .decision_detection import (
     DETECTED_FAMILIES,
@@ -33,13 +37,15 @@ from .dependencies import require_dependency
 ARTIFACTS = {
     "qwen3-vl-8b": "qwen3-vl-8b-instruct-4bit",
     "qwen3-vl-4b": "qwen3-vl-4b-instruct-4bit",
+    QWEN38_27B_VIDEO_MODEL: QWEN38_27B_MODEL,
 }
-# Evaluated default: a family is flagged at P(yes) >= 0.5.
+# Start Qwen3.8 at the Qwen3-VL threshold until labeled footage supports calibration.
 THRESHOLDS = {family: 0.5 for family in DETECTED_FAMILIES}
 TOP_LOGPROBS = 20
 USER = "<|im_start|>user\n"
 END = "<|im_end|>\n"
 ASSISTANT = "<|im_start|>assistant\n"
+NON_THINKING_ASSISTANT = ASSISTANT + "<think>\n\n</think>\n\n"
 # Qwen chat templates render an image as this span; the processor expands the pad token.
 IMAGE_SPAN = "<|vision_start|><|image_pad|><|vision_end|>"
 # Prompt-time model kwargs that stay valid for text-only continuations.
@@ -47,14 +53,14 @@ _CONTINUE_KWARGS = ("rope_deltas",)
 _LOCK = Lock()
 
 
-def first_turn(text: str) -> str:
+def first_turn(text: str, assistant: str = ASSISTANT) -> str:
     """Opening user turn: the frame followed by ``text``, then the reply prefix."""
-    return f"{USER}{IMAGE_SPAN}{text}{END}{ASSISTANT}"
+    return f"{USER}{IMAGE_SPAN}{text}{END}{assistant}"
 
 
-def next_turn(text: str) -> str:
+def next_turn(text: str, assistant: str = ASSISTANT) -> str:
     """Close the previous reply and open the next user turn and reply prefix."""
-    return f"{END}{USER}{text}{END}{ASSISTANT}"
+    return f"{END}{USER}{text}{END}{assistant}"
 
 
 def yes_no(family) -> str:
@@ -82,18 +88,18 @@ class Step:
 
 
 class QwenConversation:
-    """One frame conversation over a loaded mlx-vlm Qwen3-VL model and its KV cache."""
+    """One frame conversation over a loaded mlx-vlm Qwen model and its prompt cache."""
 
     def __init__(self, model, processor):
         self.model = model
         self.processor = processor
         self.tokenizer = getattr(processor, "tokenizer", processor)
-        self._mx = require_dependency("mlx.core", "mlx", "The Qwen3-VL detector requires")
+        self._mx = require_dependency("mlx.core", "mlx", "The Qwen video detector requires")
         self._cache: list | None = None
         self._kwargs: dict = {}
 
     def _reset_positions(self) -> None:
-        # Qwen3-VL keeps M-RoPE state from the last prompt; clear it so neither this
+        # The language model keeps M-RoPE state from the last prompt; clear it so neither this
         # conversation nor a later summary inherits stale positions.
         language = self.model.language_model
         for attribute in ("_rope_deltas", "_position_ids"):
@@ -105,9 +111,9 @@ class QwenConversation:
 
         ``image`` is a frame path or an already decoded (e.g. downscaled) PIL image.
         """
-        utils = require_dependency("mlx_vlm.utils", "mlx-vlm", "The Qwen3-VL detector requires")
+        utils = require_dependency("mlx_vlm.utils", "mlx-vlm", "The Qwen video detector requires")
         cache = require_dependency(
-            "mlx_vlm.models.cache", "mlx-vlm", "The Qwen3-VL detector requires"
+            "mlx_vlm.models.cache", "mlx-vlm", "The Qwen video detector requires"
         )
         self._reset_positions()
         inputs = utils.prepare_inputs(
@@ -133,6 +139,7 @@ class QwenConversation:
                 if key != "inputs_embeds" and value is not None
             },
         }
+        # MLX defers to the model's cache factory, including Qwen3.8's recurrent layers.
         self._cache = cache.make_prompt_cache(self.model.language_model)
         step = self._forward(input_ids, embedded.inputs_embeds)
         # Later turns are text only: positions continue from the cache offset plus the
@@ -174,16 +181,16 @@ class QwenConversation:
         return Step(token_id=ids[0], top=top)
 
 
-def converse(conversation, image: Path) -> dict:
+def converse(conversation, image: Path, *, assistant: str = ASSISTANT) -> dict:
     """Ask every family question about one frame in a single chained conversation."""
     scores = {}
     try:
         for index, family in enumerate(DETECTED_FAMILIES):
             text = yes_no(family)
             step = (
-                conversation.begin(first_turn(text), image)
+                conversation.begin(first_turn(text, assistant), image)
                 if index == 0
-                else conversation.extend(next_turn(text))
+                else conversation.extend(next_turn(text, assistant))
             )
             scores[family] = yes_probability(step.top)
             if index < len(DETECTED_FAMILIES) - 1:
@@ -203,19 +210,20 @@ def _conversation(video_model: str) -> QwenConversation:
 
 
 def score_frame(video_model: str, frame_path: Path) -> FrameDecision:
-    """Score one frame with the selected Qwen3-VL detector."""
+    """Score one frame with the selected Qwen detector's answer prefix."""
+    assistant = NON_THINKING_ASSISTANT if video_model == QWEN38_27B_VIDEO_MODEL else ASSISTANT
     with _LOCK:
-        scores = converse(_conversation(video_model), frame_path)
+        scores = converse(_conversation(video_model), frame_path, assistant=assistant)
     return FrameDecision(scores=scores, thresholds=THRESHOLDS)
 
 
 @lru_cache(maxsize=None)
 def detector(video_model: str) -> DecisionDetector:
-    """Describe one Qwen3-VL detector id; weights load on the first scored frame."""
+    """Describe one Qwen detector id; weights load on the first scored frame."""
     artifact = manifest().artifact(ARTIFACTS[video_model])
     return DecisionDetector(
         video_model=video_model,
-        label_prefix="qwen3_vl",
+        label_prefix="qwen3_8" if video_model == QWEN38_27B_VIDEO_MODEL else "qwen3_vl",
         model_id=artifact.repository or artifact.id,
         model_revision=artifact.revision or artifact.backend_version,
         score=lambda frame_path: score_frame(video_model, frame_path),

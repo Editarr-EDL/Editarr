@@ -105,6 +105,7 @@ def test_capabilities_expose_legacy_choices_and_detailed_backend_records():
     assert [model.id for model in capabilities["qwen_models"]] == [
         "qwen3-vl-8b-instruct-4bit",
         "qwen3-vl-4b-instruct-4bit",
+        "qwen38-27b-instruct-4bit",
     ]
     assert detailed["qwen3_vl"].stage == "enrichment"
     assert detailed["qwen3_vl"].weight_requirement == "on_demand"
@@ -157,9 +158,22 @@ def test_fake_model_mode_accepts_the_decision_video_models(monkeypatch):
     monkeypatch.setattr(api, "require_available", unavailable)
     monkeypatch.setattr("scanner.testing.test_fake_models.enabled", lambda: True)
 
-    for video_model in ("qwen3-vl-8b", "qwen3-vl-4b", "d1-3b"):
+    for video_model in ("qwen3-vl-8b", "qwen3-vl-4b", "qwen38-27b", "d1-3b"):
         options = api.ScanOptions(scan_audio=False, video_model=video_model)
         assert options.video_model == video_model
+
+
+def test_scan_options_accept_qwen38_for_audio_and_video(monkeypatch):
+    monkeypatch.setattr(api, "require_available", lambda _backend_id: None)
+    options = api.ScanOptions(
+        audio_filter="qwen",
+        video_model="qwen38-27b",
+        qwen_model="qwen38-27b-instruct-4bit",
+    )
+
+    assert options.audio_filter == "qwen"
+    assert options.video_model == "qwen38-27b"
+    assert options.qwen_model == "qwen38-27b-instruct-4bit"
 
 
 @pytest.mark.parametrize(

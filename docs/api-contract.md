@@ -810,6 +810,10 @@ Video models are listed in selection order, so the first entry is the default:
 `qwen3-vl-8b` where MLX runs (Apple silicon), otherwise `nudenet`. A scan request that
 omits `video_model` uses the same default. The description model keeps the request
 field name `qwen_model` for compatibility with stored scan options.
+On Apple silicon, use `video_model: "qwen38-27b"` to detect visual content with Qwen3.8-27B
+and `qwen_model: "qwen38-27b-instruct-4bit"` for scene descriptions and severity.
+Set `audio_filter: "qwen"` to use the selected `qwen_model` for transcript discovery
+and language classification.
 
 ### Audio track selection
 

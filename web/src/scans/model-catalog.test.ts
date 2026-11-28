@@ -87,11 +87,13 @@ describe("buildModelOptions", () => {
         capability("qwen", { stage: "audio", download: download("ready", 5_776_630_909) }),
         capability("qwen3-vl-8b", { download: download("ready", 5_776_630_909) }),
         capability("qwen3-vl-4b", { download: download("not_downloaded", 3_109_729_929) }),
+        capability("qwen38-27b", { download: download("not_downloaded", 16_074_308_726) }),
       ],
     };
     const qwenFilter = (qwenModelId?: string) => buildModelOptions("filter", caps, { qwenModelId })[0];
     expect(qwenFilter("qwen3-vl-4b-instruct-4bit").status).toEqual({ kind: "download", bytesTotal: 3_109_729_929 });
     expect(qwenFilter("qwen3-vl-8b-instruct-4bit").status).toEqual({ kind: "ready", bytesTotal: 5_776_630_909 });
+    expect(qwenFilter("qwen38-27b-instruct-4bit").status).toEqual({ kind: "download", bytesTotal: 16_074_308_726 });
     expect(qwenFilter().status).toEqual({ kind: "ready", bytesTotal: 5_776_630_909 });
     expect(qwenFilter("future-qwen").status).toEqual({ kind: "ready", bytesTotal: 5_776_630_909 });
   });
