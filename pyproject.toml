@@ -57,6 +57,7 @@ editarr-evaluate-video-model = "scanner.commands.video_model_eval_cli:main"
 editarr-evaluate-subcategorization = "scanner.commands.subcategorization_eval_cli:main"
 editarr-add-video-model-corpus-range = "scanner.commands.video_model_corpus_cli:main"
 editarr-evaluate-credits = "scanner.commands.credits_eval_cli:main"
+editarr-evaluate-folder = "scanner.commands.folder_eval_cli:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]

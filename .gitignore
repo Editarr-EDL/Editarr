@@ -62,3 +62,6 @@ models/
 # Test files
 *.mkv
 *.wav
+
+# Local evaluation datasets and results (not redistributable)
+/evaluation_data/

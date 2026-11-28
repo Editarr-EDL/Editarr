@@ -1,5 +1,6 @@
 """Verify test-image exclusions with Docker's actual context parser."""
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,9 +12,17 @@ def test_docker_context_excludes_environment_files(tmp_path):
     docker = shutil.which("docker")
     if docker is None:
         pytest.skip("Docker is not installed")
-    ready = subprocess.run([docker, "info"], capture_output=True, timeout=30, check=False)
+    # The suite runs with a scratch HOME (see conftest); Docker's CLI plugins and
+    # contexts live under the real one.
+    env = {**os.environ, "HOME": os.environ.get("EDITARR_TESTS_REAL_HOME", os.environ["HOME"])}
+    ready = subprocess.run([docker, "info"], capture_output=True, timeout=30, check=False, env=env)
     if ready.returncode:
         pytest.skip("Docker daemon is unavailable")
+    buildx = subprocess.run(
+        [docker, "buildx", "version"], capture_output=True, timeout=30, check=False, env=env
+    )
+    if buildx.returncode:
+        pytest.skip("Docker buildx is unavailable")
     context = tmp_path / "context"
     context.mkdir()
     shutil.copyfile(Path(".dockerignore"), context / ".dockerignore")
@@ -36,6 +45,7 @@ def test_docker_context_excludes_environment_files(tmp_path):
         text=True,
         timeout=120,
         check=False,
+        env=env,
     )
 
     assert built.returncode == 0, built.stderr
