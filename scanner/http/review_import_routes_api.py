@@ -125,6 +125,8 @@ def _run_edl_import(
     caller=None,
     prepared=None,
     staged_version=None,
+    parsed_actions=None,
+    videoskip_source=None,
 ):
     """Import EDL content for a resolved target and return the new review."""
     if caller is not None:
@@ -141,6 +143,8 @@ def _run_edl_import(
                     source_name=source_name,
                     prepared=prepared,
                     staged_version=staged_version,
+                    parsed_actions=parsed_actions,
+                    videoskip_source=videoskip_source,
                 ),
                 capability=C.REVIEWS_IMPORT_UPLOAD,
                 capabilities=CONTENT_EDITS,
@@ -171,7 +175,9 @@ def _run_edl_import(
     from scanner.formats.edl import parse_edl_content
 
     version_id = _store_staged_version(db, prepared, staged_version)
-    parsed = parse_edl_content(content, duration_seconds=None if version_id else duration)
+    parsed = parsed_actions if parsed_actions is not None else parse_edl_content(
+        content, duration_seconds=None if version_id else duration
+    )
     return import_edl_as_saved_review(
         db,
         media_item=media,
@@ -183,6 +189,7 @@ def _run_edl_import(
         duration_seconds=duration,
         catalog_mcf_document=catalog_document,
         verification_version_id=version_id,
+        videoskip_source=videoskip_source,
     )
 
 

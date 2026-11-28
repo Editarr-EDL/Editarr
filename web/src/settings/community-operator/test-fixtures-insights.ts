@@ -103,7 +103,7 @@ export const activity = [
     filter: null, subject: null, detail: { submissionId: "sub_lena1", entries: 29, state: "counted" } },
 ];
 const check = (id: string, labelText: string, ok: boolean, detail: string) => ({ id, label: labelText, ok, detail });
-export const healthBody = { ready: true, checks: [check("schema", "Database schema", true, "community-master-1 version 5"),
+export const healthBody = { ready: true, checks: [check("schema", "Database schema", true, "community-master-1 version 6"),
   check("retention", "Hourly maintenance", true, "Last sweep 2 h ago"), check("storage", "Submission storage", true, "112 MiB of 350 MiB used"),
   check("wal", "Write-ahead log", true, "1.9 MiB"), check("backups", "Scheduled backups", true, "Last backup verified 14 h ago")],
   database: { bytes: 40055603, walBytes: 1992294, pageSize: 4096 }, storage: { payloadBytes: 117440512, quotaBytes: 367001600 },

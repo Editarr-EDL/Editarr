@@ -79,7 +79,9 @@ def _seed(path, default_mode):
         )
         database.executemany(
             "INSERT INTO user_filter_copy_severities VALUES (3, ?, ?, 'low')",
-            [(item.value, position) for position, item in enumerate(McfCategory)],
+            database.execute(
+                "SELECT subcategory, position FROM mcf_severity_defaults ORDER BY position"
+            ).fetchall(),
         )
         database.executemany(
             "INSERT INTO user_filter_enforcements VALUES (4, ?, ?)",

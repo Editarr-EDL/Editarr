@@ -58,7 +58,9 @@ def apply_review_defaults(db, review_id: str, request):
         db,
         review_id=review_id,
         memberships={value.scan_id: value for value in review.memberships},
-        filters=request.filters,
+        # Community rows are already on the review's timeline. Apply reads only their submitted
+        # values, and the save validates their snapshot or live-link provenance.
+        filters=[value for value in request.filters if value.community_source_id is None],
     )
     settings = base_filter_settings(db, prepared.owner_id)
     applied = apply_filter_defaults(request.filters, settings)

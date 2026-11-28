@@ -11,7 +11,7 @@ from scanner.backup.archive import _sqlite_snapshot
 from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _upgrade
 from tests.community_master_migration_support import retire_publications
-from tests.explicit_filter_modes_support import drop_0031_additions
+from tests.explicit_filter_modes_support import drop_filter_migration_additions
 from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_export_regeneration_migration import JOBS, _publications
@@ -63,7 +63,7 @@ def test_previous_revision_upgrades_with_every_row_kept_and_empty_link_tables(tm
     assert generation.is_dir()
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     added = (*TABLES, "account_dispositions", "account_transfer_moves", "jellyfin_user_blocks")
     assert [upgraded.pop(table) for table in added] == [[], [], [], [], []]
     assert all(row[-1] is None for row in upgraded["media_item_exports"])

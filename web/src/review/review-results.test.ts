@@ -75,8 +75,19 @@ it("groups a shown clean verdict under No objectionable content without a descri
   const clean = { ...visual("clean", null), group_key: "No objectionable content" };
   const results = mergeSavedReviewFilters([clean], new Map());
   expect(results[0].descriptions).toEqual([]);
-  const [family] = buildReviewHierarchy(results, "visual", null, true);
+  const [family] = buildReviewHierarchy(results, null);
   expect(family.subcategories[0].groups.map((group) => group.name)).toEqual(["No objectionable content"]);
+});
+
+it("groups video cues with matching labels even when their stored group values differ", () => {
+  const results = mergeSavedReviewFilters([
+    { ...visual("fight-one", null, 10), label: "Bar fight", group_key: "violence" },
+    { ...visual("fight-two", null, 20), label: "Bar fight", group_key: "other" },
+    { ...visual("weapon", null, 30), label: "Weapon", group_key: "violence" },
+  ], new Map());
+  const [family] = buildReviewHierarchy(results, null);
+  expect(family.subcategories[0].groups.map((group) => [group.name, group.results.length]))
+    .toEqual([["Bar fight", 2], ["Weapon", 1]]);
 });
 
 /** The previous incremental merge, kept as a behavioural reference. */

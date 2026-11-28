@@ -26,7 +26,10 @@ export interface ReviewFilterRowContext {
   /** Show the category name in place of a missing description (the time-sorted list has no category headers). */
   categoryFallback: boolean;
   editingFilterId: string | null;
-  setEditingFilterId: (update: (current: string | null) => string | null) => void;
+  editFilter: (filter: Filter) => void;
+  finishEditing: (filter: Filter) => void;
+  onInvalidTiming?: (invalid: boolean) => void;
+  resetTiming?: number;
   onToggleFilters: (filterIds: string[], selected: boolean) => void;
   onChangeFilter: (filterId: string, patch: Partial<Filter>) => void;
   onDeleteFilter: (filterId: string) => void;
@@ -47,7 +50,8 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
 }) {
   const {
     scanById, requiredIds, lockedSeverities, busy, filtersEditable, cuesEditable, metadataEditable, previewDisabled,
-    preview, categoryFallback, editingFilterId, setEditingFilterId, onToggleFilters, onChangeFilter, onDeleteFilter,
+    preview, categoryFallback, editingFilterId, editFilter, finishEditing, onInvalidTiming, resetTiming,
+    onToggleFilters, onChangeFilter, onDeleteFilter,
     onPreviewFilter, renderFilterVote,
   } = context;
   const result = item.result;
@@ -55,7 +59,7 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
   const sourceScans = result.scanIds.map((id) => scanById.get(id)).filter((scan): scan is Scan => !!scan);
   const rowSelected = result.filters.every((filter) => filter.selected);
   const rowMixed = !rowSelected && result.filters.some((filter) => filter.selected);
-  const editingFilter = result.filters.find((filter) => filter.id === editingFilterId);
+  const editingFilter = item.pathFilters.find((filter) => filter.id === editingFilterId);
   const rowName = result.descriptions.join("; ") || categoryName;
   const descriptionFilters = new Map<string, Filter>();
   for (const filter of result.filters) {
@@ -69,6 +73,7 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
   const severity = severityLevels.find((level) => item.pathFilters.some((filter) => filter.severity === level)) ?? "none";
   const editActions = [...new Set(result.filters.map((filter) => filter.edit_action))];
   const showScanSource = sourceScans.length > 0 || !result.filters.some(isCommunityFilter);
+  const manualDraft = result.filters.some((filter) => !filter.source_scan_id && !isCommunityFilter(filter));
   const linkedIndicator = item.linked && <span className="linked-result-indicator" role="img" aria-label="Linked result repeated in another category"> 🔗</span>;
   const word = (description: string) => <>“<CensoredAudioWord word={description} context={descriptionFilters.get(description)?.details} />”</>;
   const previewed = preview && result.filters.find((filter) => filter.id === preview.filterId);
@@ -90,7 +95,8 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
           {item.pathFilters.some((filter) => lockedSeverities[filter.id]) && <small>Locked by instance policy</small>}
         </div>
         <div className="review-filter-meta">
-          {showScanSource && <span className="review-scan-source">
+          {manualDraft && <span className="review-scan-source">Manual</span>}
+          {showScanSource && (!manualDraft || sourceScans.length > 0) && <span className="review-scan-source">
             {sourceScans.length ? `Scan · ${reviewScanSourceLabel(sourceScans)}` : reviewScanSourceLabel(sourceScans)}
             <ReviewScanInfo scans={sourceScans} /></span>}
           <CommunityFilterSource filters={result.filters} />
@@ -107,17 +113,17 @@ export function ReviewFilterRow({ item, source, categoryName, context }: {
         {renderFilterVote && isCommunityFilter(filter) && renderFilterVote(filter, filterName(filter))}
         <MoreMenu label={`More actions for ${filterName(filter)}`} items={[
           { key: "edit", label: "Edit", accessibleName: `Edit ${filterName(filter)}`,
-            disabled: busy, onSelect: () => setEditingFilterId(() => filter.id) },
+            disabled: busy, onSelect: () => editFilter(filter) },
           { key: "delete", label: "Delete", accessibleName: `Delete ${filterName(filter)}`, danger: true,
             disabled: busy || !cuesEditable || requiredIds.has(filter.id),
-            onSelect: () => { setEditingFilterId((current) => current === filter.id ? null : current); onDeleteFilter(filter.id); } },
+            onSelect: () => onDeleteFilter(filter.id) },
         ]} />
       </div>)}</td>
     </tr>
     {editingFilter && <tr className="saved-review-filter-editor-row"><td colSpan={3}><fieldset className="review-fieldset" disabled={busy}>
-      <ReviewFilterEditor filter={editingFilter} required={requiredIds.has(editingFilter.id)} severityLocked={Boolean(lockedSeverities[editingFilter.id])}
-        filtersEditable={filtersEditable} cuesEditable={cuesEditable} metadataEditable={metadataEditable}
-        onChange={(patch) => onChangeFilter(editingFilter.id, patch)} onDone={() => setEditingFilterId(() => null)} />
+      <ReviewFilterEditor key={editingFilter.id} filter={editingFilter} severityLocked={Boolean(lockedSeverities[editingFilter.id])}
+        cuesEditable={cuesEditable} metadataEditable={metadataEditable} onInvalidTiming={onInvalidTiming} resetTiming={resetTiming}
+        onChange={(patch) => onChangeFilter(editingFilter.id, patch)} onDone={() => finishEditing(editingFilter)} />
     </fieldset></td></tr>}
   </Fragment>;
 }

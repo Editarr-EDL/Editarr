@@ -49,6 +49,7 @@ from scanner.pipeline.runner_workers import (
 )
 from scanner.pipeline.scenes import detect_scenes as detect_scenes
 from scanner.pipeline.scenes import sample_scene_frames as sample_scene_frames
+from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints, visual_checkpoint_dir
 from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.runtime.process_control import terminate_isolated_process as terminate_isolated_process
 from scanner.runtime.runtime_workspaces import (
@@ -234,6 +235,10 @@ def run_scan(
     analyzed_audio_callback=None,
     analyzed_audio_timing_callback=None,
     media_cache_key: str | None = None,
+    stage_results_writer: (
+        Callable[[str, list[FindingCreate], dict[str, object]], None] | None
+    ) = None,
+    checkpoint_worker_token: str | None = None,
 ) -> str:
     """
     Run the full analysis pipeline on a video file.
@@ -294,10 +299,11 @@ def run_scan(
         for stage in ("audio_extract", "audio_scan", "audio_qwen"):
             stage_settings[stage]["audio_selection"] = asdict(audio_selection)
 
-    def record_stage(stage: str, state: str, **settings: object) -> None:
+    def record_stage(stage: str, state: str, **observed: object) -> None:
+        effective = stage_settings[stage]
+        effective.update(observed)
         if stage_callback:
-            stage_settings[stage].update(settings)
-            stage_callback(stage, state, stage_settings[stage])
+            stage_callback(stage, state, effective)
 
     def record_visual_enrichment(event: str) -> None:
         scene, separator, state = event.partition(":")
@@ -306,8 +312,23 @@ def run_scan(
         stage = f"visual_qwen:{scene}"
         if state == "reused":
             stage_settings["visual"]["cached_scene_findings_reused"] = True
+        elif state == "checkpoint_reused":
+            # This scene already ran for the same job, media and model settings.
+            # Keep combined detector coverage without claiming a new Qwen run.
+            stage_settings["visual"]["checkpoint_scene_findings_reused"] = True
+            state = "reused"
         stage_settings[stage] = stage_settings["visual_qwen"]
         record_stage(stage, state)
+
+    def complete_stage(stage: str, findings: list[FindingCreate]) -> None:
+        if stage_results_writer is not None:
+            stage_results_writer(stage, findings, stage_settings[stage].copy())
+            return
+        if findings:
+            findings_writer(db, video_id, findings)
+        if checkpoint_callback:
+            checkpoint_callback(stage)
+        record_stage(stage, "complete")
 
     if _test_fake_models_enabled():
         return _run_test_fake_models(
@@ -402,6 +423,9 @@ def run_scan(
     try:
         if scan_video and "visual" not in completed_stages:
             record_stage("visual", "started")
+            checkpoint_dir = visual_checkpoint_dir(
+                video_id, video_hash, stage_settings["visual"], stage_settings["visual_qwen"]
+            ) if stage_results_writer is not None else None
             # The visual classifier is loaded after positive detections. Keep
             # this pass isolated so its model memory is released before audio.
             try:
@@ -420,24 +444,26 @@ def run_scan(
                     progress_callback=lambda frac, msg: emit("visual", frac, msg),
                     provenance_callback=lambda event: record_visual_enrichment(event),
                     should_cancel=should_cancel,
+                    **({"checkpoint_dir": checkpoint_dir} if checkpoint_dir is not None else {}),
+                    **({"checkpoint_worker_token": checkpoint_worker_token}
+                       if checkpoint_worker_token is not None else {}),
                 )
                 emit("visual", 1.0, "Visual scan complete")
-                if visual_findings:
-                    findings_writer(db, video_id, visual_findings)
-                if checkpoint_callback:
-                    checkpoint_callback("visual")
+                complete_stage("visual", visual_findings)
             except BaseException as exc:
                 record_stage(
-                    "visual", "partial" if isinstance(exc, ScanCancelledError) else "failed"
+                    "visual", "partial" if isinstance(
+                        exc, (ScanCancelledError, FullApplicationQuitRequested)
+                    ) else "failed"
                 )
                 raise
-            record_stage("visual", "complete")
+            if checkpoint_dir is not None:
+                discard_visual_checkpoints(settings.data_dir, video_id)
         elif scan_video:
             emit("visual", 1.0, "Visual scan restored from checkpoint")
 
         if scan_audio:
             run_audio_stages(
-                db,
                 path,
                 video_hash=video_hash,
                 duration=duration,
@@ -449,10 +475,9 @@ def run_scan(
                 audio_selection=audio_selection,
                 should_cancel=should_cancel,
                 completed_stages=completed_stages,
-                checkpoint_callback=checkpoint_callback,
+                complete_stage=complete_stage,
                 analyzed_audio_callback=analyzed_audio_callback,
                 analyzed_audio_timing_callback=analyzed_audio_timing_callback,
-                findings_writer=findings_writer,
                 record_stage=record_stage,
                 emit=emit,
             )

@@ -6,12 +6,13 @@
  * adds new filters and flags filters no longer served.
  */
 import type { Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { json, mockReview } from "./app-fixtures";
 import type { CommunityMastersMock, ServedFilter } from "./community-masters-mock";
-import type { ReviewCommunityMembership, ReviewFilter } from "../src/api/api-review-types";
+import type { ReviewCommunityDraft, ReviewCommunityMembership, ReviewFilter } from "../src/api/api-review-types";
 
 type Source = { id: string; entries: ServedFilter[]; removed: Set<string>; revision: number };
-type Save = { community_memberships?: ReviewCommunityMembership[]; filters: ReviewFilter[] };
+type Save = { community_memberships?: ReviewCommunityMembership[]; community_drafts?: ReviewCommunityDraft[]; filters: ReviewFilter[] };
 
 const material = (entries: ServedFilter[]) => JSON.stringify(entries.map((entry) =>
   [entry.filterId, entry.category, entry.subcategory, entry.severity, entry.action, entry.startMs, entry.endMs, entry.expression]));
@@ -77,6 +78,15 @@ export async function mockCommunityReview(page: Page, community: CommunityMaster
     source.revision = community.state.link!.appliedRevision;
     return rows;
   };
+  await page.route(/\/api\/community\/masters\/[^/?]+\?review_draft=true$/, (route) => {
+    const link = community.state.link!;
+    return json(route, { version: 1, token: "a".repeat(64), filters: community.servedFilters().map((entry) => ({
+      ...defaults(link.linkId, entry, randomUUID()),
+      community: { source_id: link.linkId, filter_id: entry.filterId, label: link.label,
+        master_revision: link.appliedRevision, confidence: entry.confidence, contributor_count: entry.contributorCount,
+        low_confidence: entry.lowConfidence, removed: false, locally_verified: false },
+    })) });
+  });
   await page.route("**/api/library-items/movie-1/reviews*", (route) => route.request().method() === "GET"
     ? json(route, [present()]) : route.fallback());
   await page.route("**/api/reviews/review-c", async (route) => {
@@ -92,7 +102,9 @@ export async function mockCommunityReview(page: Page, community: CommunityMaster
           revision: community.state.link!.appliedRevision };
         sources.set(source.id, source);
         kept.add(source.id);
-        rows.push(...source.entries.map((entry) => defaults(source.id, entry)));
+        const draft = body.community_drafts?.find(({ link_id }) => link_id === membership.link_id);
+        rows.push(...(draft ? draft.filters.map((filter) => ({ ...filter, community_source_id: source.id }))
+          : source.entries.map((entry) => defaults(source.id, entry))));
         continue;
       }
       const source = sources.get(membership.source_id!)!;

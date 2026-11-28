@@ -10,9 +10,10 @@ from tests.community_schema_fixture import SYNTHETIC_PASSWORD_HASH
 
 
 def undo_community_master_migration(connection) -> None:
-    """Reverse 0040, 0039 and 0037 on a fixture without master-set or retired data."""
+    """Reverse recent schema changes on a fixture without the features' data."""
     with Operations.context(MigrationContext.configure(connection)):
         for name in (
+            "0041_mcf_1_1_1",
             "0040_review_community_filters",
             "0039_review_community_sources",
             "0037_community_master_sets",

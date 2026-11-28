@@ -73,11 +73,20 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     cors_allow_credentials: bool = False
 
-    community_service_url: str | None = None
-    community_service_audience: str | None = None
-    community_publication_request_bytes: int | None = Field(default=None, gt=0, le=3_000_000)
-    community_preview_bounds: dict[str, int] | None = None
-    community_preview_source_limit: int | None = Field(default=None, gt=0, le=1000)
+    community_service_url: str | None = "https://community.editarr.org"
+    community_service_audience: str | None = "community.editarr.org"
+    community_publication_request_bytes: int | None = Field(default=1_500_000, gt=0, le=3_000_000)
+    # Use the v3 submission size limits and bound the larger, private source capture.
+    community_preview_bounds: dict[str, int] | None = Field(
+        default_factory=lambda: {
+            "compressed_bytes": 1_000_000,
+            "expanded_bytes": 4_000_000,
+            "events": 4_000,
+            "text": 4_096,
+            "depth": 24,
+        }
+    )
+    community_preview_source_limit: int | None = Field(default=32, gt=0, le=1000)
     community_download_bounds: dict[str, int] | None = None
     community_download_response_bytes: int | None = Field(default=None, gt=0, le=3_000_000)
 

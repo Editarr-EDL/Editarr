@@ -6,7 +6,7 @@ export type McfCategoryFamily = "commercial_content" | "discrimination" | "dispe
 export type McfCategory = string;
 export type Severity = "low" | "medium" | "high";
 export type McfChannel = "both" | "video" | "audio";
-export type McfSourceVersion = "1.0.0" | "1.1.0";
+export type McfSourceVersion = "1.0.0" | "1.1.0" | "1.1.1";
 export type McfWorkType = "movie" | "series" | "episode";
 export type ExportFormat = "edl" | "mcf";
 

@@ -283,7 +283,7 @@ describe("production saved-review UI authority", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Adjust Cue Times" }));
     const dialog = screen.getByRole("dialog", { name: "Adjust Cue Times" });
     expect(within(dialog).queryByRole("button", { name: "Review Credits Result" })).not.toBeInTheDocument();
-    expect(within(dialog).getByText(/Only imported or unverified cues are adjusted/)).toBeVisible();
+    expect(within(dialog).getByText(/Only cues from imported or unverified scans are adjusted/)).toBeVisible();
     fireEvent.change(within(dialog).getByLabelText("Proposed START"), { target: { value: "00:00:10.000" } });
     fireEvent.change(within(dialog).getByLabelText("Proposed synchronization END"), { target: { value: "00:01:50.000" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Apply to draft" }));

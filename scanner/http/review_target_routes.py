@@ -141,6 +141,14 @@ def create_target(caller, target, data):
         raise HTTPException(409, "The selected media file could not be verified") from exc
 
     def persist(db):
+        from scanner.persistence.repository.review_community_drafts import require_draft_edits
+
+        if data.community_drafts:
+            resource = ResourceRef(
+                AccountRef(principal.user_id, principal.account.role),
+                caller.media_decision(prepared.media),
+            )
+            require_draft_edits(db, caller.access, resource, data.community_drafts)
         version_id = observe_sampled_target_version(
             db, prepared, fingerprint=fingerprint, known_content_sha256=known,
         )

@@ -1,6 +1,7 @@
 import { CommunityApiError } from "./api-community";
 import { apiRequest } from "./api-transport";
 import { runtimeApiBasePath } from "../shared/runtime-urls";
+import type { ReviewFilter } from "./api-review-types";
 import type {
   ActiveMasterFilters, AliasResponse, AlignmentPreview, AlignmentPreviewRequest, FeedbackResult, FindLabel,
   FindResponse, MasterLink, MasterLinkSummary, MasterPreferences, MasterPreferencesResult, MasterTarget,
@@ -82,6 +83,9 @@ export function listCommunityMasters(itemId: string, mediaSourceId: string | nul
 
 export const fetchCommunityMaster = (linkId: string, signal?: AbortSignal) =>
   communityJson<MasterView>(link(linkId), { signal });
+
+export const fetchCommunityReviewDraft = (linkId: string, signal?: AbortSignal) =>
+  communityJson<{ version: 1; token: string; filters: ReviewFilter[] }>(`${link(linkId)}?review_draft=true`, { signal });
 
 /** The link's in-effect filters on the local timeline now and their merged Simple EDL. `clipped: false`
  * returns them unclipped, as saved-review snapshots store them. */

@@ -10,6 +10,7 @@ from scanner.settings.capabilities import DEFAULT_QWEN_MODEL
 
 from . import pending_scenes
 from .detector_memory import defer_descriptions, release_detector
+from .visual_checkpoints import save_scene_checkpoint, scene_checkpoint_path
 
 # Share of visual progress for detection when descriptions run after every scene.
 _DEFERRED_DETECTION_SHARE = 0.9
@@ -31,6 +32,7 @@ def _scan_visual_by_scene(
     should_cancel: Callable[[], bool] | None = None,
     video_model: str | None = None,
     provenance_callback: Callable[[str], None] | None = None,
+    checkpoint_dir: Path | None = None,
 ) -> list[FindingCreate]:
     """Scan each scene, caching its findings and reporting progress to the caller."""
 
@@ -88,8 +90,19 @@ def _scan_visual_by_scene(
         return findings
 
     # Deferred scenes are spooled to disk; only this small ordered index stays in memory.
-    pending: list[pending_scenes.PendingScene] = []
+    pending: list[tuple[int, Scene, pending_scenes.PendingScene | None]] = []
     by_scene: dict[int, list[FindingCreate]] = {}
+
+    def result_path_for(scene: Scene) -> Path:
+        if checkpoint_dir is not None:
+            return scene_checkpoint_path(checkpoint_dir, scene, phase="complete")
+        return result_dir / f"scene_{scene.index:04d}.json"
+
+    def save_result(path: Path, findings: list[FindingCreate]) -> None:
+        if checkpoint_dir is not None:
+            save_scene_checkpoint(path, findings)
+        else:
+            root.atomic_write_json(path, [finding.model_dump(mode="json") for finding in findings])
 
     def describe(scene_index: int, frames, detected, summary_progress):
         return root.summarize_flagged_segments(
@@ -119,11 +132,12 @@ def _scan_visual_by_scene(
         if progress_callback:
             progress_callback(scene_start, f"Visual scan: scene {idx}/{total_scenes}")
 
-        result_path = result_dir / f"scene_{scene.index:04d}.json"
+        result_path = result_path_for(scene)
         cached_findings = root._load_cached_visual_findings(result_path)
         if cached_findings is not None:
             if provenance_callback:
-                provenance_callback(f"scene_{scene.index:04d}:reused")
+                reuse = "checkpoint_reused" if checkpoint_dir is not None else "reused"
+                provenance_callback(f"scene_{scene.index:04d}:{reuse}")
             by_scene[idx] = cached_findings
             if progress_callback:
                 progress_callback(
@@ -131,6 +145,17 @@ def _scan_visual_by_scene(
                     f"Visual scan: scene {idx}/{total_scenes} restored from cache",
                 )
             continue
+
+        if deferred and checkpoint_dir is not None:
+            detection_path = scene_checkpoint_path(checkpoint_dir, scene, phase="detected")
+            if root._load_cached_visual_findings(detection_path) is not None:
+                pending.append((idx, scene, None))
+                if progress_callback:
+                    progress_callback(
+                        scene_start + scene_weight,
+                        f"Visual detection: scene {idx}/{total_scenes} restored from checkpoint",
+                    )
+                continue
 
         fine_extract_start = 0.0
         fine_extract_weight = 0.5
@@ -178,7 +203,7 @@ def _scan_visual_by_scene(
                 flagged = True
             if not flagged:
                 skipped += 1
-                root.atomic_write_json(result_path, [])
+                save_result(result_path, [])
                 if progress_callback:
                     progress_callback(
                         scene_start + scene_weight,
@@ -239,9 +264,16 @@ def _scan_visual_by_scene(
             should_cancel=should_cancel,
         )
         if deferred:
+            if checkpoint_dir is not None:
+                save_scene_checkpoint(
+                    scene_checkpoint_path(checkpoint_dir, scene, phase="detected"), scene_findings
+                )
             pending.append(
-                pending_scenes.spool_scene(
-                    result_dir, idx, scene.index, fine_frames, scene_findings
+                (
+                    idx, scene,
+                    pending_scenes.spool_scene(
+                        result_dir, idx, scene.index, fine_frames, scene_findings
+                    ),
                 )
             )
             del fine_frames, scene_findings
@@ -267,10 +299,7 @@ def _scan_visual_by_scene(
                 else None
             ),
         )
-        root.atomic_write_json(
-            result_path,
-            [finding.model_dump(mode="json") for finding in scene_findings],
-        )
+        save_result(result_path, scene_findings)
         by_scene[idx] = scene_findings
 
         if should_cancel and should_cancel():
@@ -285,17 +314,29 @@ def _scan_visual_by_scene(
     if pending:
         release_detector(video_model)
     try:
-        for done, entry in enumerate(pending, start=1):
+        for done, (idx, scene, entry) in enumerate(pending, start=1):
             if should_cancel and should_cancel():
                 raise ScanCancelledError("Scan cancelled")
             base = _DEFERRED_DETECTION_SHARE + (
                 (1 - _DEFERRED_DETECTION_SHARE) * (done - 1) / len(pending)
             )
             step = (1 - _DEFERRED_DETECTION_SHARE) / len(pending)
-            idx = entry.order
-            frames, detected = pending_scenes.load_scene(entry)
+            if entry is None:
+                assert checkpoint_dir is not None
+                detected = root._load_cached_visual_findings(
+                    scene_checkpoint_path(checkpoint_dir, scene, phase="detected")
+                )
+                if detected is None:
+                    raise RuntimeError("Saved scene detection is no longer readable")
+                frames = root.sample_scene_frames(
+                    video_path, scene, work_dir / "fine" / f"scene_{scene.index:04d}",
+                    interval_seconds=None, timestamp_interval_seconds=source_frame_interval,
+                    should_cancel=should_cancel,
+                ) if detected else []
+            else:
+                frames, detected = pending_scenes.load_scene(entry)
             described = describe(
-                entry.scene_index,
+                scene.index,
                 frames,
                 detected,
                 (
@@ -307,11 +348,9 @@ def _scan_visual_by_scene(
                     else None
                 ),
             )
-            root.atomic_write_json(
-                result_dir / f"scene_{entry.scene_index:04d}.json",
-                [finding.model_dump(mode="json") for finding in described],
-            )
-            entry.path.unlink()
+            save_result(result_path_for(scene), described)
+            if entry is not None:
+                entry.path.unlink()
             by_scene[idx] = described
             if report:
                 report(base + step, f"Visual summary: scene {idx}/{total_scenes} complete")

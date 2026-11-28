@@ -12,6 +12,7 @@ import type {
   SavedReview,
 } from "../api/api-review-types";
 import type { CreditsAcceptanceResult } from "../api/api-credits-types";
+import type { ManualFilterDraft } from "./review-manual-draft";
 
 interface ReviewContent {
   name: string;
@@ -22,7 +23,7 @@ interface ReviewContent {
   synchronization: ReviewSynchronization;
   acceptedCredits: AcceptedCreditsReference | AcceptedCreditsProvenance | null;
   mcfMetadataSeed: McfMetadataSeedRequest | null;
-  newManualFilters: NewManualReviewFilter[];
+  newManualFilters: ManualFilterDraft[];
   communityMemberships: ReviewCommunityMembership[];
 }
 
@@ -38,6 +39,8 @@ export interface ReviewDraft extends ReviewContent {
   baseline: string;
   baselineState: ReviewContent;
   removedSnapshots: Record<string, ReviewFilter[]>;
+  /** Freshness token for each newly included link; saved snapshots use their source UUIDs. */
+  communityDraftTokens: Record<string, string>;
 }
 
 function clone<T>(value: T): T {
@@ -98,8 +101,13 @@ function withLabelProvenance(next: ReviewFilter[], previous: ReviewFilter[]): Re
   const previousById = new Map(previous.map((filter) => [filter.id, filter]));
   return clone(next).map((filter) => {
     const prior = previousById.get(filter.id);
-    return "label_edited" in filter || !prior || !("label_edited" in prior) || prior.label !== filter.label
-      ? filter : { ...filter, label_edited: prior.label_edited };
+    if (!prior) return filter;
+    const label = !("label_edited" in filter) && "label_edited" in prior && prior.label === filter.label
+      ? { label_edited: prior.label_edited } : {};
+    const community = !("community" in filter) && prior.community
+      && prior.community_source_id === filter.community_source_id && prior.community_filter_id === filter.community_filter_id
+      ? { community: prior.community } : {};
+    return { ...filter, ...label, ...community };
   });
 }
 
@@ -163,6 +171,7 @@ export function createReviewDraft(
     baseline: contentState(content),
     baselineState: clone(content),
     removedSnapshots: {},
+    communityDraftTokens: {},
   };
 }
 
@@ -289,6 +298,10 @@ function communityEdit(target: ReviewFilter, patch: Partial<ReviewFilter>) {
  * the relabel; restoring the loaded label restores its loaded flag (keeping the draft clean).
  */
 export function updateReviewFilter(draft: ReviewDraft, filterId: string, patch: Partial<ReviewFilter>): ReviewDraft {
+  if (draft.newManualFilters.some((filter) => filter.id === filterId)) {
+    return { ...draft, newManualFilters: draft.newManualFilters.map((filter) =>
+      filter.id === filterId ? { ...filter, ...patch, id: filterId } : filter) };
+  }
   const pair = draft.filterBases[filterId];
   const target = draft.filters.find((filter) => filter.id === filterId);
   if (target?.community_source_id && communityEdit(target, patch)) {
@@ -311,7 +324,8 @@ export function updateReviewFilter(draft: ReviewDraft, filterId: string, patch: 
 }
 
 export function deleteReviewFilter(draft: ReviewDraft, filterId: string): ReviewDraft {
-  return { ...draft, filters: draft.filters.filter((filter) => filter.id !== filterId) };
+  return { ...draft, filters: draft.filters.filter((filter) => filter.id !== filterId),
+    newManualFilters: draft.newManualFilters.filter((filter) => filter.id !== filterId) };
 }
 
 export function stageManualReviewFilter(draft: ReviewDraft, filter: NewManualReviewFilter): ReviewDraft {
@@ -322,14 +336,17 @@ export function applyReviewRetimeResult(draft: ReviewDraft, result: ReviewRetime
   const acceptedCredits = result.accepted_credits && draft.acceptedCredits
     ? { ...clone(draft.acceptedCredits), accepted_boundary_seconds: result.accepted_credits.accepted_boundary_seconds }
     : clone(result.accepted_credits);
+  const isNewCommunity = (filter: ReviewFilter) => filter.community_source_id && draft.communityDraftTokens[filter.community_source_id];
   return {
-    ...applyReviewFilterResult(draft, result),
+    ...applyReviewFilterResult(draft, {
+      filters: [...result.filters, ...draft.filters.filter(isNewCommunity)],
+      base_filters: [...(result.base_filters ?? result.filters), ...reviewDraftFilters(draft).filter(isNewCommunity)],
+    }),
     synchronization: clone(result.synchronization),
     policy_owner_id: result.policy_owner_id ?? draft.policy_owner_id,
     policy_revision: result.policy_revision ?? draft.policy_revision,
     mcfDocument: clone(result.mcf_document),
     acceptedCredits,
-    newManualFilters: clone(result.new_manual_filters),
   };
 }
 
@@ -371,6 +388,7 @@ export function discardReviewDraft(draft: ReviewDraft): ReviewDraft {
     ...draft,
     ...clone(draft.baselineState),
     removedSnapshots: {},
+    communityDraftTokens: {},
   };
 }
 

@@ -43,7 +43,11 @@ from scanner.security.auth_repository_sessions import (
 from tests import upgrade_matrix_support as state
 from tests.activity_migration_support import _upgrade, link_owner, sidecar_state
 from tests.community_identity_migration_support import no_network as no_network
-from tests.explicit_filter_modes_support import FILTER_MODE_TABLES, drop_0031_additions
+from tests.explicit_filter_modes_support import (
+    FILTER_MODE_TABLES,
+    drop_filter_migration_additions,
+    legacy_instance_severities,
+)
 from tests.test_account_migration import _cookie, _sign_in, _snapshot
 from tests.test_account_migration import http as http
 from tests.test_api_key_migration import DIGEST, KEY
@@ -73,6 +77,7 @@ LATER = [
     "0037_community_master_sets",
     "0038_retire_receipt_capabilities",
     "0039_review_community_sources",
+    "0040_review_community_filters",
 ]
 SOURCES = [*PROFILE_SOURCES, *LATER]
 ACCOUNTS = "0010_user_accounts"
@@ -83,7 +88,7 @@ _TIME = "%Y-%m-%d %H:%M:%S.%f"
 def test_the_matrix_covers_every_revision_below_head():
     versions = Path(adoption.__file__).parent / "versions"
     chain = [None, *(path.stem for path in sorted(versions.glob("0*.py")))]
-    assert chain[-1] == adoption.HEAD_REVISION == "0040_review_community_filters"
+    assert chain[-1] == adoption.HEAD_REVISION == "0041_mcf_1_1_1"
     assert SOURCES == chain[:-1]
 
 
@@ -203,10 +208,13 @@ def test_every_source_revision_upgrades_with_activity_credentials_and_backup(
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
     assert adoption.upgrade_existing_database(path, path.parent) is None
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     before, after = _counts(original), _counts(upgraded)
     assert {name: after.get(name) for name in before} == before
-    changed = state.unchanged(source, state.content(path))
+    content = state.content(path)
+    columns, rows = content["mcf_severity_defaults"]
+    content["mcf_severity_defaults"] = (columns, legacy_instance_severities(rows))
+    changed = state.unchanged(source, content)
     assert set(changed) <= set(FILTER_MODE_TABLES)
     kept = state.expected(revision, upgraded=True)
     assert state.read(path, kept) == kept

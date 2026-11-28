@@ -105,11 +105,12 @@ def test_renamed_saved_preview_uses_authorized_current_path(app, moved_review, m
     assert rendered == [moved]
 
 
-def test_a_different_file_at_the_renamed_path_is_rejected(app, moved_review):
+@pytest.mark.parametrize("format", ["edl", "videoskip"])
+def test_a_different_file_at_the_renamed_path_is_rejected(app, moved_review, format):
     route, review, headers, _, moved = moved_review
     moved.write_bytes(b"replacement file with different sampled ranges")
     result = app.send(
-        "POST", f"{route}/exports/edl/download", headers, {"revision": review["revision"]}
+        "POST", f"{route}/exports/{format}/download", headers, {"revision": review["revision"]}
     )
     assert result.status_code == 409, result.text
 

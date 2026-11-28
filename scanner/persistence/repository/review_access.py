@@ -298,8 +298,10 @@ class ReviewAccess:
             if before != after:
                 require(self.access, ActionPair(own, other), target)
         self._require_community_changes(stored, draft, target)
+        from .review_community_drafts import require_draft_edits
         from .review_policy import validate_policy_draft
 
+        require_draft_edits(self.db, self.access, target, getattr(draft, "community_drafts", ()))
         base_draft = validate_policy_draft(self.db, self.db.get(SavedReviewRow, review_id), draft)
         # Read-only provenance is not editable content and must not count as a change.
         before = {

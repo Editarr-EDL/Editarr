@@ -66,10 +66,11 @@ def _scan_from_row(
     """
     from .community_import_targets import scan_pending_targets, scan_target_approvals
     from .scan_verification_coverage import verification_coverage_by_scan
-    from .version_reuse import approved_reuse, source_pending_reuse
+    from .version_reuse import approved_reuse, reuse_state
 
     item = row.media_item
     duration, as_of = scan_timing(row)
+    import_state = reuse_state(row)
     reuse_approval = approved_reuse(row)
     db = object_session(row) if reuse_approval and verification_coverage is None else None
     if db is not None:
@@ -80,7 +81,8 @@ def _scan_from_row(
         name=row.name,
         origin=row.origin,
         import_source_name=row.import_source_name,
-        reuse_pending=source_pending_reuse(row),
+        videoskip_source=import_state.get("videoskip_source"),
+        reuse_pending=import_state.get("identity_reuse_pending") is True,
         stable_version_id=row.media_version_pin.version_id if row.media_version_pin else None,
         verified_from_scan_id=reuse_approval.get("source_scan_id") if reuse_approval else None,
         verification_coverage=verification_coverage.get(row.id) if verification_coverage else None,

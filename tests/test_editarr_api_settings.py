@@ -298,9 +298,9 @@ def test_settings_api_tests_before_saving_and_never_returns_key(monkeypatch, db,
     monkeypatch.setattr(api, "init_db", lambda: None)
     _isolate_api_runtime(monkeypatch, tmp_path)
     monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
-    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db: 0)
+    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db, **_: 0)
     monkeypatch.setattr(api, "scanning_scan_worker_processes", lambda _db: [])
-    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids: [])
+    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids, **_: [])
     monkeypatch.setattr(api, "get_session_factory", lambda: sessionmaker(bind=db.get_bind()))
     monkeypatch.setattr(
         "scanner.security.auth_policy.get_session_factory", lambda: sessionmaker(bind=db.get_bind())
@@ -337,9 +337,9 @@ def test_default_filter_settings_api_updates_and_reads(monkeypatch, db, tmp_path
     monkeypatch.setattr(api, "init_db", lambda: None)
     _isolate_api_runtime(monkeypatch, tmp_path)
     monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
-    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db: 0)
+    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db, **_: 0)
     monkeypatch.setattr(api, "scanning_scan_worker_processes", lambda _db: [])
-    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids: [])
+    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids, **_: [])
     monkeypatch.setattr(api, "get_session_factory", lambda: sessionmaker(bind=db.get_bind()))
     monkeypatch.setattr(
         "scanner.security.auth_policy.get_session_factory", lambda: sessionmaker(bind=db.get_bind())
@@ -352,7 +352,7 @@ def test_default_filter_settings_api_updates_and_reads(monkeypatch, db, tmp_path
             settings = client.get("/api/settings/filters").json()
             assert settings["revision"] == 0
             assert settings["selection_rules"] == []
-            assert len(settings["severity_defaults"]) == 97
+            assert len(settings["severity_defaults"]) == 105
             assert settings["severity_defaults"][0] == {
                 "subcategory": "commercial",
                 "severity": "medium",
@@ -426,9 +426,9 @@ def test_diagnostic_log_api_saves_debug_preference_and_redacts_log_tails(monkeyp
     monkeypatch.setattr(api, "init_db", lambda: None)
     _isolate_api_runtime(monkeypatch, tmp_path)
     monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: None)
-    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db: 0)
+    monkeypatch.setattr(api, "recover_cancelled_scan_queue_items", lambda _db, **_: 0)
     monkeypatch.setattr(api, "scanning_scan_worker_processes", lambda _db: [])
-    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids: [])
+    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids, **_: [])
     monkeypatch.setattr(api, "get_session_factory", lambda: sessionmaker(bind=db.get_bind()))
     monkeypatch.setattr(
         "scanner.security.auth_policy.get_session_factory", lambda: sessionmaker(bind=db.get_bind())

@@ -339,7 +339,9 @@ def associated_scan_ids_for_media_item(db: Session, *, media_item_id: str) -> se
     return explicit_association_ids | owned_scan_ids
 
 
-def create_scan_findings_batch(db: Session, scan_id: str, findings: list[FindingCreate]) -> None:
+def create_scan_findings_batch(
+    db: Session, scan_id: str, findings: list[FindingCreate], *, commit: bool = True
+) -> None:
     """Store scanner findings for ``scan_id`` in one transaction."""
     rows = [
         ScanFindingRow(
@@ -362,7 +364,8 @@ def create_scan_findings_batch(db: Session, scan_id: str, findings: list[Finding
         for finding in findings
     ]
     db.add_all(rows)
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def get_scan_findings(db: Session, scan_id: str) -> ScanFindings | None:

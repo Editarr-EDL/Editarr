@@ -25,15 +25,21 @@ import {
   ModalDialog,
 } from "../ui/ModalDialog";
 
-export function formatScanDuration(scan: Scan | ScanQueueItem, now = Date.now()): string {
+export function formatScanDuration(scan: Scan, now = Date.now(), format = formatTime): string {
   if (typeof scan.scan_duration_seconds === "number") {
     const sampledAt = scan.scan_duration_as_of ? Date.parse(scan.scan_duration_as_of) : NaN;
-    const running = scan.status === "scanning" || scan.status === "cancelling";
+    const running = ["scanning", "pausing", "cancelling"].includes(scan.status);
     const sinceSample = running && Number.isFinite(sampledAt) ? (now - sampledAt) / 1_000 : 0;
-    return formatTime(scan.scan_duration_seconds + sinceSample);
+    return format(scan.scan_duration_seconds + sinceSample);
   }
   if (scan.manual) return "N/A";
-  return scan.status === "queued" && !scan.scan_started_at ? "Not started" : "Unavailable";
+  return !scan.scan_started_at && ["queued", "paused"].includes(scan.status) ? "Not started" : "Unavailable";
+}
+
+function formatQueueDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  return [Math.floor(total / 3600), Math.floor(total / 60) % 60, total % 60]
+    .map((part) => String(part).padStart(2, "0")).join(":");
 }
 
 function scanIsActive(scan: ScanQueueItem, now = Date.now()): boolean {
@@ -48,7 +54,7 @@ function ScanActivityIndicator({ scan, now }: { scan: ScanQueueItem; now: number
 }
 
 export function ScanDuration({ scan, now }: { scan: ScanQueueItem; now: number }) {
-  return <time dateTime={scan.scan_started_at || undefined}>{formatScanDuration(scan, now)}</time>;
+  return <time className="scan-queue-duration" dateTime={scan.scan_started_at || undefined}>{formatScanDuration(scan, now, formatQueueDuration)}</time>;
 }
 
 export function ScanProgressDetails({ scan, now }: { scan: ScanQueueItem; now: number }) {
@@ -75,13 +81,17 @@ function scanAnalysisDetails(scan: Scan | ScanQueueItem): string {
     scan.scan_audio ? `${scan.audio_model || "whisper"} transcriber · ${scan.audio_filter || "better_profanity"} filter` : null,
     scan.scan_audio ? (scan.analyzed_audio_selection
       ? `Analyzed audio: ${audioTrackLabel(scan.analyzed_audio_selection.track)}`
-      : scan.requested_audio_selection && ["queued", "scanning", "orphaned", "cancelling"].includes(scan.status)
+      : scan.requested_audio_selection && ["queued", "scanning", "orphaned", "pausing", "paused", "cancelling"].includes(scan.status)
         ? `Requested audio: ${audioTrackLabel(scan.requested_audio_selection.track)}`
         : "Analyzed audio track unknown") : null,
     scan.scan_video ? `${scan.video_model || "Video"} video` : null,
   ].filter(Boolean).join(" · ");
+  const interval = scan.coarse_scan_interval;
+  const visualPass = scan.coarse_scan_enabled
+    ? `Coarse scan${interval && interval > 0 ? ` every ${interval} s` : ""} · Fine scan for flagged scenes or scenes without samples`
+    : "Fine scan every frame";
   const videoOptions = scan.scan_video
-    ? ` · Fine scan every frame${scan.coarse_scan_enabled ? ` · Coarse scan ${scan.coarse_scan_interval || 5}s` : ""} · ${scan.qwen_model?.includes("-4b-") ? "Qwen3-VL 4B" : "Qwen3-VL 8B"} · ${scan.qwen_summaries_per_segment} representative frames · Join gaps ${scan.qwen_segment_join_gap_seconds}s`
+    ? ` · ${visualPass} · ${scan.qwen_model?.includes("-4b-") ? "Qwen3-VL 4B" : "Qwen3-VL 8B"} · ${scan.qwen_summaries_per_segment} representative frames · Join gaps ${scan.qwen_segment_join_gap_seconds}s`
     : "";
   return `${analyses || "No analyses"}${videoOptions}`;
 }

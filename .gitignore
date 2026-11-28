@@ -15,6 +15,7 @@ build/
 # Database
 *.db
 *.sqlite3
+/research/editarr-seed/community-staging.sqlite*
 
 # IDE
 .vscode/

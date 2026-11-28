@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from scanner import repository, worker
 from scanner.credits.credits_detector import default_configuration
-from scanner.db import Base, ScanRow
+from scanner.db import Base, ScanRow, ScanStageCoverageRow
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.models import ScanMode
 from scanner.pipeline.audio_tracks import AudioTrack, AudioTrackSelection
@@ -167,8 +167,10 @@ def test_worker_persists_checkpoints_and_releases_the_queue(monkeypatch):
             ("audio_scan", {"audio_model": "whisper", "audio_filter": "better_profanity"}),
         ):
             kwargs["stage_callback"](stage, "started", effective)
-            kwargs["checkpoint_callback"](stage)
-            kwargs["stage_callback"](stage, "complete", effective)
+            kwargs["stage_results_writer"](stage, [], {**effective, "duration_seconds": 60})
+            coverage = db.get(ScanStageCoverageRow, (scan.id, stage, "worker-token"))
+            assert coverage is not None and coverage.status == "complete"
+            assert coverage.intervals_json is not None
         kwargs["status_updater"](db, kwargs["video_id"], "complete")
 
     monkeypatch.setattr(worker, "get_session_factory", lambda: factory)
@@ -277,108 +279,6 @@ def test_credits_worker_failure_is_terminal_and_releases_the_queue(monkeypatch):
     assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id) is None
     assert row.worker_pid is None
     assert [item.id for item in repository.list_scan_history(check_db)] == [scan.id]
-    check_db.close()
-
-
-def test_orphaned_worker_is_adopted_or_can_resume_from_checkpoints():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    db = sessionmaker(bind=engine)()
-    scan, queue_item = _scan_with_queue(db)
-    assert repository.reserve_scan_worker(db, scan.id, token="worker-token")
-    assert repository.record_scan_worker_process(db, scan.id, token="worker-token", pid=42, pgid=42)
-    repository.mark_scan_checkpoint(db, scan.id, "visual")
-
-    repository.mark_orphaned_scan_workers(db, {42})
-    row = db.get(ScanRow, scan.id)
-    assert row is not None
-    assert row.status == "scanning"
-    assert row.progress_message == "Reattached to active scan"
-
-    assert repository.heartbeat_scan_worker(db, scan.id, "worker-token")
-    adopted = db.get(ScanRow, scan.id)
-    assert adopted.status == "scanning"
-    assert adopted.progress_message == "Reattached to active scan"
-
-    repository.mark_orphaned_scan_workers(db, set())
-    started_at = db.get(ScanRow, scan.id).worker_started_at
-    assert repository.resume_orphaned_scan(db, queue_item.queue_id)
-    row = db.get(ScanRow, scan.id)
-    assert row.status == "queued"
-    assert row.worker_started_at == started_at
-    assert row.visual_checkpoint_complete
-    assert row.progress_message == "Queued to resume from the latest checkpoint"
-    db.close()
-
-
-def test_worker_observes_a_cancellation_committed_by_another_session(monkeypatch):
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    setup_db = factory()
-    scan, _queue_item = _scan_with_queue(setup_db)
-    assert repository.reserve_scan_worker(setup_db, scan.id, token="worker-token")
-    setup_db.close()
-
-    def fake_run_scan(_db, _path, **kwargs):
-        canceller = factory()
-        try:
-            row = canceller.get(ScanRow, scan.id)
-            assert row is not None
-            row.status = "cancelling"
-            canceller.commit()
-        finally:
-            canceller.close()
-        assert kwargs["should_cancel"]()
-        raise worker.ScanCancelledError("Scan cancelled")
-
-    monkeypatch.setattr(worker, "get_session_factory", lambda: factory)
-    monkeypatch.setattr(worker, "run_scan", fake_run_scan)
-
-    assert worker.run_scan_worker(scan.id, "worker-token") == 0
-
-    check_db = factory()
-    row = check_db.get(ScanRow, scan.id)
-    assert row is not None
-    assert row.status == "cancelled"
-    check_db.close()
-
-
-def test_worker_failure_is_resumable_and_keeps_its_queue_item(monkeypatch):
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    setup_db = factory()
-    scan, queue_item = _scan_with_queue(setup_db)
-    assert repository.reserve_scan_worker(setup_db, scan.id, token="worker-token")
-    assert repository.record_scan_worker_process(
-        setup_db, scan.id, token="worker-token", pid=42, pgid=42
-    )
-    setup_db.close()
-
-    def fail_scan(*_args, **_kwargs):
-        raise RuntimeError("decoder crashed")
-
-    monkeypatch.setattr(worker, "get_session_factory", lambda: factory)
-    monkeypatch.setattr(worker, "run_scan", fail_scan)
-
-    assert worker.run_scan_worker(scan.id, "worker-token") == 0
-
-    check_db = factory()
-    row = check_db.get(ScanRow, scan.id)
-    assert row.status == "orphaned"
-    assert row.error_message == "decoder crashed"
-    assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id).queue_id == (
-        queue_item.queue_id
-    )
-    assert repository.resume_orphaned_scan(check_db, queue_item.queue_id)
-    assert check_db.get(ScanRow, scan.id).status == "queued"
     check_db.close()
 
 

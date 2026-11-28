@@ -47,7 +47,9 @@ export interface SubmissionInput {
   digest: string;
   contributorId: string;
   acceptedSeq: number;
-  durationMs: number;
+  durationMs: number | null;
+  /** Offline operator-granted unit support for an attributed external source. */
+  externalSeed?: boolean;
   matchKeys: readonly MatchKey[];
   coverage: readonly CoverageInput[];
   entries: readonly EntryInput[];

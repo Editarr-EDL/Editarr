@@ -20,7 +20,7 @@ function effectiveAlias(label: Label): string | null {
 export function labelsEqual(left: Label, right: Label): boolean {
   const a = effectiveAlias(left), b = effectiveAlias(right);
   if (a !== null || b !== null) return a === b;
-  return left.labelText === right.labelText;
+  return normalize(left.labelText ?? '') === normalize(right.labelText ?? '');
 }
 
 /** Look up the alias for one normalized approved spelling. */

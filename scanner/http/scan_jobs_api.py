@@ -13,8 +13,10 @@ from scanner.models import (
     ScanQueueReorder,
     ScanReferences,
 )
+from scanner.persistence.repository.repository_queue import settle_stopped_scan_worker
 from scanner.persistence.repository.repository_review_operations import scan_reference_facts
 from scanner.persistence.repository.scan_jobs import queued_scan_id
+from scanner.persistence.repository.scan_pause import pause_scan_queue_item
 from scanner.repository import (
     ScanReferencedError,
     cancel_scan_queue_item,
@@ -23,12 +25,10 @@ from scanner.repository import (
     get_scan_references,
     list_scan_history,
     list_scan_queue,
-    remove_scan_queue_item,
     rename_scan,
     reorder_scan_queue,
     resume_orphaned_scan,
     scan_worker_process,
-    update_scan_status,
 )
 from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.identity import UserId
@@ -82,25 +82,52 @@ def api_reorder_scan_queue(request: ScanQueueReorder, caller: ScanCaller = Depen
 def api_cancel_scan_queue_item(queue_id: int, caller: ScanCaller = Depends(scan_caller)):
     """Cancel queued or active scan work and wake the queue processor."""
     db = caller.db
-    _queued_job(caller, queue_id, JOB_CANCEL)
+    expected_scan_id = _queued_job(caller, queue_id, JOB_CANCEL)
     worker = scan_worker_process(db, queue_id)
-    cancelled = cancel_scan_queue_item(db, queue_id)
+    cancelled = cancel_scan_queue_item(db, queue_id, expected_scan_id=expected_scan_id)
     if not cancelled:
         raise HTTPException(404, "Queued scan not found")
     scan_id, is_running = cancelled
-    if is_running and worker and worker[3] == "orphaned":
-        root._terminate_scan_worker(scan_id, *worker[:3])
-        update_scan_status(db, scan_id, "cancelled")
-        remove_scan_queue_item(db, queue_id)
-        is_running = False
+    if is_running and worker and worker[3] in {"orphaned", "cancelling"}:
+        pid, pgid, token, status = worker
+        if status == "orphaned":
+            root._terminate_scan_worker(scan_id, pid, pgid, token)
+        if not root.PROCESS_CONTROL.attempt_may_be_running(
+            scan_id, pid, pgid, token, data_dir=root.settings.data_dir
+        ) and settle_stopped_scan_worker(
+            db, scan_id, token=token, expected_process=(pid, pgid), expected_status="cancelling"
+        ) == "cancelled":
+            root.cleanup_worker_control_endpoint(scan_id, token)
+            is_running = False
+    if is_running:
+        root._start_scan_queue_worker_if_needed()
+    else:
+        from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints
+
+        discard_visual_checkpoints(root.settings.data_dir, scan_id)
     return {"cancelled": True, "cancelling": is_running}
+
+
+@router.post("/api/scans/queue/{queue_id}/pause")
+def api_pause_scan(queue_id: int, caller: ScanCaller = Depends(scan_caller)):
+    """Persist a pause before acknowledging it to the caller."""
+    _queued_job(caller, queue_id, JOB_RESUME)
+    status = pause_scan_queue_item(caller.db, queue_id)
+    if status is None:
+        raise HTTPException(409, "Only a queued or running scan can be paused")
+    return {"paused": status == "paused", "pausing": status == "pausing"}
 
 
 @router.post("/api/scans/queue/{queue_id}/resume")
 def api_resume_orphaned_scan(queue_id: int, caller: ScanCaller = Depends(scan_caller)):
-    _queued_job(caller, queue_id, JOB_RESUME)
-    if not resume_orphaned_scan(caller.db, queue_id):
-        raise HTTPException(409, "Only an orphaned scan can be resumed")
+    scan_id = _queued_job(caller, queue_id, JOB_RESUME)
+    worker = scan_worker_process(caller.db, queue_id)
+    if worker and worker[3] == "orphaned" and root.PROCESS_CONTROL.attempt_may_be_running(
+        scan_id, *worker[:3], data_dir=root.settings.data_dir
+    ):
+        raise HTTPException(409, "The previous scan attempt is still stopping")
+    if not worker or not resume_orphaned_scan(caller.db, queue_id, observed_attempt=worker[:3]):
+        raise HTTPException(409, "Only a paused or interrupted scan can be resumed")
     root._start_scan_queue_worker_if_needed()
     return {"resumed": True}
 

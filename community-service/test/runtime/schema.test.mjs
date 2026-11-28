@@ -260,7 +260,7 @@ test('0004 upgrades a version 3 store to index retention scans after a verified 
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-for (const from of [1, 2, 3, 4]) test(`0005 upgrades a version ${from} store to operator insights after a verified backup`, async () => {
+for (const from of [1, 2, 3, 4, 5]) test(`0006 upgrades a version ${from} store to operator insights after a verified backup`, async () => {
   const directory = workspace(`community-insights-${from}-`);
   const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
   try {
@@ -278,6 +278,17 @@ for (const from of [1, 2, 3, 4]) test(`0005 upgrades a version ${from} store to 
       INSERT INTO filter_votes VALUES ('f1', 'voter', 'up', '${'b'.repeat(64)}', 0, 40), ('f2', 'other', 'down', '${'c'.repeat(64)}', 1, 30);
       INSERT INTO moderation_actions (action_id, actor, resource, target_id, command, expected_revision, reason, request_json,
         outcome, error_code, created_at) VALUES ('a1', 'operator', 'vote:f2:other', 'f2', 'exclude_vote', 0, 'Spam', '{}', 'applied', NULL, 9);`);
+    if (from >= 5) source.exec(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, display_name_key, state, created_at)
+        VALUES ('external-seed-videoskip', 'external-seed-videoskip', 'VideoSkip external archive', 'videoskip external archive', 'suspended', 1);
+      INSERT INTO installations VALUES ('external-seed-videoskip', 'external-seed-videoskip', 1);
+      INSERT INTO installation_keys VALUES ('sha256:seed', 'external-seed-videoskip', 'Ed25519', x'00', 'revoked', 1, 1);
+      INSERT INTO version_acceptances (submission_id, version_id, contributor_id, accepted_seq, founder, duration_ms, accepted_at)
+        VALUES ('seed_1', 'version', 'external-seed-videoskip', 1, 1, 1000, 1);
+      INSERT INTO submissions (submission_id, digest, contributor_id, installation_id, key_id, version_id, accepted_seq,
+        artifact_bytes, manifest_bytes, envelope_bytes, match_keys_json, state, created_at)
+        VALUES ('seed_1', '${'d'.repeat(64)}', 'external-seed-videoskip', 'external-seed-videoskip', 'sha256:seed', 'version', 1,
+        x'01', x'02', x'03', '[]', 'counted', 1);
+      INSERT INTO external_seed_submissions VALUES ('seed_1', 'VideoSkip', 'videoskip:1', '${'e'.repeat(64)}', NULL, '{"a":1}');`);
     source.close();
     assert.throws(() => openDatabase(path), /database_upgrade_required/);
     await upgradeDatabase(path, snapshot);
@@ -301,6 +312,10 @@ for (const from of [1, 2, 3, 4]) test(`0005 upgrades a version ${from} store to 
         { enabled: 0, frequency: 'daily', at_utc: '03:30', keep_last: 14, keep_weekly: 8 });
       for (const table of ['service_metrics_hourly', 'usage_daily', 'maintenance_runs', 'backup_runs'])
         assert.equal(db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n, 0);
+      assert.deepEqual(rows('SELECT submission_id, source, source_record_id, source_runtime_ms, provenance_json FROM external_seed_submissions'),
+        from >= 5 ? [{ submission_id: 'seed_1', source: 'VideoSkip', source_record_id: 'videoskip:1', source_runtime_ms: null,
+          provenance_json: '{"a":1}' }] : []);
+      if (from >= 5) assert.throws(() => db.exec('DELETE FROM external_seed_submissions'), /immutable_external_seed/);
     } finally { database.close(); }
     const restored = new DatabaseSync(snapshot, { readOnly: true });
     try {
@@ -324,4 +339,28 @@ test('expressions are stored only on language supports and hold 1–64 character
     assert.throws(() => insert('e4', 'dispute', 'language', 'damn'), /CHECK/);
     assert.throws(() => insert('e5', 'support', 'language', 'x'.repeat(65)), /CHECK/);
   } finally { database.close(); }
+});
+
+test('0005 upgrades a version 4 store with a verified backup and preserves its catalog', async () => {
+  const directory = workspace('community-seed-upgrade-');
+  const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
+  try {
+    initializeDatabase(path, migrationsRoot(directory, 4));
+    const previous = new DatabaseSync(path);
+    previous.exec("INSERT INTO works (work_id, kind, catalog_seq, created_at) VALUES ('original', 'movie', 0, 1)");
+    previous.close();
+    assert.throws(() => openDatabase(path), /database_upgrade_required/);
+    await upgradeDatabase(path, snapshot);
+    const { database } = openDatabase(path);
+    const restored = new DatabaseSync(snapshot, { readOnly: true });
+    try {
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 4);
+      assert.equal(database.connection.prepare('PRAGMA user_version').get().user_version, CURRENT);
+      assert.deepEqual(restored.prepare('SELECT * FROM works').all(), database.connection.prepare('SELECT * FROM works').all());
+      assert.equal(database.connection.prepare('SELECT count(*) AS count FROM external_seed_submissions').get().count, 0);
+    } finally {
+      restored.close();
+      database.close();
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

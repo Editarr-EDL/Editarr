@@ -17,12 +17,17 @@ from scanner.integrations.community.find_targets import capture_find_keys
 from scanner.integrations.community.master_service import MasterService
 from scanner.integrations.community.masters import MasterSets
 from scanner.persistence.repository.community_master_filters import master_view
-from scanner.persistence.repository.community_master_links import get_link, list_links
+from scanner.persistence.repository.community_master_links import (
+    CommunityMasterError,
+    get_link,
+    list_links,
+)
 from scanner.persistence.repository.community_master_sources import (
     as_findings,
     link_active_filters,
 )
 from scanner.persistence.repository.review_access import ReviewAccess, not_found
+from scanner.persistence.repository.review_community_drafts import project_draft
 from scanner.persistence.repository.review_community_filters import link_merges
 from scanner.persistence.rows.db_media_identity import MediaVersionLocatorRow
 from scanner.security.access.capability_ids import Capability as C
@@ -168,13 +173,27 @@ def list_masters(
 @router.get("/masters/{link_id}")
 def view_master(
     link_id: LinkId,
+    review_draft: bool = Query(default=False),
     db: Session = Depends(get_db),
     access: PrincipalAccess = Depends(request_access),
 ):
     """The master view: the link, the saved preferences and every row in the local set."""
 
     def action():
-        authorize_link(db, access, link_id, C.COMMUNITY_SEARCH)
+        link = authorize_link(db, access, link_id, C.COMMUNITY_SEARCH)
+        if review_draft:
+            if link.link_state == "replaced":
+                raise CommunityMasterError("link_unavailable")
+            if link.alignment_state == "required":
+                raise CommunityMasterError("alignment_required")
+            token, filters = project_draft(db, link)
+            result = {
+                "version": 1,
+                "token": token,
+                "filters": [row.model_dump(mode="json") for row in filters],
+            }
+            db.rollback()
+            return result
         view = master_view(db, access.principal.user_id, link_id)
         merges = link_merges(db, view.link)
         result = {

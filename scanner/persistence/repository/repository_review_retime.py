@@ -34,6 +34,8 @@ from scanner.repository import (
 from .repository_paths import (
     resolve_local_path,
 )
+from .review_community_filters import community_rows
+from .review_community_sources import kept_plans
 from .review_policy import (
     ReviewPolicyConflict,
     _map_policy_floor,
@@ -203,7 +205,14 @@ def _validate_retime_filter_provenance(
     ids = [value.id for value in filters] + [value.id for value in new_manual_filters]
     if len(ids) != len(set(ids)):
         raise ReviewMembershipError("Review filter IDs must be unique")
-    root._filter_rows_from_inputs(db, review_id=review.id, memberships=memberships, filters=filters)
+    root._filter_rows_from_inputs(
+        db, review_id=review.id, memberships=memberships,
+        filters=[value for value in filters if value.community_source_id is None],
+    )
+    community_rows(
+        db, review, kept_plans(review),
+        [value for value in filters if value.community_source_id is not None], None,
+    )
 
 
 def _map_retime_entries(

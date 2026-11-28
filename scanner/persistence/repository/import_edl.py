@@ -15,6 +15,7 @@ from scanner.db import (
     ScanRow,
 )
 from scanner.formats.edl import ParsedEdl
+from scanner.modeling.model_videoskip import VideoSkipSource
 from scanner.models import (
     EdlImportResult,
     EdlImportWarning,
@@ -50,6 +51,7 @@ def import_edl_as_saved_review(
     catalog_mcf_document: ReviewMcfDocument | None = None,
     imported_at: datetime | None = None,
     verification_version_id: str | None = None,
+    videoskip_source: VideoSkipSource | None = None,
 ) -> EdlImportResult:
     """Import parsed EDL actions into a scan and saved review for the target media."""
     if not parsed.filters:
@@ -62,7 +64,7 @@ def import_edl_as_saved_review(
         or 0
     ) + 1
     imported_at = imported_at or datetime.now(timezone.utc)
-    has_audio = any(item.source == "audio" for item in parsed.filters)
+    has_audio = any(item.source == "audio" or item.mcf_channel == "both" for item in parsed.filters)
     has_video = any(item.source == "visual" for item in parsed.filters)
     scan = stage_imported_scan(
         db,
@@ -74,11 +76,13 @@ def import_edl_as_saved_review(
         resolved_local_path=resolved_local_path,
         media_source_id=source_id,
         duration_seconds=(
-            catalog_mcf_document.material_end_seconds if catalog_mcf_document is not None else None
+            catalog_mcf_document.material_end_seconds
+            if catalog_mcf_document is not None and videoskip_source is None
+            else None
         ),
         has_audio=has_audio,
         has_video=has_video,
-        progress_message="Imported EDL",
+        progress_message="Imported VideoSkip" if videoskip_source else "Imported EDL",
     )
     finding_rows: list[ScanFindingRow] = []
     for item in parsed.filters:
@@ -112,7 +116,7 @@ def import_edl_as_saved_review(
         else None
     )
     if verification_version_id:
-        stage_reuse_source(db, scan, verification_version_id)
+        stage_reuse_source(db, scan, verification_version_id, videoskip_source=videoskip_source)
         db.commit()
         return EdlImportResult(
             review=None, scan=_scan_from_row(scan, finding_count=len(finding_rows)),

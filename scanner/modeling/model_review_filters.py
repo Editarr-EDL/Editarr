@@ -119,4 +119,12 @@ class ReviewFilterInput(ReviewFilter, ReviewWriteModel):
         return self
 
 
+class ReviewCommunityDraft(ReviewWriteModel):
+    """Edits to a new community source, including omissions for deleted draft filters."""
+
+    link_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.-]+$")
+    token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    filters: list[ReviewFilterInput] = Field(max_length=4000)
+
+
 __all__ = ["PROVENANCE_FIELDS", "ReviewFilter", "ReviewFilterInput", "SavedReviewFilter"]

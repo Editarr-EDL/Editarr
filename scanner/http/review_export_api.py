@@ -7,6 +7,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import PlainTextResponse
 from pydantic import Field
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -36,6 +37,11 @@ from scanner.security.access.capability_ids import Capability as C
 from scanner.security.access.targets import AccountRef, ActionPair, ResourceRef
 
 from .review_access import review_caller, run_review
+from .review_videoskip_export import (
+    VideoSkipExportRequest,
+    VideoSkipPreflight,
+    prepare_videoskip_download,
+)
 
 router = APIRouter()
 
@@ -162,15 +168,7 @@ def compatibility_export(caller, review_id, request, format):
     return result["compatibility"]
 
 
-@router.post("/api/reviews/{review_id}/exports/{format}/download")
-def api_download_review_export(
-    review_id: str,
-    format: ExportFormat,
-    request: ReviewExportRequest,
-    caller: ReviewAccess = Depends(review_caller),
-):
-    """Download the same prepared bytes without creating directories or export rows."""
-
+def _run_download(caller, review_id, operation):
     def authorize(ref):
         require(
             caller.access,
@@ -180,6 +178,80 @@ def api_download_review_export(
                 ref.media,
             ),
         )
+
+    action = ActionPair(C.EXPORTS_PERSONAL_DOWNLOAD_OWN, C.REVIEWS_EXPORT_OTHER)
+    try:
+        return run_review(
+            caller,
+            review_id,
+            action,
+            operation,
+            authorize=authorize,
+            capture_review_media=True,
+        )
+    except ReviewPolicyConflict:
+        raise
+    except (ValueError, OSError, SQLAlchemyError) as exc:
+        raise _error(exc) from exc
+
+
+def _attachment(content, filename, media_type):
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "cache-control": "private, no-store",
+            "content-disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+        },
+    )
+
+
+@router.post("/api/reviews/{review_id}/exports/videoskip/preflight")
+def api_preflight_videoskip_export(
+    review_id: str,
+    request: VideoSkipExportRequest,
+    response: Response,
+    caller: ReviewAccess = Depends(review_caller),
+) -> VideoSkipPreflight:
+    """Report compatibility issues for the selected, effective review cues."""
+    preflight, _, _ = _run_download(
+        caller, review_id, lambda db, source_id: prepare_videoskip_download(db, source_id, request)
+    )
+    response.headers["cache-control"] = "private, no-store"
+    return preflight
+
+
+# The dedicated route precedes the EDL/MCF format parameter below.
+@router.post(
+    "/api/reviews/{review_id}/exports/videoskip/download", response_class=PlainTextResponse
+)
+def api_download_videoskip_export(
+    review_id: str,
+    request: VideoSkipExportRequest,
+    caller: ReviewAccess = Depends(review_caller),
+):
+    """Download a VideoSkip file without a publication or sidecar."""
+    preflight, content, filename = _run_download(
+        caller, review_id, lambda db, source_id: prepare_videoskip_download(db, source_id, request)
+    )
+    if not preflight.eligible:
+        message = (
+            "A required filter cannot be represented in VideoSkip."
+            if preflight.exported_count
+            else "No selected filters can be represented in VideoSkip."
+        )
+        raise _review_http_error("incomplete_videoskip_export", message, 422)
+    return _attachment(content, filename, "text/plain")
+
+
+@router.post("/api/reviews/{review_id}/exports/{format}/download")
+def api_download_review_export(
+    review_id: str,
+    format: ExportFormat,
+    request: ReviewExportRequest,
+    caller: ReviewAccess = Depends(review_caller),
+):
+    """Download the same prepared bytes without creating directories or export rows."""
 
     def operation(db, source_id):
         output = prepare_review_export(
@@ -196,28 +268,9 @@ def api_download_review_export(
         filename = personal_export_path(output.media, identity, format).name
         return output.content, filename
 
-    action = ActionPair(C.EXPORTS_PERSONAL_DOWNLOAD_OWN, C.REVIEWS_EXPORT_OTHER)
-    try:
-        content, filename = run_review(
-            caller,
-            review_id,
-            action,
-            operation,
-            authorize=authorize,
-            capture_review_media=True,
-        )
-    except ReviewPolicyConflict:
-        raise
-    except (ValueError, OSError, SQLAlchemyError) as exc:
-        raise _error(exc) from exc
-    return Response(
-        content=content,
-        media_type="text/vtt" if format == ExportFormat.MCF else "text/plain",
-        headers={
-            "cache-control": "private, no-store",
-            "content-disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
-        },
-    )
+    content, filename = _run_download(caller, review_id, operation)
+    media_type = "text/vtt" if format == ExportFormat.MCF else "text/plain"
+    return _attachment(content, filename, media_type)
 
 
 def _export(caller, export_id, *, deleting=False, revision=None, publication_id=None):

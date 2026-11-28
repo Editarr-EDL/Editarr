@@ -8,6 +8,19 @@ export interface PublicationRequest extends ReviewExportRequest {
   confirmation?: string;
 }
 
+export interface VideoSkipExportRequest extends ReviewExportRequest {
+  reference_seconds?: number;
+  reference_description?: string;
+}
+
+export interface VideoSkipExportPreflight {
+  eligible: boolean;
+  filter_count: number;
+  exported_count: number;
+  issue_count: number;
+  issues: { code: string; filter_id: string | null; message: string; omitted: boolean }[];
+}
+
 /** A publish either lands, or the server names the replacement it needs confirmed. */
 export type PublishOutcome =
   | { kind: "published"; publication: ExportPublication }
@@ -49,13 +62,24 @@ function attachmentName(header: string | null, fallback: string): string {
   try { return decodeURIComponent(encoded); } catch { return fallback; }
 }
 
+/** Evaluate the saved review with the options planned for a VideoSkip download. */
+export function preflightVideoSkipExport(reviewId: string, request: VideoSkipExportRequest): Promise<VideoSkipExportPreflight> {
+  return jsonApi(`${reviewPath(reviewId)}/exports/videoskip/preflight`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
+  }, "Unable to check VideoSkip compatibility");
+}
+
 /** Fetch the caller's personal rendering of a review without publishing it. */
-export async function downloadReviewExport(reviewId: string, format: ExportFormat, request: ReviewExportRequest): Promise<{ blob: Blob; filename: string }> {
+export async function downloadReviewExport(reviewId: string, ...[format, request]:
+  [format: ExportFormat, request: ReviewExportRequest] | [format: "videoskip", request: VideoSkipExportRequest]
+): Promise<{ blob: Blob; filename: string }> {
   const response = await apiRequest(`${reviewPath(reviewId)}/exports/${format}/download`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
   });
-  if (!response.ok) throw await responseError(response, `Unable to download ${format.toUpperCase()}`);
-  return { blob: await response.blob(), filename: attachmentName(response.headers.get("content-disposition"), `review.${format}`) };
+  const name = format === "videoskip" ? "VideoSkip" : format.toUpperCase();
+  const extension = format === "videoskip" ? "skp" : format;
+  if (!response.ok) throw await responseError(response, `Unable to download ${name}`);
+  return { blob: await response.blob(), filename: attachmentName(response.headers.get("content-disposition"), `review.${extension}`) };
 }
 
 /** Delete one published file, bound to the UUID and revision the caller saw. */

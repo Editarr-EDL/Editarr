@@ -37,10 +37,10 @@ def _refuse_another_source(exc: Exception) -> None:
         ) from exc
 
 
-def _safe_import_basename(value: str | None) -> str:
+def _safe_import_basename(value: str | None, *, format_label: str = "EDL") -> str:
     candidate = (value or "").replace("\\", "/").rsplit("/", 1)[-1]
     if any(unicodedata.category(character).startswith("C") for character in candidate):
-        raise ValueError("EDL filename contains unsupported characters")
+        raise ValueError(f"{format_label} filename contains unsupported characters")
     candidate = " ".join(candidate.split()).strip()
     return candidate or "import.edl"
 

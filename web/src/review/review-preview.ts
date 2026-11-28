@@ -6,7 +6,7 @@ import type { ReviewDraft } from "./review-draft";
 import { useReviewLifetime } from "./review-access";
 
 export type PreviewFilter = Pick<ReviewFilter, "id" | "source" | "edit_action" | "start_seconds" | "end_seconds">
-  & Partial<Pick<ReviewFilter, "source_scan_id" | "source_finding_id">>;
+  & Partial<Pick<ReviewFilter, "source_scan_id" | "source_finding_id" | "community_source_id" | "community_filter_id">>;
 
 /** The clip a filter previews follows its action, whatever its source: a mute renders the
  * muted audio, a skip the skipped video. */
@@ -72,6 +72,8 @@ export function useReviewPreview({ target, selected, draft, setBusy, setError, d
     setBusy(true); setError(null);
     try {
       const saved = selected?.filters.find((candidate) => candidate.id === filter.id);
+      const draftLink = filter.community_source_id && draft.communityDraftTokens[filter.community_source_id]
+        ? filter.community_source_id : undefined;
       const blob = selected && saved && sameClip(saved, filter)
         ? await (previewsAudio(filter)
           ? fetchSavedReviewMutePreview(selected.id, filter.id)
@@ -80,6 +82,8 @@ export function useReviewPreview({ target, selected, draft, setBusy, setError, d
           review_id: selected?.id,
           source_scan_id: filter.source_scan_id ?? undefined,
           source_finding_id: filter.source_finding_id,
+          community_link_id: draftLink,
+          community_filter_id: draftLink ? filter.community_filter_id ?? undefined : undefined,
           start_seconds: filter.start_seconds,
           end_seconds: filter.end_seconds,
           edit_action: filter.edit_action,

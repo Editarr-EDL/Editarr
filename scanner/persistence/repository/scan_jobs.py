@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from scanner.db import MediaItemRow, ScanQueueRow, ScanRow, UserRow
 from scanner.models import ScanMode
+from scanner.persistence.write_lock import write_lock
 
 from .scan_timing import stop_scan_attempt
 
@@ -96,19 +97,21 @@ def initiator_stamp(db: Session, scan_id: str) -> tuple[int, str, str] | None:
 def fail_refused_scan_job(db: Session, scan_id: str, message: str) -> None:
     """End a job its initiator may no longer run, so it leaves the queue and blocks nothing."""
 
-    row = db.get(ScanRow, scan_id)
-    if row is None:
-        return
-    now = datetime.now(timezone.utc)
-    stop_scan_attempt(row, now)
-    row.status = "failed"
-    row.error_message = message
-    row.progress_stage = "failed"
-    row.progress_message = message
-    row.worker_pid = None
-    row.worker_pgid = None
-    row.worker_token = None
-    row.worker_heartbeat_at = None
-    row.updated_at = now
-    db.query(ScanQueueRow).filter(ScanQueueRow.scan_id == scan_id).delete()
-    db.commit()
+    with write_lock(db):
+        row = db.get(ScanRow, scan_id)
+        if row is None or row.status in {"pausing", "paused", "cancelling", "cancelled"}:
+            db.rollback()
+            return
+        now = datetime.now(timezone.utc)
+        stop_scan_attempt(row, now)
+        row.status = "failed"
+        row.error_message = message
+        row.progress_stage = "failed"
+        row.progress_message = message
+        row.worker_pid = None
+        row.worker_pgid = None
+        row.worker_token = None
+        row.worker_heartbeat_at = None
+        row.updated_at = now
+        db.query(ScanQueueRow).filter(ScanQueueRow.scan_id == scan_id).delete()
+        db.commit()

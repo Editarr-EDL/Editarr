@@ -248,8 +248,8 @@ cutover. Preserve the original volume, configuration and receipt key history.
 Restoring stale snapshots can roll back revocations, moderation, replay and
 operation state: recovery must account for that before access is enabled.
 
-Current schema is **`community-master-1` version 5** (`0001_master_baseline.sql`
-through `0005_operator_insights.sql`; see the
+Current schema is **`community-master-1` version 6** (`0001_master_baseline.sql`
+through `0006_operator_insights.sql`; see the
 [migrations README](../community-service/migrations/README.md)). The master-filter-set refactor rebased the service
 migrations ([contract §8](community-scan-service-contracts.md#8-storage-schema-service),
 [ADR 0002](adr/0002-community-master-filter-sets.md) D1). The owner explicitly

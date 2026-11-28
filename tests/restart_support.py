@@ -37,15 +37,19 @@ def standalone_process(tmp_path: Path):
     clients: list[httpx.Client] = []
 
     def launch(
-        port: int, *, cli_override: bool = False, explicit_http_cookie: bool = False
+        port: int, *, cli_override: bool = False, explicit_http_cookie: bool = False,
+        reopen: bool = False, native: bool = False,
     ):
         data = tmp_path / f"service-{port}"
         home = tmp_path / f"home-{port}"
         runtime_temp = tmp_path / f"runtime-{port}"
-        data.mkdir()
-        home.mkdir()
-        runtime_temp.mkdir()
-        if not cli_override:
+        if reopen:
+            assert (data / "scanner.db").is_file()
+        else:
+            data.mkdir()
+            home.mkdir()
+            runtime_temp.mkdir()
+        if not cli_override and not reopen:
             (data / "deployment.json").write_text(
                 json.dumps({"version": 1, "port": port}), encoding="utf-8"
             )
@@ -70,10 +74,13 @@ def standalone_process(tmp_path: Path):
         if explicit_http_cookie:
             environment["EDITARR_AUTH_COOKIE_SECURE"] = "false"
         command = [sys.executable, "-m", "scanner.cli", "--api-only"]
+        if native:
+            environment["EDITARR_NATIVE_LAUNCHER"] = "1"
+            command.append("--no-browser")
         if cli_override:
             command += ["--port", str(port)]
         log_path = data / "service.log"
-        log = log_path.open("wb")
+        log = log_path.open("ab" if reopen else "wb")
         process = subprocess.Popen(
             command,
             cwd=Path(__file__).parents[1],

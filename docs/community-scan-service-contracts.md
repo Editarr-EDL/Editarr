@@ -1344,7 +1344,9 @@ The service migrations are **rebased** to a new baseline,
 - Later migrations return to verified-backup-first upgrades. The first,
   `0002_filter_expressions.sql`, adds the nullable expression columns below;
   existing rows keep their values. `0003` and `0004` add only the retention
-  indexes below. `0005_operator_insights.sql` adds the operator insight tables
+  indexes below. `0005_external_seed_submissions.sql` adds the immutable
+  `external_seed_submissions` provenance table for offline seed imports.
+  `0006_operator_insights.sql` adds the operator insight tables
   below, backfills one `cast` vote event per existing `filter_votes` row at its
   `updated_at`, rebuilds `moderation_actions` (rows, index and triggers kept) so its
   audit accepts the backup commands, and adds read-path indexes for the operator
@@ -1439,7 +1441,7 @@ conservatively; none changes a wire format:
   not the revision history.
 - **Expiry scans:** maintenance finds expired `rate_counters` and `sync_runs` rows
   through their `window_start` and `started_at` indexes, a bounded batch per run.
-- **Operator insights (0005):** casting, changing or removing a vote and excluding or
+- **Operator insights (0006):** casting, changing or removing a vote and excluding or
   restoring one append a `vote_events` row in the same batch as the change. The
   hourly maintenance samples `service_metrics_hourly` and refreshes `usage_daily`
   before its prunes, then records a `retention` run; `all` recomputes record a

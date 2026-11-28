@@ -9,6 +9,8 @@ import { usePrincipal } from "../auth/auth-gate";
 import { ShareAction } from "../scans/sharing-dialog";
 import { useReviewAccountLabel } from "./review-access";
 import { ReviewSourcesMenu } from "./review-sources-menu";
+import { ReviewCommunityDraftLoader } from "./review-community-draft-loader";
+import { manualDraftRows } from "./review-manual-draft";
 import { hasExportEvidence } from "./review-community";
 import { useReviewCommunity } from "./use-review-community";
 import { useReviewCommunityVotes } from "./use-review-community-votes";
@@ -26,12 +28,14 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
   const accountLabel = useReviewAccountLabel(workspace.selected);
   const me = usePrincipal()?.userId ?? null;
   const [dialog, setDialog] = useState<"export" | "delete" | null>(null);
+  const [invalidTiming, setInvalidTiming] = useState(false);
+  const [resetTiming, setResetTiming] = useState(0);
   const community = useReviewCommunity(workspace);
   const votes = useReviewCommunityVotes(community.sources);
   const {
     scans, selected, draft, busy, preview, editingReviewName, reviewNameBeforeEdit,
     showManualFilter, preflightFocusFilterId, draftNameValidation,
-    invalidDraftClassification, metadataSourceRequired, invalidMcfDocument,
+    invalidDraftClassification, invalidManualFilters, metadataSourceRequired, invalidMcfDocument,
     availableScans, setName, setError, setDraft, setMetadataCandidates,
     setApplyStatus, setShowDuplicateReview, setEditingReviewName,
     setReviewNameBeforeEdit, setShowManualFilter, setPreflightFocusFilterId,
@@ -41,10 +45,10 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
   if (!draft) return null;
   const exportable = !guided && selected !== null && (publishDestinations(selected.owner_id, me, access.allowed).length > 0 || canDownload(selected.owner_id, me, access.allowed));
 
-  const saveDisabled = busy || Boolean(conflict) || !access.save || invalidMcfDocument || invalidDraftClassification
+  const saveDisabled = busy || workspace.communityLoading || Boolean(conflict) || !access.save || invalidMcfDocument || invalidDraftClassification || invalidManualFilters || invalidTiming
     || metadataSourceRequired || Boolean(draftNameValidation?.error)
     || !draftNameValidation?.normalized || Boolean(selected && !isReviewDraftDirty(draft));
-  const renameDisabled = busy || Boolean(conflict) || !access.rename || !draftNameValidation?.normalized
+  const renameDisabled = busy || Boolean(conflict) || !access.rename || !draftNameValidation?.normalized || invalidTiming
     || Boolean(draftNameValidation.error)
     || Boolean(selected && (
       isReviewDraftContentDirty(draft)
@@ -54,11 +58,13 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
     disabled={busy || !access.field("evidence")} onToggleScan={(scan, included) => void toggleScanMembership(scan, included)}
     onChangeRole={(scan, role) => void changeScanMembership(scan, role)} onChange={setDraft}
     votesFailed={votes.loadFailed} onRetryVotes={votes.retry} />;
+  const pending = community.entries.flatMap(({ included, source, link }) =>
+    included && !source && link && !draft.communityDraftTokens[link.linkId] ? [link] : []);
 
   const overview = <SavedReviewOverview
       requiredFilterIds={selected?.policy_required_filter_ids}
       lockedSeverities={selected?.policy_locked_severities}
-      filters={draft.filters}
+      filters={[...draft.filters, ...manualDraftRows(draft.newManualFilters)]}
       memberships={draft.memberships}
       scans={[...(selected?.scans ?? []).map((reference) => reference.scan), ...scans]}
       defaultSort={guided ? "time" : "category"}
@@ -74,11 +80,15 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       onApplyDefaults={() => void applyFilterDefaults()}
       onPreviewFilter={(filter) => void previewFilter(filter)}
       preview={preview}
-      previewDisabled={!access.preview}
+      previewDisabled={!access.preview || invalidTiming}
+      onInvalidTiming={setInvalidTiming}
+      resetTiming={resetTiming}
       focusFilterId={preflightFocusFilterId}
       onFocusFilterComplete={() => setPreflightFocusFilterId(null)}
       renderFilterVote={votes.renderVote}
       sources={sources}
+      stagedCommunity={pending.length > 0 && pending.map((link) => <ReviewCommunityDraftLoader
+        key={`${draft.id}:${link.linkId}`} link={link} draftId={draft.id} setDraft={setDraft} />)}
     />;
   const saveControls = <div className="button-row saved-review-header-group review-save-actions">
         <button type="button" className="btn-primary compact-button" onClick={() => void save()} disabled={saveDisabled}>
@@ -89,11 +99,12 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
           className="btn-secondary compact-button"
           onClick={() => {
             setDraft(discardReviewDraft(draft));
+            setResetTiming((value) => value + 1);
             setMetadataCandidates([]);
             setApplyStatus(null);
             setEditingReviewName(false);
           }}
-          disabled={busy || !isReviewDraftDirty(draft)}
+          disabled={busy || (!invalidTiming && !isReviewDraftDirty(draft))}
         >Discard</button>
         {exportable && <button type="button" className="btn-secondary compact-button" aria-haspopup="dialog"
           disabled={busy || Boolean(conflict) || isReviewDraftDirty(draft)}
@@ -163,6 +174,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
     {editingReviewName && draft.name && draftNameValidation?.error && <span className="form-error" role="alert">
       {draftNameValidation.error}
     </span>}
+    {invalidManualFilters && <p className="form-error" role="alert">Manual filters need a category, subcategory, and an end time after the start time.</p>}
     {overview}
     <div className="button-row">
       <button
@@ -171,9 +183,6 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
         onClick={() => { setError(null); setShowManualFilter(true); }}
         disabled={busy || !access.field("cues")}
       >Add Manual Filter</button>
-      {draft.newManualFilters.length > 0 && <span className="form-status" role="status">
-        {draft.newManualFilters.length} Manual {draft.newManualFilters.length === 1 ? "filter" : "filters"} staged
-      </span>}
     </div>
     {selected && dialog === "export" && <ExportDialog review={selected} reviews={reviews} exports={exports} allowed={access.allowed}
       exportAvailable={hasExportEvidence(selected)} onMcfIssues={workspace.setMcfPreflightIssues}
@@ -186,7 +195,7 @@ export function ReviewWorkspaceEditor({ workspace, guided = false }: { workspace
       previewError={workspace.error}
       onPreview={access.preview ? (filter) => void previewFilter(filter) : undefined}
       onClose={() => { clearPreview(); setError(null); setShowManualFilter(false); }}
-      onAdd={(filter) => { setDraft(stageManualReviewFilter(draft, filter)); setShowManualFilter(false); }}
+      onAdd={(filter) => { setDraft((current) => current ? stageManualReviewFilter(current, filter) : current); setShowManualFilter(false); }}
     />}
   </>;
 }

@@ -81,7 +81,7 @@ CREATE INDEX idx_backup_runs_started ON backup_runs(started_at);
 
 -- Rebuild moderation_actions so its audit accepts the backup commands. Columns, rows, the index
 -- and the guard triggers are kept; backup commands, like recompute, never advance a revision.
-ALTER TABLE moderation_actions RENAME TO moderation_actions_v4;
+ALTER TABLE moderation_actions RENAME TO moderation_actions_v5;
 CREATE TABLE moderation_actions (
   action_id TEXT PRIMARY KEY NOT NULL,
   actor TEXT NOT NULL,
@@ -97,8 +97,8 @@ CREATE TABLE moderation_actions (
   created_at INTEGER NOT NULL CHECK (created_at >= 0)
 );
 INSERT INTO moderation_actions SELECT action_id, actor, resource, target_id, command, expected_revision, reason,
-  request_json, outcome, error_code, created_at FROM moderation_actions_v4;
-DROP TABLE moderation_actions_v4;
+  request_json, outcome, error_code, created_at FROM moderation_actions_v5;
+DROP TABLE moderation_actions_v5;
 CREATE INDEX idx_moderation_audit ON moderation_actions(resource, created_at, action_id);
 CREATE TRIGGER guard_audit_update BEFORE UPDATE ON moderation_actions
 BEGIN SELECT RAISE(ABORT, 'immutable_audit'); END;

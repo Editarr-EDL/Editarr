@@ -67,6 +67,7 @@ def test_launch_cancellation_race_finishes_cancelled_and_releases_queue(monkeypa
         lambda identity: process_events.append(f"force:{identity.pid}") or True,
     )
     monkeypatch.setattr(api, "record_scan_worker_process", cancel_before_record)
+    monkeypatch.setattr(api.PROCESS_CONTROL, "attempt_may_be_running", lambda *_a, **_k: False)
     api.SCAN_QUEUE_STOP_EVENT.clear()
 
     assert not api._launch_scan_worker(scan.id)
@@ -140,6 +141,7 @@ def test_launch_failure_marks_scan_resumable_and_keeps_queue_item(monkeypatch):
     row = check_db.get(ScanRow, scan.id)
     assert row.status == "orphaned"
     assert row.error_message == "failed to exec worker"
+    assert row.worker_token is None
     assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id).queue_id == (
         queue_item.queue_id
     )
@@ -211,6 +213,38 @@ def test_scheduler_marks_a_dead_dedicated_worker_orphaned(monkeypatch):
     assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id) is not None
     check_db.close()
     assert cleaned == [(scan.id, "worker-token")]
+
+
+def test_scheduler_waits_to_orphan_a_scan_while_its_writer_is_alive(monkeypatch):
+    factory = _queue_factory()
+    with factory() as db:
+        scan, _entry = _enqueue_scan(db, "pending-checkpoint-writer")
+        assert repository.reserve_scan_worker(db, scan.id, token="worker-token")
+        assert repository.record_scan_worker_process(
+            db, scan.id, token="worker-token", pid=42, pgid=42
+        )
+    stop_event = Event()
+    liveness = iter([True, False])
+
+    def attempt_may_be_alive(_scan_id, _pid, _pgid, token, **_kwargs):
+        with factory() as db:
+            row = db.get(ScanRow, scan.id)
+            assert row.status == "scanning" and row.worker_token == token
+        still_writing = next(liveness)
+        if not still_writing:
+            stop_event.set()
+        return still_writing
+
+    monkeypatch.setattr(api, "SCAN_QUEUE_STOP_EVENT", stop_event)
+    monkeypatch.setattr(api, "get_session_factory", lambda: factory)
+    monkeypatch.setattr(api, "_worker_identity", lambda *_args: None)
+    monkeypatch.setattr(api.PROCESS_CONTROL, "attempt_may_be_running", attempt_may_be_alive)
+
+    api._scan_queue_worker()
+
+    with factory() as db:
+        row = db.get(ScanRow, scan.id)
+        assert row.status == "orphaned" and row.worker_token is None
 
 
 def test_scheduler_releases_a_cancelled_dead_worker_and_starts_next(monkeypatch):
@@ -285,6 +319,8 @@ def test_scheduler_preserves_terminal_state_during_liveness_check(monkeypatch, t
 
 @pytest.mark.parametrize("change", ["cancellation", "replacement"])
 def test_scheduler_rechecks_attempt_and_cancellation_after_liveness(monkeypatch, change):
+    from scanner.pipeline import visual_checkpoints
+
     factory = _queue_factory()
     setup_db = factory()
     scan, queue_item = _enqueue_scan(setup_db, "changed-attempt")
@@ -313,6 +349,11 @@ def test_scheduler_rechecks_attempt_and_cancellation_after_liveness(monkeypatch,
     monkeypatch.setattr(api, "get_session_factory", lambda: factory)
     monkeypatch.setattr(api, "_worker_identity", change_before_identity_returns)
     monkeypatch.setattr(api, "cleanup_worker_control_endpoint", lambda *_args: None)
+    discarded = []
+    monkeypatch.setattr(
+        visual_checkpoints, "discard_visual_checkpoints",
+        lambda _root, scan_id: discarded.append(scan_id),
+    )
 
     api._scan_queue_worker()
 
@@ -325,6 +366,7 @@ def test_scheduler_rechecks_attempt_and_cancellation_after_liveness(monkeypatch,
             assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id) is not None
         else:
             assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id) is None
+    assert discarded == ([scan.id] if change == "cancellation" else [])
 
 
 def test_scheduler_does_not_delete_reused_queue_entry(monkeypatch):

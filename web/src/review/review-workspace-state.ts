@@ -39,6 +39,8 @@ import { useReviewPreview } from "./review-preview";
 import { catalogReviewMcfDocument, focusMcfPreflightIssue } from "./review-workspace-metadata-state";
 import { useReviewSelection } from "./review-selection";
 import { useReviewAccess, useReviewLifetime } from "./review-access";
+import { communitySaveFilters } from "./review-community";
+import { validManualDraft } from "./review-manual-draft";
 
 export type SavedReviewPanelProps = {
   item: Pick<JellyfinMediaItem, "id"> & Partial<Pick<JellyfinMediaItem, "item_type" | "name" | "year" | "season_number" | "index_number" | "duration_seconds" | "versions">>;
@@ -113,13 +115,17 @@ export function useSavedReviewWorkspace({
   }, [selected?.id]);
   const pendingNameValidation = validateDisplayName(name, true);
   const draftNameValidation = draft ? validateDisplayName(draft.name, true) : null;
-  const invalidDraftClassification = Boolean(draft && mcfRegistry && draft.filters.some((filter) => (
+  const invalidDraftClassification = Boolean(draft && mcfRegistry && [...draft.filters, ...draft.newManualFilters].some((filter) => (
     (Boolean(filter.category) !== Boolean(filter.subcategory))
     || (Boolean(filter.category) && !classificationIsValid(mcfRegistry, filter.category, filter.subcategory))
     || Boolean(filter.mcf_comment?.includes("-->"))
   )));
+  const invalidManualFilters = Boolean(draft?.newManualFilters.some((filter) => !validManualDraft(filter)));
   const metadataSourceRequired = metadataCandidates.length > 0 && !draft?.mcfMetadataSeed;
   const invalidMcfDocument = Boolean(draft && Object.keys(validateMcfDocument(draft.mcfDocument)).length);
+  const communityLoading = Boolean(draft?.communityMemberships.some(
+    ({ link_id }) => !!link_id && !draft.communityDraftTokens[link_id],
+  ));
   const toggleReviewSort = (nextSort: typeof sort) => {
     if (sort === nextSort) setDirection((current) => current === "asc" ? "desc" : "asc");
     else { setSort(nextSort); setDirection("asc"); }
@@ -153,7 +159,7 @@ export function useSavedReviewWorkspace({
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const applyFilterDefaults = async () => {
-    if (!draft || conflict || !isCurrent() || !access.field("filters")) return;
+    if (!draft || communityLoading || conflict || !isCurrent() || !access.field("filters")) return;
     setBusy(true); setError(null);
     try {
       const result = selected
@@ -201,12 +207,14 @@ export function useSavedReviewWorkspace({
   };
 
   const save = async (resolveConflict = false) => {
-    if (!draft || (conflict && !(resolveConflict && conflict === "ready")) || !isCurrent() || !access.save || (selected && !conflict && !isReviewDraftDirty(draft))) return;
+    if (!draft || communityLoading || (conflict && !(resolveConflict && conflict === "ready")) || !isCurrent() || !access.save || (selected && !conflict && !isReviewDraftDirty(draft))) return;
     const token = resolveConflict && selected ? selected : draft;
     if (draftNameValidation?.error || !draftNameValidation?.normalized) {
       setError(draftNameValidation?.error || "Enter a review name before saving it.");
       return;
     }
+    const manualFilters = draft.newManualFilters.filter(validManualDraft);
+    if (manualFilters.length !== draft.newManualFilters.length) return;
     setBusy(true); setError(null);
     try {
       const saved = selected
@@ -215,19 +223,19 @@ export function useSavedReviewWorkspace({
           revision: token.revision,
           name: draftNameValidation.normalized,
           memberships: draft.memberships,
-          filters: reviewDraftFilters(draft),
+          ...communitySaveFilters(draft),
           filter_basis: "base",
           mcf_document: draft.mcfDocument,
           synchronization: draft.synchronization,
           accepted_credits: draft.acceptedCredits,
-          new_manual_filters: draft.newManualFilters,
+          new_manual_filters: manualFilters,
           community_memberships: draft.communityMemberships,
         })
         : await createSavedReview({ ...reviewTarget, stable_version_id: stableVersionId }, {
           name: draftNameValidation.normalized,
           memberships: draft.memberships,
-          filters: reviewDraftFilters(draft),
-          new_manual_filters: draft.newManualFilters,
+          ...communitySaveFilters(draft),
+          new_manual_filters: manualFilters,
           mcf_metadata_seed: draft.mcfMetadataSeed,
           community_memberships: draft.communityMemberships.filter((value) => value.link_id),
         });
@@ -397,8 +405,8 @@ export function useSavedReviewWorkspace({
     name, sort, direction, busy, error, preview, showNewReview, showDuplicateReview,
     editingReviewName, reviewNameBeforeEdit, showManualFilter, metadataCandidates,
     applyStatus, mcfPreflightIssues, preflightFocusFilterId, pendingNameValidation,
-    draftNameValidation, invalidDraftClassification, metadataSourceRequired,
-    invalidMcfDocument, availableScans, completedCreditsScans, rowExportStatus,
+    draftNameValidation, invalidDraftClassification, invalidManualFilters, metadataSourceRequired,
+    invalidMcfDocument, communityLoading, availableScans, completedCreditsScans, rowExportStatus,
     setName, setError, setDraft, setMetadataCandidates, setApplyStatus,
     setShowNewReview, setShowDuplicateReview, setEditingReviewName,
     setReviewNameBeforeEdit, setShowManualFilter, setPreflightFocusFilterId,

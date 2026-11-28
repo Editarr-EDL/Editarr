@@ -11,7 +11,7 @@ from scanner.persistence.migrations import adoption
 from tests.activity_migration_support import _upgrade, link_owner
 from tests.community_identity_migration_support import no_network as no_network
 from tests.community_master_migration_support import retire_publications
-from tests.explicit_filter_modes_support import drop_0031_additions
+from tests.explicit_filter_modes_support import drop_filter_migration_additions
 from tests.stable_media_identity_migration_support import without_stable_media_identity
 from tests.test_account_migration import _snapshot
 from tests.test_activity_migration import _assert_recoverable
@@ -37,7 +37,7 @@ def test_every_supported_revision_retains_rows_and_verified_recovery(tmp_path, r
     generation = adoption.upgrade_existing_database(path, path.parent)
     assert adoption._inspect_database(path) == adoption.HEAD_REVISION
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     evidence = upgraded.pop("review_policy_evidence")
     assert upgraded.pop("review_scan_repairs") == []
     assert upgraded.pop("media_item_export_regenerations") == []

@@ -68,12 +68,13 @@ async function openMovieNightReview(page: Page) {
   await panel.getByLabel("Group by", { exact: true }).selectOption("category");
   await expect(panel.getByRole("heading", { name: "Movie night", exact: true })).toBeVisible();
   await panel.getByRole("button", { name: /^Nudity family/ }).click();
-  for (const group of [/^Kissing subcategory/, /^kissing finding group/, /^Punching subcategory/, /^punching finding group/]) {
+  for (const group of [/^Kissing subcategory/, /^A couple kisses on a balcony at night finding group/, /^Punching subcategory/,
+    /^Two characters trade punches in a parking garage finding group/, /^A bar fight breaks out after an argument finding group/]) {
     await panel.getByRole("button", { name: group }).click();
   }
   const sex = panel.getByRole("checkbox", { name: "Use all video filters in Sex family" });
   await sex.check();
-  const barFight = panel.locator("tr").filter({ hasText: "A bar fight breaks out after an argument" }).getByRole("checkbox");
+  const barFight = panel.getByRole("checkbox", { name: /^Include A bar fight breaks out after an argument at / });
   await barFight.uncheck();
   await panel.getByRole("button", { name: "Save Review", exact: true }).click();
   await expect(panel.getByRole("button", { name: "Save Changes", exact: true })).toBeVisible();

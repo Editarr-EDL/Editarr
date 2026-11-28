@@ -151,21 +151,34 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
   await openFirstReviewFilterEditor();
   await expect(panel.getByLabel(/Filter .* label/)).toHaveValue("Imported mute");
   await panel.getByLabel(/Filter .* family/).selectOption("language");
-  await expect(panel.getByLabel(/Filter .* subcategory/)).toHaveCount(0);
-  await openFirstReviewFilterEditor();
-  await panel.getByLabel(/Filter .* subcategory/).fill("swearing");
-  await expect(panel.getByLabel(/Filter .* description/)).toHaveCount(0);
-  await openFirstReviewFilterEditor();
+  await panel.getByLabel(/Filter .* subcategory/).selectOption({ label: "Swearing" });
   await panel.getByLabel(/Filter .* description/).fill("Imported details");
-  await panel.getByLabel(/Filter .* start seconds/).fill("1.25");
-  await panel.getByLabel(/Filter .* end seconds/).fill("2.75");
+  await panel.getByLabel(/Filter .* start time/).fill("00:00:01.25");
+  await panel.getByLabel(/Filter .* end time/).fill("00:00:02.75");
   await panel.getByLabel(/Filter .* action/).selectOption("skip");
-  await panel.getByLabel(/Filter .* label/).fill("Imported edited");
+  const importedLabel = panel.getByLabel(/Filter .* label/);
+  await importedLabel.fill("");
+  await importedLabel.pressSequentially("Imported edited");
+  await expect(importedLabel).toHaveValue("Imported edited");
+  await expect(importedLabel).toBeFocused();
+  await panel.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(panel.getByRole("button", { name: /importededit finding group/ })).toHaveAttribute("aria-expanded", "true");
   await panel.getByRole("button", { name: "Add Manual Filter" }).click();
   dialog = page.getByRole("dialog", { name: "Add Manual Filter" });
   await dialog.getByLabel("Manual filter label").fill("Review-local mute");
   await dialog.getByRole("button", { name: "Add Filter" }).click();
-  await expect(panel.getByRole("status")).toContainText("1 Manual filter staged");
+  await panel.getByLabel("Group by", { exact: true }).selectOption("time");
+  const manualRow = panel.getByRole("row").filter({ has: page.getByText("Manual", { exact: true }) });
+  await expect(manualRow).toBeVisible();
+  await chooseFilterAction(page, manualRow, /^Edit /);
+  await panel.getByLabel(/Filter .* end time/).fill("00:00:01.10");
+  await panel.getByRole("button", { name: "Done" }).click();
+  await page.route("**/api/library-items/movie-1/reviews/preview", (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ start_seconds: 0, end_seconds: 1.1, edit_action: "mute" });
+    return route.fulfill({ contentType: "audio/mpeg", body: Buffer.from([0]) });
+  });
+  await manualRow.getByRole("button", { name: /^Preview / }).click();
+  await expect(manualRow.locator("audio")).toBeVisible();
   const [importedSave] = await Promise.all([
     page.waitForResponse((response) => response.url().includes("/api/reviews/") && response.request().method() === "PUT"),
     panel.getByRole("button", { name: "Save Changes" }).click(),
@@ -174,6 +187,7 @@ test("keeps saved reviews isolated, versioned, exportable, and importable", asyn
     category: "language", subcategory: "swearing", label: "Imported edited", details: "Imported details",
     start_seconds: 1.25, end_seconds: 2.75, edit_action: "skip",
   }));
+  expect(importedSave.request().postDataJSON().new_manual_filters[0]).toMatchObject({ end_seconds: 1.1 });
   await expandReviewFilterGroups();
   await expect(panel.getByRole("button", { name: /^More actions for / })).toHaveCount(2);
   await (await chooseExportFormat(page, "EDL")).click();

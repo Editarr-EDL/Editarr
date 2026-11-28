@@ -32,6 +32,7 @@ from .model_core import (
 )
 from .model_publications import ExportPublication
 from .model_review_repairs import ReviewRepairSummary
+from .model_videoskip import VideoSkipSource
 
 
 class CreditsDetectionConfiguration(ReviewWriteModel):
@@ -144,6 +145,7 @@ class Scan(BaseModel):
     name: str | None = None
     origin: ScanOrigin = ScanOrigin.GENERATED
     import_source_name: str | None = None
+    videoskip_source: VideoSkipSource | None = None
     imported_at: AwareDatetime | None = None
     reuse_pending: bool = False
     stable_version_id: str | None = None

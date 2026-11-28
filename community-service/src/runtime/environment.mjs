@@ -37,6 +37,11 @@ export function readConfiguration(path, secretsPath) {
   return { ...config, env: { ...values, ...protectedValues, APP_ENV: 'self-hosted', SELF_HOSTED_ENABLED: config.enabled } };
 }
 
+/** Read the unsigned snapshot settings needed by the offline seed command. */
+export function readSeedSettings(path) {
+  return path ? strings(jsonFile(path).variables, variables) : {};
+}
+
 export function tunnelActor(request) {
   const address = request.headers.get('CF-Connecting-IP');
   if (!address || !isIP(address) || request.headers.has('CF-Worker')) return null;
