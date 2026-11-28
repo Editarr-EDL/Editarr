@@ -136,7 +136,8 @@ def _scan_visual_by_scene(
         cached_findings = root._load_cached_visual_findings(result_path)
         if cached_findings is not None:
             if provenance_callback:
-                provenance_callback(f"scene_{scene.index:04d}:reused")
+                reuse = "checkpoint_reused" if checkpoint_dir is not None else "reused"
+                provenance_callback(f"scene_{scene.index:04d}:{reuse}")
             by_scene[idx] = cached_findings
             if progress_callback:
                 progress_callback(

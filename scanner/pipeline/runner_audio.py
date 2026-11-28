@@ -19,7 +19,7 @@ def run_audio_stages(
     audio_selection,
     should_cancel,
     completed_stages,
-    save_stage_results,
+    complete_stage,
     analyzed_audio_callback,
     analyzed_audio_timing_callback,
     record_stage,
@@ -50,7 +50,7 @@ def run_audio_stages(
                 ),
                 **({"audio_selection": audio_selection} if audio_selection else {}),
             )
-            save_stage_results("audio_extract", [])
+            complete_stage("audio_extract", [])
         except BaseException as exc:
             record_stage(
                 "audio_extract", "partial" if isinstance(
@@ -58,7 +58,6 @@ def run_audio_stages(
                 ) else "failed"
             )
             raise
-        record_stage("audio_extract", "complete")
     else:
         pipeline.logger.info("Using cached audio extraction for identity %s", identity)
         record_stage("audio_extract", "reused")
@@ -123,11 +122,10 @@ def run_audio_stages(
                 analyzed_audio_callback(audio_selection)
             if analyzed_audio_timing_callback:
                 analyzed_audio_timing_callback(audio_selection, playback_offset)
-        save_stage_results("audio_scan", findings)
+        complete_stage("audio_scan", findings)
     except BaseException as exc:
         record_stage("audio_scan", "partial" if isinstance(
             exc, (ScanCancelledError, FullApplicationQuitRequested)
         ) else "failed")
         raise
-    record_stage("audio_scan", "complete")
     pipeline.logger.info("Found %d audio findings", len(findings))

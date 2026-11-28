@@ -47,9 +47,6 @@ from scanner.persistence.migrations.preflight import (  # noqa: E402
     require_owner_setup,
     require_supported_schema,
 )
-from scanner.persistence.repository.repository_checkpoints import (  # noqa: E402
-    commit_scan_stage_results,
-)
 from scanner.persistence.repository.scan_jobs import fail_refused_scan_job  # noqa: E402
 from scanner.persistence.repository.scan_pause import is_scan_pause_requested  # noqa: E402
 from scanner.pipeline.processes import ScanCancelledError  # noqa: E402
@@ -86,6 +83,7 @@ from scanner.runtime.worker_quit import (  # noqa: E402
     ScanPauseRequested,
     ScanReservationLost,
 )
+from scanner.runtime.worker_stage import commit_worker_stage_results  # noqa: E402
 from scanner.runtime.worker_stage import record_worker_stage as _record_stage  # noqa: E402
 from scanner.security.scan_jobs.authority import (  # noqa: E402
     REFUSAL_MESSAGES,
@@ -339,8 +337,9 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                     ),
                     completed_stages=checkpoints,
                     checkpoint_worker_token=worker_token,
-                    stage_results_writer=partial(
-                        gate.run, db, commit_scan_stage_results, item.id, worker_token
+                    stage_results_writer=lambda stage, findings, effective: gate.run(
+                        db, commit_worker_stage_results, item.id, worker_token, stage, findings,
+                        effective=effective,
                     ),
                     stage_callback=partial(
                         gate.run,

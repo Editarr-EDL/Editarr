@@ -280,6 +280,54 @@ def test_zero_finding_stage_completes_and_unavailable_model_does_not_run(
     ]
 
 
+def test_durable_pipeline_supplies_final_coverage_once(tmp_path, monkeypatch):
+    media = tmp_path / "synthetic.mkv"
+    media.write_bytes(b"synthetic")
+    monkeypatch.setattr(runner.settings, "data_dir", tmp_path)
+    monkeypatch.setattr(runner.settings, "frames_dir", tmp_path / "frames")
+    monkeypatch.setattr(runner, "require_available", lambda _model: None)
+    monkeypatch.setattr(runner, "qwen_enrichment_capability", lambda: SimpleNamespace(
+        availability="available", enrichment_behavior="qwen_summary",
+    ))
+
+    def run_visual(*_args, provenance_callback, **_kwargs):
+        provenance_callback("scene_0001:reused")
+        return []
+
+    def run_audio(*_args, provenance_callback, **_kwargs):
+        provenance_callback("complete")
+        return []
+
+    monkeypatch.setattr(runner, "_scan_visual_isolated", run_visual)
+    monkeypatch.setattr(runner, "cached_audio_path", lambda *_args: tmp_path / "extracted.wav")
+    monkeypatch.setattr(runner, "extract_audio", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runner, "transcription_cache_model_key", lambda *_args, **_kw: "locale-key")
+    monkeypatch.setattr(runner, "transcription_cache_path", lambda *_args: tmp_path / "transcript")
+    monkeypatch.setattr(runner, "_scan_audio_isolated", run_audio)
+    writes = []
+    events = []
+
+    runner.run_scan(
+        db=object(), video_path=str(media), video_id="scan", video_duration_seconds=90,
+        audio_model="apple_speech", media_cache_key="synthetic-fingerprint",
+        status_updater=lambda *_args: None,
+        findings_writer=lambda *_args: pytest.fail("used loose findings writer"),
+        checkpoint_callback=lambda *_args: pytest.fail("used loose checkpoint callback"),
+        stage_callback=lambda stage, state, _effective: events.append((stage, state)),
+        stage_results_writer=lambda stage, findings, effective: writes.append(
+            (stage, findings, effective)
+        ),
+    )
+
+    assert [stage for stage, _, _ in writes] == ["visual", "audio_extract", "audio_scan"]
+    assert [stage for stage, state in events if state == "complete"] == ["audio_qwen"]
+    assert all(
+        not findings and effective["duration_seconds"] == 90 for _, findings, effective in writes
+    )
+    assert writes[0][2]["cached_scene_findings_reused"] is True
+    assert writes[2][2]["transcript_cache_key"] == "locale-key"
+
+
 def test_decision_video_models_resolve_their_pinned_artifacts():
     qwen = stage_model_identity("visual", {"video_model": "qwen3-vl-4b"})
     d1 = stage_model_identity("visual", {"video_model": "d1-3b"})

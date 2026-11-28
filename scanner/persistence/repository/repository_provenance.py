@@ -83,6 +83,7 @@ def record_scan_stage(
     quantization: str | None = None,
     intervals: list[dict[str, float]] | None = None,
     sampling_seconds: float | None = None,
+    commit: bool = True,
 ) -> None:
     """Persist a real stage attempt without replacing prior worker attempts."""
     scan = db.get(ScanRow, scan_id)
@@ -142,8 +143,16 @@ def record_scan_stage(
         )
     elif state in {"partial", "failed", "complete", "unsupported"}:
         row.status = state
+        if state == "complete" and settings:
+            started = _decode_settings(row.effective_settings_json) or {}
+            row.effective_settings_json = json.dumps(
+                {**started, **settings}, sort_keys=True, separators=(",", ":")
+            )
         if intervals is not None:
             row.intervals_json = json.dumps(
                 intervals, sort_keys=True, separators=(",", ":")
             )
-    db.commit()
+        if sampling_seconds is not None:
+            row.sampling_seconds = sampling_seconds
+    if commit:
+        db.commit()

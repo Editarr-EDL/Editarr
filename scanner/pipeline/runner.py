@@ -235,7 +235,9 @@ def run_scan(
     analyzed_audio_callback=None,
     analyzed_audio_timing_callback=None,
     media_cache_key: str | None = None,
-    stage_results_writer: Callable[[str, list[FindingCreate]], None] | None = None,
+    stage_results_writer: (
+        Callable[[str, list[FindingCreate], dict[str, object]], None] | None
+    ) = None,
     checkpoint_worker_token: str | None = None,
 ) -> str:
     """
@@ -297,10 +299,11 @@ def run_scan(
         for stage in ("audio_extract", "audio_scan", "audio_qwen"):
             stage_settings[stage]["audio_selection"] = asdict(audio_selection)
 
-    def record_stage(stage: str, state: str, **settings: object) -> None:
+    def record_stage(stage: str, state: str, **observed: object) -> None:
+        effective = stage_settings[stage]
+        effective.update(observed)
         if stage_callback:
-            stage_settings[stage].update(settings)
-            stage_callback(stage, state, stage_settings[stage])
+            stage_callback(stage, state, effective)
 
     def record_visual_enrichment(event: str) -> None:
         scene, separator, state = event.partition(":")
@@ -309,17 +312,23 @@ def run_scan(
         stage = f"visual_qwen:{scene}"
         if state == "reused":
             stage_settings["visual"]["cached_scene_findings_reused"] = True
+        elif state == "checkpoint_reused":
+            # This scene already ran for the same job, media and model settings.
+            # Keep combined detector coverage without claiming a new Qwen run.
+            stage_settings["visual"]["checkpoint_scene_findings_reused"] = True
+            state = "reused"
         stage_settings[stage] = stage_settings["visual_qwen"]
         record_stage(stage, state)
 
-    def save_stage_results(stage: str, findings: list[FindingCreate]) -> None:
+    def complete_stage(stage: str, findings: list[FindingCreate]) -> None:
         if stage_results_writer is not None:
-            stage_results_writer(stage, findings)
-        else:
-            if findings:
-                findings_writer(db, video_id, findings)
-            if checkpoint_callback:
-                checkpoint_callback(stage)
+            stage_results_writer(stage, findings, stage_settings[stage].copy())
+            return
+        if findings:
+            findings_writer(db, video_id, findings)
+        if checkpoint_callback:
+            checkpoint_callback(stage)
+        record_stage(stage, "complete")
 
     if _test_fake_models_enabled():
         return _run_test_fake_models(
@@ -440,7 +449,7 @@ def run_scan(
                        if checkpoint_worker_token is not None else {}),
                 )
                 emit("visual", 1.0, "Visual scan complete")
-                save_stage_results("visual", visual_findings)
+                complete_stage("visual", visual_findings)
             except BaseException as exc:
                 record_stage(
                     "visual", "partial" if isinstance(
@@ -448,7 +457,6 @@ def run_scan(
                     ) else "failed"
                 )
                 raise
-            record_stage("visual", "complete")
             if checkpoint_dir is not None:
                 discard_visual_checkpoints(settings.data_dir, video_id)
         elif scan_video:
@@ -467,7 +475,7 @@ def run_scan(
                 audio_selection=audio_selection,
                 should_cancel=should_cancel,
                 completed_stages=completed_stages,
-                save_stage_results=save_stage_results,
+                complete_stage=complete_stage,
                 analyzed_audio_callback=analyzed_audio_callback,
                 analyzed_audio_timing_callback=analyzed_audio_timing_callback,
                 record_stage=record_stage,

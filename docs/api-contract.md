@@ -796,6 +796,9 @@ until observed; no-input enrichment is `disabled` with a skip reason, while
 unavailable capability is `unsupported`. Cache reuse has partial/unknown original
 model provenance; queued options alone do not prove a stage ran. Versioned
 checkpoints may resume only when linked to completed attempt coverage.
+A resumed fine scan can combine detector coverage from private scene checkpoints
+bound to the same scan, media, and model settings. The visual stage records their
+reuse as `checkpoint_scene_findings_reused` in its effective settings.
 
 ### Scan model choices
 

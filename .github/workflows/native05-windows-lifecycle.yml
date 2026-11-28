@@ -79,11 +79,19 @@ jobs:
           Invoke-TaskNativeCommand 'python --version' { python --version }
           Invoke-TaskNativeCommand 'uv --version' { uv --version }
           Invoke-TaskNativeCommand 'uv sync' { uv sync --locked --extra dev }
+          $checkpointTests = @(
+            'tests/test_scan_pause_checkpoints.py',
+            'tests/test_scan_pause_restart.py',
+            'tests/test_scan_worker_launch_recovery.py',
+            'tests/test_execution_provenance.py',
+            'tests/test_scan_stage_commit.py',
+            'tests/test_visual_checkpoint_coverage.py'
+          )
           Invoke-TaskNativeCommand 'ruff' {
-            uv run ruff check scanner/security/auth_crypto.py scanner/runtime/process_control.py scanner/runtime/process_control_windows.py scanner/api.py scanner/runtime/restart_service.py scanner/pipeline/runner.py tests/test_auth_crypto.py tests/test_process_control_units.py tests/test_process_control_integration.py tests/test_processes.py tests/test_restart_controller.py tests/test_restart_integration.py tests/test_queue_scheduler.py tests/test_queue_workers.py tests/test_queue_credits.py tests/test_frozen_bootstrap.py tests/test_scan_pause_checkpoints.py tests/test_scan_pause_restart.py tests/test_scan_worker_launch_recovery.py
+            uv run ruff check scanner/security/auth_crypto.py scanner/runtime/process_control.py scanner/runtime/process_control_windows.py scanner/api.py scanner/runtime/restart_service.py scanner/pipeline/runner.py tests/test_auth_crypto.py tests/test_process_control_units.py tests/test_process_control_integration.py tests/test_processes.py tests/test_restart_controller.py tests/test_restart_integration.py tests/test_queue_scheduler.py tests/test_queue_workers.py tests/test_queue_credits.py tests/test_frozen_bootstrap.py @checkpointTests
           }
           Invoke-TaskNativeCommand 'pytest' {
-            uv run pytest -q -n 0 tests/test_auth_crypto.py tests/test_process_control_units.py tests/test_process_control_integration.py tests/test_processes.py tests/test_restart_controller.py tests/test_restart_integration.py tests/test_queue_scheduler.py tests/test_queue_workers.py tests/test_queue_credits.py tests/test_frozen_bootstrap.py tests/test_scan_pause_checkpoints.py tests/test_scan_pause_restart.py tests/test_scan_worker_launch_recovery.py --junitxml "$env:RUNNER_TEMP\native05-windows-junit.xml"
+            uv run pytest -q -n 0 tests/test_auth_crypto.py tests/test_process_control_units.py tests/test_process_control_integration.py tests/test_processes.py tests/test_restart_controller.py tests/test_restart_integration.py tests/test_queue_scheduler.py tests/test_queue_workers.py tests/test_queue_credits.py tests/test_frozen_bootstrap.py @checkpointTests --junitxml "$env:RUNNER_TEMP\native05-windows-junit.xml"
           }
           Invoke-TaskNativeCommand 'git diff --check' { git diff --check }
 

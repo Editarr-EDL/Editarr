@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from scanner.db import ScanRow, ScanStageCoverageRow
+from scanner.models import FindingCreate
+from scanner.persistence.write_lock import write_lock
 
 
 def scan_checkpoint_stages(
@@ -100,10 +102,25 @@ def _checkpoint_state(row: ScanRow) -> dict[str, object]:
 
 
 def commit_scan_stage_results(
-    db: Session, scan_id: str, execution_id: str, stage: str, findings
+    db: Session,
+    scan_id: str,
+    execution_id: str,
+    stage: str,
+    findings: list[FindingCreate],
+    *,
+    effective: dict[str, object] | None = None,
+    intervals: list[dict[str, float]] | None = None,
+    sampling_seconds: float | None = None,
 ) -> None:
-    """Publish findings and their completion marker atomically for safe retries."""
+    """Commit findings, final coverage, and the resume marker together."""
     from .repository_catalog import create_scan_findings_batch
+    from .repository_provenance import record_scan_stage
 
-    create_scan_findings_batch(db, scan_id, findings, commit=False)
-    mark_scan_checkpoint(db, scan_id, stage, execution_id=execution_id)
+    with write_lock(db):
+        if effective is not None:
+            record_scan_stage(
+                db, scan_id, stage, execution_id, "complete", effective,
+                intervals=intervals, sampling_seconds=sampling_seconds, commit=False,
+            )
+        create_scan_findings_batch(db, scan_id, findings, commit=False)
+        mark_scan_checkpoint(db, scan_id, stage, execution_id=execution_id)

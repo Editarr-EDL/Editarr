@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from scanner import repository, worker
 from scanner.credits.credits_detector import default_configuration
-from scanner.db import Base, ScanRow
+from scanner.db import Base, ScanRow, ScanStageCoverageRow
 from scanner.modeling.model_audio_tracks import AudioSelection
 from scanner.models import ScanMode
 from scanner.pipeline.audio_tracks import AudioTrack, AudioTrackSelection
@@ -167,8 +167,10 @@ def test_worker_persists_checkpoints_and_releases_the_queue(monkeypatch):
             ("audio_scan", {"audio_model": "whisper", "audio_filter": "better_profanity"}),
         ):
             kwargs["stage_callback"](stage, "started", effective)
-            kwargs["stage_results_writer"](stage, [])
-            kwargs["stage_callback"](stage, "complete", effective)
+            kwargs["stage_results_writer"](stage, [], {**effective, "duration_seconds": 60})
+            coverage = db.get(ScanStageCoverageRow, (scan.id, stage, "worker-token"))
+            assert coverage is not None and coverage.status == "complete"
+            assert coverage.intervals_json is not None
         kwargs["status_updater"](db, kwargs["video_id"], "complete")
 
     monkeypatch.setattr(worker, "get_session_factory", lambda: factory)
