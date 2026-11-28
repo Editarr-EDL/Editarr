@@ -61,7 +61,7 @@ def score_item(
     try:
         # Inside the try: a refused (excluded) item is recorded as an error, never scored.
         ensure_allowed(item["path"], layout.data_root)
-        ensure_frames_cached(layout.results, frames)
+        ensure_frames_cached(layout.results, item["id"], frames)
         if batch is not None:
             outputs = batch[0]
         else:
@@ -166,7 +166,7 @@ def _scored_batch(backend, layout, pending, thresholds, done):
     for item, frames in pending:
         try:
             ensure_allowed(item["path"], layout.data_root)
-            ensure_frames_cached(layout.results, frames)
+            ensure_frames_cached(layout.results, item["id"], frames)
         except PermissionError as exc:
             yield item, frames, _error_record(backend, item, exc, 0.0)
             continue

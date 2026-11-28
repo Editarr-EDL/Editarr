@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .inventory import top_folder
-from .paths import Layout, MissingInput, write_json
+from .paths import Layout, MissingInput, cached_frame_ok, write_json
 from .results import aggregate
 
 log = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ def write_decision_sample(layout: Layout, seed: int = DEFAULT_SEED) -> dict[str,
 
     def frame_exists(item: dict[str, Any], n: int) -> bool:
         file = files.get((item["id"], n))
-        return file is not None and (layout.results / file).is_file()
+        return file is not None and cached_frame_ok(layout.results, item["id"], file)
 
     # Sampled from inventory labels, not corrections, so the fixed sample does not drift
     # as reviewers edit ground truth; subset metrics still use corrected labels.

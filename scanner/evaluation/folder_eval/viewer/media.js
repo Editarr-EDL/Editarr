@@ -139,10 +139,19 @@ function lazyImg(item, src, attrs) {
   return img;
 }
 
+/** Whether a frame reference names a file directly in `frames/<item id>/`, like paths.frame_reference_ok. */
+export function frameFileOk(item, file) {
+  const parts = typeof file === "string" ? file.split("/") : [];
+  return parts.length === 3 && parts[0] === "frames" && parts[1] === item.id
+    && !["", ".", ".."].includes(parts[2]) && !file.includes("\\");
+}
+
 /** Linked frame image (frame n, default first) inside a .media-wrap that can host a reveal button. */
 export function frameBlock(item, n, href, { cls = "thumb", alt = "", linkAttrs = {} } = {}) {
   const frames = item.frames || [];
-  const fr = frames.find((f) => f.n === n) || frames[0];
+  const found = frames.find((f) => f.n === n) || frames[0];
+  // Only a file directly in frames/<item id>/ (as the harness writes) is ever loaded.
+  const fr = found && frameFileOk(item, found.file) ? found : null;
   const img = fr ? lazyImg(item, encPath(fr.file), { class: cls, alt }) : h("div", { class: `${cls} none`, text: item.kind || "?" });
   return h("div", { class: "media-wrap" }, h("a", { href, ...linkAttrs }, img));
 }

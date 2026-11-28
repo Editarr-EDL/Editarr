@@ -169,3 +169,14 @@ test("content text stays hidden until every model has loaded, and for sensitive 
   const text = ui.h("span", { text: "label" });
   assert.equal(narrative.protectedText(clean, text, "detector labels"), text, "known and clean: shown");
 });
+
+test("only frames directly in frames/<item id>/ are ever loaded", { skip }, async () => {
+  const { media } = await viewer();
+  const item = { id: "a", kind: "video" };
+  assert.equal(media.frameFileOk(item, "frames/a/0.jpg"), true);
+  for (const bad of ["../video/nude/decoy.jpg", "frames/b/0.jpg", "frames/a/../b/0.jpg", "/abs.jpg", "frames/a", "frames\\a\\0.jpg"]) {
+    assert.equal(media.frameFileOk(item, bad), false, bad);
+  }
+  const block = media.frameBlock({ ...item, frames: [{ n: 0, file: "../video/nude/decoy.jpg" }] }, 0, "#x");
+  assert.equal(block.querySelector("img"), null);
+});

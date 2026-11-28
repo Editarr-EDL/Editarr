@@ -15,6 +15,7 @@ from .paths import (
     Layout,
     cached_frame_ok,
     ensure_allowed,
+    frame_reference_ok,
     has_symlink_below,
     matches_prefix,
     write_json,
@@ -152,12 +153,17 @@ def extract_item(
     written = 0
     errors: list[str] = []
     times: dict[str, float] = {}
-    missing = [frame for frame in item["frames"] if not cached_frame_ok(results, frame["file"])]
+    missing = [
+        frame for frame in item["frames"] if not cached_frame_ok(results, item["id"], frame["file"])
+    ]
     if missing and item.get("hdr") and hdr_path is None:
         return item["id"], 0, [NO_HDR_PATH], times
     item_hdr_path = hdr_path if item.get("hdr") else None
     start = probe_start_time(source) if missing else 0.0
     for frame in missing:
+        if not frame_reference_ok(item["id"], frame["file"]):
+            errors.append(f"frame {frame['n']}: invalid frame path {frame['file']!r}")
+            continue
         target = results / frame["file"]
         # Never write through, or keep, a symlink in the frames cache.
         for link in (target, target.parent):
@@ -194,7 +200,10 @@ def _record_times(layout: Layout, times: dict[str, dict[str, float]]) -> None:
 
 def frames_present(layout: Layout, item: dict[str, Any]) -> list[dict[str, Any]]:
     """Frames cached as genuine files (see `cached_frame_ok`); others count as missing."""
-    return [frame for frame in item["frames"] if cached_frame_ok(layout.results, frame["file"])]
+    return [
+        frame for frame in item["frames"]
+        if cached_frame_ok(layout.results, item["id"], frame["file"])
+    ]
 
 
 def extract_frames(

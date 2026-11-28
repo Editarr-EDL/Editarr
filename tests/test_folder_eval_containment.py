@@ -43,7 +43,7 @@ def test_a_linked_results_tree_is_never_written_or_trusted(tmp_path, outside):
     ):
         with pytest.raises(PermissionError):
             write()
-    assert not cached_frame_ok(layout.results, "frames/a/0.jpg")
+    assert not cached_frame_ok(layout.results, "a", "frames/a/0.jpg")
     assert sorted(path.name for path in outside.iterdir()) == ["frames", "keep.txt"]
 
 

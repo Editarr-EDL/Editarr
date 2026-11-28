@@ -2,7 +2,7 @@
 import { S, allLoaded, loadAllModels } from "./data.js";
 import { h, $, fill, fmt, fmtTime, fmtWindow, encPath, expectedChips, itemExtras } from "./ui.js";
 import { parseHash, withParams } from "./router.js";
-import { frameBlock, guardOriginalLink, protect } from "./media.js";
+import { frameBlock, frameFileOk, guardOriginalLink, protect } from "./media.js";
 import { frameTop } from "./results.js";
 import { modelCell } from "./folder-view.js";
 import { outcomeFor, supportsKey, wasAsked } from "./scoring.js";
@@ -109,7 +109,7 @@ export async function syncDetail(itemId) {
     truthEditor(item),
     h("h3", { text: `Frames (${(item.frames || []).length})` }),
     h("ul", { class: "frames" }, (item.frames || []).map((fr) => h("li", { class: `frame${inSampleFrame(item, fr.n) ? " in-sample" : ""}` },
-      frameBlock(item, fr.n, encPath(fr.file), { cls: "", alt: `Frame ${fr.n} at ${fmt(fr.t, 1)} s`, linkAttrs: { target: "_blank", rel: "noopener" } }),
+      frameBlock(item, fr.n, frameFileOk(item, fr.file) ? encPath(fr.file) : undefined, { cls: "", alt: `Frame ${fr.n} at ${fmt(fr.t, 1)} s`, linkAttrs: { target: "_blank", rel: "noopener" } }),
       h("div", { class: "muted", text: `#${fr.n} · ${item.window ? `${fmtTime(fr.t)} in film` : `${fmt(fr.t, 1)} s`}${inSampleFrame(item, fr.n) ? " · in sample" : ""}` }),
       h("dl", {}, S.modelIds.map((id) => {
         const f = S.results[id].get(item.id)?.frames.find((x) => x.n === fr.n);

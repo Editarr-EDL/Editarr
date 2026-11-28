@@ -75,10 +75,27 @@ def ensure_allowed(relative_path: str, data_root: Path) -> None:
         raise PermissionError(f"Refusing to process excluded path: {relative_path}")
 
 
-def cached_frame_ok(results: Path, relative_file: str) -> bool:
-    """Whether `results/relative_file` is a usable cached frame: a non-empty regular file,
-    not a symlink, whose real path lies inside `results/frames` (so a planted link, or a
-    linked frame folder, never feeds another file to a model or the server)."""
+def frame_reference_ok(item_id: str, relative_file: str) -> bool:
+    """Whether an inventory frame reference names a file directly in `frames/<item id>/`:
+    relative, POSIX, no `..`, `.` or empty parts, so it can never point elsewhere."""
+    if not isinstance(relative_file, str) or "\\" in relative_file:
+        return False
+    parts = PurePosixPath(relative_file).parts
+    return (
+        not relative_file.startswith("/")
+        and len(parts) == 3
+        and parts[:2] == ("frames", item_id)
+        and parts[2] not in ("", ".", "..")
+    )
+
+
+def cached_frame_ok(results: Path, item_id: str, relative_file: str) -> bool:
+    """Whether `results/relative_file` is a usable cached frame of item `item_id`: a
+    well-formed reference (see `frame_reference_ok`) to a non-empty regular file, with no
+    symlink from `_results` down to it (so neither a planted link, a linked frame folder,
+    nor a reference such as `../video/nude/x.jpg` feeds another file to a model)."""
+    if not frame_reference_ok(item_id, relative_file):
+        return False
     path = results / relative_file
     try:
         info = os.lstat(path)
@@ -86,17 +103,15 @@ def cached_frame_ok(results: Path, relative_file: str) -> bool:
         return False
     if not stat.S_ISREG(info.st_mode) or info.st_size == 0:
         return False
-    # No link anywhere from `_results` (inclusive) down to the file, e.g. a linked
-    # `_results/frames` whose target holds planted images.
     return not has_symlink_below(results.parent, path)
 
 
-def ensure_frames_cached(results: Path, frames: list[dict[str, Any]]) -> None:
-    """Refuse to score frames that are not genuine cached frame files."""
+def ensure_frames_cached(results: Path, item_id: str, frames: list[dict[str, Any]]) -> None:
+    """Refuse to score frames that are not genuine cached frame files of `item_id`."""
     for frame in frames:
-        if not cached_frame_ok(results, frame["file"]):
+        if not cached_frame_ok(results, item_id, frame["file"]):
             raise PermissionError(
-                f"Refusing frame {frame['file']}: not a regular file inside the frames cache"
+                f"Refusing frame {frame['file']}: not a regular file in frames/{item_id}/"
             )
 
 

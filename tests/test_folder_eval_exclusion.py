@@ -183,16 +183,18 @@ def test_planted_frame_symlinks_are_never_scored_and_get_re_extracted(tmp_path, 
     layout = Layout(tmp_path)
     secret = tmp_path / "outside.jpg"
     secret.write_bytes(b"private")
-    (tmp_path / "video/x").mkdir(parents=True)
-    (tmp_path / "video/x/a.mp4").write_bytes(b"x")
-    item = {"id": "a", "path": "video/x/a.mp4", "frames": [
-        {"n": 0, "t": 1.0, "file": "frames/a/0.jpg"}, {"n": 1, "t": 2.0, "file": "frames/b/0.jpg"},
-    ]}
-    (layout.results / "frames/a").mkdir(parents=True)
-    (layout.results / "frames/a/0.jpg").symlink_to(secret)
-    (layout.results / "frames/b").symlink_to(tmp_path, target_is_directory=True)
     (tmp_path / "0.jpg").write_bytes(b"private")
-    assert frames_present(layout, item) == []
+    (tmp_path / "video/x").mkdir(parents=True)
+    pending = []
+    for name in ("a", "b"):
+        (tmp_path / f"video/x/{name}.mp4").write_bytes(b"x")
+        item = {"id": name, "path": f"video/x/{name}.mp4",
+                "frames": [{"n": 0, "t": 1.0, "file": f"frames/{name}/0.jpg"}]}
+        pending.append((item, item["frames"]))
+    (layout.results / "frames/a").mkdir(parents=True)
+    (layout.results / "frames/a/0.jpg").symlink_to(secret)  # planted frame link
+    (layout.results / "frames/b").symlink_to(tmp_path, target_is_directory=True)  # linked folder
+    assert all(frames_present(layout, item) == [] for item, _frames in pending)
 
     seen = []
 
@@ -203,15 +205,42 @@ def test_planted_frame_symlinks_are_never_scored_and_get_re_extracted(tmp_path, 
             seen.extend(paths)
             return [{"scores": {}} for _ in paths]
 
-    ((_item, _frames, record),) = scored(Backend(), layout, [(item, item["frames"])], {}, {}, 1)
-    assert seen == [] and record["status"] == "error" and "frames cache" in record["error"]
+    records = [record for _i, _f, record in scored(Backend(), layout, pending, {}, {}, 1)]
+    assert seen == [] and all("not a regular file" in record["error"] for record in records)
 
     def fake_ffmpeg(_source, target, *_args):
         target.write_bytes(b"jpeg")
         return True, None
 
     monkeypatch.setattr(frames_module, "_ffmpeg", fake_ffmpeg)
-    _id, written, errors, _times = extract_item(str(tmp_path), item)
-    assert (written, errors) == (2, [])
+    for item, _frames in pending:
+        _id, written, errors, _times = extract_item(str(tmp_path), item)
+        assert (written, errors) == (1, [])
+        assert [frame["n"] for frame in frames_present(layout, item)] == [0]
     assert secret.read_bytes() == b"private" and (tmp_path / "0.jpg").read_bytes() == b"private"
-    assert [frame["n"] for frame in frames_present(layout, item)] == [0, 1]
+
+
+def test_frame_references_outside_their_item_folder_are_refused(tmp_path, monkeypatch):
+    from scanner.evaluation.folder_eval.paths import Layout, cached_frame_ok, frame_reference_ok
+
+    layout = Layout(tmp_path)
+    (tmp_path / "video/nude").mkdir(parents=True)
+    (tmp_path / "video/nude/decoy.jpg").write_bytes(b"decoy")
+    (layout.results / "frames/b").mkdir(parents=True)
+    (layout.results / "frames/b/0.jpg").write_bytes(b"other item")
+    for reference in (
+        "../video/nude/decoy.jpg", "frames/../../video/nude/decoy.jpg", str(tmp_path / "x.jpg"),
+        "frames/b/0.jpg", "frames/a/../b/0.jpg", "frames/a", "frames\\a\\0.jpg",
+    ):
+        assert not frame_reference_ok("a", reference), reference
+        assert not cached_frame_ok(layout.results, "a", reference), reference
+    assert frame_reference_ok("a", "frames/a/0.jpg")
+
+    item = {"id": "a", "path": "video/x/a.mp4",
+            "frames": [{"n": 0, "t": 1.0, "file": "../video/nude/decoy.jpg"}]}
+    (tmp_path / "video/x").mkdir(parents=True)
+    (tmp_path / "video/x/a.mp4").write_bytes(b"x")
+    monkeypatch.setattr(frames_module, "_ffmpeg", lambda *_a, **_k: pytest.fail("decoded"))
+    _id, written, errors, _times = extract_item(str(tmp_path), item)
+    assert written == 0 and "invalid frame path" in errors[0]
+    assert (tmp_path / "video/nude/decoy.jpg").read_bytes() == b"decoy"
