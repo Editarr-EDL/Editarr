@@ -83,6 +83,8 @@ jobs:
             'tests/test_scan_pause_checkpoints.py',
             'tests/test_scan_pause_restart.py',
             'tests/test_scan_worker_launch_recovery.py',
+            'tests/test_scan_cancellation_recovery.py',
+            'tests/test_startup_gate.py',
             'tests/test_execution_provenance.py',
             'tests/test_scan_stage_commit.py',
             'tests/test_visual_checkpoint_coverage.py'

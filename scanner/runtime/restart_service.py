@@ -19,6 +19,7 @@ from threading import Event, Lock, Thread, current_thread, main_thread
 
 from scanner.models import RestartCapability
 from scanner.runtime.process_control import (
+    FORCE_STOP_TIMEOUT,
     GRACEFUL_STOP_TIMEOUT,
     ProcessControl,
     cleanup_worker_control_endpoint,
@@ -277,7 +278,12 @@ def _full_quit_owned_workers() -> None:
 
     from scanner.db import get_session_factory
     from scanner.persistence.migrations.preflight import database_location, require_supported_schema
-    from scanner.repository import mark_scan_orphaned, scanning_scan_worker_processes
+    from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints
+    from scanner.repository import (
+        mark_scan_orphaned,
+        recover_cancelled_scan_queue_items,
+        scanning_scan_worker_processes,
+    )
 
     control = ProcessControl()
     db = None
@@ -285,13 +291,31 @@ def _full_quit_owned_workers() -> None:
         require_supported_schema()
         _, data_dir = database_location()
         db = get_session_factory()()
-        for scan_id, pid, pgid, token in scanning_scan_worker_processes(db):
+
+        def stop_attempt(scan_id, pid, pgid, token):
             identity = control.identity(scan_id, pid, pgid, token)
+            deadline = time.monotonic()
             if identity is not None:
+                deadline += GRACEFUL_STOP_TIMEOUT
                 control.request_stop(identity)
-                if not control.wait_for_exit(identity, GRACEFUL_STOP_TIMEOUT):
+                if not control.wait_for_exit(identity, max(0, deadline - time.monotonic())):
                     control.force_stop(identity)
-            if control.attempt_may_be_running(scan_id, pid, pgid, token, data_dir=data_dir):
+                    deadline = time.monotonic() + FORCE_STOP_TIMEOUT
+            # Workers can close their endpoint before the process or detached
+            # helper exits. Only an authenticated stop warrants waiting here.
+            while control.attempt_may_be_running(scan_id, pid, pgid, token, data_dir=data_dir):
+                if time.monotonic() >= deadline:
+                    return identity, True
+                time.sleep(0.05)
+            return identity, False
+
+        def cleanup_cancelled(scan_id, token):
+            cleanup_worker_control_endpoint(scan_id, token)
+            discard_visual_checkpoints(data_dir, scan_id)
+
+        for scan_id, pid, pgid, token in scanning_scan_worker_processes(db):
+            identity, running = stop_attempt(scan_id, pid, pgid, token)
+            if running:
                 continue
             settled = mark_scan_orphaned(
                 db, scan_id, "Interrupted by application Quit — ready to resume",
@@ -300,6 +324,10 @@ def _full_quit_owned_workers() -> None:
             )
             if settled:
                 cleanup_worker_control_endpoint(scan_id, token)
+        recover_cancelled_scan_queue_items(
+            db, may_be_running=lambda *attempt: stop_attempt(*attempt)[1],
+            on_cancelled=cleanup_cancelled,
+        )
     except Exception:
         # A failed cold start can occur before schema initialization.  Preserve its
         # primary diagnostic rather than replacing it with a best-effort Quit query.

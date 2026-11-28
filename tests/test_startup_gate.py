@@ -14,11 +14,18 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import scanner.http.auth_api as auth_api
-from scanner import api
-from scanner.db import Base, get_db
+from scanner import api, repository
+from scanner.db import Base, ScanRow, get_db
 from scanner.http.auth_api import router
+from scanner.persistence.repository.scan_worker_registration import (
+    record_unconfirmed_scan_worker_process,
+)
+from scanner.pipeline import visual_checkpoints
+from scanner.runtime import restart_service
+from scanner.runtime.worker_checkpoint_lease import checkpoint_writer_lease
 from scanner.settings.config import Settings
 from tests.jellyfin_setup_fake import install, setup_body
+from tests.queue_support import _enqueue_scan, _queue_factory
 
 
 class _DummyDb:
@@ -78,13 +85,13 @@ def _configure_startup(monkeypatch, tmp_path, *, setup_required: bool, calls: li
         lambda _db: calls.append("administrator") or setup_required,
     )
     monkeypatch.setattr(
-        api, "recover_cancelled_scan_queue_items", lambda _db: calls.append("recover") or 0
+        api, "recover_cancelled_scan_queue_items", lambda _db, **_: calls.append("recover") or 0
     )
     monkeypatch.setattr(api, "recover_interrupted_credits_model_acquisitions", lambda _db: 0)
     monkeypatch.setattr(api, "recover_terminal_scan_queue_items", lambda _db: 0)
     monkeypatch.setattr(api, "scanning_scan_worker_processes", lambda _db: [])
     monkeypatch.setattr(
-        api, "mark_orphaned_scan_workers", lambda _db, _pids: calls.append("orphans") or []
+        api, "mark_orphaned_scan_workers", lambda _db, _pids, **_: calls.append("orphans") or []
     )
     monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: calls.append("start"))
     monkeypatch.setattr(api, "SCAN_QUEUE_PROCESSING_ACTIVE", False)
@@ -175,7 +182,7 @@ def test_queue_activation_serializes_concurrent_setup_completion(monkeypatch):
     release_recovery = Event()
     calls: list[str] = []
 
-    def recover(_db):
+    def recover(_db, **_ignored):
         calls.append("recover")
         entered_recovery.set()
         assert release_recovery.wait(timeout=2)
@@ -186,7 +193,7 @@ def test_queue_activation_serializes_concurrent_setup_completion(monkeypatch):
     monkeypatch.setattr(api, "recover_interrupted_credits_model_acquisitions", lambda _db: 0)
     monkeypatch.setattr(api, "recover_terminal_scan_queue_items", lambda _db: 0)
     monkeypatch.setattr(api, "scanning_scan_worker_processes", lambda _db: [])
-    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids: [])
+    monkeypatch.setattr(api, "mark_orphaned_scan_workers", lambda _db, _pids, **_: [])
     monkeypatch.setattr(api, "_start_scan_queue_worker_if_needed", lambda: calls.append("start"))
     monkeypatch.setattr(api, "SCAN_QUEUE_PROCESSING_ACTIVE", False)
     monkeypatch.setattr(api, "SCAN_QUEUE_STOP_EVENT", Event())
@@ -203,6 +210,82 @@ def test_queue_activation_serializes_concurrent_setup_completion(monkeypatch):
 
     assert not first.is_alive() and not second.is_alive()
     assert calls == ["recover", "start"]
+
+
+@pytest.mark.parametrize("entry_point", ["startup", "full_quit"])
+def test_recovery_keeps_cancelling_job_while_checkpoint_writer_is_live(
+    monkeypatch, tmp_path, entry_point,
+):
+    factory = _queue_factory()
+    with factory() as db:
+        scan, entry = _enqueue_scan(db, "shutdown-cancelling")
+        scan_id = scan.id
+        assert repository.reserve_scan_worker(db, scan_id, token="old-worker")
+        assert repository.cancel_scan_queue_item(db, entry.queue_id) == (scan_id, True)
+
+    _configure_startup(monkeypatch, tmp_path, setup_required=False, calls=[])
+    monkeypatch.setattr(api, "get_session_factory", lambda: factory)
+    monkeypatch.setattr(
+        api, "recover_cancelled_scan_queue_items", repository.recover_cancelled_scan_queue_items
+    )
+    monkeypatch.setattr("scanner.db.get_session_factory", lambda: factory)
+    monkeypatch.setattr("scanner.persistence.migrations.preflight.require_supported_schema", Mock())
+    def idle_scheduler(*_args, **_kwargs):
+        return SimpleNamespace(start=Mock(), stop=Mock())
+
+    monkeypatch.setattr("scanner.backup.schedule_runner.BackupScheduler", idle_scheduler)
+    monkeypatch.setattr(
+        "scanner.runtime.jellyfin_sync_scheduler.JellyfinSyncScheduler", idle_scheduler
+    )
+    monkeypatch.setattr(visual_checkpoints.settings, "data_dir", tmp_path)
+    checkpoint = visual_checkpoints.visual_checkpoint_dir(scan_id, "fingerprint", {}, {})
+    (checkpoint / "saved-result.json").touch()
+
+    def recover():
+        if entry_point == "startup":
+            api._recover_and_start_scan_queue_processing()
+            api.shutdown()
+        else:
+            restart_service._full_quit_owned_workers()
+
+    with checkpoint_writer_lease(tmp_path, scan_id, "old-worker"):
+        recover()
+        assert checkpoint.exists()
+        with factory() as db:
+            assert repository.get_scan_queue_item_by_scan_id(db, scan_id).status == "cancelling"
+            assert db.get(ScanRow, scan_id).worker_token == "old-worker"
+
+    recover()
+    assert not checkpoint.exists()
+    with factory() as db:
+        assert repository.get_scan_queue_item_by_scan_id(db, scan_id) is None
+        row = db.get(ScanRow, scan_id)
+        assert row.status == "cancelled" and row.worker_token is None
+
+
+def test_cancellation_recovery_preserves_worker_registered_after_snapshot():
+    factory = _queue_factory()
+    with factory() as db:
+        scan, entry = _enqueue_scan(db, "register-during-recovery")
+        scan_id = scan.id
+        assert repository.reserve_scan_worker(db, scan_id, token="launching")
+        assert repository.cancel_scan_queue_item(db, entry.queue_id) == (scan_id, True)
+        cleanup = Mock()
+
+        def worker_registered(observed_id, pid, pgid, token):
+            assert (observed_id, pid, pgid, token) == (scan_id, None, None, "launching")
+            with factory() as registration_db:
+                record_unconfirmed_scan_worker_process(
+                    registration_db, scan_id, token=token, pid=42, pgid=None
+                )
+            return False
+
+        assert repository.recover_cancelled_scan_queue_items(
+            db, may_be_running=worker_registered, on_cancelled=cleanup
+        ) == 0
+        assert repository.get_scan_queue_item_by_scan_id(db, scan_id).status == "cancelling"
+        assert db.get(ScanRow, scan_id).worker_pid == 42
+        cleanup.assert_not_called()
 
 
 def test_successful_api_setup_activates_once_and_failed_or_conflicting_setup_does_not(

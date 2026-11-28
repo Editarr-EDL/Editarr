@@ -235,6 +235,8 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         def commit_status(session, item_id, status):
             if is_scan_pause_requested(session, item_id):
                 raise ScanPauseRequested
+            if is_scan_cancellation_requested(session, item_id):
+                raise ScanCancelledError("Scan cancelled")
             if status == "complete":
                 require_scan_generation(local_path, media_proof)
             return update_scan_status(session, item_id, status)
@@ -245,6 +247,8 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         def commit_credits(session, **result):
             if is_scan_pause_requested(session, scan_id):
                 raise ScanPauseRequested
+            if is_scan_cancellation_requested(session, scan_id):
+                raise ScanCancelledError("Scan cancelled")
             require_scan_generation(local_path, media_proof)
             return complete_credits_detection(session, **result)
 
@@ -380,6 +384,12 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
         logger.info("Scan %s paused while database maintenance is pending", scan_id)
     except ScanCancelledError:
         from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints
+        from scanner.runtime.worker_checkpoint_lease import checkpoint_writer_may_be_running
+
+        if checkpoint_writer_may_be_running(settings.data_dir, scan_id, worker_token):
+            db.rollback()
+            logger.info("Scan %s is cancelling while its checkpoint writer stops", scan_id)
+            return 0
 
         update_scan_status(db, scan_id, "cancelled")
         queue_item = get_scan_queue_item_by_scan_id(db, scan_id)

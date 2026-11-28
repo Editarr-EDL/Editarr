@@ -76,6 +76,7 @@ def test_actual_cli_rebinds_saved_port_and_preserves_worker(standalone_process):
     }
     worker_program = """
 from threading import Event
+from time import sleep
 from scanner.runtime.process_control import WorkerControlServer, assign_current_worker_job
 import sys
 scan_id, token = sys.argv[1:]
@@ -87,6 +88,7 @@ try:
     stop.wait(30)
 finally:
     server.close()
+    sleep(0.25)  # Keep the process live briefly after its authenticated endpoint closes.
     if worker_job:
         worker_job.close()
 """
@@ -166,6 +168,9 @@ finally:
                 controller.terminate()
             else:
                 os.kill(controller.pid, signal.SIGTERM)
+                # Pytest owns this synthetic worker, so reap it as the native
+                # worker's parent or init would during application Quit.
+                assert worker.wait(timeout=12) == 0
             controller.wait(timeout=15)
             check = sessionmaker(bind=engine)()
             row = check.get(ScanRow, scan.id)

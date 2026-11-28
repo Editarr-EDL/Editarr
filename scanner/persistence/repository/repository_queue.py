@@ -1,6 +1,7 @@
 """Repository operations for scan queue and worker checkpoints."""
 
 from datetime import datetime, timezone
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,6 +11,9 @@ from scanner.models import ScanMode, ScanQueueItem
 from scanner.persistence.write_lock import write_lock
 
 from .repository_rows import _scan_queue_from_row
+from .scan_cancel_recovery import (
+    recover_cancelled_scan_queue_items as recover_cancelled_scan_queue_items,
+)
 from .scan_pause import clear_worker_reservation, mark_paused
 from .scan_timing import start_scan_attempt, stop_scan_attempt
 from .scan_worker_registration import (
@@ -187,8 +191,9 @@ def clear_scan_worker(db: Session, scan_id: str) -> None:
 def settle_stopped_scan_worker(
     db: Session, scan_id: str, *, token: str | None,
     expected_process: tuple[int | None, int | None] | None = None,
+    expected_status: str | None = None,
     launch_error: str | None = None,
-) -> bool:
+) -> Literal["paused", "cancelled", "orphaned"] | None:
     """Settle a stopped attempt without changing a finished or replacement scan."""
     with write_lock(db):
         queue_row = db.query(ScanQueueRow).filter(ScanQueueRow.scan_id == scan_id).first()
@@ -196,24 +201,26 @@ def settle_stopped_scan_worker(
             not queue_row
             or queue_row.scan.worker_token != token
             or queue_row.scan.status not in {"scanning", "cancelling", "pausing"}
+            or (expected_status is not None and queue_row.scan.status != expected_status)
             or (
                 expected_process is not None
                 and expected_process != (queue_row.scan.worker_pid, queue_row.scan.worker_pgid)
             )
         ):
             db.rollback()
-            return False
+            return None
         scan = queue_row.scan
         if scan.status == "pausing":
             mark_paused(scan)
             db.commit()
-            return True
+            return "paused"
         stop_scan_attempt(scan, None)
         clear_worker_reservation(scan)
         if scan.status == "cancelling":
             scan.status = "cancelled"
             scan.error_message = None
             db.delete(queue_row)
+            final_status = "cancelled"
         else:
             scan.status = "orphaned"
             scan.progress_stage = "orphaned"
@@ -223,9 +230,10 @@ def settle_stopped_scan_worker(
                 else "Orphaned scan — worker stopped; ready to resume"
             )
             scan.error_message = launch_error or "Dedicated scan worker is no longer running"
+            final_status = "orphaned"
         scan.updated_at = datetime.now(timezone.utc)
         db.commit()
-        return True
+        return final_status
 
 
 def mark_scan_orphaned(
@@ -293,14 +301,16 @@ def reorder_scan_queue(db: Session, queue_ids: list[int], movable: set[int] | No
     db.commit()
 
 
-def cancel_scan_queue_item(db: Session, queue_id: int) -> tuple[str, bool] | None:
+def cancel_scan_queue_item(
+    db: Session, queue_id: int, *, expected_scan_id: str | None = None
+) -> tuple[str, bool] | None:
     """Cancel a queued scan or mark a running scan for cooperative cancellation.
 
     A finished scan keeps its terminal status; only its stale queue entry is removed.
     """
     with write_lock(db):
         row = db.get(ScanQueueRow, queue_id)
-        if not row:
+        if row is None or (expected_scan_id is not None and row.scan_id != expected_scan_id):
             db.rollback()
             return None
         scan = row.scan
@@ -317,19 +327,6 @@ def cancel_scan_queue_item(db: Session, queue_id: int) -> tuple[str, bool] | Non
         db.delete(row)
         db.commit()
         return scan_id, False
-
-
-def recover_cancelled_scan_queue_items(db: Session) -> int:
-    """Discard cooperative cancellation markers left by a service restart."""
-    rows = db.query(ScanQueueRow).join(ScanRow).filter(ScanRow.status == "cancelling").all()
-    for row in rows:
-        stop_scan_attempt(row.scan, None)
-        row.scan.status = "cancelled"
-        row.scan.updated_at = datetime.now(timezone.utc)
-        db.delete(row)
-    if rows:
-        db.commit()
-    return len(rows)
 
 
 def recover_interrupted_credits_model_acquisitions(db: Session, scan_id: str | None = None) -> int:

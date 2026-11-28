@@ -319,6 +319,8 @@ def test_scheduler_preserves_terminal_state_during_liveness_check(monkeypatch, t
 
 @pytest.mark.parametrize("change", ["cancellation", "replacement"])
 def test_scheduler_rechecks_attempt_and_cancellation_after_liveness(monkeypatch, change):
+    from scanner.pipeline import visual_checkpoints
+
     factory = _queue_factory()
     setup_db = factory()
     scan, queue_item = _enqueue_scan(setup_db, "changed-attempt")
@@ -347,6 +349,11 @@ def test_scheduler_rechecks_attempt_and_cancellation_after_liveness(monkeypatch,
     monkeypatch.setattr(api, "get_session_factory", lambda: factory)
     monkeypatch.setattr(api, "_worker_identity", change_before_identity_returns)
     monkeypatch.setattr(api, "cleanup_worker_control_endpoint", lambda *_args: None)
+    discarded = []
+    monkeypatch.setattr(
+        visual_checkpoints, "discard_visual_checkpoints",
+        lambda _root, scan_id: discarded.append(scan_id),
+    )
 
     api._scan_queue_worker()
 
@@ -359,6 +366,7 @@ def test_scheduler_rechecks_attempt_and_cancellation_after_liveness(monkeypatch,
             assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id) is not None
         else:
             assert repository.get_scan_queue_item_by_scan_id(check_db, scan.id) is None
+    assert discarded == ([scan.id] if change == "cancellation" else [])
 
 
 def test_scheduler_does_not_delete_reused_queue_entry(monkeypatch):

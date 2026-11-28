@@ -28,9 +28,17 @@ def _terminate_scan_worker(
     from scanner import api as root
 
     identity = root._worker_identity(scan_id, pid, pgid, token)
-    if identity is None:
-        root.cleanup_worker_control_endpoint(scan_id, token)
     return bool(identity and root.PROCESS_CONTROL.force_stop(identity))
+
+
+def _cleanup_settled_scan_attempt(scan_id: str, token: str | None, status: str) -> None:
+    """Retire a stopped worker endpoint and discard checkpoints after cancellation."""
+    from scanner import api as root
+    from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints
+
+    root.cleanup_worker_control_endpoint(scan_id, token)
+    if status == "cancelled":
+        discard_visual_checkpoints(root.settings.data_dir, scan_id)
 
 
 def _recover_failed_scan_launch(
@@ -85,10 +93,11 @@ def _recover_failed_scan_launch(
         scan_id, pid, group, token, data_dir=root.settings.data_dir
     ):
         return
-    if settle_stopped_scan_worker(
+    settled = settle_stopped_scan_worker(
         db, scan_id, token=token, expected_process=(pid, group), launch_error=error
-    ):
-        root.cleanup_worker_control_endpoint(scan_id, token)
+    )
+    if settled:
+        _cleanup_settled_scan_attempt(scan_id, token, settled)
 
 
 def _stop_discovered_worker(identity: WorkerIdentity) -> None:
@@ -226,8 +235,10 @@ def _scan_queue_worker() -> None:
                             token=worker[2] if worker else None,
                             expected_process=worker[:2] if worker else (None, None),
                         )
-                        if settled and worker:
-                            root.cleanup_worker_control_endpoint(active_item.id, worker[2])
+                        if settled:
+                            _cleanup_settled_scan_attempt(
+                                active_item.id, worker[2] if worker else None, settled
+                            )
                         active_item = root.get_active_scan_queue_item(db)
                         next_item = root.get_next_scan_queue(db)
             except Exception:
