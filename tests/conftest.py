@@ -7,36 +7,47 @@ import tempfile
 from pathlib import Path
 
 REAL_HOME_ENV = "EDITARR_TESTS_REAL_HOME"
+# Per-user locations redirected into the scratch root (relative paths). HOME covers
+# POSIX; USERPROFILE, APPDATA and LOCALAPPDATA cover Windows, where Path.home() reads
+# USERPROFILE, matching the Windows lifecycle harness in scripts/build_release.py.
+ISOLATED_LOCATIONS = {
+    "HOME": "home",
+    "USERPROFILE": "home",
+    "APPDATA": "home/AppData/Roaming",
+    "LOCALAPPDATA": "home/AppData/Local",
+    "XDG_DATA_HOME": "xdg/data",
+    "XDG_CONFIG_HOME": "xdg/config",
+    "XDG_STATE_HOME": "xdg/state",
+    "XDG_CACHE_HOME": "xdg/cache",
+}
+# Cleared so nothing falls back to the real profile or app folders.
+CLEARED_VARIABLES = (
+    "HOMEDRIVE", "HOMEPATH", "EDITARR_DATA_DIR", "EDITARR_LOG_DIR", "EDITARR_MODEL_CACHE",
+    "EDITARR_DECISION_MODELS_DIR",
+)
 
 
 def _isolate_user_locations() -> Path:
     """Point every per-user Editarr location at a private scratch root.
 
     Runs before any `scanner` import, because settings resolve the data, log and cache
-    directories from HOME (and the XDG/LOCALAPPDATA roots) at import time. Without this
-    the suite, and the subprocesses it starts, would use and log into the installed
-    app's directories. EDITARR_DATA_DIR and EDITARR_LOG_DIR are cleared rather than set,
-    so the default-path logic under test resolves inside the scratch HOME. The real HOME
-    is kept in EDITARR_TESTS_REAL_HOME for tools such as docker that need their config.
+    directories from the home and app-data roots at import time. Without this the
+    suite, and the subprocesses it starts, would use and log into the installed app's
+    directories. The EDITARR_* path overrides are cleared rather than set, so the
+    default-path logic under test resolves inside the scratch home. The real home is
+    kept in EDITARR_TESTS_REAL_HOME for tools such as docker that need their config.
     """
     root = Path(tempfile.mkdtemp(prefix="editarr-tests-"))
     atexit.register(shutil.rmtree, root, ignore_errors=True)
     os.environ.setdefault(REAL_HOME_ENV, str(Path.home()))
-    for name, child in (
-        ("HOME", "home"),
-        ("LOCALAPPDATA", "home/AppData/Local"),
-        ("XDG_DATA_HOME", "xdg/data"),
-        ("XDG_CONFIG_HOME", "xdg/config"),
-        ("XDG_STATE_HOME", "xdg/state"),
-        ("XDG_CACHE_HOME", "xdg/cache"),
-    ):
+    locations = dict(ISOLATED_LOCATIONS)
+    if os.name == "nt":
+        locations.update(TEMP="tmp", TMP="tmp")
+    for name, child in locations.items():
         path = root / child
         path.mkdir(parents=True, exist_ok=True)
         os.environ[name] = str(path)
-    for name in (
-        "EDITARR_DATA_DIR", "EDITARR_LOG_DIR", "EDITARR_MODEL_CACHE",
-        "EDITARR_DECISION_MODELS_DIR",
-    ):
+    for name in CLEARED_VARIABLES:
         os.environ.pop(name, None)
     return root
 
