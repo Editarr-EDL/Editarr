@@ -32,16 +32,20 @@ const ROLES: Record<ModelRole, { list: keyof Pick<ScanCapabilities, "audio_model
   filter: { list: "audio_filters", ids: ["better_profanity", "glin_profanity", "alt_profanity_check", "qwen"] },
   video: {
     list: "video_models",
-    ids: ["qwen3-vl-8b", "qwen3-vl-4b", "nudenet", "image_safety_gate", "siglip2_moderation_nsfw",
+    ids: ["qwen3-vl-8b", "qwen3-vl-4b", "qwen38-27b", "nudenet", "image_safety_gate", "siglip2_moderation_nsfw",
       "siglip2_moderation_violence", "shieldstral", "d1-3b"],
   },
-  severity: { list: "qwen_models", ids: ["qwen3-vl-8b-instruct-4bit", "qwen3-vl-4b-instruct-4bit"] },
+  severity: {
+    list: "qwen_models",
+    ids: ["qwen3-vl-8b-instruct-4bit", "qwen3-vl-4b-instruct-4bit", "qwen38-27b-instruct-4bit"],
+  },
 };
 
 /** Description models share artifacts with the matching video detector, which carries their download state. */
 const SEVERITY_ARTIFACT: Record<string, string> = {
   "qwen3-vl-8b-instruct-4bit": "qwen3-vl-8b",
   "qwen3-vl-4b-instruct-4bit": "qwen3-vl-4b",
+  "qwen38-27b-instruct-4bit": "qwen38-27b",
 };
 const SEVERITY_ENRICHMENT = "qwen3_vl";
 const QWEN_FILTER = "qwen";

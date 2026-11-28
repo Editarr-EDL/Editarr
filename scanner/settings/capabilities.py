@@ -39,6 +39,8 @@ DEFAULT_AUDIO_MODEL = "whisper"
 APPLE_SPEECH_MODEL = "apple_speech"
 DEFAULT_AUDIO_FILTER = "better_profanity"
 DEFAULT_QWEN_MODEL = "qwen3-vl-8b-instruct-4bit"
+QWEN38_27B_MODEL = "qwen38-27b-instruct-4bit"
+QWEN38_27B_VIDEO_MODEL = "qwen38-27b"
 SUPPORTED_AUDIO_MODELS = (DEFAULT_AUDIO_MODEL, "mlx_whisper", APPLE_SPEECH_MODEL)
 SUPPORTED_AUDIO_FILTERS = (
     DEFAULT_AUDIO_FILTER,
@@ -54,6 +56,7 @@ RECOMMENDED_VIDEO_MODEL = "qwen3-vl-8b"
 SUPPORTED_VIDEO_MODELS = (
     RECOMMENDED_VIDEO_MODEL,
     "qwen3-vl-4b",
+    QWEN38_27B_VIDEO_MODEL,
     FALLBACK_VIDEO_MODEL,
     "image_safety_gate",
     "siglip2_moderation_nsfw",
@@ -61,7 +64,7 @@ SUPPORTED_VIDEO_MODELS = (
     "shieldstral",
     "d1-3b",
 )
-SUPPORTED_QWEN_MODELS = (DEFAULT_QWEN_MODEL, "qwen3-vl-4b-instruct-4bit")
+SUPPORTED_QWEN_MODELS = (DEFAULT_QWEN_MODEL, "qwen3-vl-4b-instruct-4bit", QWEN38_27B_MODEL)
 QWEN35_9B_MODEL = "qwen35-9b-4bit"
 SUPPORTED_QWEN_LANGUAGE_REPLAY_MODELS = (*SUPPORTED_QWEN_MODELS, QWEN35_9B_MODEL)
 RECOMMENDED_QWEN_MODEL = DEFAULT_QWEN_MODEL
@@ -82,12 +85,14 @@ DISPLAY_NAMES = {
     "shieldstral": "Shieldstral",
     "qwen3-vl-8b": "Qwen3-VL 8B",
     "qwen3-vl-4b": "Qwen3-VL 4B",
+    QWEN38_27B_VIDEO_MODEL: "Qwen3.8-27B",
     "d1-3b": "d1-3B",
-    "qwen3_vl": "Qwen3-VL enrichment",
+    "qwen3_vl": "Qwen enrichment",
 }
 QWEN_MODEL_DISPLAY_NAMES = {
     "qwen3-vl-8b-instruct-4bit": "Qwen3-VL 8B",
     "qwen3-vl-4b-instruct-4bit": "Qwen3-VL 4B",
+    QWEN38_27B_MODEL: DISPLAY_NAMES[QWEN38_27B_VIDEO_MODEL],
 }
 
 class CapabilityUnavailableError(ValueError):
@@ -299,7 +304,7 @@ def model_capabilities(
                 available=False,
                 reason=target_failure or "unsupported_platform",
             )
-            for backend_id in ("shieldstral", "qwen3-vl-8b", "qwen3-vl-4b")
+            for backend_id in ("shieldstral", "qwen3-vl-8b", "qwen3-vl-4b", QWEN38_27B_VIDEO_MODEL)
         ),
         _d1_capability(environment, standard),
     ]

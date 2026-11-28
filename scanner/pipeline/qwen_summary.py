@@ -1,4 +1,4 @@
-"""Qwen3-VL summaries for video frames flagged by a safety detector."""
+"""Qwen summaries for video frames flagged by a safety detector."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ from scanner.model_acquisition import acquire_artifact
 from scanner.models import MCF_CATEGORY_REGISTRY, McfCategoryFamily
 from scanner.settings.capabilities import (
     DEFAULT_QWEN_MODEL,
+    QWEN35_9B_MODEL,
+    QWEN38_27B_MODEL,
     SUPPORTED_QWEN_LANGUAGE_REPLAY_MODELS,
     SUPPORTED_QWEN_MODELS,
     require_available,
@@ -33,6 +35,10 @@ QWEN_MODELS = {
     "qwen3-vl-4b-instruct-4bit": (
         "mlx-community/Qwen3-VL-4B-Instruct-4bit",
         "2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b",
+    ),
+    QWEN38_27B_MODEL: (
+        "mlx-community/Qwen3.8-27B-4bit",
+        "b935172e4bb5dcd0543774a34748fb92422e3027",
     ),
 }
 PROMPT = (
@@ -141,8 +147,15 @@ def subcategorization_prompt(
     )
 
 
+def _qwen_chat_template_options(qwen_model: str) -> dict[str, bool]:
+    """Request direct answers from models whose default includes reasoning."""
+    if qwen_model in (QWEN35_9B_MODEL, QWEN38_27B_MODEL):
+        return {"enable_thinking": False}
+    return {}
+
+
 def _require_dependency(import_name: str, install_hint: str):
-    return require_dependency(import_name, install_hint, "Qwen3-VL video summaries require")
+    return require_dependency(import_name, install_hint, "Qwen inference requires")
 
 
 def _load_model(qwen_model: str = DEFAULT_QWEN_MODEL):
@@ -158,9 +171,7 @@ def _load_model(qwen_model: str = DEFAULT_QWEN_MODEL):
             return _CACHE[qwen_model]
 
         if platform.system() != "Darwin":
-            raise RuntimeError(
-                "Qwen3-VL video summaries use MLX and require a Mac running macOS."
-            )
+            raise RuntimeError("Qwen inference uses MLX and requires a Mac running macOS.")
 
         mlx_vlm = _require_dependency("mlx_vlm", "mlx-vlm")
         mlx_vlm_utils = _require_dependency("mlx_vlm.utils", "mlx-vlm")
@@ -200,10 +211,10 @@ def _summarize(
     # Admission and the visual stage normally validate this first. Keep the public
     # summary/replay path defensive too, and reject before importing the MLX stack.
     require_available("qwen3_vl")
-    mlx_vlm = _require_dependency("mlx_vlm", "mlx-vlm")
-    prompt_utils = _require_dependency("mlx_vlm.prompt_utils", "mlx-vlm")
     if qwen_model not in SUPPORTED_QWEN_MODELS:
         raise ValueError(f"Unsupported Severity and Description model: {qwen_model}")
+    mlx_vlm = _require_dependency("mlx_vlm", "mlx-vlm")
+    prompt_utils = _require_dependency("mlx_vlm.prompt_utils", "mlx-vlm")
     model, processor, config = _load_model(qwen_model)
     effective_prompt = subcategorization_prompt(families, base_prompt=prompt)
     formatted_prompt = prompt_utils.apply_chat_template(
@@ -211,6 +222,7 @@ def _summarize(
         config,
         effective_prompt,
         num_images=len(image_paths),
+        **_qwen_chat_template_options(qwen_model),
     )
     generate_kwargs = {
         # Room for the per-family severity keys on top of the original 160-token budget.

@@ -19,10 +19,15 @@ for (const width of [320, 1440]) {
         { id: "better_profanity", display_name: "better-profanity" },
         { id: "qwen", display_name: "Qwen (multilingual)" },
       ],
-      video_models: [{ id: "nudenet", display_name: "NudeNet", recommended: false }, { id: "qwen3-vl-8b", display_name: "Qwen3-VL 8B", recommended: true }],
+      video_models: [
+        { id: "nudenet", display_name: "NudeNet", recommended: false },
+        { id: "qwen3-vl-8b", display_name: "Qwen3-VL 8B", recommended: true },
+        { id: "qwen38-27b", display_name: "Qwen3.8-27B", recommended: false },
+      ],
       qwen_models: [
         { id: "qwen3-vl-4b-instruct-4bit", display_name: "Qwen3-VL 4B", recommended: false },
         { id: "qwen3-vl-8b-instruct-4bit", display_name: "Qwen3-VL 8B", recommended: true },
+        { id: "qwen38-27b-instruct-4bit", display_name: "Qwen3.8-27B", recommended: false },
       ],
       model_capabilities: [],
     }));
@@ -96,6 +101,7 @@ for (const width of [320, 1440]) {
     await expect(severityList).toBeHidden();
     await expect(dialog).toBeVisible();
     await expect(severityModel).toBeFocused();
+    await chooseModel(dialog, "Severity and Description model", "Qwen3.8-27B");
     await dialog.getByRole("button", { name: "About the Severity and Description model" }).focus();
     await expect(page.getByRole("tooltip")).toContainText("Describes flagged scenes and rates their severity when the video model doesn't.");
     await page.keyboard.press("Escape");
@@ -109,7 +115,7 @@ for (const width of [320, 1440]) {
     expect(submissions[0].audio_selection.track).toEqual(tracks[1]);
     expect(submissions[0].audio_selection.file_version).toBe("a".repeat(64));
     expect(submissions[0].audio_filter).toBe("qwen");
-    expect(submissions[0].qwen_model).toBe("qwen3-vl-8b-instruct-4bit");
+    expect(submissions[0].qwen_model).toBe("qwen38-27b-instruct-4bit");
     expect(selections.at(-1)).toEqual({ item_id: "movie-1", media_source_id: "source-1", selection: submissions[0].audio_selection });
 
     const reopen = async () => {
@@ -134,7 +140,9 @@ for (const width of [320, 1440]) {
     await expect(dialog.getByRole("status").filter({ hasText: "No audio tracks" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Add to Queue" })).toBeDisabled();
     await chooseScanType(dialog, "Video");
+    await chooseModel(dialog, "Video model", "Qwen3.8-27B");
     await expect(dialog.getByRole("button", { name: "Add to Queue" })).toBeEnabled();
+    await expectNoHorizontalPageOverflow(page);
     probe = "unknown"; await reopen();
     await expect(catalogSelect.locator("option").filter({ hasText: /Unknown language.*Untitled/ })).toBeAttached();
     probe = "failure"; await reopen();

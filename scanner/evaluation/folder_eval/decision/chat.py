@@ -16,7 +16,7 @@ TRANSCRIPT_LIMIT = 2000
 USER = qwen_detector.USER
 END = qwen_detector.END
 # Generation prompt with thinking disabled, as the template renders enable_thinking=false.
-ASSISTANT = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+ASSISTANT = qwen_detector.NON_THINKING_ASSISTANT
 # Generation prompt for instruct models without a thinking mode (Qwen3-VL Instruct).
 ASSISTANT_PLAIN = qwen_detector.ASSISTANT
 SEQ_TURNS = (

@@ -5,9 +5,10 @@ from types import SimpleNamespace
 import pytest
 
 from scanner.evaluation.subcategorization import SubcategorizationFallbackReason
+from scanner.model_acquisition import manifest
 from scanner.models import McfCategoryFamily
 from scanner.pipeline import qwen_summary
-from scanner.settings.capabilities import CapabilityUnavailableError
+from scanner.settings.capabilities import QWEN38_27B_MODEL, CapabilityUnavailableError
 
 
 @pytest.fixture(autouse=True)
@@ -212,7 +213,16 @@ def test_qwen_model_download_root_is_the_resolved_regenerable_cache(monkeypatch,
     }
 
 
-def test_qwen_summary_selects_4b_model_and_records_its_provenance(monkeypatch):
+@pytest.mark.parametrize(
+    ("qwen_model", "expected_options"),
+    [
+        ("qwen3-vl-4b-instruct-4bit", {"num_images": 1}),
+        (QWEN38_27B_MODEL, {"num_images": 1, "enable_thinking": False}),
+    ],
+)
+def test_qwen_summary_selects_model_and_records_its_provenance(
+    monkeypatch, qwen_model, expected_options
+):
     response = json.dumps(
         {
             "version": 1,
@@ -228,13 +238,17 @@ def test_qwen_summary_selects_4b_model_and_records_its_provenance(monkeypatch):
             ],
         }
     )
+    template_options = []
+
+    def apply_chat_template(*_args, **kwargs):
+        template_options.append(kwargs)
+        return "formatted prompt"
+
     dependencies = {
         "mlx_vlm": SimpleNamespace(
             generate=lambda *_args, **_kwargs: SimpleNamespace(text=response)
         ),
-        "mlx_vlm.prompt_utils": SimpleNamespace(
-            apply_chat_template=lambda *_args, **_kwargs: "formatted prompt"
-        ),
+        "mlx_vlm.prompt_utils": SimpleNamespace(apply_chat_template=apply_chat_template),
     }
     selected = []
     monkeypatch.setattr(
@@ -251,16 +265,14 @@ def test_qwen_summary_selects_4b_model_and_records_its_provenance(monkeypatch):
     summary = qwen_summary.summarize_frames(
         [Path("/tmp/flagged-frame.jpg")],
         families=(McfCategoryFamily.VIOLENCE,),
-        qwen_model="qwen3-vl-4b-instruct-4bit",
+        qwen_model=qwen_model,
     )
 
-    assert selected == ["qwen3-vl-4b-instruct-4bit"]
-    assert summary.subcategorization[0].model_id == (
-        "mlx-community/Qwen3-VL-4B-Instruct-4bit"
-    )
-    assert summary.subcategorization[0].model_revision == (
-        "2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b"
-    )
+    artifact = manifest().artifact(qwen_model)
+    assert selected == [qwen_model]
+    assert template_options == [expected_options]
+    assert summary.subcategorization[0].model_id == artifact.repository
+    assert summary.subcategorization[0].model_revision == artifact.revision
 
 
 def test_qwen_prompt_extends_the_json_schema_with_rubric_severity():

@@ -209,13 +209,16 @@ def test_server_command_uses_model_files_and_flags(tmp_path: Path):
     )
     assert command[command.index("--mmproj") + 1].endswith("mmproj-Clef-Flash-Q8_0.gguf")
     assert command[command.index("--port") + 1] == "9999"
+
+
+def test_registry_includes_each_production_and_evaluation_detector():
     from scanner.evaluation.folder_eval.decision.onejson_backends import (
         BACKENDS as ONEJSON_BACKENDS,
     )
     from scanner.evaluation.folder_eval.decision.qwen_mlx import SPECS as MLX_SPECS
     from scanner.evaluation.folder_eval.decision.qwen_vlm import SPECS as VLM_SPECS
 
-    scan_ids = {"scan-d1-3b", "scan-qwen3-vl-8b", "scan-qwen3-vl-4b"}
+    scan_ids = {"scan-d1-3b", "scan-qwen3-vl-8b", "scan-qwen3-vl-4b", "scan-qwen38-27b"}
     assert set(BACKENDS) == (
         set(SPECS)
         | set(VLM_SPECS)

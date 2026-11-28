@@ -12,7 +12,11 @@ from scanner.evaluation.qwen_language_comparison import align_language_replay_fi
 from scanner.model_acquisition import manifest
 from scanner.models import FindingCreate
 from scanner.pipeline import audio, qwen_language
-from scanner.settings.capabilities import DEFAULT_QWEN_MODEL, QWEN35_9B_MODEL
+from scanner.settings.capabilities import (
+    DEFAULT_QWEN_MODEL,
+    QWEN35_9B_MODEL,
+    QWEN38_27B_MODEL,
+)
 
 
 @pytest.fixture
@@ -169,8 +173,9 @@ def test_apple_speech_replay_records_locale_in_transcript_identity(
     ]
 
 
-def test_replay_compares_qwen35_to_default_with_the_same_transcript(
-    tmp_path, replay_backend, capsys
+@pytest.mark.parametrize("candidate_model", [QWEN35_9B_MODEL, QWEN38_27B_MODEL])
+def test_replay_compares_qwen_models_with_the_same_transcript(
+    tmp_path, replay_backend, capsys, candidate_model
 ):
     audio_path = tmp_path / "excerpt.wav"
     cache = tmp_path / "cache"
@@ -181,13 +186,13 @@ def test_replay_compares_qwen35_to_default_with_the_same_transcript(
     assert main(_run_args(audio_path, baseline, cache, *deny_options)) == 0
     assert (
         main(
-            _run_args(audio_path, candidate, cache, "--qwen-model", QWEN35_9B_MODEL, *deny_options)
+            _run_args(audio_path, candidate, cache, "--qwen-model", candidate_model, *deny_options)
         )
         == 0
     )
 
     assert len(replay_backend.transcriptions) == 1
-    assert replay_backend.loaded_models == [DEFAULT_QWEN_MODEL, QWEN35_9B_MODEL]
+    assert replay_backend.loaded_models == [DEFAULT_QWEN_MODEL, candidate_model]
     assert (
         replay_backend.template_options
         == [{"num_images": 0}] * 2
@@ -200,14 +205,14 @@ def test_replay_compares_qwen35_to_default_with_the_same_transcript(
     before, after = (json.loads(report.read_text()) for report in (baseline, candidate))
     assert before["transcript_sha256"] == after["transcript_sha256"]
     assert (after["qwen_model"], after["qwen_revision"]) == (
-        QWEN35_9B_MODEL,
-        manifest().artifact(QWEN35_9B_MODEL).revision,
+        candidate_model,
+        manifest().artifact(candidate_model).revision,
     )
     capsys.readouterr()
     assert main(["compare", str(baseline), str(candidate)]) == 0
     comparison = capsys.readouterr().out
     assert (
-        f"Setting changed (qwen_model): {DEFAULT_QWEN_MODEL!r} → {QWEN35_9B_MODEL!r}" in comparison
+        f"Setting changed (qwen_model): {DEFAULT_QWEN_MODEL!r} → {candidate_model!r}" in comparison
     )
 
 

@@ -143,6 +143,7 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
         "siglip2-moderation-head-violence",
         "qwen3-vl-4b-instruct-4bit",
         "qwen3-vl-8b-instruct-4bit",
+        "qwen38-27b-instruct-4bit",
         "qwen35-9b-4bit",
         "shieldstral-3b-int8",
         "d1-3b",
@@ -214,9 +215,21 @@ def test_bundled_manifest_is_exhaustive_pinned_and_records_licenses():
     for video_model, artifact_id in (
         ("qwen3-vl-8b", "qwen3-vl-8b-instruct-4bit"),
         ("qwen3-vl-4b", "qwen3-vl-4b-instruct-4bit"),
+        ("qwen38-27b", "qwen38-27b-instruct-4bit"),
     ):
         assert artifact_ids_for_backend(video_model) == (artifact_id,)
         assert video_model in declared.artifact(artifact_id).backend_ids
+
+
+def test_qwen38_uses_a_single_pinned_artifact():
+    artifact = manifest().artifact(artifact_ids_for_backend("qwen38-27b")[0])
+    # Settings uses the first backend to prefetch this artifact.
+    assert artifact.backend_ids == ("qwen38-27b", "qwen3_vl")
+    assert artifact.expected_size == 16_074_308_726
+    shards = [item for item in artifact.files if item.path.endswith(".safetensors")]
+    assert len(shards) == 3
+    assert all(item.sha256 for item in shards)
+    assert any(item.path == "chat_template.jinja" and item.git_blob_sha1 for item in artifact.files)
 
 
 def test_source_media_release_offers_models_with_undeclared_licenses(tmp_path, monkeypatch):

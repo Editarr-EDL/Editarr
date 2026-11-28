@@ -1,10 +1,10 @@
 """Keep one large vision model resident during a visual scan.
 
-Large detectors (d1-3B, the Qwen3-VL detectors, and Shieldstral) stay loaded for the
+Large detectors (d1-3B, the Qwen detectors, and Shieldstral) stay loaded for the
 whole detection pass. When the Severity and Description model is a different artifact,
 holding both would roughly double peak memory (about 18 GB for d1-3B plus Qwen3-VL 8B).
 Such scans therefore detect every scene first, release the detector, and then run the
-deferred descriptions; a Qwen3-VL detector that is the same artifact as the description
+deferred descriptions; a Qwen detector that is the same artifact as the description
 model keeps its single shared instance.
 """
 

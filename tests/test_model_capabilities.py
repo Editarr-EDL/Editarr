@@ -27,7 +27,7 @@ _PACKAGES = {
     "mlx_vlm",
     "mlx",
 }
-_MAC_ONLY_DETECTORS = {"shieldstral", "qwen3-vl-8b", "qwen3-vl-4b"}
+_MAC_ONLY_DETECTORS = {"shieldstral", "qwen3-vl-8b", "qwen3-vl-4b", "qwen38-27b"}
 _PORTABLE_DETECTORS = tuple(
     backend
     for backend in capabilities.SUPPORTED_VIDEO_MODELS
@@ -478,6 +478,7 @@ def test_capabilities_mark_only_qwen3_vl_8b_recommended(
         {"qwen3-vl-8b"} if system == "Darwin" else set()
     )
     assert "d1-3b" in video
+    assert ("qwen38-27b" in video) == (system == "Darwin")
     if system == "Darwin":
         assert (video["qwen3-vl-8b"].display_name, video["qwen3-vl-4b"].display_name) == (
             "Qwen3-VL 8B",
@@ -487,6 +488,7 @@ def test_capabilities_mark_only_qwen3_vl_8b_recommended(
     assert {key: choice.recommended for key, choice in qwen.items()} == {
         "qwen3-vl-8b-instruct-4bit": True,
         "qwen3-vl-4b-instruct-4bit": False,
+        "qwen38-27b-instruct-4bit": False,
     }
     payload = result["video_models"][0].model_dump()
     assert set(payload) == {"id", "display_name", "recommended"}

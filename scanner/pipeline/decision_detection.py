@@ -1,4 +1,4 @@
-"""Frame decisions from the VLM decision detectors (Qwen3-VL and d1-3B).
+"""Frame decisions from the VLM decision detectors (Qwen and d1-3B).
 
 Each detector answers one yes/no question per family about a frame and reports
 P(yes). A family is positive when its score reaches the detector's threshold. Fine
@@ -14,6 +14,7 @@ from pathlib import Path
 from scanner.evaluation.severity_rubric import level_severity
 from scanner.evaluation.subcategorization import subcategorize_detector_label
 from scanner.models import McfCategoryFamily
+from scanner.settings.capabilities import QWEN38_27B_VIDEO_MODEL
 from scanner.settings.config import settings
 
 from .severity import SEVERITY_CONFIDENCE, SEVERITY_DETECTOR
@@ -33,7 +34,7 @@ FAMILY_SUBJECTS = {
     McfCategoryFamily.SEX: "sexual content",
     McfCategoryFamily.VIOLENCE: "violence",
 }
-DECISION_VIDEO_MODELS = ("qwen3-vl-8b", "qwen3-vl-4b", "d1-3b")
+DECISION_VIDEO_MODELS = ("qwen3-vl-8b", "qwen3-vl-4b", QWEN38_27B_VIDEO_MODEL, "d1-3b")
 
 
 def family_question(family: McfCategoryFamily) -> str:

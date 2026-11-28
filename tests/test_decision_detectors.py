@@ -1,6 +1,5 @@
-"""Qwen3-VL and d1-3B video detectors with mocked models (no weights)."""
+"""Qwen and d1-3B video detectors with mocked models (no weights)."""
 
-import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,8 +7,9 @@ import pytest
 from PIL import Image
 
 from scanner.models import McfCategoryFamily, Severity
-from scanner.pipeline import d1_detector, decision_detection, qwen_detector, visual
+from scanner.pipeline import d1_detector, decision_detection, visual
 from scanner.pipeline.decision_detection import DecisionDetector, FrameDecision
+from scanner.settings.capabilities import QWEN38_27B_VIDEO_MODEL
 from scanner.settings.config import settings
 
 F = McfCategoryFamily
@@ -22,119 +22,8 @@ QUESTIONS = {
 
 
 def test_video_model_ids_are_supported():
-    for video_model in ("qwen3-vl-8b", "qwen3-vl-4b", "d1-3b"):
+    for video_model in ("qwen3-vl-8b", "qwen3-vl-4b", QWEN38_27B_VIDEO_MODEL, "d1-3b"):
         assert visual.normalize_video_model(video_model) == video_model
-
-
-def test_yes_probability_normalizes_yes_and_no_candidates():
-    top = [("Yes", math.log(0.3)), (" no", math.log(0.1)), ("NO.", math.log(0.1)), ("x", 0.0)]
-
-    assert qwen_detector.yes_probability(top) == pytest.approx(0.6)
-    assert qwen_detector.yes_probability([("maybe", 0.0)]) == 0.0
-
-
-class _Conversation:
-    def __init__(self, answers):
-        self.answers = iter(answers)
-        self.calls = []
-
-    def _step(self):
-        yes = next(self.answers)
-        return qwen_detector.Step(
-            token_id=1 if yes >= 0.5 else 2,
-            top=[("Yes", math.log(yes)), ("No", math.log(1 - yes))],
-        )
-
-    def begin(self, prompt, image):
-        self.calls.append(("begin", prompt, image))
-        return self._step()
-
-    def extend(self, text):
-        self.calls.append(("extend", text))
-        return self._step()
-
-    def push(self, token_id):
-        self.calls.append(("push", token_id))
-
-    def end(self):
-        self.calls.append(("end",))
-
-
-def test_qwen_chains_the_evaluated_questions_in_one_conversation(tmp_path):
-    conversation = _Conversation([0.1, 0.8, 0.2, 0.6])
-    frame = tmp_path / "frame.jpg"
-
-    scores = qwen_detector.converse(conversation, frame)
-
-    assert scores == pytest.approx({F.DRUGS: 0.1, F.NUDITY: 0.8, F.SEX: 0.2, F.VIOLENCE: 0.6})
-    assert conversation.calls == [
-        (
-            "begin",
-            "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>"
-            f"{QUESTIONS[F.DRUGS]} Answer yes or no.<|im_end|>\n<|im_start|>assistant\n",
-            frame,
-        ),
-        ("push", 2),
-        ("extend", qwen_detector.next_turn(f"{QUESTIONS[F.NUDITY]} Answer yes or no.")),
-        ("push", 1),
-        ("extend", qwen_detector.next_turn(f"{QUESTIONS[F.SEX]} Answer yes or no.")),
-        ("push", 2),
-        ("extend", qwen_detector.next_turn(f"{QUESTIONS[F.VIOLENCE]} Answer yes or no.")),
-        ("end",),
-    ]
-    assert qwen_detector.next_turn("Q") == (
-        "<|im_end|>\n<|im_start|>user\nQ<|im_end|>\n<|im_start|>assistant\n"
-    )
-
-
-def test_qwen_conversation_accepts_a_frame_path_or_a_decoded_image(monkeypatch, tmp_path):
-    seen = []
-    modules = {
-        "mlx_vlm.utils": SimpleNamespace(
-            prepare_inputs=lambda _processor, images, **_kwargs: seen.append(images[0])
-            or {"input_ids": "ids"}
-        ),
-        "mlx_vlm.models.cache": SimpleNamespace(make_prompt_cache=lambda _language: []),
-    }
-    monkeypatch.setattr(
-        qwen_detector, "require_dependency", lambda name, *_args: modules.get(name)
-    )
-    embedded = SimpleNamespace(inputs_embeds="embeds", to_dict=lambda: {})
-    model = SimpleNamespace(
-        language_model=SimpleNamespace(),
-        config=SimpleNamespace(),
-        get_input_embeddings=lambda *_args, **_kwargs: embedded,
-    )
-    conversation = qwen_detector.QwenConversation(model, SimpleNamespace(tokenizer=None))
-    monkeypatch.setattr(conversation, "_forward", lambda *_args: "step")
-    image, frame = Image.new("RGB", (4, 4)), tmp_path / "frame.jpg"
-
-    assert conversation.begin("prompt", frame) == "step"
-    assert conversation.begin("prompt", image) == "step"
-    assert seen == [str(frame), image]
-
-
-@pytest.mark.parametrize(
-    ("video_model", "artifact"),
-    [("qwen3-vl-8b", "qwen3-vl-8b-instruct-4bit"), ("qwen3-vl-4b", "qwen3-vl-4b-instruct-4bit")],
-)
-def test_qwen_detector_shares_the_description_model_loader(monkeypatch, video_model, artifact):
-    loaded = []
-    model, processor = object(), object()
-    monkeypatch.setattr(qwen_detector, "require_available", lambda _backend: None)
-    monkeypatch.setattr(
-        "scanner.pipeline.qwen_summary._load_model",
-        lambda artifact_id: loaded.append(artifact_id) or (model, processor, object()),
-    )
-    monkeypatch.setattr(qwen_detector, "QwenConversation", lambda *args: args)
-
-    assert qwen_detector._conversation(video_model) == (model, processor)
-    assert loaded == [artifact]
-    assert qwen_detector.detector(video_model).model_revision == (
-        "defcdea7cc7a4b0858fea563cbbce171d328e457"
-        if video_model == "qwen3-vl-8b"
-        else "2fd8dacbdb8f1e54b8c005f081ec5bf79c56376b"
-    )
 
 
 def test_d1_asks_family_decisions_then_rubric_severity_questions():

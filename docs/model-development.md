@@ -7,10 +7,12 @@ For ordinary Editarr setup and use, see the project [README](../README.md).
 ## Qwen prompt replay
 
 The **Severity and Description model** (API field `qwen_model`) describes flagged
-segments after detection, for every video model. Scans can use either the pinned
-Qwen3-VL 8B (recommended, default) or 4B Instruct 4-bit model; 4B reduces download size
-and memory use. Each scan persists its choice, and only the selected artifact is
-acquired on demand.
+segments after detection, for every video model. On Apple silicon, scans can use
+Qwen3-VL 8B (recommended and default), Qwen3-VL 4B, or Qwen3.8-27B in 4-bit MLX.
+With the **Qwen (multilingual)** audio filter, the same model checks timed transcripts
+for objectionable language and classifies each finding. Each scan persists its model
+choice. The selected artifact is acquired on demand and shared with the video detector
+when that detector uses the same model.
 
 The description prompt (`qwen_summary.PROMPT` plus the constrained JSON instructions)
 also asks for a `severity` level per classification on the rubric in
@@ -85,9 +87,11 @@ New reports record the original prompt and response for inspection. Older
 reports use the cached transcript and available prompt source to reconstruct
 the batch. The inspector identifies reconstructed evidence.
 
-The replay model selector includes Qwen3.5-9B (4-bit MLX). The first run with
-this model downloads about 6 GB into the Editarr model cache. To use it
-from the terminal, pass `--qwen-model qwen35-9b-4bit` to `run`.
+The replay model selector includes the production Qwen3.8-27B model and the
+replay-only Qwen3.5-9B model. From the terminal, pass
+`--qwen-model qwen38-27b-instruct-4bit` or `--qwen-model qwen35-9b-4bit` to
+`run`. The first run downloads about 16.1 GB or 6 GB, respectively, if the model
+is missing from the Editarr model cache.
 
 You can run the same workflow from the terminal.
 
@@ -275,8 +279,8 @@ changing the inventory when any listed film has no file or a key names no film i
 ### Models
 
 `run --model ID` accepts `nudenet`, `siglip2`, `siglip2-gore`, the shipped decision
-detectors `scan-d1-3b`, `scan-qwen3-vl-8b` and `scan-qwen3-vl-4b`, and the evaluation-only
-llama.cpp and MLX ids in
+detectors `scan-d1-3b`, `scan-qwen3-vl-8b`, `scan-qwen3-vl-4b`, and
+`scan-qwen38-27b`, plus the evaluation-only llama.cpp and MLX ids in
 [`decision/`](../scanner/evaluation/folder_eval/decision/) (for example `d1-3b-f512`,
 `qwen3vl-8b`, `qwen3vl-8b-mlx-desc`). By default `run` and `all` refuse downloads for
 the whole process, from the moment the command starts: `nudenet`, `siglip2`,
@@ -393,24 +397,27 @@ budget.
 The complete scanner/model configuration is defined in
 [`scanner/settings/config.py`](../scanner/settings/config.py).
 
-### Qwen3-VL and d1-3B video detectors
+### Qwen and d1-3B video detectors
 
-`qwen3-vl-8b` (recommended and the default on Apple silicon), `qwen3-vl-4b`, and `d1-3b`
-ask one yes/no question per family about each frame, using the evaluation harness's
-wording: `Does this video frame show <subject>? Answer yes or no.` with subjects
+`qwen3-vl-8b` (recommended and the default on Apple silicon), `qwen3-vl-4b`,
+`qwen38-27b`, and `d1-3b` ask one yes/no question per family about each frame.
+The evaluation harness asks `Does this video frame show <subject>? Answer yes or no.` using
 `drugs, alcohol, smoking, or gambling`, `nudity`, `sexual content`, and `violence`.
 Positive families become general-family findings (`drugs`, `nudity`, `sex`,
 `violence`) that the description model can refine. Thresholds are module constants in
 [`qwen_detector.py`](../scanner/pipeline/qwen_detector.py) and
 [`d1_detector.py`](../scanner/pipeline/d1_detector.py).
 
-The Qwen3-VL detectors (macOS Apple silicon only) run on MLX with the same pinned
+The Qwen detectors (macOS Apple silicon only) run on MLX with the same pinned
 artifacts and loader as the description model. The questions are chained in one
 conversation per frame: the image is encoded once, each later question feeds only its
 new tokens into the KV cache, and the greedy answer token stays in the conversation.
 A family's score is P(yes) / (P(yes) + P(no)) from the first answer token's top 20
 log-probabilities at temperature 0, flagged at 0.5. When the detector and the
 description model are the same artifact, the scan worker loads it once.
+Qwen3.8-27B uses its non-thinking chat template to score the first answer token.
+Its initial threshold is 0.5 for each family. Use reviewed positives and clean frames to
+compare precision, recall, and throughput with the 8B detector.
 
 d1-3B is a decision model that answers typed questions in one forward pass without
 generating text. It runs through transformers (≥ 5.14) and torch, on MPS where the
@@ -438,13 +445,13 @@ families) on an M4 Pro (24 GB):
 | `qwen3-vl-8b` (MLX) | 48/48 decisions; scores identical to `qwen3vl-8b-mlx` | 1.37 s | 6.5 GB MLX peak |
 | `d1-3b` (transformers, BF16, MPS) | 48/48 decisions vs `d1-3b-full4` and `d1-3b-sev` (llama.cpp Q8_0); 47/48 severity levels; mean \|ΔP\| 0.009 | 0.71 s | 7.0 GB MPS |
 
-A resident detector (d1-3B, a Qwen3-VL detector, or Shieldstral) whose artifact differs
+A resident detector (d1-3B, a Qwen detector, or Shieldstral) whose artifact differs
 from the description model is never loaded alongside it: the scan detects every scene
 first, spooling each scene's detections to its own file in the attempt's temporary
 `visual-results/pending/` directory, then releases the detector and describes one scene
 at a time, deleting each spooled file once its scene is described. On a 20 s clip with d1-3B and the 8B description model this cut the scan
 worker's peak footprint from 17.7 GB to 10.5 GB and wall time from 324 s to 235 s with
-identical findings. A Qwen3-VL detector that is the description model's artifact keeps
+identical findings. A Qwen detector that shares the description model's artifact keeps
 the single shared instance and describes each scene as it is detected.
 
 ### Shieldstral

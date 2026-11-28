@@ -400,6 +400,7 @@ def artifact_ids_for_backend(
         "shieldstral": ("shieldstral-3b-int8",),
         "qwen3-vl-8b": ("qwen3-vl-8b-instruct-4bit",),
         "qwen3-vl-4b": ("qwen3-vl-4b-instruct-4bit",),
+        "qwen38-27b": ("qwen38-27b-instruct-4bit",),
         "d1-3b": ("d1-3b",),
         "qwen3_vl": ("qwen3-vl-8b-instruct-4bit",),
         "qwen": ("qwen3-vl-8b-instruct-4bit",),
