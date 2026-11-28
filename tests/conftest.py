@@ -1,13 +1,52 @@
 """Shared pytest configuration for the Python suite."""
 
+import atexit
+import os
 import shutil
 import tempfile
 from pathlib import Path
 
-import pytest
+REAL_HOME_ENV = "EDITARR_TESTS_REAL_HOME"
 
-from scanner.persistence.migrations import preflight, runner
-from scanner.runtime.maintenance import DatabaseMaintenance
+
+def _isolate_user_locations() -> Path:
+    """Point every per-user Editarr location at a private scratch root.
+
+    Runs before any `scanner` import, because settings resolve the data, log and cache
+    directories from HOME (and the XDG/LOCALAPPDATA roots) at import time. Without this
+    the suite, and the subprocesses it starts, would use and log into the installed
+    app's directories. EDITARR_DATA_DIR and EDITARR_LOG_DIR are cleared rather than set,
+    so the default-path logic under test resolves inside the scratch HOME. The real HOME
+    is kept in EDITARR_TESTS_REAL_HOME for tools such as docker that need their config.
+    """
+    root = Path(tempfile.mkdtemp(prefix="editarr-tests-"))
+    atexit.register(shutil.rmtree, root, ignore_errors=True)
+    os.environ.setdefault(REAL_HOME_ENV, str(Path.home()))
+    for name, child in (
+        ("HOME", "home"),
+        ("LOCALAPPDATA", "home/AppData/Local"),
+        ("XDG_DATA_HOME", "xdg/data"),
+        ("XDG_CONFIG_HOME", "xdg/config"),
+        ("XDG_STATE_HOME", "xdg/state"),
+        ("XDG_CACHE_HOME", "xdg/cache"),
+    ):
+        path = root / child
+        path.mkdir(parents=True, exist_ok=True)
+        os.environ[name] = str(path)
+    for name in (
+        "EDITARR_DATA_DIR", "EDITARR_LOG_DIR", "EDITARR_MODEL_CACHE",
+        "EDITARR_DECISION_MODELS_DIR",
+    ):
+        os.environ.pop(name, None)
+    return root
+
+
+ISOLATED_ROOT = _isolate_user_locations()
+
+import pytest  # noqa: E402
+
+from scanner.persistence.migrations import preflight, runner  # noqa: E402
+from scanner.runtime.maintenance import DatabaseMaintenance  # noqa: E402
 
 _real_migrate_fresh_database = runner.migrate_fresh_database
 _template: bytes | None = None
