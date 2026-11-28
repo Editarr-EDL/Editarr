@@ -3,7 +3,7 @@
   "info": {
     "title": "Editarr",
     "description": "Local Editarr API. Send a personal key in the X-Api-Key header; a key carries the signed-in account's own current permissions, never more. Browser-session mutations must be same-origin and include the X-CSRF-Token header. Some account-security operations require an interactive browser session and return 403 interactive_session_required when called with an API key.",
-    "version": "0.1.3"
+    "version": "0.1.18"
   },
   "paths": {
     "/api/auth/api-key": {
