@@ -73,6 +73,7 @@ def _scan_visual_worker(
     video_model: str | None,
     queue: mp.Queue,
     cancel_event,
+    checkpoint_dir_value: str | None = None,
 ) -> None:
     """Run a visual pass in a disposable process so model memory is released."""
     from scanner.pipeline import runner as root
@@ -128,6 +129,7 @@ def _scan_visual_worker(
                 should_cancel=cancel_event.is_set,
                 video_model=video_model,
                 provenance_callback=lambda state: queue.put({"enrichment": state}),
+                **({"checkpoint_dir": Path(checkpoint_dir_value)} if checkpoint_dir_value else {}),
             )
         queue.put({"findings": [finding.model_dump(mode="json") for finding in findings]})
     except AcquisitionCancelled:
@@ -202,6 +204,7 @@ def _scan_visual_isolated(
     progress_callback: Callable[[float, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     provenance_callback: Callable[[str], None] | None = None,
+    checkpoint_dir: Path | None = None,
 ) -> list[FindingCreate]:
     """Run a heavyweight visual model in a short-lived process and relay progress."""
     from scanner.pipeline import runner as root
@@ -225,6 +228,7 @@ def _scan_visual_isolated(
             video_model,
             queue,
             cancel_event,
+            *((str(checkpoint_dir),) if checkpoint_dir is not None else ()),
         ),
     )
     proc.start()

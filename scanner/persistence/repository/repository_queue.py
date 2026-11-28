@@ -10,6 +10,7 @@ from scanner.models import ScanMode, ScanQueueItem
 from scanner.persistence.write_lock import write_lock
 
 from .repository_rows import _scan_queue_from_row
+from .scan_pause import mark_paused
 from .scan_timing import start_scan_attempt, stop_scan_attempt
 
 
@@ -28,7 +29,7 @@ def get_active_scan_queue_item(db: Session) -> ScanQueueItem | None:
     row = (
         db.query(ScanQueueRow)
         .join(ScanRow)
-        .filter(ScanRow.status.in_(("scanning", "orphaned", "cancelling")))
+        .filter(ScanRow.status.in_(("scanning", "orphaned", "cancelling", "pausing")))
         .order_by(ScanQueueRow.sort_order, ScanQueueRow.id)
         .first()
     )
@@ -41,7 +42,7 @@ def scanning_scan_worker_processes(
     rows = (
         db.query(ScanRow.id, ScanRow.worker_pid, ScanRow.worker_pgid, ScanRow.worker_token)
         .join(ScanQueueRow)
-        .filter(ScanRow.status == "scanning")
+        .filter(ScanRow.status.in_(("scanning", "pausing")))
         .all()
     )
     return [(row.id, row.worker_pid, row.worker_pgid, row.worker_token) for row in rows]
@@ -75,7 +76,9 @@ def record_scan_worker_process(
     """Persist the operating-system process identity for a reserved scan worker."""
     with write_lock(db):
         row = db.get(ScanRow, scan_id)
-        if not row or row.worker_token != token or row.status not in {"scanning", "orphaned"}:
+        if not row or row.worker_token != token or row.status not in {
+            "scanning", "pausing", "orphaned",
+        }:
             db.rollback()
             return False
         now = datetime.now(timezone.utc)
@@ -103,7 +106,7 @@ def heartbeat_scan_worker(db: Session, scan_id: str, token: str) -> bool:
         if (
             not row
             or row.worker_token != token
-            or row.status not in {"scanning", "cancelling", "orphaned"}
+            or row.status not in {"scanning", "cancelling", "pausing", "orphaned"}
             or (row.status == "orphaned" and row.progress_stage == "orphaned")
         ):
             db.rollback()
@@ -125,13 +128,17 @@ def mark_orphaned_scan_workers(db: Session, active_pids: set[int]) -> list[ScanQ
         rows = (
             db.query(ScanQueueRow)
             .join(ScanRow)
-            .filter(ScanRow.status == "scanning")
+            .filter(ScanRow.status.in_(("scanning", "pausing")))
             .order_by(ScanQueueRow.sort_order, ScanQueueRow.id)
             .all()
         )
         now = datetime.now(timezone.utc)
         for queue_row in rows:
             scan = queue_row.scan
+            if scan.status == "pausing":
+                if scan.worker_pid not in active_pids:
+                    mark_paused(scan)
+                continue
             if scan.worker_pid in active_pids:
                 scan.status = "scanning"
                 scan.progress_message = "Reattached to active scan"
@@ -145,10 +152,10 @@ def mark_orphaned_scan_workers(db: Session, active_pids: set[int]) -> list[ScanQ
 
 
 def resume_orphaned_scan(db: Session, queue_id: int) -> bool:
-    """Return an orphaned queue item to runnable state by ``queue_id``."""
+    """Return a paused or orphaned queue item to runnable state by ``queue_id``."""
     with write_lock(db):
         queue_row = db.get(ScanQueueRow, queue_id)
-        if not queue_row or queue_row.scan.status != "orphaned":
+        if not queue_row or queue_row.scan.status not in {"orphaned", "paused"}:
             db.rollback()
             return False
         scan = queue_row.scan
@@ -199,11 +206,15 @@ def settle_stopped_scan_worker(db: Session, scan_id: str, *, token: str | None) 
         if (
             not queue_row
             or queue_row.scan.worker_token != token
-            or queue_row.scan.status not in {"scanning", "cancelling"}
+            or queue_row.scan.status not in {"scanning", "cancelling", "pausing"}
         ):
             db.rollback()
             return
         scan = queue_row.scan
+        if scan.status == "pausing":
+            mark_paused(scan)
+            db.commit()
+            return
         stop_scan_attempt(scan, None)
         if scan.status == "cancelling":
             scan.status = "cancelled"
@@ -225,11 +236,16 @@ def mark_scan_orphaned(
     error_message: str | None = None,
     *,
     use_last_heartbeat: bool = False,
+    settle_pause: bool = False,
 ) -> None:
     """Mark an interrupted worker as orphaned while retaining resumable work."""
     with write_lock(db):
         row = db.get(ScanRow, scan_id)
-        if not row or row.status not in {"scanning", "cancelling", "error", "orphaned"}:
+        if row is not None and row.status == "pausing" and settle_pause:
+            mark_paused(row)
+            db.commit()
+            return
+        if not row or row.status not in {"scanning", "error", "orphaned"}:
             db.rollback()
             return
         # A worker re-marks its own committed `error` as resumable, but a cancellation
@@ -281,7 +297,7 @@ def cancel_scan_queue_item(db: Session, queue_id: int) -> tuple[str, bool] | Non
             return None
         scan = row.scan
         now = datetime.now(timezone.utc)
-        if scan.status in {"acquiring_model", "scanning", "orphaned", "cancelling"}:
+        if scan.status in {"acquiring_model", "scanning", "orphaned", "cancelling", "pausing"}:
             scan.status = "cancelling"
             scan.updated_at = now
             db.commit()
@@ -370,10 +386,10 @@ def update_scan_status(
     db: Session, scan_id: str, status: str, error_message: str | None = None
 ) -> None:
     row = db.get(ScanRow, scan_id)
-    if not row:
+    if not row or row.status in {"pausing", "paused"}:
         return
     now = datetime.now(timezone.utc)
-    if status not in {"scanning", "cancelling"}:
+    if status not in {"scanning", "cancelling", "pausing"}:
         stop_scan_attempt(row, now)
     row.status = status
     row.error_message = error_message
@@ -402,6 +418,8 @@ def update_scan_progress(
     if not row:
         return
     if worker_token is not None and (row.status != "scanning" or row.worker_token != worker_token):
+        return
+    if row.status == "pausing":
         return
     if row.status == "orphaned" and row.progress_stage == "orphaned":
         return

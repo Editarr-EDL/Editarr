@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from scanner.models import MCF_CATEGORY_TO_FAMILY
+from scanner.models import MCF_1_1_1_CATEGORIES, MCF_CATEGORY_TO_FAMILY
 
 from .artifact_v2 import (
     PUBLIC_EXECUTION_SETTINGS,
@@ -386,9 +386,9 @@ def parse_artifact(
         event_ids.add(finding.event_id)
         if (finding.category is None) != (finding.subcategory is None):
             raise ArtifactError("Incomplete classification pair")
-        if (
-            finding.subcategory is not None
-            and MCF_CATEGORY_TO_FAMILY.get(finding.subcategory) != finding.category
+        if finding.subcategory is not None and (
+            finding.subcategory in MCF_1_1_1_CATEGORIES
+            or MCF_CATEGORY_TO_FAMILY.get(finding.subcategory) != finding.category
         ):
             raise ArtifactError("Unknown classification pair")
         if finding.source == "derived" and artifact.kind != "derived":

@@ -329,12 +329,19 @@ versions or among its scans (U7); it works for snapshots whose link is gone.
   review, like a scan filter. Filters of a snapshot removed from
   `community_memberships` are removed with it.
 - **`community_memberships`** (at most 32): `{"source_id"}` keeps a snapshot,
-  `{"source_id", "refresh": true}` refreshes it, and `{"link_id"}` includes a link
-  (adding its filters). Omitted or null keeps the stored snapshots; snapshots left
+  `{"source_id", "refresh": true}` refreshes it, and `{"link_id"}` includes a link.
+  Omitted or null keeps the stored snapshots; snapshots left
   out are removed. Adding, refreshing or removing one is a content change: it
   advances `revision`, `content_revision`, `edl_content_revision` and
   `mcf_content_revision`, so published exports report themselves outdated.
   `POST /api/library-items/{item_id}/reviews` accepts `{"link_id"}` entries only.
+- **Editing before the first save.** `GET /api/community/masters/{link_id}?review_draft=true`
+  returns the aligned review rows and a freshness `token`. The draft preview route
+  accepts `community_link_id` and `community_filter_id` for these rows. When saving,
+  send the link in `community_memberships` and send `{link_id, token, filters}` in
+  `community_drafts`. Send the retained rows with their edited values, or an empty
+  list if all rows were deleted. If the token is stale, reload the source before
+  saving. Clients that omit `community_drafts` get the link's default filters.
 - **Refresh** (U3) takes a new snapshot of the link and merges it into the
   submitted filters by master filter ID, following `mergedIds` (a merged filter
   continues an edited review filter first, then any other, then one the user

@@ -5,7 +5,9 @@ import type { SavedReview } from "../api/api-review-types";
 import { formatTime } from "../shared/display";
 import { communityResultCount } from "./review-community-badges";
 import { ReviewFilterRow, type ReviewFilterRowContext } from "./review-filter-row";
-import { mergeReviewRanges, savedReviewTimelineRanges, censorAudioWord, filterSourceOrigin, isNoObjectionableContentFilter, reviewVideoCategories, reviewAudioRoot, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
+import { mergeReviewRanges, savedReviewTimelineRanges, censorAudioWord, filterSourceOrigin, isNoObjectionableContentFilter, reviewFilterGroupPath, mergeSavedReviewFilters, sortSavedReviewResults, buildReviewHierarchy, sortTieredReviewResults, sortTieredReviewGroups, uniqueTieredFilters, type ReviewTableSortKey, type ReviewTableSortDirection, type SavedReviewResult, type TieredReviewResult } from "./review-results";
+
+type Filter = SavedReview["filters"][number];
 
 /** Render editable audio and video review results with stable category tiers. */
 export function SavedReviewOverview({
@@ -20,6 +22,8 @@ export function SavedReviewOverview({
   onPreviewFilter,
   preview,
   previewDisabled,
+  onInvalidTiming,
+  resetTiming,
   focusFilterId,
   onFocusFilterComplete,
   requiredFilterIds = [],
@@ -30,6 +34,7 @@ export function SavedReviewOverview({
   defaultSort = "category",
   renderFilterVote,
   sources,
+  stagedCommunity,
 }: {
   filters: SavedReview["filters"];
   memberships: SavedReview["memberships"];
@@ -42,6 +47,8 @@ export function SavedReviewOverview({
   onPreviewFilter: (filter: SavedReview["filters"][number]) => void;
   preview: { filterId: string; url: string } | null;
   previewDisabled: boolean;
+  onInvalidTiming?: (invalid: boolean) => void;
+  resetTiming?: number;
   focusFilterId?: string | null;
   onFocusFilterComplete?: () => void;
   requiredFilterIds?: string[];
@@ -54,6 +61,8 @@ export function SavedReviewOverview({
   renderFilterVote?: (filter: SavedReview["filters"][number], name: string) => ReactNode;
   /** The Filters toolbar's included-sources control, shown after its heading. */
   sources?: ReactNode;
+  /** Newly included community filters awaiting a save. */
+  stagedCommunity?: ReactNode;
 }) {
   const { registry } = useMcfRegistry();
   const [sort, setSort] = useState(defaultSort);
@@ -69,8 +78,26 @@ export function SavedReviewOverview({
   const [collapsedFamilies, setCollapsedFamilies] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showNoObjectionableContent, setShowNoObjectionableContent] = useState(false);
-  const [editingFilterId, setEditingFilterId] = useState<string | null>(null);
+  const [editor, setEditor] = useState<{ id: string; path: ReturnType<typeof reviewFilterGroupPath> } | null>(null);
   const scanById = new Map(scans.map((scan) => [scan.id, scan]));
+  const pathFor = (filter: Filter) => reviewFilterGroupPath(filter, filterSourceOrigin(filter, scanById));
+  const openPath = (source: Filter["source"], { family, subcategory, group }: ReturnType<typeof reviewFilterGroupPath>) => {
+    setCollapsedFamilies((current) => { const next = new Set(current); next.delete(`${source}:family:${family}`); return next; });
+    setExpandedGroups((current) => new Set([
+      ...current,
+      `${source}:subcategory:${family}:${subcategory}`,
+      `${source}:group:${family}:${subcategory}:${group}`,
+    ]));
+  };
+  const editFilter = (filter: Filter) => {
+    const path = pathFor(filter);
+    openPath(filter.source, path);
+    setEditor({ id: filter.id, path });
+  };
+  const finishEditing = (filter: Filter) => {
+    openPath(filter.source, pathFor(filter));
+    setEditor(null);
+  };
   const requiredIds = new Set(requiredFilterIds);
   const videoResults = sortSavedReviewResults(mergeSavedReviewFilters(filters.filter((filter) => filter.source === "visual"), scanById), "alphabetical");
   const audioResults = sortSavedReviewResults(mergeSavedReviewFilters(filters.filter((filter) => filter.source === "audio"), scanById), "alphabetical");
@@ -84,22 +111,9 @@ export function SavedReviewOverview({
     if (!focusFilterId) return;
     const filter = filters.find((candidate) => candidate.id === focusFilterId);
     if (!filter) return;
-    const source = filter.source === "visual" ? "visual" : "audio";
     setShow("all");
     if (isNoObjectionableContentFilter(filter)) setShowNoObjectionableContent(true);
-    const group = filter.source === "visual"
-      ? reviewVideoCategories(filter, true)[0]
-      : reviewAudioRoot(filter.label, filter.subcategory || filter.category || "audio");
-    const family = filter.category || "";
-    const subcategory = filter.subcategory || "";
-    const familyKey = `${source}:family:${family}`;
-    setCollapsedFamilies((current) => { const next = new Set(current); next.delete(familyKey); return next; });
-    setExpandedGroups((current) => new Set([
-      ...current,
-      `${source}:subcategory:${family}:${subcategory}`,
-      `${source}:group:${family}:${subcategory}:${group}`,
-    ]));
-    setEditingFilterId(focusFilterId);
+    editFilter(filter);
     requestAnimationFrame(() => {
       Array.from(document.querySelectorAll<HTMLElement>("[aria-label]"))
         .find((element) => element.getAttribute("aria-label")?.startsWith(`Filter ${focusFilterId} `))?.focus();
@@ -119,8 +133,10 @@ export function SavedReviewOverview({
 
   const rowContext: ReviewFilterRowContext = {
     scanById, requiredIds, lockedSeverities, busy, filtersEditable, cuesEditable, metadataEditable, previewDisabled, preview,
-    categoryFallback: sort === "time", editingFilterId, setEditingFilterId, onToggleFilters, onChangeFilter,
+    categoryFallback: sort === "time", editingFilterId: editor?.id ?? null, editFilter, finishEditing,
+    onInvalidTiming, resetTiming, onToggleFilters, onChangeFilter,
     onDeleteFilter: (filterId) => {
+      if (editor?.id === filterId) setEditor(null);
       onDeleteFilter(filterId);
       // The deleted row's menu button goes with it, so focus stays in the filter list.
       requestAnimationFrame(() => { if (!resultsRef.current?.contains(document.activeElement)) resultsRef.current?.focus(); });
@@ -132,7 +148,9 @@ export function SavedReviewOverview({
   const tableHead = <thead><tr><th className="review-filter-use">Use</th><th>Filter</th><th className="review-filter-actions-cell">Actions</th></tr></thead>;
 
   const renderTieredSection = (title: "Video" | "Audio", results: SavedReviewResult[], source: "visual" | "audio") => {
-    const hierarchy = buildReviewHierarchy(results, source, registry, showNoObjectionableContent);
+    // Keep the editor mounted in its original group while the user changes its label or classification.
+    const hierarchy = buildReviewHierarchy(results, registry, (filter) =>
+      editor?.id === filter.id ? editor.path : pathFor(filter));
     const tableSort = tableSorts[source];
     const toggleSort = (key: ReviewTableSortKey) => setTableSorts((current) => ({
       ...current,
@@ -155,12 +173,18 @@ export function SavedReviewOverview({
       onToggle: () => void,
     ) => {
       const nodeFilters = uniqueTieredFilters(items);
-      const selectedCount = items.filter((item) => item.result.filters.every((filter) => filter.selected)).length;
+      const selectionByResult = new Map<string, boolean>();
+      for (const { result, pathFilters } of items) {
+        selectionByResult.set(result.key, (selectionByResult.get(result.key) ?? true)
+          && pathFilters.every((filter) => filter.selected));
+      }
+      const resultCount = selectionByResult.size;
+      const selectedCount = [...selectionByResult.values()].filter(Boolean).length;
       const selected = nodeFilters.every((filter) => filter.selected);
       const mixed = !selected && nodeFilters.some((filter) => filter.selected);
       const displayName = source === "audio" && level === "group" ? censorAudioWord(name) : name;
       const levelLabel = level === "group" ? "finding group" : level;
-      return <tr className={`combined-result-hierarchy-header hierarchy-${level}`} key={key}><th className="combined-result-group-use"><input type="checkbox" aria-label={`Use all ${title.toLowerCase()} filters in ${name} ${levelLabel}`} aria-checked={mixed ? "mixed" : selected} ref={(node) => { if (node) node.indeterminate = mixed; }} checked={selected} disabled={busy || !filtersEditable || nodeFilters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(nodeFilters.filter(filter => !requiredIds.has(filter.id)).map((filter) => filter.id), !selected)} /></th><th colSpan={2}><button type="button" onClick={onToggle} aria-expanded={open} aria-label={`${name} ${levelLabel}, ${items.length} ${items.length === 1 ? "result" : "results"}, ${selectedCount} selected`}><span>{displayName}</span><small>{items.length} {items.length === 1 ? "result" : "results"} · {selectedCount} selected</small></button></th></tr>;
+      return <tr className={`combined-result-hierarchy-header hierarchy-${level}`} key={key}><th className="combined-result-group-use"><input type="checkbox" aria-label={`Use all ${title.toLowerCase()} filters in ${name} ${levelLabel}`} aria-checked={mixed ? "mixed" : selected} ref={(node) => { if (node) node.indeterminate = mixed; }} checked={selected} disabled={busy || !filtersEditable || nodeFilters.every(filter => requiredIds.has(filter.id))} onChange={() => onToggleFilters(nodeFilters.filter(filter => !requiredIds.has(filter.id)).map((filter) => filter.id), !selected)} /></th><th colSpan={2}><button type="button" onClick={onToggle} aria-expanded={open} aria-label={`${name} ${levelLabel}, ${resultCount} ${resultCount === 1 ? "result" : "results"}, ${selectedCount} selected`}><span>{displayName}</span><small>{resultCount} {resultCount === 1 ? "result" : "results"} · {selectedCount} selected</small></button></th></tr>;
     };
     return <section className={`finding-group combined-${source}-findings`} aria-label={`${title} review filters`}><div className="section-heading"><div><h3>{title}</h3><p>{results.length} {results.length === 1 ? "result" : "results"} in {hierarchy.length} {hierarchy.length === 1 ? "family" : "families"}</p></div>
       <div className="review-table-sort" role="group" aria-label={`Order ${title.toLowerCase()} filters`}><span aria-hidden="true">Order</span>{sortButton("time", "Time")}{sortButton("description", "Description")}{sortButton("severity", "Severity")}</div></div>
@@ -227,7 +251,8 @@ export function SavedReviewOverview({
         </div>
       </div>
       <div className="saved-review-filter-results finding-groups" ref={resultsRef} role="region" aria-label="Filter results" tabIndex={0}>
-        {sort === "category" ? <>
+        {stagedCommunity}
+        {stagedCommunity && !filters.length ? null : sort === "category" ? <>
           {showVideo && renderTieredSection("Video", visibleVideoResults, "visual")}
           {showAudio && renderTieredSection("Audio", audioResults, "audio")}
         </> : chronological.length ? <div className="review-filter-table-wrap">
@@ -235,7 +260,7 @@ export function SavedReviewOverview({
             {tableHead}
             <tbody>{chronological.map((result) => {
               const filter = result.filters[0];
-              const category = filter.source === "visual" ? reviewVideoCategories(filter, true).join(", ") : "Audio";
+              const category = filter.source === "visual" ? pathFor(filter).group : "Audio";
               return renderResult({ result, pathFilters: result.filters, linked: false }, filter.source, filter.source, category);
             })}</tbody>
           </table>

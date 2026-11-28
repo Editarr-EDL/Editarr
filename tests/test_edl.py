@@ -9,7 +9,7 @@ from scanner.formats.edl import (
     normalized_edl_ranges,
     parse_edl_content,
 )
-from scanner.models import EditAction, McfCategoryFamily, ScanFinding
+from scanner.models import EditAction, McfCategory, McfCategoryFamily, ScanFinding
 
 
 def scan_finding(
@@ -112,6 +112,20 @@ def test_parser_imports_metadata_and_fallbacks_with_ignored_actions():
         ),
         ("visual", None, None, "Imported skip", EditAction.SKIP),
     ]
+
+
+def test_edl_distinguishes_classified_other_from_legacy_unclassified_comments():
+    unclassified = scan_finding(1, EditAction.MUTE, 0, 1)
+    classified = scan_finding(2, EditAction.SKIP, 2, 3).model_copy(
+        update={"category": McfCategoryFamily.DISPENSABLE_SCENES, "subcategory": McfCategory.other}
+    )
+    exported = export_edl_content([unclassified, classified])
+    assert "## other: Imported mute\n" in exported
+    assert "## dispensable_scenes/other: Imported skip\n" in exported
+
+    legacy, new = parse_edl_content(exported.encode()).filters
+    assert (legacy.category, legacy.subcategory) == (None, None)
+    assert (new.category, new.subcategory) == ("dispensable_scenes", "other")
 
 
 def test_parser_ignores_unsupported_actions_after_syntax_and_number_validation():

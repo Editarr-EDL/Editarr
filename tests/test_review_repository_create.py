@@ -401,9 +401,9 @@ def test_mcf_metadata_and_format_exports_convert_independently():
         assert review.exports.exports[ExportFormat.MCF].current is True
         settings = repository.get_structured_filter_defaults_settings(db)
         assert settings.revision == 0
-        assert len(settings.severity_defaults) == 97
+        assert len(settings.severity_defaults) == 105
         assert settings.severity_defaults[0].subcategory == "commercial"
-        assert settings.severity_defaults[-1].subcategory == "weapons"
+        assert settings.severity_defaults[-1].subcategory == "abuse"
     finally:
         db.close()
 

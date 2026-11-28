@@ -44,6 +44,12 @@ def _recover_failed_scan_launch(db: Session, scan_id: str, error: str) -> None:
             root.remove_scan_queue_item(db, queue_item.queue_id)
         return
     queue_item = root.get_scan_queue_item_by_scan_id(db, scan_id)
+    if queue_item and queue_item.status == "pausing":
+        from scanner.persistence.repository.repository_queue import settle_stopped_scan_worker
+
+        worker = root.scan_worker_process(db, queue_item.queue_id)
+        settle_stopped_scan_worker(db, scan_id, token=worker[2] if worker else None)
+        return
     if queue_item and queue_item.status == "orphaned" and queue_item.error_message:
         # The worker can fail and close its endpoint before discovery finishes.
         # Keep its concrete pipeline/startup error instead of replacing it with
@@ -173,12 +179,19 @@ def _scan_queue_worker() -> None:
             try:
                 active_item = root.get_active_scan_queue_item(db)
                 next_item = root.get_next_scan_queue(db)
-                if active_item and active_item.status in {"scanning", "cancelling"}:
+                if active_item and active_item.status in {"scanning", "cancelling", "pausing"}:
                     worker = root.scan_worker_process(db, active_item.queue_id)
-                    worker_is_alive = bool(
-                        worker
-                        and root._worker_identity(active_item.id, worker[0], worker[1], worker[2])
+                    identity = (
+                        root._worker_identity(active_item.id, *worker[:3]) if worker else None
                     )
+                    worker_is_alive = bool(identity)
+                    if active_item.status == "pausing" and worker:
+                        if identity:
+                            root.PROCESS_CONTROL.request_stop(identity)
+                        else:
+                            worker_is_alive = root.PROCESS_CONTROL.worker_may_be_running(
+                                *worker[:2]
+                            )
                     if not worker_is_alive:
                         if worker:
                             root.cleanup_worker_control_endpoint(active_item.id, worker[2])

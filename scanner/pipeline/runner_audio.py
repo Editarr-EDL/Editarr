@@ -1,12 +1,12 @@
 """Selected audio extraction, analysis, checkpoints, and actual-input recording."""
 
+from scanner.runtime.worker_quit import FullApplicationQuitRequested
 from scanner.settings.capabilities import APPLE_SPEECH_MODEL
 
 from .processes import ScanCancelledError
 
 
 def run_audio_stages(
-    db,
     path,
     *,
     video_hash,
@@ -19,10 +19,9 @@ def run_audio_stages(
     audio_selection,
     should_cancel,
     completed_stages,
-    checkpoint_callback,
+    save_stage_results,
     analyzed_audio_callback,
     analyzed_audio_timing_callback,
-    findings_writer,
     record_stage,
     emit,
 ):
@@ -51,11 +50,12 @@ def run_audio_stages(
                 ),
                 **({"audio_selection": audio_selection} if audio_selection else {}),
             )
-            if checkpoint_callback:
-                checkpoint_callback("audio_extract")
+            save_stage_results("audio_extract", [])
         except BaseException as exc:
             record_stage(
-                "audio_extract", "partial" if isinstance(exc, ScanCancelledError) else "failed"
+                "audio_extract", "partial" if isinstance(
+                    exc, (ScanCancelledError, FullApplicationQuitRequested)
+                ) else "failed"
             )
             raise
         record_stage("audio_extract", "complete")
@@ -123,12 +123,11 @@ def run_audio_stages(
                 analyzed_audio_callback(audio_selection)
             if analyzed_audio_timing_callback:
                 analyzed_audio_timing_callback(audio_selection, playback_offset)
-        if findings:
-            findings_writer(db, video_id, findings)
-        if checkpoint_callback:
-            checkpoint_callback("audio_scan")
+        save_stage_results("audio_scan", findings)
     except BaseException as exc:
-        record_stage("audio_scan", "partial" if isinstance(exc, ScanCancelledError) else "failed")
+        record_stage("audio_scan", "partial" if isinstance(
+            exc, (ScanCancelledError, FullApplicationQuitRequested)
+        ) else "failed")
         raise
     record_stage("audio_scan", "complete")
     pipeline.logger.info("Found %d audio findings", len(findings))

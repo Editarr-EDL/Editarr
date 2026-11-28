@@ -5,6 +5,30 @@ from scanner.pipeline.runner import _scan_visual_by_scene
 from scanner.pipeline.scenes import Scene
 
 
+def test_coarse_scan_skips_fine_pass_on_scenes_with_clean_samples(monkeypatch, tmp_path):
+    scenes = [
+        Scene(start_seconds=0.0, end_seconds=10.0, index=0),
+        Scene(start_seconds=10.0, end_seconds=20.0, index=1),
+    ]
+    sampled: list[tuple[int, float | None]] = []
+
+    def sample(_video_path, scene, _output_dir, interval_seconds, **_kwargs):
+        sampled.append((scene.index, interval_seconds))
+        return [(tmp_path / "frame.jpg", scene.start_seconds)]
+
+    monkeypatch.setattr("scanner.pipeline.runner.detect_scenes", lambda *_a, **_k: scenes)
+    monkeypatch.setattr("scanner.pipeline.runner.get_video_frame_interval", lambda *_a: 1 / 24)
+    monkeypatch.setattr("scanner.pipeline.runner.sample_scene_frames", sample)
+    monkeypatch.setattr("scanner.pipeline.runner.scan_frame", lambda _path, time, **_k: time == 10)
+    monkeypatch.setattr("scanner.pipeline.runner.scan_frames", lambda *_a, **_k: [])
+
+    _scan_visual_by_scene(
+        "video.mp4", "video-1", tmp_path, coarse_scan_enabled=True, coarse_scan_interval_seconds=2.5
+    )
+
+    assert sampled == [(0, 2.5), (1, 2.5), (1, None)]
+
+
 def test_coarse_scan_falls_back_to_every_frame_when_no_coarse_frames(monkeypatch, tmp_path: Path):
     scene = Scene(start_seconds=0.0, end_seconds=1.0, index=0)
     calls: list[tuple[str, float | None, float | None]] = []

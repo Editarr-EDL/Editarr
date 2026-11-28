@@ -13,6 +13,22 @@ export interface ScanQueueItem extends Scan {
   progress_message: string | null;
 }
 
+export interface VideoSkipSource {
+  format: "videoskip";
+  filename: string;
+  sha256: string;
+  source_url: string | null;
+  uploader: string | null;
+  sync: {
+    reference_seconds: number | null;
+    reference_description: string | null;
+    platform_offsets_seconds: Record<string, number>;
+    screenshot_media_type: string | null;
+    screenshot_sha256: string | null;
+    notes: string[];
+  };
+}
+
 export interface Scan {
   id: string;
   scan_id: number;
@@ -67,6 +83,7 @@ export interface Scan {
   stable_version_id?: string | null;
   community_pending_targets?: { target_item_id: string; media_source_id: string | null; channels: ("audio" | "video")[] }[];
   import_source_name: string | null;
+  videoskip_source?: VideoSkipSource | null;
   imported_at: string | null;
   mcf_document: ScanMcfDocument | null;
   credits_detection: CreditsDetection | null;

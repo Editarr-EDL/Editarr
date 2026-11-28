@@ -6,6 +6,7 @@ import { fetchMcfPreflight, reviewPolicyToken } from "../api/api-reviews";
 import { ApiError } from "../api/api-transport";
 import { usePrincipal } from "../auth/auth-gate";
 import { ModalDialog } from "../ui/ModalDialog";
+import { saveExportFile } from "./export-download";
 import {
   EXPORT_FORMATS, canDownload, occupant, publishDestinations,
   type Allowed, type ExportDestination,
@@ -22,15 +23,6 @@ type Phase =
   | { kind: "stale"; format: ExportFormat };
 
 const upper = (format: ExportFormat) => format.toUpperCase();
-
-function saveBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 /**
  * Download or publish one saved review's EDL and MCF. Destinations come from
@@ -120,7 +112,7 @@ export function ExportDialog({ review, reviews, exports, allowed, formats = EXPO
     try {
       if (format === "mcf" && !await eligibleMcf()) return;
       const { blob, filename } = await downloadReviewExport(review.id, format, request);
-      if (isCurrent()) saveBlob(blob, filename);
+      if (isCurrent()) saveExportFile(blob, filename);
     } catch (reason) {
       if (isCurrent()) await fail(reason, `Unable to download ${upper(format)}.`);
     } finally { if (isCurrent()) setPhase((current) => current.kind === "working" ? { kind: "idle" } : current); }

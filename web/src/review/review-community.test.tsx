@@ -79,7 +79,7 @@ it("blocks including a link that awaits alignment and explains a new inclusion",
   render(<Entries sources={[]} links={[masterLink({ alignmentState: "required" }), masterLink({ linkId: "link-2", label: "Extended" })]} />);
   expect(screen.getByRole("checkbox", { name: "Community · Theatrical" })).toBeDisabled();
   fireEvent.click(screen.getByRole("checkbox", { name: "Community · Extended" }));
-  expect(screen.getByText(/Saving the review adds these community filters to the results/)).toBeInTheDocument();
+  expect(screen.getByText(/Edit and preview these filters in the draft/)).toBeInTheDocument();
 });
 
 it("labels a community filter's source with its version, confidence, contributors and flags", () => {

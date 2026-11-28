@@ -49,6 +49,7 @@ from scanner.pipeline.runner_workers import (
 )
 from scanner.pipeline.scenes import detect_scenes as detect_scenes
 from scanner.pipeline.scenes import sample_scene_frames as sample_scene_frames
+from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints, visual_checkpoint_dir
 from scanner.runtime.media_fingerprints import sampled_media_fingerprint
 from scanner.runtime.process_control import terminate_isolated_process as terminate_isolated_process
 from scanner.runtime.runtime_workspaces import (
@@ -234,6 +235,7 @@ def run_scan(
     analyzed_audio_callback=None,
     analyzed_audio_timing_callback=None,
     media_cache_key: str | None = None,
+    stage_results_writer: Callable[[str, list[FindingCreate]], None] | None = None,
 ) -> str:
     """
     Run the full analysis pipeline on a video file.
@@ -308,6 +310,15 @@ def run_scan(
             stage_settings["visual"]["cached_scene_findings_reused"] = True
         stage_settings[stage] = stage_settings["visual_qwen"]
         record_stage(stage, state)
+
+    def save_stage_results(stage: str, findings: list[FindingCreate]) -> None:
+        if stage_results_writer is not None:
+            stage_results_writer(stage, findings)
+        else:
+            if findings:
+                findings_writer(db, video_id, findings)
+            if checkpoint_callback:
+                checkpoint_callback(stage)
 
     if _test_fake_models_enabled():
         return _run_test_fake_models(
@@ -402,6 +413,9 @@ def run_scan(
     try:
         if scan_video and "visual" not in completed_stages:
             record_stage("visual", "started")
+            checkpoint_dir = visual_checkpoint_dir(
+                video_id, video_hash, stage_settings["visual"], stage_settings["visual_qwen"]
+            ) if stage_results_writer is not None else None
             # The visual classifier is loaded after positive detections. Keep
             # this pass isolated so its model memory is released before audio.
             try:
@@ -420,24 +434,25 @@ def run_scan(
                     progress_callback=lambda frac, msg: emit("visual", frac, msg),
                     provenance_callback=lambda event: record_visual_enrichment(event),
                     should_cancel=should_cancel,
+                    **({"checkpoint_dir": checkpoint_dir} if checkpoint_dir is not None else {}),
                 )
                 emit("visual", 1.0, "Visual scan complete")
-                if visual_findings:
-                    findings_writer(db, video_id, visual_findings)
-                if checkpoint_callback:
-                    checkpoint_callback("visual")
+                save_stage_results("visual", visual_findings)
             except BaseException as exc:
                 record_stage(
-                    "visual", "partial" if isinstance(exc, ScanCancelledError) else "failed"
+                    "visual", "partial" if isinstance(
+                        exc, (ScanCancelledError, FullApplicationQuitRequested)
+                    ) else "failed"
                 )
                 raise
             record_stage("visual", "complete")
+            if checkpoint_dir is not None:
+                discard_visual_checkpoints(settings.data_dir, video_id)
         elif scan_video:
             emit("visual", 1.0, "Visual scan restored from checkpoint")
 
         if scan_audio:
             run_audio_stages(
-                db,
                 path,
                 video_hash=video_hash,
                 duration=duration,
@@ -449,10 +464,9 @@ def run_scan(
                 audio_selection=audio_selection,
                 should_cancel=should_cancel,
                 completed_stages=completed_stages,
-                checkpoint_callback=checkpoint_callback,
+                save_stage_results=save_stage_results,
                 analyzed_audio_callback=analyzed_audio_callback,
                 analyzed_audio_timing_callback=analyzed_audio_timing_callback,
-                findings_writer=findings_writer,
                 record_stage=record_stage,
                 emit=emit,
             )

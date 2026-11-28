@@ -44,6 +44,7 @@ from scanner.runtime.process_control_windows import (
     _verify_windows_worker_job,
     _WindowsJobHandle,
     _WindowsPipeListener,
+    windows_worker_may_be_running,
 )
 from scanner.runtime.process_control_windows import (
     _windows_api as _windows_api,
@@ -454,6 +455,27 @@ class ProcessControl:
             return False
         response = _request(identity, b"stop")
         return response == b"stopping"
+
+    def worker_may_be_running(self, pid: int | None, process_group: int | None) -> bool:
+        """Require more than an IPC timeout before declaring a paused worker gone."""
+        if pid is None or pid <= 0:
+            return False
+        if os.name == "nt":
+            return windows_worker_may_be_running(pid)
+        try:
+            # A subprocess started by this HTTP process may still be a zombie.
+            reaped, _status = os.waitpid(pid, os.WNOHANG)
+            if reaped:
+                return False
+        except ChildProcessError:
+            pass
+        try:
+            group = os.getpgid(pid)
+            return process_group is None or group == process_group
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
 
     def wait_for_exit(self, identity: WorkerIdentity, timeout: float) -> bool:
         deadline = time.monotonic() + timeout

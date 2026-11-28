@@ -125,7 +125,7 @@ class McfCategoryFamily(str, Enum):
     VIOLENCE = "violence"
 
 
-MCF_CATEGORY_REGISTRY: dict[McfCategoryFamily, tuple[tuple[str, str], ...]] = {
+_LEGACY_MCF_CATEGORY_REGISTRY: dict[McfCategoryFamily, tuple[tuple[str, str], ...]] = {
     McfCategoryFamily.COMMERCIAL_CONTENT: (
         ("commercial", "Commercial content (General)"),
         ("advertBreak", "Advert break"),
@@ -242,6 +242,25 @@ MCF_CATEGORY_REGISTRY: dict[McfCategoryFamily, tuple[tuple[str, str], ...]] = {
         ("weapons", "Weapons"),
     ),
 }
+
+_MCF_1_1_1_ADDITIONS: dict[McfCategoryFamily, tuple[tuple[str, str], ...]] = {
+    McfCategoryFamily.DISCRIMINATION: (
+        ("sizeism", "Sizeism"),
+        ("ableism", "Ableism"),
+        ("ageism", "Ageism"),
+    ),
+    McfCategoryFamily.DISPENSABLE_SCENES: (("other", "Other"),),
+    McfCategoryFamily.LANGUAGE: (("innuendo", "Innuendo"),),
+    McfCategoryFamily.SEX: (("sexualRape", "Rape"),),
+    McfCategoryFamily.VIOLENCE: (("gore", "Gore"), ("abuse", "Abuse")),
+}
+MCF_1_1_1_CATEGORIES = frozenset(
+    token for categories in _MCF_1_1_1_ADDITIONS.values() for token, _label in categories
+)
+MCF_CATEGORY_REGISTRY = {
+    family: categories + _MCF_1_1_1_ADDITIONS.get(family, ())
+    for family, categories in _LEGACY_MCF_CATEGORY_REGISTRY.items()
+}
 MCF_CATEGORY_TO_FAMILY = {
     token: family
     for family, categories in MCF_CATEGORY_REGISTRY.items()
@@ -295,6 +314,7 @@ MCF_FAMILY_CHANNELS: dict[McfCategoryFamily, McfChannel] = {
 class McfSourceVersion(str, Enum):
     V1_0_0 = "1.0.0"
     V1_1_0 = "1.1.0"
+    V1_1_1 = "1.1.1"
 
 
 class McfWorkType(str, Enum):

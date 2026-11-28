@@ -21,6 +21,8 @@ import type {
   ReviewTargetRequest,
   EdlImportOptions,
   McfImportOptions,
+  VideoSkipImportOptions,
+  VideoSkipImportResult,
   CreditsDetectionStartRequest,
   CreditsDetectionStartResult,
   CreditsAcceptanceRequest,
@@ -127,6 +129,8 @@ export interface DraftFilterPreview {
   audio_track_index?: number;
   source_scan_id?: string;
   source_finding_id?: number | null;
+  community_link_id?: string;
+  community_filter_id?: string;
   source: "audio" | "visual";
   edit_action: "mute" | "skip";
   start_seconds: number;
@@ -160,6 +164,13 @@ export function importMcfUpload(file: File, options: McfImportOptions): Promise<
   body.append("file", file, file.name);
   body.append("options", JSON.stringify(options));
   return jsonApi(`${runtimeApiBasePath()}/mcf-imports/upload`, { method: "POST", body }, "Unable to import MCF");
+}
+
+export function importVideoSkipUpload(file: File, options: VideoSkipImportOptions): Promise<VideoSkipImportResult> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("options", JSON.stringify(options));
+  return jsonApi(`${runtimeApiBasePath()}/videoskip-imports/upload`, { method: "POST", body }, "Unable to import VideoSkip");
 }
 
 export async function startCreditsDetection(data: CreditsDetectionStartRequest): Promise<CreditsDetectionStartResult> {

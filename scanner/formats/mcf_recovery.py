@@ -37,13 +37,13 @@ def parse_mcf_content_with_recovery(
     cursor = 2
     issues: list[McfParseIssue] = []
     metadata: dict[str, object] = {}
-    if source_version == McfSourceVersion.V1_1_0 and _starts_metadata_block(lines, cursor):
+    if source_version != McfSourceVersion.V1_0_0 and _starts_metadata_block(lines, cursor):
         metadata, cursor = _parse_metadata_with_recovery(lines, cursor, issues)
 
     cursor, material_start, material_end, source_bounds_recovered = _parse_bounds_with_recovery(
         lines, cursor, duration_seconds, issues
     )
-    entries = _parse_cues_with_recovery(lines, cursor, duration_seconds, issues)
+    entries = _parse_cues_with_recovery(lines, cursor, duration_seconds, issues, source_version)
     if source_bounds_recovered or material_start is None or material_end is None:
         raise McfParseError(
             "invalid_source_mcf_bounds",
@@ -215,6 +215,7 @@ def _parse_cues_with_recovery(
     cursor: int,
     duration_seconds: float | None,
     issues: list[McfParseIssue],
+    source_version: McfSourceVersion,
 ) -> list[McfCueEntry]:
     """Keep valid cues while reporting malformed timings and payloads."""
     entries: list[McfCueEntry] = []
@@ -263,7 +264,13 @@ def _parse_cues_with_recovery(
                 try:
                     entries.append(
                         _parse_payload(
-                            lines[cursor], cursor + 1, cue_index, payload_index, start, end
+                            lines[cursor],
+                            cursor + 1,
+                            cue_index,
+                            payload_index,
+                            start,
+                            end,
+                            source_version,
                         )
                     )
                     payload_index += 1

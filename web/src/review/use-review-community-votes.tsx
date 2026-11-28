@@ -100,6 +100,7 @@ export function useReviewCommunityVotes(sources: ReviewCommunitySource[]) {
   };
   /** The vote pill of a community review filter; `name` describes the filter. */
   const renderVote = (filter: ReviewFilter, name: string) => {
+    if (!sources.some((source) => source.source_id === filter.community_source_id)) return null;
     const target = targetFor(filter);
     return <MasterVote key={`${target.linkId}:${target.filterId}`} linkId={target.linkId} filterId={target.filterId}
       name={name} myVote={target.myVote} unavailable={target.unavailable} />;

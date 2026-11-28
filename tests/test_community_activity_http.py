@@ -5,7 +5,6 @@ import gzip
 import hashlib
 import json
 import shutil
-from dataclasses import asdict
 from datetime import datetime, timezone
 
 import httpx
@@ -21,7 +20,6 @@ from scanner.db import (
     ScanRow,
     UserCapabilityOverrideRow,
 )
-from scanner.formats.community.codec import ResourceBounds
 from scanner.http import (
     community_activity_access,
     community_api,
@@ -41,7 +39,6 @@ from tests.test_community_identity_users import _enroll
 from tests.test_stream_fingerprints import generated_streams as generated_streams
 from tests.users_api_http_support import UsersApp
 
-BOUNDS = ResourceBounds(65536, 524288, 100, 4096, 24)
 ALIASES = [
     {"aliasId": alias.alias_id, "label": alias.label, "spellings": list(alias.spellings)}
     for alias in SEEDED_ALIASES
@@ -110,9 +107,6 @@ def community(activities, monkeypatch, generated_streams):
         update={
             "community_service_url": SERVICE,
             "community_service_audience": AUDIENCE,
-            "community_preview_bounds": asdict(BOUNDS),
-            "community_preview_source_limit": 4,
-            "community_publication_request_bytes": 100_000,
         }
     )
     service = ActivityService()

@@ -1,6 +1,7 @@
 import { chooseExportFormat, chooseWorkflowStep, openReviewSources } from "./workflow-actions";
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { readFile } from "node:fs/promises";
 import { authenticationStatus, expectNoHorizontalPageOverflow as expectNoOverflow, json } from "./app-fixtures";
 
 const emptyExport = (format: "edl" | "mcf") => ({
@@ -270,7 +271,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await importButton.click();
     const importDialog = page.getByRole("dialog", { name: "Import" });
     await importDialog.getByRole("button", { name: "MCF" }).click();
-    await expect(importDialog.getByText(/Movie Content Filter 1\.0\.0 or 1\.1\.0/)).toBeVisible();
+    await expect(importDialog.getByText("Movie Content Filter 1.0.0, 1.1.0, or 1.1.1 (.mcf)")).toBeVisible();
     await expect(importDialog.getByText("Imports into Jellyfin item Example Movie, version 4K")).toBeVisible();
     await expect(importDialog.getByLabel("MCF file")).toHaveAttribute("accept", ".mcf,text/plain,text/mcf+vtt");
     await expect(importDialog.getByRole("button", { name: "Review Credits Result" })).toBeVisible();
@@ -298,6 +299,35 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     await expectNoOverflow(page);
     await expectAxeClean(page);
     await page.screenshot({ path: `test-results/mcf10-catalog-${viewport.name}.png`, fullPage: true });
+  });
+
+  test(`downloads a checked VideoSkip file from a saved review at ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await mockApi(page);
+    const content = "0:00:15.000 --> 0:00:16.000\nprofanity audio 2\n";
+    await page.route("**/exports/videoskip/preflight", (route) => json(route, {
+      eligible: true, filter_count: 2, exported_count: 1, issue_count: 1,
+      issues: [{ code: "test-issue", filter_id: "audio-2", message: "The cue was omitted.", omitted: true }],
+    }));
+    await page.route("**/exports/videoskip/download", (route) => route.fulfill({
+      contentType: "text/plain", body: content,
+      headers: { "content-disposition": "attachment; filename*=UTF-8''Example%20Movie.skp" },
+    }));
+    await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Publish");
+    await page.getByRole("button", { name: "VideoSkip (.skp)", exact: true }).click();
+    await page.getByRole("button", { name: "Export VideoSkip" }).click();
+    const dialog = page.getByRole("dialog", { name: "Export VideoSkip" });
+    const download = dialog.getByRole("button", { name: "Download VideoSkip" });
+    await expect(download).toBeDisabled();
+    await dialog.getByRole("button", { name: "Check compatibility" }).click();
+    await expect(dialog.getByRole("status")).toContainText("1 of 2 selected filters");
+    await expect(dialog.getByText(/The cue was omitted/)).toContainText("Words");
+    const [file] = await Promise.all([page.waitForEvent("download"), download.click()]);
+    expect(file.suggestedFilename()).toBe("Example Movie.skp");
+    expect(await readFile(await file.path(), "utf-8")).toBe(content);
+    await expectNoOverflow(page);
+    await expectAxeClean(page);
   });
 
   test(`MCF-13 tiered Review tables are accessible at ${viewport.name}`, async ({ page }) => {
@@ -331,12 +361,12 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
     const violenceGeneral = video.getByRole("button", { name: /Violence \(General\) subcategory/ });
     await violenceGeneral.focus();
     await violenceGeneral.press("Enter");
-    const fight = video.getByRole("button", { name: /fight finding group/ });
+    const fight = video.getByRole("button", { name: /Fight finding group/ });
     await expect(fight).toHaveAttribute("aria-expanded", "false");
     await fight.focus();
     await fight.press("Enter");
     await video.getByRole("button", { name: /Weapons subcategory/ }).click();
-    await video.getByRole("button", { name: /weapons finding group/ }).click();
+    await video.getByRole("button", { name: /Weapon finding group/ }).click();
 
     const linkedRows = video.getByRole("checkbox", { name: /^Include Linked fight; Linked weapon at 0:30/ });
     await expect(linkedRows).toHaveCount(2);

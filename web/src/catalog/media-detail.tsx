@@ -231,7 +231,10 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       onImported={(result) => {
         setImportedReview(result.review);
         setMessage(importStatusMessage(result));
-        if (!result.review && stableIdentity) openVerification(result.scan);
+        if (!result.review && (stableIdentity || result.scan.reuse_pending)) {
+          if (result.scan.stable_version_id) setIdentified({ source: scanContext, id: result.scan.stable_version_id });
+          openVerification(result.scan);
+        }
         void loadScans();
       }}
       guided={{
@@ -247,7 +250,7 @@ export function MediaDetail({ item, breadcrumbs, onNavigate, seasonNumber, onDir
       }} />
     {mayScan && showNewScan && <NewScanDialog form={newScan} title={item.name} meta={newScanMeta}
       versions={versions} mediaSourceId={mediaSourceId} onVersionChange={setMediaSourceId} />}
-    {stableIdentity && scanToVerify && mayVerify && !showNewScan && <ScanVerificationDialog
+    {scanToVerify && (stableIdentity || scanToVerify.reuse_pending) && mayVerify && !showNewScan && <ScanVerificationDialog
       key={`${scanContext}/${scanToVerify.id}`} scan={scanToVerify} itemName={item.name}
       target={{ source: "jellyfin", item_id: item.id, media_source_id: selectedReviewMediaSourceId }}
       originalName={scanToVerify.media_source_name || previousVersions.find((version) => version.scans.some((scan) => scan.id === scanToVerify.id))?.label || scanToVerify.import_source_name || ""}

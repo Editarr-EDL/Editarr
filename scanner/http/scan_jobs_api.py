@@ -15,6 +15,7 @@ from scanner.models import (
 )
 from scanner.persistence.repository.repository_review_operations import scan_reference_facts
 from scanner.persistence.repository.scan_jobs import queued_scan_id
+from scanner.persistence.repository.scan_pause import pause_scan_queue_item
 from scanner.repository import (
     ScanReferencedError,
     cancel_scan_queue_item,
@@ -93,14 +94,28 @@ def api_cancel_scan_queue_item(queue_id: int, caller: ScanCaller = Depends(scan_
         update_scan_status(db, scan_id, "cancelled")
         remove_scan_queue_item(db, queue_id)
         is_running = False
+    if not is_running:
+        from scanner.pipeline.visual_checkpoints import discard_visual_checkpoints
+
+        discard_visual_checkpoints(root.settings.data_dir, scan_id)
     return {"cancelled": True, "cancelling": is_running}
+
+
+@router.post("/api/scans/queue/{queue_id}/pause")
+def api_pause_scan(queue_id: int, caller: ScanCaller = Depends(scan_caller)):
+    """Persist a pause before acknowledging it to the caller."""
+    _queued_job(caller, queue_id, JOB_RESUME)
+    status = pause_scan_queue_item(caller.db, queue_id)
+    if status is None:
+        raise HTTPException(409, "Only a queued or running scan can be paused")
+    return {"paused": status == "paused", "pausing": status == "pausing"}
 
 
 @router.post("/api/scans/queue/{queue_id}/resume")
 def api_resume_orphaned_scan(queue_id: int, caller: ScanCaller = Depends(scan_caller)):
     _queued_job(caller, queue_id, JOB_RESUME)
     if not resume_orphaned_scan(caller.db, queue_id):
-        raise HTTPException(409, "Only an orphaned scan can be resumed")
+        raise HTTPException(409, "Only a paused or interrupted scan can be resumed")
     root._start_scan_queue_worker_if_needed()
     return {"resumed": True}
 

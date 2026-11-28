@@ -65,7 +65,7 @@ export function selectCounted(submissions: readonly SubmissionInput[], reference
           weight: 0, ignoredReason: null });
         continue;
       }
-      const unverified = entry.kind === 'support' && entry.origin === 'downloaded' && !entry.locallyVerified;
+      const unverified = entry.kind === 'support' && entry.origin === 'downloaded' && !entry.locallyVerified && !input.externalSeed;
       submission.entries.push({ submission, entry, alignedStartMs: entry.startMs, alignedEndMs: entry.endMs,
         weight: entry.kind === 'support' && !unverified ? 1 : 0,
         ignoredReason: unverified ? 'unverified_reshare' : null });

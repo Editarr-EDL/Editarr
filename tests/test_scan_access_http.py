@@ -110,6 +110,30 @@ def test_users_resume_their_own_interrupted_job(app, credential):
     assert app.calls == ["wake"]
 
 
+@pytest.mark.parametrize("credential", CREDENTIALS)
+def test_pause_parks_own_job_and_uses_resume_authority(app, credential):
+    own, own_queue = app.seed_scan(USER, "user-job")
+    other, other_queue = app.seed_scan(PEER_USER, "peer-job")
+    headers = _headers(app, USER, credential, unsafe=True)
+    path = f"/api/scans/queue/{own_queue}"
+
+    assert app.send("POST", f"/api/scans/queue/{other_queue}/pause", headers).status_code == 404
+    assert app.scan(other).status == "queued"
+    for _ in range(2):
+        response = app.send("POST", f"{path}/pause", headers)
+        assert response.status_code == 200, response.text
+        assert response.json() == {"paused": True, "pausing": False}
+    assert app.scan(own).status == "paused"
+    assert app.calls == []
+
+    app.accounts.set_override(USER, C.SCAN_JOBS_RESUME_OWN, OverrideEffect.DENY)
+    assert app.send("POST", f"{path}/resume", headers).status_code == 403
+    app.accounts.set_override(USER, C.SCAN_JOBS_RESUME_OWN, OverrideEffect.ALLOW)
+    assert app.send("POST", f"{path}/resume", headers).json() == {"resumed": True}
+    assert app.scan(own).status == "queued"
+    assert app.calls == ["wake"]
+
+
 def test_a_denied_job_capability_refuses_even_the_callers_own_job(app):
     own, own_queue = app.seed_scan(USER, "user-job")
     app.accounts.set_override(USER, C.SCAN_JOBS_CANCEL_OWN, OverrideEffect.DENY)

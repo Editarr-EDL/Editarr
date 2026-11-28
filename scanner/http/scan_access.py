@@ -70,6 +70,8 @@ _SAFE_STATUS = {
     "queued": "Scan queued",
     "acquiring_model": "Acquiring scan model",
     "orphaned": "Scan interrupted",
+    "paused": "Scan paused — ready to resume",
+    "pausing": "Pausing scan — preserving checkpoints",
     "awaiting_model_consent": "Awaiting model consent",
     "cancelling": "Cancelling scan",
     "cancelled": "Scan cancelled",

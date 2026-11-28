@@ -224,7 +224,7 @@ export function visualFilterListLabel(
  */
 export function filterSourceOrigin(filter: SavedReview["filters"][number], scanById: Map<string, Scan>): Scan["origin"] | null {
   if (filter.community_source_id) return "imported";
-  return filter.source_scan_id ? scanById.get(filter.source_scan_id)?.origin ?? null : null;
+  return filter.source_scan_id ? scanById.get(filter.source_scan_id)?.origin ?? null : "manual";
 }
 
 function isNoObjectionableContent(value: string | null | undefined): boolean {
@@ -246,22 +246,8 @@ export function isNoObjectionableContentFilter(
       && filter.group_key!.split("|").every((token) => isNoObjectionableContent(token.trim())));
 }
 
-/** Split a video filter group into its visible category labels. */
-export function reviewVideoCategories(
-  filter: SavedReview["filters"][number],
-  includeNoObjectionableContent = false,
-): string[] {
-  const categories = [...new Set((filter.group_key || filter.subcategory || filter.category || "Unclassified")
-    .split("|")
-    .map((category) => category.trim())
-    .filter((category) => category && (
-      includeNoObjectionableContent || !isNoObjectionableContent(category)
-    )))];
-  return categories.length ? categories : [filter.subcategory || filter.category || "Unclassified"];
-}
-
 /** Choose a stable grouping key for an audio word or fallback label. */
-export function reviewAudioRoot(label: string | null, fallback: string): string {
+function reviewAudioRoot(label: string | null, fallback: string): string {
   const normalized = (label || fallback).trim().toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
   if (!normalized || normalized === "segment") return normalized || "audio";
   for (const suffix of ["ingly", "ing", "ers", "ed", "es", "s"]) {
@@ -269,6 +255,28 @@ export function reviewAudioRoot(label: string | null, fallback: string): string 
     if (normalized.endsWith(suffix) && normalized.length - suffix.length >= 3) return normalized.slice(0, -suffix.length);
   }
   return normalized;
+}
+
+interface ReviewGroupPath {
+  family: McfCategoryFamily | "";
+  subcategory: string;
+  group: string;
+}
+
+/** Derive the finding group from the cue label, with a classification fallback for unnamed cues. */
+export function reviewFilterGroupPath(
+  filter: SavedReview["filters"][number], sourceOrigin?: Scan["origin"] | null,
+): ReviewGroupPath {
+  const classification = filter.subcategory || filter.category || "Unclassified";
+  const label = filter.label?.trim();
+  // Detector tokens predate user-editable labels. Keep them out of heading text.
+  const detectorToken = isGeneratedFilter(sourceOrigin) && !filter.label_edited
+    && label?.split(/,\s*/).every((value) => /^(?:d1|shieldstral|yolo)_\w+$/.test(value));
+  const group = filter.source === "audio"
+    ? reviewAudioRoot(label ?? null, classification)
+    : isNoObjectionableContentFilter(filter, sourceOrigin) ? "No objectionable content"
+      : detectorToken ? classification : label || classification;
+  return { family: filter.category || "", subcategory: filter.subcategory || "", group };
 }
 
 /**
@@ -318,25 +326,18 @@ export function sortSavedReviewResults(results: SavedReviewResult[], sort: Saved
 /** Group display results by stable family and subcategory tokens for one source. */
 export function buildReviewHierarchy(
   results: SavedReviewResult[],
-  source: "visual" | "audio",
   registry: McfRegistry | null,
-  includeNoObjectionableContent: boolean,
+  groupPath: (filter: SavedReview["filters"][number]) => ReviewGroupPath = reviewFilterGroupPath,
 ): TieredReviewFamily[] {
   const families = new Map<McfCategoryFamily | "", Map<string, Map<string, TieredReviewResult[]>>>();
   for (const result of results) {
     const paths = new Map<string, { family: McfCategoryFamily | ""; subcategory: string; group: string; filters: SavedReview["filters"] }>();
     for (const filter of result.filters) {
-      const family: McfCategoryFamily | "" = filter.category || "";
-      const subcategory = filter.subcategory || "";
-      const groups = source === "visual"
-        ? reviewVideoCategories(filter, includeNoObjectionableContent)
-        : [reviewAudioRoot(filter.label, filter.subcategory || filter.category || "audio")];
-      for (const group of groups) {
-        const pathKey = JSON.stringify([family, subcategory, group]);
-        const path = paths.get(pathKey);
-        if (path) path.filters.push(filter);
-        else paths.set(pathKey, { family, subcategory, group, filters: [filter] });
-      }
+      const { family, subcategory, group } = groupPath(filter);
+      const pathKey = JSON.stringify([family, subcategory, group]);
+      const path = paths.get(pathKey);
+      if (path) path.filters.push(filter);
+      else paths.set(pathKey, { family, subcategory, group, filters: [filter] });
     }
     for (const path of paths.values()) {
       const subcategories = families.get(path.family) || new Map<string, Map<string, TieredReviewResult[]>>();
@@ -414,7 +415,7 @@ export function sortTieredReviewGroups(
 
 /** Return each underlying filter once across linked result rows. */
 export function uniqueTieredFilters(items: TieredReviewResult[]): SavedReview["filters"] {
-  return [...new Map(items.flatMap((item) => item.result.filters).map((filter) => [filter.id, filter])).values()];
+  return [...new Map(items.flatMap((item) => item.pathFilters).map((filter) => [filter.id, filter])).values()];
 }
 
 export function severityText(filters: SavedReview["filters"]): string {

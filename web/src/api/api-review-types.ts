@@ -183,12 +183,19 @@ export interface ReviewCreate {
   name: string;
   memberships?: ReviewScanMembership[];
   community_memberships?: ReviewCommunityMembership[];
+  community_drafts?: ReviewCommunityDraft[];
   filters?: ReviewFilterInput[] | null;
   new_manual_filters?: NewManualReviewFilter[];
   mcf_metadata_seed?: McfMetadataSeedRequest | null;
 }
 
 export interface ReviewFilterInput extends ReviewFilter {}
+
+export interface ReviewCommunityDraft {
+  link_id: string;
+  token: string;
+  filters: ReviewFilterInput[];
+}
 
 export interface NewManualReviewFilter {
   id: string;
@@ -219,6 +226,7 @@ export interface ReviewSave extends ReviewPolicyToken {
   accepted_credits?: AcceptedCreditsReference | null;
   new_manual_filters?: NewManualReviewFilter[];
   community_memberships?: ReviewCommunityMembership[];
+  community_drafts?: ReviewCommunityDraft[];
 }
 
 export interface ReviewRetimeRequest extends ReviewPolicyToken {
@@ -270,6 +278,12 @@ export interface EdlImportWarning {
   ignored_action_count: number;
 }
 export interface EdlImportResult { review: SavedReview | null; scan: Scan; warning: EdlImportWarning | null; }
+export interface VideoSkipImportResult {
+  review: null;
+  scan: Scan;
+  issue_count: number;
+  issues: { code: string; message: string; line_number: number }[];
+}
 export interface ReviewReference { id: string; name: string; updated_at: string; }
 export interface ScanReferences { scan_id: string; active_exports: ExportFormat[]; reviews: ReviewReference[]; community_in_progress: boolean; }
 export interface ReviewErrorDetail {
@@ -287,6 +301,11 @@ export interface ReviewErrorDetail {
 }
 export interface ReviewTargetRequest { source: ReviewSource; item_id: string; media_source_id?: string | null; stable_version_id?: string; }
 export interface EdlImportOptions { target: ReviewTargetRequest; name: string; stage_for_verification?: boolean }
+export interface VideoSkipImportOptions {
+  target: ReviewTargetRequest;
+  name: string;
+  attribution: { source_url: string | null; uploader: string | null };
+}
 export interface McfImportOptions {
   target: ReviewTargetRequest;
   name: string;

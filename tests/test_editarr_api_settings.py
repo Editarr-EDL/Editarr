@@ -352,7 +352,7 @@ def test_default_filter_settings_api_updates_and_reads(monkeypatch, db, tmp_path
             settings = client.get("/api/settings/filters").json()
             assert settings["revision"] == 0
             assert settings["selection_rules"] == []
-            assert len(settings["severity_defaults"]) == 97
+            assert len(settings["severity_defaults"]) == 105
             assert settings["severity_defaults"][0] == {
                 "subcategory": "commercial",
                 "severity": "medium",

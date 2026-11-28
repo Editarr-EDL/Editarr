@@ -35,6 +35,7 @@ from scanner.modeling.model_catalog import (
 )
 from scanner.modeling.model_core import (
     MAX_PERSISTED_INTEGER,
+    MCF_1_1_1_CATEGORIES,
     MCF_CATEGORY_FAMILY_LABELS,
     MCF_CATEGORY_LABELS,
     MCF_CATEGORY_REGISTRY,

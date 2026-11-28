@@ -167,7 +167,7 @@ def test_worker_persists_checkpoints_and_releases_the_queue(monkeypatch):
             ("audio_scan", {"audio_model": "whisper", "audio_filter": "better_profanity"}),
         ):
             kwargs["stage_callback"](stage, "started", effective)
-            kwargs["checkpoint_callback"](stage)
+            kwargs["stage_results_writer"](stage, [])
             kwargs["stage_callback"](stage, "complete", effective)
         kwargs["status_updater"](db, kwargs["video_id"], "complete")
 

@@ -14,7 +14,9 @@ import {
 const registry: McfRegistry = {
   families: [
     { token: "language", label: "Language", categories: [{ token: "language", label: "Language (General)" }, { token: "swearing", label: "Swearing" }] },
-    { token: "violence", label: "Violence", categories: [{ token: "violence", label: "Violence (General)" }, { token: "weapons", label: "Weapons" }] },
+    { token: "violence", label: "Violence", categories: [{ token: "violence", label: "Violence (General)" }, { token: "weapons", label: "Weapons" }, { token: "rape", label: "Rape" }] },
+    { token: "sex", label: "Sex", categories: [{ token: "sexualRape", label: "Rape" }] },
+    { token: "nudity", label: "Nudity", categories: [{ token: "nudity", label: "Nudity (General)" }, { token: "exposedGenitalia", label: "Exposed genitalia" }] },
   ],
 };
 
@@ -86,15 +88,23 @@ describe("review MCF controls", () => {
     expect(onChange).toHaveBeenCalledWith({ ...document, material_end_seconds: 3723.456, material_start_seconds: 1.25 });
   });
 
-  it("constrains searchable subcategories and edits severity without separate channel or comment inputs", () => {
+  it("shows descriptive subcategory options for the selected family and writes category tokens", () => {
     const onChange = vi.fn();
-    render(<McfClassificationFields controlId="Filter one" registry={registry} value={filter} onChange={onChange} allowClear />);
+    const { rerender } = render(<McfClassificationFields controlId="Filter one" registry={registry} value={filter} onChange={onChange} allowClear />);
 
-    expect(screen.getByLabelText("Filter one subcategory")).toHaveAttribute("list", "Filter one-subcategories");
+    const subcategory = screen.getByRole("combobox", { name: "Filter one subcategory" });
+    expect(subcategory).toHaveDisplayValue("Weapons");
+    expect(screen.queryByRole("option", { name: "Exposed genitalia" })).not.toBeInTheDocument();
     expect(classificationIsValid(registry, "violence", "weapons")).toBe(true);
     expect(classificationIsValid(registry, "language", "weapons")).toBe(false);
-    fireEvent.change(screen.getByLabelText("Filter one family"), { target: { value: "language" } });
-    expect(onChange).toHaveBeenCalledWith({ category: "language", subcategory: null });
+    fireEvent.change(screen.getByLabelText("Filter one family"), { target: { value: "nudity" } });
+    expect(onChange).toHaveBeenCalledWith({ category: "nudity", subcategory: null });
+    rerender(<McfClassificationFields controlId="Filter one" registry={registry}
+      value={{ ...filter, category: "nudity", subcategory: "nudity" }} onChange={onChange} allowClear />);
+    expect(subcategory).toHaveDisplayValue("Nudity (General)");
+    expect(screen.getByRole("option", { name: "Exposed genitalia" })).toHaveValue("exposedGenitalia");
+    fireEvent.change(subcategory, { target: { value: "exposedGenitalia" } });
+    expect(onChange).toHaveBeenCalledWith({ subcategory: "exposedGenitalia" });
     fireEvent.click(screen.getByLabelText("Medium"));
     expect(onChange).toHaveBeenCalledWith({ severity: "medium" });
     expect(screen.queryByLabelText("Filter one channel")).not.toBeInTheDocument();
@@ -121,5 +131,17 @@ describe("review MCF controls", () => {
     expect(screen.getByText("Catalog metadata · Catalog")).toBeVisible();
     fireEvent.click(screen.getByLabelText(/Catalog defaults/));
     expect(onChange).toHaveBeenCalledWith({ kind: "catalog" });
+  });
+
+  it("gives the two Rape classifications distinct values in their respective families", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<McfClassificationFields controlId="Filter one" registry={registry} value={filter} onChange={onChange} />);
+    expect(screen.getByRole("option", { name: "Rape" })).toHaveValue("rape");
+
+    rerender(<McfClassificationFields controlId="Filter one" registry={registry}
+      value={{ ...filter, category: "sex", subcategory: null }} onChange={onChange} />);
+    expect(screen.getByRole("option", { name: "Rape" })).toHaveValue("sexualRape");
+    fireEvent.change(screen.getByLabelText("Filter one subcategory"), { target: { value: "sexualRape" } });
+    expect(onChange).toHaveBeenCalledWith({ subcategory: "sexualRape" });
   });
 });

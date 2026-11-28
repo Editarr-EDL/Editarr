@@ -200,10 +200,18 @@ def test_policy_interval_producers_use_source_basis_or_mapper():
             "prepare_review_export",
         },
         ("review_export_content.py", "prepare_review_export"): {
+            "prepare_review_export_context",
+            "render_review_export",
+        },
+        ("review_export_content.py", "prepare_review_export_context"): {
             "prepare_review_policy",
             "require_policy_revision",
             "require_policy_evidence",
-            "render_review_export",
+        },
+        ("../../http/review_videoskip_export.py", "prepare_videoskip_download"): {
+            "prepare_review_export_context",
+            "policy_export_filters",
+            "export_videoskip",
         },
         ("review_export_content.py", "render_review_export"): {
             "policy_export_filters",

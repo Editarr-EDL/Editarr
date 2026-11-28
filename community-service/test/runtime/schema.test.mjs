@@ -274,3 +274,27 @@ test('expressions are stored only on language supports and hold 1–64 character
     assert.throws(() => insert('e5', 'support', 'language', 'x'.repeat(65)), /CHECK/);
   } finally { database.close(); }
 });
+
+test('0005 upgrades a version 4 store with a verified backup and preserves its catalog', async () => {
+  const directory = workspace('community-seed-upgrade-');
+  const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
+  try {
+    initializeDatabase(path, migrationsRoot(directory, 4));
+    const previous = new DatabaseSync(path);
+    previous.exec("INSERT INTO works (work_id, kind, catalog_seq, created_at) VALUES ('original', 'movie', 0, 1)");
+    previous.close();
+    assert.throws(() => openDatabase(path), /database_upgrade_required/);
+    await upgradeDatabase(path, snapshot);
+    const { database } = openDatabase(path);
+    const restored = new DatabaseSync(snapshot, { readOnly: true });
+    try {
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, 4);
+      assert.equal(database.connection.prepare('PRAGMA user_version').get().user_version, CURRENT);
+      assert.deepEqual(restored.prepare('SELECT * FROM works').all(), database.connection.prepare('SELECT * FROM works').all());
+      assert.equal(database.connection.prepare('SELECT count(*) AS count FROM external_seed_submissions').get().count, 0);
+    } finally {
+      restored.close();
+      database.close();
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

@@ -28,6 +28,7 @@ from scanner.modeling.community_review_filters import served, snapshot_digest
 from scanner.models import ReviewCommunitySource
 
 from .community_master_links import alignment_of, utcnow
+from .review_community_drafts import validate_draft
 from .review_community_filters import SourcePlan, entries_of, link_entries
 
 MAX_SOURCES = 32
@@ -142,13 +143,18 @@ def kept_plans(review: SavedReviewRow) -> list[SourcePlan]:
     return [SourcePlan(row, "keep") for row in review.community_sources]
 
 
-def prepare_sources(db: Session, review: SavedReviewRow, requested) -> list[SourcePlan] | None:
+def prepare_sources(
+    db: Session, review: SavedReviewRow, requested, drafts=()
+) -> list[SourcePlan] | None:
     """Validate a requested snapshot list; None when it keeps the stored snapshots.
 
     `requested` holds `ReviewCommunityMembership` values. New links and refreshes take
     their snapshots now (a refresh remembers the entries it replaces); kept snapshots
     are unchanged.
     """
+    edited = {draft.link_id: draft for draft in drafts}
+    if len(edited) != len(drafts) or set(edited) - {m.link_id for m in requested or ()}:
+        raise _membership_error("Community draft filters must reference an included new source")
     if requested is None:
         return None
     existing = {row.id: row for row in review.community_sources}
@@ -174,7 +180,10 @@ def prepare_sources(db: Session, review: SavedReviewRow, requested) -> list[Sour
         else:
             link = db.get(CommunityMasterLinkRow, value.link_id)
             _require_capturable(db, review, link, versions)
-            item = SourcePlan(capture(db, link), "new")
+            row = capture(db, link)
+            draft = edited.get(link.id)
+            defaults = validate_draft(db, link, draft, entries_of(row)) if draft else None
+            item = SourcePlan(row, "new", draft=draft, draft_defaults=defaults)
         if item.row.link_id is not None:
             if item.row.link_id in links:
                 raise _membership_error("A review cannot include the same community filters twice")

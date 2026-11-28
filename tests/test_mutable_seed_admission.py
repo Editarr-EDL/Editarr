@@ -28,6 +28,7 @@ from scanner.persistence.repository.repository_settings import (
 from scanner.settings.config import Settings
 from scanner.settings.filter_policy.updates import FilterModeUpdate
 from tests.community_schema_fixture import create_unversioned_fixture
+from tests.explicit_filter_modes_support import legacy_instance_severities
 from tests.multi_user_access_support import add_linked_owner
 
 
@@ -209,7 +210,7 @@ def test_edited_defaults_export_preview_and_activation(edited, tmp_path):
     [
         "DELETE FROM mcf_severity_defaults WHERE position=0",
         "INSERT INTO mcf_severity_defaults (settings_id, subcategory, position, severity) "
-        "VALUES (1, 'unknown', 97, 'medium')",
+        "VALUES (1, 'unknown', 999, 'medium')",
         "UPDATE mcf_severity_defaults SET position=999 WHERE position=0",
         "UPDATE mcf_severity_defaults SET settings_id=2 WHERE position=0",
         "UPDATE mcf_severity_defaults SET subcategory='unknown' WHERE position=0",
@@ -262,9 +263,10 @@ def test_unversioned_baseline_adopts_edited_defaults_without_losing_values(tmp_p
             assert connection.execute("SELECT id, revision FROM filter_settings").fetchall() == [
                 tuple(row[:2]) for row in before["filter_settings"]
             ]
-            assert connection.execute("SELECT * FROM mcf_severity_defaults").fetchall() == [
-                tuple(row) for row in before["mcf_severity_defaults"]
-            ]
+            rows = connection.execute("SELECT * FROM mcf_severity_defaults").fetchall()
+            if database == path:
+                rows = legacy_instance_severities(rows)
+            assert rows == [tuple(row) for row in before["mcf_severity_defaults"]]
 
 
 @pytest.mark.parametrize(

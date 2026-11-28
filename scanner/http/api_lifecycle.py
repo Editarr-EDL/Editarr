@@ -15,6 +15,7 @@ def _secure_data_directory() -> None:
 def _recover_and_start_scan_queue_processing() -> None:
     """Run configured-instance recovery and start one scheduler for this lifecycle."""
     from scanner import api as root
+    from scanner.persistence.repository.scan_pause import is_scan_pause_requested
 
     with root.SCAN_QUEUE_ACTIVATION_LOCK:
         if root.SCAN_QUEUE_PROCESSING_ACTIVE:
@@ -28,10 +29,15 @@ def _recover_and_start_scan_queue_processing() -> None:
             active_pids = set()
             for scan_id, pid, pgid, token in root.scanning_scan_worker_processes(db):
                 identity = root._worker_identity(scan_id, pid, pgid, token)
-                if identity is None:
-                    root.cleanup_worker_control_endpoint(scan_id, token)
-                else:
+                if identity is not None:
                     active_pids.add(identity.pid)
+                elif (
+                    is_scan_pause_requested(db, scan_id)
+                    and root.PROCESS_CONTROL.worker_may_be_running(pid, pgid)
+                ):
+                    active_pids.add(pid)
+                else:
+                    root.cleanup_worker_control_endpoint(scan_id, token)
             root.mark_orphaned_scan_workers(db, active_pids)
         finally:
             db.close()

@@ -5,7 +5,7 @@ import { fetchVerificationTranscriptStatus, type VerificationRequest } from "../
 import type { Scan, ScanQueueItem } from "../api/api-scan-types";
 
 export type TranscriptStatus = "checking" | "ready" | "verify" | "missing" | "unknown";
-const waitingStatuses = new Set(["queued", "scanning", "cancelling", "acquiring_model", "orphaned"]);
+const waitingStatuses = new Set(["queued", "scanning", "pausing", "paused", "cancelling", "acquiring_model", "orphaned"]);
 
 /** Scope queued audio work and readiness to the selected physical version and stream. */
 export function useVerificationTranscript({ source, target, selection, channels, scans, submittedScan }: {

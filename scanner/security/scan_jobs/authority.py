@@ -23,7 +23,9 @@ from time import monotonic
 from sqlalchemy.orm import Session, sessionmaker
 
 from scanner.persistence.repository.scan_jobs import scan_job_facts
+from scanner.persistence.repository.scan_pause import worker_owns_scan
 from scanner.persistence.write_lock import write_lock
+from scanner.runtime.worker_quit import ScanReservationLost
 from scanner.security.access.api_shapes import AccessErrorCode
 from scanner.security.access.capability_ids import Capability
 from scanner.security.access.decisions import Allowed, admission_error
@@ -131,6 +133,7 @@ class JobGate:
     factory: sessionmaker
     scan_id: str
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+    worker_token: str | None = None
     _state: JobState | None = field(default=None, init=False, repr=False)
     _evidence: ScanEvidence | None = field(default=None, init=False, repr=False)
     _checked_at: datetime | None = field(default=None, init=False, repr=False)
@@ -181,6 +184,7 @@ class JobGate:
         """Coalesce read-only polls briefly; stored changes invalidate the cached decision."""
 
         with self._mutex, self.factory() as db:
+            self._require_worker_reservation(db)
             for _attempt in range(MAX_EVIDENCE_ATTEMPTS):
                 state, evidence = self._prepare(db)
                 if self._verdict is not None:
@@ -212,5 +216,11 @@ class JobGate:
                 invalidate=invalidate,
                 lock=write_lock,
             ) as evidence:
+                self._require_worker_reservation(db)
                 self._require(db, evidence, download=download)
                 return operation(db, *args, **kwargs)
+
+    def _require_worker_reservation(self, db: Session) -> None:
+        token = self.worker_token
+        if token is not None and not worker_owns_scan(db, self.scan_id, token):
+            raise ScanReservationLost

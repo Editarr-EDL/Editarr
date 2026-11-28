@@ -194,7 +194,7 @@ def _create_saved_review(
         bind_review_version(db, row.id, stable_version_id)
     if any(value.source_id for value in data.community_memberships):
         raise ReviewMembershipError("A new review can only include community filters by link")
-    plans = prepare_sources(db, row, data.community_memberships) or []
+    plans = prepare_sources(db, row, data.community_memberships, data.community_drafts) or []
     row.community_sources = [plan.row for plan in plans]
     db.flush()
     row.mcf_document = _review_mcf_document_row(row.id, review_document)

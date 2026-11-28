@@ -62,6 +62,8 @@ class DraftFilterPreview(ReviewWriteModel):
     review_id: str | None = Field(default=None, min_length=1)
     source_scan_id: str | None = Field(default=None, min_length=1)
     source_finding_id: int | None = Field(default=None, gt=0, le=MAX_PERSISTED_INTEGER, strict=True)
+    community_link_id: str | None = Field(default=None, min_length=1, max_length=128)
+    community_filter_id: str | None = Field(default=None, min_length=1, max_length=128)
     source: Literal["audio", "visual"]
     edit_action: EditAction
     start_seconds: float = Field(ge=0, allow_inf_nan=False)
@@ -71,6 +73,9 @@ class DraftFilterPreview(ReviewWriteModel):
     def validate_clip(self):
         if self.source_finding_id is not None and self.source_scan_id is None:
             raise ValueError("A finding preview requires its source scan")
+        if ((self.community_link_id is None) != (self.community_filter_id is None)
+                or (self.community_link_id is not None and self.source_scan_id is not None)):
+            raise ValueError("A community preview requires its link and filter instead of a scan")
         if self.end_seconds is not None and self.end_seconds <= self.start_seconds:
             raise ValueError("End time must be after start time")
         return self
@@ -160,6 +165,36 @@ def _target_changed():
     return root._review_http_error("target_changed", "The selected version has changed", 409)
 
 
+def _draft_community(caller: ReviewAccess, target: ReviewTarget, request: DraftFilterPreview):
+    """Bind a draft's community filter to the selected version and recognize its original clip."""
+    if request.community_link_id is None:
+        return None, False
+    from scanner.persistence.repository.review_community_drafts import project_draft
+
+    from .community_master_access import authorize_link, version_locations
+
+    db = caller.db
+    link = authorize_link(db, caller.access, request.community_link_id, C.COMMUNITY_SEARCH)
+    source = target.source
+    locations = version_locations(db, link.media_version_id)
+    if (link.alignment_state == "required" or link.link_state == "replaced"
+            or not any(
+                (item.server_id, item.jellyfin_id, locator.media_source_id)
+                == (source.server_id, source.item_id, source.media_source_id or "")
+                for locator, item in locations
+            )):
+        raise not_found()
+    _, filters = project_draft(db, link)
+    original = next(
+        (row for row in filters if row.community_filter_id == request.community_filter_id), None
+    )
+    if original is None:
+        raise not_found()
+    return link.media_version_id, (
+        original.source, original.edit_action, original.start_seconds, original.end_seconds
+    ) == (request.source, request.edit_action, request.start_seconds, request.end_seconds)
+
+
 def _authorize_saved_draft(
     caller: ReviewAccess,
     request: DraftFilterPreview,
@@ -168,6 +203,11 @@ def _authorize_saved_draft(
 ) -> None:
     """Allow saved evidence with the review's preview grant; other clips need cue editing."""
     _saved_preview_media(caller.db, request.review_id, target)
+    if request.community_link_id is not None:
+        _, original = _draft_community(caller, target, request)
+        if not original:
+            require(caller.access, CUES, resource)
+        return
     finding = (
         caller.db.get(ScanFindingRow, request.source_finding_id)
         if (request.source_finding_id is not None)
@@ -209,6 +249,9 @@ def _preview_clip(
 
     path = _target_path(db, target)
     versions = {request.stable_version_id} if request.stable_version_id is not None else set()
+    draft_version, original_community_clip = _draft_community(caller, target, request)
+    if draft_version is not None:
+        versions.add(draft_version)
     if review_id is not None and request.source_scan_id is None:
         # Without a source scan, nothing else ties the current file to the filter's timeline.
         versions |= _timeline_versions(db, request, review_id)
@@ -222,7 +265,7 @@ def _preview_clip(
         ):
             raise not_found()
     duration = source.duration_seconds
-    edited = True
+    edited = not original_community_clip
     generation = None
     if request.source_scan_id is not None:
         scan = db.get(ScanRow, request.source_scan_id)

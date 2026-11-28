@@ -13,6 +13,7 @@ import type {
   ReviewFilter,
   ReviewMcfDocument,
 } from "../api/api-review-types";
+import { formatReviewTimestamp, parseReviewTimestamp } from "./review-timestamps";
 
 export function familyLabel(registry: McfRegistry | null, family: McfCategoryFamily | null): string {
   return registry?.families.find((item) => item.token === family)?.label || family || "Unclassified";
@@ -63,10 +64,17 @@ export function McfClassificationFields({
 }) {
   const family = registry.families.find((item) => item.token === value.category);
   const subcategoryValid = classificationIsValid(registry, value.category, value.subcategory);
-  const listId = `${controlId}-subcategories`;
   return <div className="mcf-classification-fields">
     <label className="field"><span>Family</span><select aria-label={`${controlId} family`} value={value.category || ""} onChange={(event) => { const next = (event.target.value || null) as McfCategoryFamily | null; onChange({ category: next, subcategory: null }); }}><option value="">Unclassified</option>{registry.families.map((item) => <option key={item.token} value={item.token}>{item.label}</option>)}</select></label>
-    <label className="field"><span>Subcategory</span><input type="search" list={listId} aria-label={`${controlId} subcategory`} value={value.subcategory || ""} disabled={!family} aria-invalid={Boolean(value.subcategory && !subcategoryValid)} onChange={(event) => onChange({ subcategory: event.target.value || null })} /><datalist id={listId}>{family?.categories.map((item) => <option key={item.token} value={item.token}>{item.label}</option>)}</datalist>{value.subcategory && !subcategoryValid && <small className="form-error">Choose a subcategory from {family?.label || "the selected family"}.</small>}</label>
+    <label className="field"><span>Subcategory</span>
+      <select aria-label={`${controlId} subcategory`} value={subcategoryValid ? value.subcategory ?? "" : ""}
+        disabled={!family} aria-invalid={Boolean(value.subcategory && !subcategoryValid)}
+        onChange={(event) => onChange({ subcategory: event.target.value || null })}>
+        <option value="">Choose a subcategory</option>
+        {family?.categories.map((item) => <option key={item.token} value={item.token}>{item.label}</option>)}
+      </select>
+      {value.subcategory && !subcategoryValid && <small className="form-error">Choose a subcategory from {family?.label || "the selected family"}.</small>}
+    </label>
     <fieldset className="mcf-severity-control" disabled={severityLocked}><legend>Severity{severityLocked ? " - locked by instance policy" : ""}</legend>{(["low", "medium", "high"] as const).map((severity) => <label key={severity}><input type="radio" name={`${controlId}-severity`} value={severity} checked={value.severity === severity} onChange={() => onChange({ severity })} /> {severity[0].toUpperCase() + severity.slice(1)}</label>)}</fieldset>
     {allowClear && <button type="button" className="btn-secondary compact-button mcf-clear-classification" onClick={() => onChange({ category: null, subcategory: null })}>Clear classification</button>}
   </div>;
@@ -115,21 +123,11 @@ export function validateMcfDocument(document: ReviewMcfDocument): Record<string,
 const metadataFields: Array<keyof ReviewMcfDocument> = ["title", "year", "work_type", "season", "episode", "source_url", "imdb_url", "release", "comment", "material_start_seconds", "material_end_seconds"];
 
 export function formatMcfTimestamp(seconds: number | null): string {
-  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return "";
-  const totalMilliseconds = Math.round(seconds * 1000);
-  const hours = Math.floor(totalMilliseconds / 3_600_000);
-  const minutes = Math.floor((totalMilliseconds % 3_600_000) / 60_000);
-  const wholeSeconds = Math.floor((totalMilliseconds % 60_000) / 1000);
-  const milliseconds = totalMilliseconds % 1000;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(wholeSeconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
+  return formatReviewTimestamp(seconds, 3);
 }
 
 export function parseMcfTimestamp(value: string): number {
-  const match = /^(\d{2,}):([0-5]\d):([0-5]\d)\.(\d{3})$/.exec(value);
-  if (!match) return Number.NaN;
-  const [, hours, minutes, seconds, milliseconds] = match;
-  const parsed = Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds) + Number(milliseconds) / 1000;
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  return parseReviewTimestamp(value, 3);
 }
 
 /** Edit a timestamp while retaining a readable formatted value.

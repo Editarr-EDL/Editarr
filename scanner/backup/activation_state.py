@@ -59,6 +59,11 @@ def _sanitize_db(path: Path, move_disagreements: int) -> None:
             run = db.connection().exec_driver_sql
             run("DELETE FROM auth_sessions")
             run(
+                "UPDATE scans SET status='paused', progress_stage='paused', "
+                "progress_message='Paused — ready to resume from the latest checkpoint' "
+                "WHERE status='pausing'"
+            )
+            run(
                 "UPDATE scans SET worker_pid=NULL, worker_pgid=NULL, worker_token=NULL, "
                 "worker_heartbeat_at=NULL, "
                 "status='orphaned' WHERE status IN ('scanning', 'cancelling')"

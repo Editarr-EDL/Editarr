@@ -97,3 +97,13 @@ def _checkpoint_state(row: ScanRow) -> dict[str, object]:
     except (TypeError, json.JSONDecodeError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def commit_scan_stage_results(
+    db: Session, scan_id: str, execution_id: str, stage: str, findings
+) -> None:
+    """Publish findings and their completion marker atomically for safe retries."""
+    from .repository_catalog import create_scan_findings_batch
+
+    create_scan_findings_batch(db, scan_id, findings, commit=False)
+    mark_scan_checkpoint(db, scan_id, stage, execution_id=execution_id)

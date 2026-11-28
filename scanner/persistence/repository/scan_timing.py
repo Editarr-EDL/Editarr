@@ -41,7 +41,9 @@ def scan_timing(row: ScanRow) -> tuple[float | None, datetime | None]:
     """Return total working time and its sample timestamp if the timer is running."""
     if row.origin != ScanOrigin.GENERATED.value:
         return None, None
-    if row.worker_attempt_started_at is None or row.status not in {"scanning", "cancelling"}:
+    if row.worker_attempt_started_at is None or row.status not in {
+        "scanning", "cancelling", "pausing",
+    }:
         return row.worker_elapsed_seconds, None
     now = datetime.now(UTC)
     elapsed = _seconds_between(row.worker_attempt_started_at, now)

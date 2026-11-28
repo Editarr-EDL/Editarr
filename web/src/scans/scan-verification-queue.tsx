@@ -31,6 +31,8 @@ export function VerificationQueue({ id, source, target, audio, transcriptReady, 
   const percent = fingerprint && fingerprint.bytes_total > 0
     ? Math.min(100, Math.floor(100 * fingerprint.bytes_read / fingerprint.bytes_total)) : undefined;
   const audioLabel = audio?.status === "orphaned" ? "Audio scan needs attention in the main Queue"
+    : audio?.status === "paused" ? "Audio scan paused. Resume it from the main Queue."
+    : audio?.status === "pausing" ? "Pausing audio scan"
     : audio?.status === "scanning" ? "Scanning target audio" : "Audio scan in Queue";
   return <section className="verification-queue" id={id} aria-label="Verification Queue">
     <header><h3>Queue</h3><button type="button" className="icon-button" aria-label="Close Queue" onClick={onClose}>×</button></header>

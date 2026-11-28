@@ -189,7 +189,7 @@ def _save_saved_review(
     root._validate_review_mcf_runtime(data.mcf_document, memberships, review=row)
     root._validate_synchronization_document(data.synchronization, data.mcf_document)
     inputs = list(data.filters) + manual_filters
-    plans = prepare_sources(db, row, data.community_memberships)
+    plans = prepare_sources(db, row, data.community_memberships, data.community_drafts)
     old_signatures = _revision_signatures(
         row.memberships,
         row.filters,

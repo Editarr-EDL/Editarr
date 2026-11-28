@@ -131,7 +131,9 @@ def test_scans_are_queued_from_jellyfin_items_with_per_item_scan_numbers(
     assert second_row.media_source_id == "source-2"
     assert second_row.media_source_name == "Alternate cut"
     assert second.media_source_name == "Alternate cut"
-    assert [item.id for item in api.api_list_scan_queue(owner_caller(db))] == [first.id, second.id]
+    queued = api.api_list_scan_queue(owner_caller(db))
+    assert [item.id for item in queued] == [first.id, second.id]
+    assert all(item.coarse_scan_enabled and item.coarse_scan_interval == 2.0 for item in queued)
     for item, path in ((first, video), (second, alternate_video)):
         assert scan_version_id(db, item.id) is None
         prepare_scan_fingerprint(

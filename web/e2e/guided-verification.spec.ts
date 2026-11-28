@@ -26,6 +26,47 @@ const title: EditarrItem = {
 };
 
 for (const width of [320, 1440]) {
+  test(`${width}px VideoSkip import opens timing verification with the source reference`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockApi(page);
+    await page.route("**/api/videoskip-imports/upload", async (route) => {
+      expect(route.request().headers()["x-csrf-token"]).toBe("test-csrf-token");
+      expect(route.request().postData()).toContain("movie.skp");
+      return json(route, {
+        review: null, issue_count: 0, issues: [],
+        scan: {
+          ...oldScan, id: "skp-upload", name: "Exchange contribution", origin: "imported",
+          reuse_pending: true, stable_version_id: "current", finding_count: 1,
+          videoskip_source: {
+            uploader: "Contributor",
+            sync: {
+              reference_seconds: 5.25, reference_description: "Studio logo clears",
+              platform_offsets_seconds: { local: 0 },
+            },
+          },
+        },
+      }, 201);
+    });
+    await page.goto("/#/library/movies/item/movie-1");
+    await chooseWorkflowStep(page, "Scans");
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    const imports = page.getByRole("dialog", { name: "Import" });
+    await imports.getByRole("button", { name: "VideoSkip", exact: true }).click();
+    await imports.getByLabel("Import review name").fill("Exchange contribution");
+    await imports.getByLabel("VideoSkip file").setInputFiles({
+      name: "movie.skp", mimeType: "text/plain",
+      buffer: Buffer.from("0:00:08 --> 0:00:10\nviolence 2\n"),
+    });
+    await expectNoHorizontalPageOverflow(page);
+    await expectNoAccessibilityViolations(page);
+    await imports.getByRole("button", { name: "Import VideoSkip" }).click();
+    const verify = page.getByRole("dialog", { name: "Verify for this version" });
+    await expect(verify.getByText(/Contributor.*Studio logo clears/)).toBeVisible();
+    await expect(verify.getByLabel("Original time 1")).toHaveValue("5.25");
+    await expectNoHorizontalPageOverflow(page);
+    await expectNoAccessibilityViolations(page);
+  });
+
   test(`${width}px guided verification previews a cut and approves without a checkbox`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockApi(page);

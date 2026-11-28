@@ -45,7 +45,7 @@ still apply; permission to initiate linking is not permission to impersonate use
 | View/edit manual media identity/source associations | Yes | Yes | Yes |
 | View own job progress/errors | Own | Yes | Yes |
 | View others' queue/progress/errors | No | Yes | Yes |
-| Cancel/resume queued/interrupted jobs | Own | Yes | Yes |
+| Cancel, pause, or resume scan jobs | Own | Yes | Yes |
 | Reorder global queue | No | Yes | Yes |
 | Rename/delete completed scans | Own | Yes | Yes |
 | Create/save/rename/duplicate/delete reviews | Own | Yes | Yes |

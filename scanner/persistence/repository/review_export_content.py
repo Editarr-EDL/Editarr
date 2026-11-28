@@ -36,17 +36,42 @@ COMMUNITY_SOURCE = "community"
 
 
 @dataclass(frozen=True)
-class PreparedReviewExport:
+class ReviewExportContext:
     review: SavedReviewRow
     policy: PreparedReviewPolicy
     memberships: tuple[ReviewScanMembershipRow, ...]
     media: Path
+    # The runtime of the exported media; retained snapshots of a review without scans
+    # reuse it.
+    duration_seconds: float | None
+
+
+@dataclass(frozen=True)
+class PreparedReviewExport(ReviewExportContext):
     format: ExportFormat
     format_revision: int
     content: bytes
-    # The runtime of the exported media; retained snapshots of a review without scans
-    # reuse it.
-    duration_seconds: float | None = None
+
+
+def prepare_review_export_context(
+    db: Session,
+    review_id: str,
+    revision: int,
+    *,
+    policy_revision: int | None = None,
+    policy_owner_id: int | None = None,
+) -> ReviewExportContext | None:
+    """Resolve the current review, evidence and physical target under the writer lock."""
+    review = db.get(SavedReviewRow, review_id)
+    if review is None:
+        return None
+    root._check_review_revision(db, review, revision)
+    policy = prepare_review_policy(db, review)
+    require_policy_revision(policy, policy_revision, policy_owner_id)
+    require_policy_evidence(policy)
+    memberships, scans, media = _review_export_scans(db, review)
+    duration = export_runtime(db, review, list(scans.values()), lambda: _probed_duration(media))
+    return ReviewExportContext(review, policy, tuple(memberships), media, duration)
 
 
 def prepare_review_export(
@@ -61,29 +86,27 @@ def prepare_review_export(
     """Prepare exact bytes under the writer lock without applying personal defaults."""
     from .repository_review_operations import preflight_saved_review_mcf
 
-    review = db.get(SavedReviewRow, review_id)
-    if review is None:
+    context = prepare_review_export_context(
+        db, review_id, revision, policy_revision=policy_revision, policy_owner_id=policy_owner_id
+    )
+    if context is None:
         return None
-    root._check_review_revision(db, review, revision)
-    policy = prepare_review_policy(db, review)
-    require_policy_revision(policy, policy_revision, policy_owner_id)
-    require_policy_evidence(policy)
-    memberships, scans, media = _review_export_scans(db, review)
-    duration = export_runtime(db, review, list(scans.values()), lambda: _probed_duration(media))
     if export_format == ExportFormat.MCF:
-        preflight = preflight_saved_review_mcf(db, review_id, prepared=policy)
+        preflight = preflight_saved_review_mcf(db, review_id, prepared=context.policy)
         if not preflight.eligible:
             raise root.IncompleteMcfReview(preflight)
-    content, format_revision = render_review_export(review, policy, export_format, duration)
+    content, format_revision = render_review_export(
+        context.review, context.policy, export_format, context.duration_seconds
+    )
     return PreparedReviewExport(
-        review,
-        policy,
-        tuple(memberships),
-        media,
-        export_format,
-        format_revision,
-        content,
-        duration,
+        review=context.review,
+        policy=context.policy,
+        memberships=context.memberships,
+        media=context.media,
+        duration_seconds=context.duration_seconds,
+        format=export_format,
+        format_revision=format_revision,
+        content=content,
     )
 
 

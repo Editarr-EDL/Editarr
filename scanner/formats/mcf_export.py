@@ -6,8 +6,10 @@ import math
 from typing import Sequence
 
 from scanner.models import (
+    MCF_1_1_1_CATEGORIES,
     MCF_CATEGORY_TO_FAMILY,
     McfMetadata,
+    McfSourceVersion,
     ReviewMcfDocument,
     ScanMcfDocument,
 )
@@ -26,13 +28,18 @@ def export_mcf_content(
     metadata: McfMetadata | ReviewMcfDocument | ScanMcfDocument,
     entries: Sequence[McfCueEntry],
 ) -> bytes:
-    """Export deterministic strict MCF 1.1.0 bytes from ordered entries."""
+    """Export deterministic MCF using version 1.1.1 when a new category is required."""
     start = getattr(metadata, "material_start_seconds", None)
     end = getattr(metadata, "material_end_seconds", None)
     if start is None or end is None or not _valid_range(start, end):
         raise ValueError("MCF export requires valid material bounds")
 
-    lines = [f"{_HEADER_PREFIX}1.1.0", ""]
+    version = (
+        McfSourceVersion.V1_1_1
+        if any(entry.subcategory in MCF_1_1_1_CATEGORIES for entry in entries)
+        else McfSourceVersion.V1_1_0
+    )
+    lines = [f"{_HEADER_PREFIX}{version.value}", ""]
     metadata_lines = _export_metadata_lines(metadata)
     if metadata_lines:
         lines.extend(["NOTE", *metadata_lines, ""])

@@ -65,6 +65,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .scans-floating-table td small { display: block; margin-top: 3px; color: #94a3b8; font-size: 11px; }
 .scans-floating-table td { vertical-align: top; }
 .scans-floating-table td:nth-child(2) { width: 180px; }
+.scan-queue-duration { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .scans-floating-table td:last-child { width: 152px; }
 .scans-floating-table .queue-actions { flex-wrap: wrap; }
 .scan-item-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }

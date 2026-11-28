@@ -13,7 +13,7 @@ TAGS: tuple[tuple[str, str], ...] = (
     ("Models", "Local AI models, downloads, and scan model settings."),
     ("Reviews", "Saved reviews, cue edits, previews, and retiming."),
     ("Subtitles", "Filtered subtitle sources, previews, and Jellyfin publications."),
-    ("Exports & imports", "EDL and MCF exports, publications, and file imports."),
+    ("Exports & imports", "EDL, MCF and VideoSkip file exports and imports, and publications."),
     ("Credits", "Credits detection results."),
     ("Community", "Community connection, master filter sets, sharing, and keys."),
     ("Settings", "Deployment, Jellyfin, filter defaults, path mappings, and macOS settings."),
@@ -36,7 +36,7 @@ RULES: tuple[tuple[str, str], ...] = (
     (_REVIEW + "/subtitles/|/api/media/subtitles/", "Subtitles"),
     (
         _REVIEW + "/(edl|mcf|exports)|" + _ITEM + "/exports|/api/exports|"
-        r"/api/(edl|mcf)-imports/|/api/mcf-registry",
+        r"/api/(edl|mcf|videoskip)-imports/|/api/mcf-registry",
         "Exports & imports",
     ),
     (_REVIEW + "|" + _ITEM + "/reviews", "Reviews"),

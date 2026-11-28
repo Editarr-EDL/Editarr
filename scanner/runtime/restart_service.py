@@ -277,6 +277,7 @@ def _full_quit_owned_workers() -> None:
 
     from scanner.db import get_session_factory
     from scanner.persistence.migrations.preflight import require_supported_schema
+    from scanner.persistence.repository.scan_pause import is_scan_pause_requested
     from scanner.repository import mark_scan_orphaned, scanning_scan_worker_processes
 
     control = ProcessControl()
@@ -287,19 +288,33 @@ def _full_quit_owned_workers() -> None:
         for scan_id, pid, pgid, token in scanning_scan_worker_processes(db):
             identity = control.identity(scan_id, pid, pgid, token)
             if identity is None:
+                if is_scan_pause_requested(db, scan_id) and control.worker_may_be_running(
+                    pid, pgid
+                ):
+                    continue
                 cleanup_worker_control_endpoint(scan_id, token)
                 mark_scan_orphaned(
                     db,
                     scan_id,
                     "Interrupted by application Quit — ready to resume",
                     use_last_heartbeat=True,
+                    settle_pause=True,
                 )
                 continue
             control.request_stop(identity)
-            if not control.wait_for_exit(identity, GRACEFUL_STOP_TIMEOUT):
+            stopped = control.wait_for_exit(identity, GRACEFUL_STOP_TIMEOUT)
+            if not stopped:
                 control.force_stop(identity)
+                stopped = control.wait_for_exit(identity, 0)
+            if is_scan_pause_requested(db, scan_id):
+                stopped = stopped and not control.worker_may_be_running(pid, pgid)
+                if not stopped:
+                    continue
             cleanup_worker_control_endpoint(scan_id, token)
-            mark_scan_orphaned(db, scan_id, "Interrupted by application Quit — ready to resume")
+            mark_scan_orphaned(
+                db, scan_id, "Interrupted by application Quit — ready to resume",
+                settle_pause=stopped,
+            )
     except Exception:
         # A failed cold start can occur before schema initialization.  Preserve its
         # primary diagnostic rather than replacing it with a best-effort Quit query.

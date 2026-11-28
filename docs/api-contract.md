@@ -168,9 +168,12 @@ account.
 > Manual Sharing. They will be removed in the removal phase. Connection,
 > enrollment, profile and key routes are unchanged.
 
-Community access is disabled unless `EDITARR_COMMUNITY_SERVICE_URL` (canonical
-HTTPS origin, no trailing slash) and `EDITARR_COMMUNITY_SERVICE_AUDIENCE` (exact
-authority) are configured. No community request starts merely on startup.
+Editarr defaults to `https://community.editarr.org` with audience
+`community.editarr.org`. To use another service, set
+`EDITARR_COMMUNITY_SERVICE_URL` to its canonical HTTPS origin without a trailing
+slash and `EDITARR_COMMUNITY_SERVICE_AUDIENCE` to its exact authority. Set both
+variables to empty strings to disable community access. No community request
+starts merely on startup.
 All `/api/community/*` routes require a local administrator session or API key.
 Session mutations
 require the existing same-origin and CSRF checks; header keys follow the policy above. Public paths inherit Base URL.
@@ -253,9 +256,9 @@ review routes are retired (local community API §5, §9).
 ### Publication jobs
 
 The publication outbox persists exact backend-approved signed publication bytes before network work.
-`EDITARR_COMMUNITY_PUBLICATION_REQUEST_BYTES` has no default; an explicit positive
-bound, at most 3,000,000 bytes, is required for queue/send. This is a client safety
-ceiling, not approval of a production payload limit. Status/cancel and owned
+`EDITARR_COMMUNITY_PUBLICATION_REQUEST_BYTES` defaults to 1,500,000 bytes, the
+community protocol's request size limit. An operator can override the local cap
+with a positive value up to 3,000,000 bytes. Status/cancel and owned
 result reconciliation do not require that bound. No startup/background sender or
 automatic enrollment occurs. The [manual sharing flow](#manual-sharing) defines
 the preview and approval boundary.
@@ -333,10 +336,11 @@ analyzed eligible source tracks are selectable; imported/historical unknown trac
 remain unknown. Preparation uses the mixed-track exclusions without editing
 the review. Private captures and consent tokens never cross the browser boundary.
 
-Preparation requires explicitly configured `EDITARR_COMMUNITY_PREVIEW_BOUNDS`
-(JSON with positive `compressed_bytes`, `expanded_bytes`, `events`, `text`, `depth`),
-`EDITARR_COMMUNITY_PREVIEW_SOURCE_LIMIT` (positive, at most 1000), and the upload
-request bound above. None has a production default. A random preview ID is valid
+`EDITARR_COMMUNITY_PREVIEW_BOUNDS` defaults to `{"compressed_bytes":1000000,
+"expanded_bytes":4000000,"events":4000,"text":4096,"depth":24}`.
+Override it with a JSON object containing all five positive bounds.
+`EDITARR_COMMUNITY_PREVIEW_SOURCE_LIMIT` defaults to 32 and accepts a positive
+value up to 1000. A random preview ID is valid
 for 15 minutes and bound to the session and installation/service scope. The
 process-local private cache is capped at 16 previews and 64 MiB and prunes expired
 entries on access/insertion; restart requires a fresh preview, not a rebuilt queued
@@ -478,10 +482,10 @@ reads and sets the instance default mode. See "Filter preferences and enforced p
 | `GET /api/library-items/{item_id}/exports` | Optional `media_source_id` | `ExportStatus` |
 | `DELETE /api/library-items/{item_id}/exports/{format}` | Optional `media_source_id`; format `edl` or `mcf` | `204` |
 
-MCF upload accepts MIME hints `text/plain` and `text/mcf+vtt`; extension and content remain
-authoritative. MCF parsing accepts exactly 1.0.0/1.1.0 and export emits 1.1.0. Preflight
-issues identify ordered document fields or review-local filter IDs/positions without
-echoing content, comments, URLs, or paths.
+MCF upload accepts MIME hints `text/plain` and `text/mcf+vtt`. The extension and contents
+determine acceptance. Editarr imports MCF 1.0.0, 1.1.0, and 1.1.1. Export uses 1.1.1 when
+an exported cue needs an added subcategory and 1.1.0 otherwise. Preflight issues identify
+ordered document fields or review-local filter IDs and positions. [MCF 1.1.1 specification](mcf-1.1.1.md)
 
 The named-review schema was delivered under the approved v1 fresh-schema development
 policy, without a data-preserving migration. This contract does not claim that an
@@ -900,7 +904,16 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
   `GET /api/library-items/{item_id}/scans` lists the caller-visible scans stored
   for that Jellyfin item. It takes no path; an unknown query parameter is ignored.
 - Queue/history: `GET /api/scans/queue`, `POST /api/scans/queue/reorder`,
-  `DELETE /api/scans/queue/{queue_id}`, and `GET /api/scans/history`.
+  `DELETE /api/scans/queue/{queue_id}`, `POST /api/scans/queue/{queue_id}/pause`,
+  `POST /api/scans/queue/{queue_id}/resume`, and `GET /api/scans/history`.
+  Pause returns `{"paused": true, "pausing": false}` for a parked job or
+  `{"paused": false, "pausing": true}` while its worker is stopping. A queued
+  job parks immediately. An active job stays `pausing` until its worker exits.
+  A `paused` job keeps its queue ID and saved progress across service restarts.
+  Other jobs can run while it is paused. Resume returns `{"resumed": true}` for
+  a paused or interrupted job and sends it back to the queue. Completed stages
+  and recorded visual scene results can be reused. The unfinished unit may run
+  again. Pause and resume require the same job permission and media access.
 - Credits detection: `POST /api/credits-detections` starts or reconnects one normal
   video-only scan for an authoritative target and exact detector configuration. `GET
   /api/credits-detections/{scan_id}` returns status/result, `/model-consent` explicitly
@@ -988,14 +1001,14 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
   atomically and returns `EdlImportResult` without changing the active sidecar.
   Browser upload is the only import transport; Editarr never reads an import file
   from a scanner-host path.
-- Import target: every EDL and MCF import `target` is a Jellyfin
+- Import target: every EDL, MCF and VideoSkip import `target` is a Jellyfin
   `ReviewTargetRequest`, `{source: "jellyfin", item_id, media_source_id?}`. A
   target whose `source` names anything else returns 400 with `code`
   `jellyfin_item_required` and the message "This file must belong to a Jellyfin
   item. Open its Jellyfin item and import the file there." A Jellyfin target that
   is malformed, such as one with an empty or missing `item_id`, is an ordinary 422
-  (`invalid_edl_import` or `invalid_mcf_document`). Nothing is written.
-- MCF import: `POST /api/mcf-imports/upload` accepts MCF 1.0.0/1.1.0.
+  (`invalid_edl_import`, `invalid_mcf_document` or `invalid_videoskip_import`).
+- MCF import: `POST /api/mcf-imports/upload` accepts MCF 1.0.0, 1.1.0, and 1.1.1.
   It requires an explicit target `synchronization`, nullable distinct
   `mcf_material_end_seconds`, and nullable server-validated `accepted_credits` reference.
   Source START/END and cues remain immutable scan evidence; the initial review receives
@@ -1011,6 +1024,11 @@ scans. Because it doesn't hash, a search can still find nothing; the dialog then
   ignored. A valid accepted credits reference adds its existing scan, corrected review
   snapshot, and detector provenance in the same import transaction without changing the
   detector finding.
+- VideoSkip import. `POST /api/videoskip-imports/upload` accepts a multipart
+  `.skp` file and JSON options with `target`, `name`, and optional `attribution`.
+  It stages skip and mute cues as a pending scan until the user verifies the
+  selected cut. The scan provides the file digest, contributor attribution and
+  reference timing under `videoskip_source`. [VideoSkip import details](videoskip-integration.md).
 - Export status/deletion: `/api/library-items/{item_id}/exports` routes return both
   format summaries and delete one selected format. EDL and MCF files and markers are independent.
 - Archive: `GET /api/archive?offset=&limit=` returns `{total, offset, limit, items}`,
@@ -1175,11 +1193,31 @@ Competing writes invalidate it with 409 `stale_export_confirmation`. Unowned
 files, symbolic links, and filenames owned by another media version are never
 silently replaced. Legacy adjacent files do not become item defaults.
 
-`POST /api/reviews/{review_id}/exports/{format}/download` accepts the existing
-review/policy tokens and returns exactly the prepared publication bytes, with a
-canonical personal attachment filename and `Cache-Control: private, no-store`.
-It creates no export row, directory, or sidecar. Cross-user downloads also need
-the actor's personal download capability.
+For `edl` and `mcf`, `POST /api/reviews/{review_id}/exports/{format}/download`
+accepts the existing review/policy tokens and returns the prepared publication
+bytes with a canonical personal attachment filename and
+`Cache-Control: private, no-store`. Downloads are read-only. Cross-user
+downloads also need the actor's personal download capability.
+
+VideoSkip uses two `POST` endpoints under `/api/reviews/{review_id}/exports/videoskip`.
+Both use the usual saved-review download permissions and the current
+`revision`, `policy_owner_id`, and `policy_revision` for the verified media cut.
+The payload can include `reference_seconds` and `reference_description`.
+Supply the two fields together. The timestamp must be nonnegative and within
+the cut when its runtime is known. The trimmed description can have up to
+256 characters.
+
+- `/preflight` returns `eligible`, `filter_count`, `exported_count`,
+  `issue_count`, and the first 100 `issues`. The counts describe the effective
+  selected cues, the representable cues, and all issues, respectively. Each
+  issue gives a `code`, `message`, a nullable `filter_id`, and whether the cue
+  was `omitted`. Eligibility requires at least one representable cue and
+  representation of every policy-required cue.
+- `/download` returns a UTF-8 text attachment with a `.skp` extension and
+  `Cache-Control: private, no-store`. It rechecks eligibility against the saved
+  review and current policy before producing the file. An ineligible download
+  returns 422 `incomplete_videoskip_export`. VideoSkip is available as a
+  download format. The publication formats are `edl` and `mcf`.
 
 The `/api/reviews/{review_id}/subtitles/sources`, `/preview`, and `/publish`
 operations share the same saved-review export eligibility, including users

@@ -13,7 +13,7 @@ from scanner.persistence.rows.db_catalog import MediaItemRow
 from scanner.persistence.rows.db_scans import ScanRow
 from tests import upgrade_matrix_support as state
 from tests.activity_migration_support import _clone, _upgrade
-from tests.explicit_filter_modes_support import drop_0031_additions
+from tests.explicit_filter_modes_support import drop_filter_migration_additions
 from tests.test_account_migration import _snapshot
 from tests.test_upgrade_matrix import SOURCES as MATRIX_SOURCES
 from tests.test_upgrade_matrix import _built
@@ -130,10 +130,10 @@ def test_every_supported_revision_archives_other_files_and_keeps_every_row(tmp_p
     assert (
         adoption._inspect_database(path)
         == adoption.HEAD_REVISION
-        == "0040_review_community_filters"
+        == "0041_mcf_1_1_1"
     )
     upgraded, _ = _snapshot(path)
-    drop_0031_additions(upgraded, original)
+    drop_filter_migration_additions(upgraded, original)
     after = _counts(upgraded)
     assert {name: after.get(name) for name in _counts(original)} == _counts(original) | {
         "scan_queue": 1
