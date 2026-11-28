@@ -19,8 +19,10 @@ services:
     environment:
       COMMUNITY_CONFIG_FILE: /etc/community/service.json
       COMMUNITY_SECRETS_FILE: /run/secrets/community_service
+      COMMUNITY_BACKUP_ROOT: /online-backups
     volumes:
       - community-data:/data
+      - community-online-backups:/online-backups
       - type: bind
         source: ${COMMUNITY_CONFIG_FILE:-./container/service.example.json}
         target: /etc/community/service.json
@@ -46,9 +48,29 @@ services:
       - community-data:/data
       - community-backups:/backups
     tmpfs: ["/tmp:size=32m,mode=1777,noexec,nosuid,nodev"]
+  restore:
+    image: editarr-community:${COMMUNITY_IMAGE_TAG:-local}
+    profiles: [maintenance]
+    init: true
+    read_only: true
+    network_mode: none
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    pids_limit: 128
+    entrypoint: [node, dist/runtime/manage.mjs, restore]
+    command: [--help]
+    volumes:
+      - community-online-backups:/online-backups:ro
+      - community-restore:/data
+    tmpfs: ["/tmp:size=32m,mode=1777,noexec,nosuid,nodev"]
 secrets:
   community_service:
     file: ${COMMUNITY_SECRETS_FILE:-./container/secrets.example.json}
 volumes:
   community-data:
   community-backups:
+  community-online-backups:
+  community-restore:
+    name: ${COMMUNITY_RESTORE_VOLUME:-editarr-community-restore}

@@ -1,8 +1,15 @@
-import service, { validateEnvironment } from './service.mjs';
+import { statSync } from 'node:fs';
+import service, { backupScheduler, validateEnvironment } from './service.mjs';
 import { readConfiguration, tunnelActor } from './environment.mjs';
 import { openDatabase, REPORTED_REFUSALS } from './schema.mjs';
 import { createHttpServer, operatorAssets } from './http.mjs';
 import { startMaintenance } from './maintenance.mjs';
+
+/** The WAL file's size; 0 when it does not exist, null when it cannot be read. */
+function walBytes(databasePath) {
+  try { return statSync(`${databasePath}-wal`).size; }
+  catch (error) { return error?.code === 'ENOENT' ? 0 : null; }
+}
 
 async function main() {
   process.umask(0o077);
@@ -15,7 +22,9 @@ async function main() {
   try {
     const env = { ...configuration.env, CATALOG_DB: database,
       OPERATOR_ASSETS: operatorAssets(new URL('./assets/', import.meta.url)),
-      TRUSTED_ACTOR_KEY: configuration.trustedTunnel ? tunnelActor : () => null };
+      TRUSTED_ACTOR_KEY: configuration.trustedTunnel ? tunnelActor : () => null,
+      COMMUNITY_BACKUP_ROOT: process.env.COMMUNITY_BACKUP_ROOT || undefined,
+      DATABASE_WAL_BYTES: () => walBytes(databasePath) };
     if (configuration.enabled) await validateEnvironment(env);
     server = createHttpServer(async request => {
       if (closing) return Response.json({ error: { code: 'service_unavailable' } }, { status: 503 });
@@ -30,7 +39,7 @@ async function main() {
       server.once('error', reject);
       server.listen(port, process.env.HOST ?? '127.0.0.1', resolve);
     });
-    maintenance = startMaintenance(service, env, configuration.enabled);
+    maintenance = startMaintenance(service, env, configuration.enabled, undefined, backupScheduler);
     console.log(`community_listening port=${port} enabled=${configuration.enabled}`);
     const shutdown = () => {
       if (closing) return;

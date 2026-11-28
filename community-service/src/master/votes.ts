@@ -6,6 +6,7 @@ import { admitRate, RouteError } from '../http/contributor-route';
 import { completionStatements, replayOperation } from '../operations/completed';
 import { availableVersion } from './download';
 import { recomputeVersion } from './recompute';
+import { voteEventStatement, voteTransition } from './vote-events';
 
 export const voteInput = z.strictObject({ version: z.literal(1), vote: z.enum(['up', 'down', 'none']),
   receiptId: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -66,7 +67,7 @@ export async function castVote(db: SqlDatabase, identity: AuthenticatedContribut
   await admitRate(db, `vote:${identity.contributorId}`, options.votesPerHour, 3600, options.now);
   await eligibleFilter(db, identity, filterId, input.receiptId);
   let result: VoteResult | undefined;
-  let replaced: string[] = [], current = filterId;
+  let replaced: string[] = [], current = filterId, prior: VoteInput['vote'] | undefined;
   await recomputeVersion(db, () => filterVersion(db, filterId), options, {
     change: state => {
       // The caller's votes on IDs merged into the same current filter are one vote: replace them all
@@ -76,6 +77,9 @@ export async function castVote(db: SqlDatabase, identity: AuthenticatedContribut
       const excludedRow = state.votes.find(vote => mine(vote) && vote.filterId === current && vote.excluded);
       replaced = state.votes.filter(vote => mine(vote) && !vote.excluded && currentFilterId(state.registry, vote.filterId) === current)
         .map(vote => vote.filterId);
+      // The vote this request replaces: an excluded row keeps (and takes) the new value; `none` deletes only live rows.
+      prior = (input.vote === 'none' ? undefined : excludedRow?.vote)
+        ?? state.votes.find(vote => mine(vote) && !vote.excluded && replaced.includes(vote.filterId))?.vote;
       state.votes = state.votes.filter(vote => !(mine(vote) && (vote.filterId === current || (!vote.excluded && replaced.includes(vote.filterId)))));
       if (input.vote !== 'none') state.votes.push({ filterId: current, contributorId, vote: input.vote, excluded: excludedRow !== undefined });
       else if (excludedRow) state.votes.push(excludedRow);
@@ -89,6 +93,9 @@ export async function castVote(db: SqlDatabase, identity: AuthenticatedContribut
           updated_at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(filter_id, contributor_id) DO UPDATE SET vote = excluded.vote,
           receipt_id = excluded.receipt_id, updated_at = excluded.updated_at`)
         .bind(current, identity.contributorId, input.vote, input.receiptId, options.now));
+      const event = voteTransition(prior, input.vote);
+      if (event) statements.push(voteEventStatement(db, { filterId: current, contributorId: identity.contributorId, ...event,
+        receiptId: input.receiptId, now: options.now }));
       return statements;
     },
   }).catch(async error => {

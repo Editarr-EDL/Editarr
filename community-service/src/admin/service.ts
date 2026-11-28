@@ -3,6 +3,9 @@ import type { Env } from '../config';
 import { authenticateOperator, OperatorDenied, operatorConfig, requireOperatorMutation } from './auth/access';
 import { operatorModeration } from './moderation-http';
 import { operatorDashboard } from './dashboard';
+import { operatorBackups } from './backups/routes';
+import { operatorSystem, SYSTEM_PATHS } from './system/http';
+import { isInsightPath, operatorInsights } from './insights/http';
 
 const securityHeaders = {
   'Cache-Control': 'private, no-store',
@@ -30,6 +33,21 @@ export async function operatorService(request: Request, env: Env,
     if (path === '/admin/v1/moderation' || path.startsWith('/admin/v1/moderation/') ||
         ['/admin/v1/reports', '/admin/v1/versions', '/admin/v1/alias-suggestions', '/admin/v1/recompute'].includes(path)) {
       const response = await operatorModeration(request, env, principal.subject, Math.floor((now?.getTime() ?? Date.now()) / 1000));
+      for (const [name, value] of Object.entries(securityHeaders)) response.headers.set(name, value);
+      return response;
+    }
+    if (SYSTEM_PATHS.includes(path)) {
+      const response = await operatorSystem(request, env, Math.floor((now?.getTime() ?? Date.now()) / 1000));
+      for (const [name, value] of Object.entries(securityHeaders)) response.headers.set(name, value);
+      return response;
+    }
+    if (path === '/admin/v1/backups' || path.startsWith('/admin/v1/backups/')) {
+      const response = await operatorBackups(request, env, principal.subject, now?.getTime() ?? Date.now());
+      for (const [name, value] of Object.entries(securityHeaders)) response.headers.set(name, value);
+      return response;
+    }
+    if (isInsightPath(path)) {
+      const response = await operatorInsights(request, env, Math.floor((now?.getTime() ?? Date.now()) / 1000));
       for (const [name, value] of Object.entries(securityHeaders)) response.headers.set(name, value);
       return response;
     }

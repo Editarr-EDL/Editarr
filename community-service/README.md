@@ -153,7 +153,8 @@ the checkpoint's `lock` file; retain all action/page evidence.
 
 `pnpm test:operator-cli` runs Node subprocess/fake-transport tests. Live cloudflared/Access/session
 and binding-cookie compatibility require a live configuration check.
-Use offline Docker maintenance for backups and restores.
+Use offline Docker maintenance for upgrade backups and restores; scheduled online
+backups are configured in the operator console (see the Docker guide's Online backups).
 
 ### Independent Service Backup
 
@@ -163,7 +164,8 @@ Stop the community container, then run offline maintenance `backup --confirm
 It verifies schema, integrity, foreign keys and exact row/BLOB fingerprints before
 completing a new snapshot. Protect configuration and receipt signing-key history
 separately. Snapshots are plaintext until independently encrypted; the same-machine
-backup volume does not prove disaster recovery. No schedule or retention is added.
+backup volume does not prove disaster recovery. Offline snapshots have no schedule
+or retention; [online backups](../docs/community-service-docker.md#online-backups) do.
 The former CLI `backup` command refuses with `container_maintenance_required` and
 cannot read provider credentials or make export requests. The dashboard cannot
 attest to operator-owned files and continues to report backup status unavailable.

@@ -10,7 +10,8 @@ export const migrationsDirectory = new URL('../../migrations/', import.meta.url)
 export const SCHEMA_LINEAGE = 'community-master-1';
 /** Refusal codes that are safe to print, so operators see why a store was not opened. */
 export const REPORTED_REFUSALS = new Set(['unsupported_database_lineage', 'database_upgrade_required',
-  'unknown_database_schema', 'unknown_database_version', 'database_missing_or_symlink', 'database_integrity_failed']);
+  'unknown_database_schema', 'unknown_database_version', 'database_missing_or_symlink', 'database_integrity_failed',
+  'restore_checksum_invalid', 'restore_checksum_mismatch', 'restore_destination_exists']);
 
 function migrations(root) {
   const names = readdirSync(root).filter(name => /^\d{4}_.+\.sql$/.test(name)).sort();
@@ -40,7 +41,7 @@ function verifyLineage(connection) {
   if (rows.length !== 1 || rows[0].lineage !== SCHEMA_LINEAGE) throw new Error('unsupported_database_lineage');
 }
 
-function verifySchema(connection, inventory) {
+function verifySchema(connection, inventory, integrity = true) {
   verifyLineage(connection);
   const version = connection.prepare('PRAGMA user_version').get().user_version;
   if (!Number.isSafeInteger(version) || version < 1 || version > inventory.length) throw new Error('unknown_database_version');
@@ -49,8 +50,20 @@ function verifySchema(connection, inventory) {
     for (const item of inventory.slice(0, version)) expected.exec(item.sql);
     if (!isDeepStrictEqual(schema(connection), schema(expected))) throw new Error('unknown_database_schema');
   } finally { expected.close(); }
-  verifyIntegrity(connection);
+  if (integrity) verifyIntegrity(connection);
   return version;
+}
+
+/**
+ * Verify a standalone snapshot file read-only: lineage, a known schema version with the exact
+ * expected schema, and (unless `integrity` is false) integrity and foreign keys. Returns its version.
+ */
+export function verifySnapshot(path, { integrity = true, root = migrationsDirectory } = {}) {
+  if (!existsSync(path) || !lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error('database_missing_or_symlink');
+  const inventory = migrations(root);
+  const connection = new DatabaseSync(path, { readOnly: true });
+  try { return { version: verifySchema(connection, inventory, integrity), current: inventory.length }; }
+  finally { connection.close(); }
 }
 
 export function initializeDatabase(path, root = migrationsDirectory) {

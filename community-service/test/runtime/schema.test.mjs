@@ -260,6 +260,57 @@ test('0004 upgrades a version 3 store to index retention scans after a verified 
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+for (const from of [1, 2, 3, 4]) test(`0005 upgrades a version ${from} store to operator insights after a verified backup`, async () => {
+  const directory = workspace(`community-insights-${from}-`);
+  const path = join(directory, 'database.sqlite'), snapshot = join(directory, 'backup.sqlite');
+  try {
+    initializeDatabase(path, migrationsRoot(directory, from));
+    const source = new DatabaseSync(path);
+    source.exec(`INSERT INTO contributors (contributor_id, discord_user_id, display_name, display_name_key, created_at)
+        VALUES ('voter', '12345678901234567', 'Voter', 'voter', 1), ('other', '12345678901234568', 'Other', 'other', 1);
+      INSERT INTO works (work_id, kind, created_at) VALUES ('work', 'movie', 1);
+      INSERT INTO versions (version_id, work_id, status, trust, revision, created_seq, created_at)
+        VALUES ('version', 'work', 'confirmed', 0.5, 1, 1, 1);
+      INSERT INTO master_revisions (version_id, revision, snapshot_digest, generated_at) VALUES ('version', 1, '${'a'.repeat(64)}', 1);
+      INSERT INTO download_receipts VALUES ('${'b'.repeat(64)}', 'voter', 'version', 1, '${'a'.repeat(64)}', 'key', 5),
+        ('${'c'.repeat(64)}', 'other', 'version', 1, '${'a'.repeat(64)}', 'key', 5);
+      INSERT INTO filter_registry (filter_id, version_id, created_seq, state) VALUES ('f1', 'version', 1, 'active'), ('f2', 'version', 2, 'active');
+      INSERT INTO filter_votes VALUES ('f1', 'voter', 'up', '${'b'.repeat(64)}', 0, 40), ('f2', 'other', 'down', '${'c'.repeat(64)}', 1, 30);
+      INSERT INTO moderation_actions (action_id, actor, resource, target_id, command, expected_revision, reason, request_json,
+        outcome, error_code, created_at) VALUES ('a1', 'operator', 'vote:f2:other', 'f2', 'exclude_vote', 0, 'Spam', '{}', 'applied', NULL, 9);`);
+    source.close();
+    assert.throws(() => openDatabase(path), /database_upgrade_required/);
+    await upgradeDatabase(path, snapshot);
+    const { database, version } = openDatabase(path);
+    try {
+      assert.equal(version, CURRENT);
+      const db = database.connection, rows = sql => db.prepare(sql).all().map(row => ({ ...row }));
+      assert.deepEqual(rows('SELECT filter_id, contributor_id, vote, kind, receipt_id, created_at FROM vote_events ORDER BY event_id'), [
+        { filter_id: 'f2', contributor_id: 'other', vote: 'down', kind: 'cast', receipt_id: 'c'.repeat(64), created_at: 30 },
+        { filter_id: 'f1', contributor_id: 'voter', vote: 'up', kind: 'cast', receipt_id: 'b'.repeat(64), created_at: 40 }]);
+      assert.equal(db.prepare('SELECT count(*) AS n FROM filter_votes').get().n, 2);
+      assert.deepEqual(rows('SELECT action_id, command, created_at FROM moderation_actions'), [{ action_id: 'a1', command: 'exclude_vote', created_at: 9 }]);
+      assert.equal(db.prepare("SELECT revision FROM moderation_versions WHERE resource = 'vote:f2:other'").get().revision, 1);
+      assert.throws(() => db.exec("DELETE FROM moderation_actions"), /immutable_audit/);
+      assert.throws(() => db.exec("UPDATE vote_events SET vote = 'down'"), /immutable_vote_event/);
+      const backupAudit = id => db.exec(`INSERT INTO moderation_actions (action_id, actor, resource, target_id, command, expected_revision,
+        reason, request_json, outcome, error_code, created_at) VALUES ('${id}', 'operator', 'backup', 'config', 'backup_configure', 0, 'r', '{}', 'applied', NULL, 10)`);
+      backupAudit('b1'); backupAudit('b2');
+      assert.equal(db.prepare("SELECT count(*) AS n FROM moderation_versions WHERE resource = 'backup'").get().n, 0);
+      assert.deepEqual({ ...db.prepare('SELECT enabled, frequency, at_utc, keep_last, keep_weekly FROM backup_config').get() },
+        { enabled: 0, frequency: 'daily', at_utc: '03:30', keep_last: 14, keep_weekly: 8 });
+      for (const table of ['service_metrics_hourly', 'usage_daily', 'maintenance_runs', 'backup_runs'])
+        assert.equal(db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n, 0);
+    } finally { database.close(); }
+    const restored = new DatabaseSync(snapshot, { readOnly: true });
+    try {
+      assert.equal(restored.prepare('PRAGMA user_version').get().user_version, from);
+      assert.equal(restored.prepare('SELECT count(*) AS n FROM filter_votes').get().n, 2);
+      assert.equal(restored.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name = 'vote_events'").get().n, 0);
+    } finally { restored.close(); }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('expressions are stored only on language supports and hold 1–64 characters', () => {
   const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   try {

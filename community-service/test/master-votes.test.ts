@@ -46,6 +46,13 @@ describe('POST /v1/filters/{filterId}/votes', () => {
     expect(none.body.result).toMatchObject({ vote: 'none', revision: 4 });
     expect(await filter(filterId)).toMatchObject({ upvotes: 0, downvotes: 0 });
     expect((await handle(await signedRead(bob, `/v1/versions/${versionId}/votes`, now, nonce()))).body.votes).toEqual([]);
+    // Append-only history: the replayed retry adds nothing; a removal records the withdrawn vote.
+    const events = await db.prepare(`SELECT vote, kind, receipt_id AS receiptId, created_at AS createdAt FROM vote_events
+      WHERE filter_id = ? AND contributor_id = ? ORDER BY event_id`).bind(filterId, bob.contributorId).all();
+    expect(events.results).toEqual([{ vote: 'up', kind: 'cast', receiptId, createdAt: now },
+      { vote: 'down', kind: 'changed', receiptId, createdAt: now }, { vote: 'down', kind: 'removed', receiptId, createdAt: now }]);
+    await vote(bob, filterId, { version: 1, vote: 'none', receiptId });
+    expect(await db.prepare('SELECT count(*) AS n FROM vote_events WHERE contributor_id = ?').bind(bob.contributorId).first()).toEqual({ n: 3 });
   });
 
   it('refuses self votes, missing or foreign receipts and filters outside the receipt snapshot', async () => {

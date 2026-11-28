@@ -14,6 +14,8 @@ import { contributorVersionCatalog } from './http/match';
 import { operatorService } from './admin/service';
 import { RETENTION_BATCH_SIZE } from './retention/transient';
 import { pruneRateWindows, pruneSnapshotBytes } from './retention/windows';
+import { pruneServiceMetrics, recordServiceMetrics, rollupUsageDaily } from './retention/metrics';
+import { recordMaintenanceRun } from './retention/runs';
 import { loadReceiptSigner, receiptKeysSchema } from './security/service-signer';
 import { contributorMasterRead } from './http/master';
 import { contributorSubmission } from './http/submissions';
@@ -140,9 +142,12 @@ export default {
     const now = Date.now();
     const observer = observeOAuthDatabase(env.CATALOG_DB);
     const db = observer.db, seconds = Math.floor(now / 1000);
-    // Each prune runs even if an earlier one fails; failures are rethrown after usage is recorded.
-    const errors: unknown[] = [];
-    for (const prune of [
+    // Each step runs even if an earlier one fails; failures are rethrown after the run and usage are recorded.
+    // Metrics and usage rollups run before the prunes so they still see the rows being retired.
+    const errors: unknown[] = [], failedSteps: number[] = [];
+    const steps = [
+      () => recordServiceMetrics(db, now, env.DATABASE_WAL_BYTES?.() ?? null),
+      () => rollupUsageDaily(db),
       () => pruneDiscordOAuth(db, now, RETENTION_BATCH_SIZE),
       () => pruneRecoveryAuthorizations(db, now, RETENTION_BATCH_SIZE),
       () => pruneExpiredAuthenticationState(db, seconds, RETENTION_BATCH_SIZE),
@@ -151,9 +156,15 @@ export default {
       () => pruneProfileNames(db, now, RETENTION_BATCH_SIZE),
       () => pruneRateWindows(db, now, RETENTION_BATCH_SIZE),
       () => pruneSnapshotBytes(db, now, RETENTION_BATCH_SIZE),
-    ]) {
-      try { await prune(); } catch (error) { errors.push(error); }
+      () => pruneServiceMetrics(db, now, RETENTION_BATCH_SIZE),
+    ];
+    for (const [index, step] of steps.entries()) {
+      try { await step(); } catch (error) { errors.push(error); failedSteps.push(index); }
     }
+    try {
+      await recordMaintenanceRun(db, { runId: crypto.randomUUID(), kind: 'retention', startedAt: now, durationMs: Date.now() - now,
+        outcome: errors.length ? 'failed' : 'ok', detail: { steps: steps.length, failedSteps } });
+    } catch (error) { errors.push(error); }
     const written = observer.rowsWritten();
     if (written === null) errors.push(new Error('usage_unavailable'));
     else {

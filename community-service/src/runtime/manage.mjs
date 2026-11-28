@@ -1,10 +1,12 @@
 import { resolve } from 'node:path';
 import { initializeDatabase, openDatabase, REPORTED_REFUSALS, upgradeDatabase, verifiedBackup } from './schema.mjs';
+import { restoreDatabase } from './restore.mjs';
 
 async function main() {
   process.umask(0o077);
   const [command, ...arguments_] = process.argv.slice(2);
-  const usage = 'usage: manage.mjs init --confirm | backup|upgrade --confirm --destination NEW_FILE | retention --dry-run';
+  const usage = 'usage: manage.mjs init --confirm | backup|upgrade --confirm --destination NEW_FILE | retention --dry-run' +
+    ' | restore --confirm --source STAGED_FILE --sha256 HEX';
   if (command === '--help' && !arguments_.length) { console.log(usage); return; }
   if (command === 'retention') {
     if (arguments_.length !== 1 || arguments_[0] !== '--dry-run') throw new Error(usage);
@@ -14,6 +16,15 @@ async function main() {
       const { previewRetention } = await import('./service.mjs');
       console.log(JSON.stringify({ ...await previewRetention(database, Date.now()), schemaVersion: version }));
     } finally { database.close(); }
+    return;
+  }
+  if (command === 'restore') {
+    if (arguments_.length !== 5 || arguments_[0] !== '--confirm' || arguments_[1] !== '--source' || arguments_[3] !== '--sha256') {
+      throw new Error(usage);
+    }
+    const path = process.env.COMMUNITY_DATABASE ?? '/data/community.sqlite';
+    const { version, current } = await restoreDatabase(resolve(arguments_[2]), path, arguments_[4]);
+    console.log(`community_restore_complete schemaVersion=${version}${version < current ? ' upgrade_required' : ''}`);
     return;
   }
   if (!['init', 'backup', 'upgrade'].includes(command) || arguments_[0] !== '--confirm' ||

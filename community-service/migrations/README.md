@@ -2,9 +2,10 @@
 
 ## Current schema
 
-The current schema is **`community-master-1` version 4**: the baseline
+The current schema is **`community-master-1` version 5**: the baseline
 `0001_master_baseline.sql`, `0002_filter_expressions.sql`,
-`0003_download_receipt_version_index.sql` and `0004_retention_scan_indexes.sql`. It is the first migration of a new lineage, recorded in
+`0003_download_receipt_version_index.sql`, `0004_retention_scan_indexes.sql` and
+`0005_operator_insights.sql`. It is the first migration of a new lineage, recorded in
 the immutable single-row `schema_lineage` table. See
 [contract §8](../../docs/community-scan-service-contracts.md#8-storage-schema-service)
 and [ADR 0002](../../docs/adr/0002-community-master-filter-sets.md).
@@ -67,6 +68,14 @@ revision vote and per-handler usage tables were not carried into the baseline.
   revisions that still hold bytes and never rescans pruned history, and
   `idx_sync_runs_expiry` on `sync_runs(started_at)`, so expired sync runs are found
   without a full scan and sort (contract §8). It adds no columns and changes no rows.
+- **0005 operator insights:** the append-only `vote_events` history (backfilled with
+  one `cast` event per existing `filter_votes` row at its `updated_at`),
+  `service_metrics_hourly`, `usage_daily`, `maintenance_runs`, the single-row
+  `backup_config` (inserted disabled) and `backup_runs`. It rebuilds
+  `moderation_actions` with its rows, index and triggers so the audit also accepts
+  `backup_configure`, `backup_run` and `backup_stage`, which never advance a moderation
+  revision, and adds read-path indexes for the operator console (contract §8). Upgrade
+  tests cover every earlier version (1–4).
 
 Add a new numbered file for every later schema change; never edit an applied
 migration. Later migrations return to verified-backup-first upgrades: the offline

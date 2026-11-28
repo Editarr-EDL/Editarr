@@ -23,6 +23,7 @@ web/**
 !web/public/
 web/public/**
 !web/public/favicon-32.png
+!web/public/apple-touch-icon.png
 !web/src/
 !web/src/**
 **/node_modules/**

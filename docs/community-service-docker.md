@@ -114,9 +114,11 @@ capacity remain operational constraints. Capacity tests must use isolated storag
 
 ## Persistence and recovery
 
-Compose uses separate named volumes for `/data` and `/backups`. The running API
-mounts only data; the offline maintenance service mounts backups without service
-secrets or a listener. Rebuilding or replacing the image does not delete them.
+Compose uses separate named volumes for `/data`, `/backups` and `/online-backups`.
+The running API mounts data and the online-backup volume only; the offline
+maintenance service mounts data and `/backups` without service secrets or a
+listener, so the API can never read or prune offline snapshots. Rebuilding or
+replacing the image does not delete any of them.
 Never use `docker compose down -v` as
 an upgrade or recovery operation. Do not move a live SQLite database to SMB/NFS
 or a cloud-synchronized directory.
@@ -126,8 +128,9 @@ Only one process serves the database; a second writer is refused. The lock is
 released after a crash without stale lock-file removal. Restart is automatic,
 but this is not a multi-host failover or high-availability deployment.
 
-Backups and upgrades currently require a short maintenance stop. Back up to a
-new destination; existing files are never overwritten:
+Offline backups and upgrades require a short maintenance stop (scheduled online
+backups do not; see [Online backups](#online-backups)). Back up to a new
+destination; existing files are never overwritten:
 
 ```sh
 docker compose -f community-service/compose.yaml stop community
@@ -142,6 +145,77 @@ transfer, protect configuration and signing secrets separately, and keep the
 decryption key independent. The backup volume on the same Mac is not disaster
 recovery. Keep independent encrypted copies according to the deployment’s
 recovery requirements. Manual snapshots have no automatic pruning or schedule.
+
+### Online backups
+
+The operator console's **Backups** page configures scheduled backups of the running
+service. They are confined to `COMMUNITY_BACKUP_ROOT`, which Compose sets to
+`/online-backups` (the `community-online-backups` volume). Without that variable,
+backups are disabled and the API reports `root: null`. The root must be an absolute,
+existing directory; it is resolved with `realpath` once, and every destination,
+backup file and staged copy must resolve inside it. A destination is a path relative
+to the root (absolute paths inside the root are accepted and stored relative); `..`,
+hidden names, any symlinked component and the reserved `staged` directory are
+refused. Directories are created `0700` and files `0600`.
+
+- **Schedule.** `hourly` runs at the minute of the configured UTC time, `every_6h`
+  at that time plus multiples of six hours, `daily` at that time, and `weekly` on
+  Sundays (UTC). The maintenance loop checks every minute. A slot that passed before
+  the configuration was saved never fires; a slot missed while the service was
+  stopped runs once after restart. Only one backup runs at a time; a manual run
+  during another answers `409 backup_running`. Runs left `running` by a stopped
+  process are recorded as failed with `interrupted`.
+- **Snapshot.** The SQLite online backup API copies the database through the
+  serving connection in small steps, so the event loop keeps serving requests and
+  writes made during the copy are included in one transaction-consistent snapshot.
+  The copy is switched to rollback journaling, written as a hidden partial file and
+  only renamed and fsynced after verification.
+- **Verification.** A worker thread runs the offline store checks on the copy:
+  `community-master-1` lineage, exact known schema version, and (unless disabled in
+  the UI) `PRAGMA integrity_check` and `foreign_key_check`. The SHA-256 is recorded.
+  Failures keep no file and record an error code (`snapshot_failed`,
+  `verification_failed`, `integrity_failed`, `destination_unwritable`,
+  `destination_full`, `destination_invalid`).
+- **Retention.** After each verified backup, the newest `keep_last` verified backups
+  and the newest backup of each of the newest `keep_weekly` UTC weeks (Monday start)
+  are kept; the newest verified backup is never pruned. Only files recorded for
+  online runs inside the root are deleted.
+- **Cleanup.** While no run is active, the minute check marks runs left `running` by
+  a stopped process as `interrupted` and removes their hidden
+  `.community-…sqlite.partial` files from the root, the configured destination and
+  (when no stage is in progress) `staged/`. Only that exact naming is removed, never
+  through symlinks. Failed and pruned run history is kept for 90 days and at most
+  200 rows; verified runs are never removed from history.
+- **Audit.** Saving configuration, starting a manual run and staging write
+  `moderation_actions` rows with resource `backup`. Every mutation needs the operator
+  Access session and the CSRF headers used by other operator actions.
+
+Download a verified backup from the console for off-device encryption and storage;
+it is streamed with `Cache-Control: no-store` and an `X-Backup-Sha256` header.
+Online backups on the same Mac are not disaster recovery.
+
+#### Restore from an online backup
+
+Restore stays offline. **Stage for restore** copies the backup to
+`/online-backups/staged/`, re-checks its SHA-256, schema and integrity, and returns
+the exact commands. Only the newest staged copy is kept: staging another backup
+removes older staged copies, and one stage runs at a time. For example:
+
+```sh
+docker compose -f community-service/compose.yaml stop community
+COMMUNITY_RESTORE_VOLUME=editarr-community-restore-1a2b3c4d docker compose -f community-service/compose.yaml run --rm --no-deps restore --confirm --source /online-backups/staged/community-20261125T033000Z-1a2b3c4d.sqlite --sha256 HEX
+```
+
+The `restore` maintenance service has no network, secrets or listener and mounts the
+online-backup volume read-only. `manage.mjs restore` refuses an existing database,
+verifies the source's SHA-256 and schema, copies it to `/data/community.sqlite` in
+the named new volume (`0600`), re-hashes the copy and opens it with the startup
+checks; a failed copy is removed. It prints `community_restore_complete
+schemaVersion=N`, plus `upgrade_required` for an older `community-master-1` version
+(then run the backup-first `upgrade` in that volume). Then follow
+[Isolated snapshot restore](#isolated-snapshot-restore) from the Compose override
+step, using the printed volume name, to start a disabled deployment and verify it
+before cutover.
 
 ### Retention And Offline Preview
 
@@ -174,8 +248,9 @@ cutover. Preserve the original volume, configuration and receipt key history.
 Restoring stale snapshots can roll back revocations, moderation, replay and
 operation state: recovery must account for that before access is enabled.
 
-Current schema is the **`community-master-1` baseline, version 1**
-(`0001_master_baseline.sql`). The master-filter-set refactor rebased the service
+Current schema is **`community-master-1` version 5** (`0001_master_baseline.sql`
+through `0005_operator_insights.sql`; see the
+[migrations README](../community-service/migrations/README.md)). The master-filter-set refactor rebased the service
 migrations ([contract §8](community-scan-service-contracts.md#8-storage-schema-service),
 [ADR 0002](adr/0002-community-master-filter-sets.md) D1). The owner explicitly
 authorized discarding the old community service store because it has no users;
@@ -240,7 +315,9 @@ in a new volume, with ingress disabled and source volumes retained.
 Use an operator-reviewed current-schema snapshot and reviewed image. Stop the service,
 preserve the original data volume and set the protected configuration's `enabled` and
 `trustedTunnel` fields to false before staging recovery. Copy into a **new** named volume
-without overwriting any existing file. Replace uppercase placeholders deliberately:
+without overwriting any existing file. For an online backup, use the staged
+`restore` command above instead of this manual copy. Replace uppercase placeholders
+deliberately:
 
 ```sh
 docker volume create NEW_RECOVERY_VOLUME

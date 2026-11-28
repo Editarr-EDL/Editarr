@@ -132,6 +132,15 @@ test('real Compose isolates mounts and preserves populated data across image rep
     assert.equal(maintenance.environment, undefined);
     assert.deepEqual(maintenance.volumes.map(mount => mount.target).sort(), ['/backups', '/data']);
     assert.notEqual(maintenance.volumes[0].source, maintenance.volumes[1].source);
+    assert.equal(api.environment.COMMUNITY_BACKUP_ROOT, '/online-backups');
+    const online = api.volumes.find(mount => mount.target === '/online-backups');
+    assert.ok(online && !maintenance.volumes.some(mount => mount.source === online.source));
+    const restore = specification.services.restore;
+    assert.equal(restore.network_mode, 'none');
+    assert.equal(restore.read_only, true);
+    assert.equal(restore.secrets, undefined);
+    assert.deepEqual(restore.volumes.map(mount => [mount.source, mount.target, mount.read_only ?? false]),
+      [[online.source, '/online-backups', true], ['community-restore', '/data', false]]);
     assert.equal(specification.secrets.community_service.file, secrets);
 
     assert.match(compose('run', '--rm', '--no-deps', 'maintenance', 'init', '--confirm'), /community_init_complete/);
@@ -190,7 +199,8 @@ test('real Compose isolates mounts and preserves populated data across image rep
   } finally {
     try { compose('down'); }
     finally {
-      spawnSync('docker', ['volume', 'rm', `${project}_community-data`, `${project}_community-backups`], { stdio: 'ignore', timeout: 15000 });
+      spawnSync('docker', ['volume', 'rm', `${project}_community-data`, `${project}_community-backups`,
+        `${project}_community-online-backups`], { stdio: 'ignore', timeout: 15000 });
       spawnSync('docker', ['image', 'rm', replacementImage], { stdio: 'ignore', timeout: 15000 });
       rmSync(fixture, { recursive: true, force: true });
     }

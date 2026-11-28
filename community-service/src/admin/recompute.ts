@@ -2,6 +2,7 @@ import type { SqlDatabase } from '../runtime/contracts';
 import { z } from 'zod';
 import { recomputeVersion } from '../master/recompute';
 import { privateNote } from './moderation';
+import { recordMaintenanceRun } from '../retention/runs';
 import type { MasterModerationContext } from './master-moderation';
 
 const token = z.string().regex(/^[A-Za-z0-9_.-]{1,128}$/);
@@ -48,15 +49,26 @@ export async function recomputeAction(db: SqlDatabase, actor: string, value: unk
     }
     return { version: 1, actionId: input.actionId, versions };
   }
-  let after = input.after ?? '', done = 0;
-  while (done < RECOMPUTE_ALL_LIMIT) {
+  const started = Date.now(), counter = { done: 0 };
+  const record = (outcome: 'ok' | 'batch_limit' | 'failed', nextAfter: string | null) => recordMaintenanceRun(db, {
+    runId: input.actionId, kind: 'recompute_all', startedAt: started, durationMs: Date.now() - started, outcome,
+    detail: { actor, after: input.after ?? null, versions: counter.done, nextAfter } });
+  let result;
+  try { result = await recomputeAll(db, input.after ?? '', context, counter); }
+  catch (error) { await record('failed', null).catch(() => undefined); throw error; }
+  await record(result.complete ? 'ok' : 'batch_limit', result.nextAfter);
+  return { version: 1, jobId: input.actionId, ...result };
+}
+
+/** Recompute up to `RECOMPUTE_ALL_LIMIT` non-merged versions after `after`, counting them in `counter`. */
+async function recomputeAll(db: SqlDatabase, after: string, context: MasterModerationContext, counter: { done: number }) {
+  while (counter.done < RECOMPUTE_ALL_LIMIT) {
     const page = await db.prepare(`SELECT version_id FROM versions WHERE status != 'merged_into' AND version_id > ?
       ORDER BY version_id LIMIT ${RECOMPUTE_BATCH}`).bind(after).all<{ version_id: string }>();
-    for (const row of page.results) await recomputeVersion(db, row.version_id, context);
-    done += page.results.length;
-    if (page.results.length < RECOMPUTE_BATCH) return { version: 1, jobId: input.actionId, complete: true, nextAfter: null };
+    for (const row of page.results) { await recomputeVersion(db, row.version_id, context); counter.done++; }
+    if (page.results.length < RECOMPUTE_BATCH) return { complete: true, nextAfter: null };
     after = page.results.at(-1)!.version_id;
   }
   const more = await db.prepare(`SELECT 1 AS more FROM versions WHERE status != 'merged_into' AND version_id > ? LIMIT 1`).bind(after).first();
-  return { version: 1, jobId: input.actionId, complete: !more, nextAfter: more ? after : null };
+  return { complete: !more, nextAfter: more ? after : null };
 }

@@ -9,7 +9,7 @@ import { SqliteDatabase } from '../../src/runtime/sqlite.mjs';
 import { operatorAssets } from '../../src/runtime/http.mjs';
 import { initializeDatabase } from '../../src/runtime/schema.mjs';
 
-for (const name of ['identity', 'sharing', 'operator', 'cleanup', ...(process.env.COMMUNITY_RUNTIME_IMAGE ? ['restart'] : ['multi-instance'])]) {
+for (const name of ['identity', 'sharing', 'operator', 'cleanup', 'backup', ...(process.env.COMMUNITY_RUNTIME_IMAGE ? ['restart'] : ['multi-instance'])]) {
   test(`Node HTTP/SQLite ${name} journey with mocked external providers`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'community-journey-'));
     const output = join(directory, 'fixture.mjs');
