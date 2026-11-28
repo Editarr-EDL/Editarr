@@ -182,10 +182,11 @@ finally:
             # TerminateJobObject must drain the child too. A closed worker pipe
             # alone is insufficient liveness evidence during pause recovery.
             deadline = monotonic() + 3
-            while control.worker_may_be_running(child_pid, None):
-                assert monotonic() < deadline, "Owned Windows worker child did not exit"
+            while any(
+                control.worker_may_be_running(pid, None) for pid in (identity.pid, child_pid)
+            ):
+                assert monotonic() < deadline, "Owned Windows worker tree did not exit"
                 sleep(0.05)
-            assert not control.worker_may_be_running(identity.pid, None)
     finally:
         if worker.poll() is None:
             worker.terminate()
