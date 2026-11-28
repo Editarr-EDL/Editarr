@@ -173,3 +173,45 @@ def test_single_item_backends_record_excluded_items_as_errors(root):
     results = scored(Single(), layout, pending, {}, {}, 1)
     records = {item["id"]: record for item, _f, record in results}
     assert seen == ["good"] and records["bad"]["status"] == "error"
+
+
+def test_planted_frame_symlinks_are_never_scored_and_get_re_extracted(tmp_path, monkeypatch):
+    from scanner.evaluation.folder_eval.frames import frames_present
+    from scanner.evaluation.folder_eval.paths import Layout
+    from scanner.evaluation.folder_eval.scoring import scored
+
+    layout = Layout(tmp_path)
+    secret = tmp_path / "outside.jpg"
+    secret.write_bytes(b"private")
+    (tmp_path / "video/x").mkdir(parents=True)
+    (tmp_path / "video/x/a.mp4").write_bytes(b"x")
+    item = {"id": "a", "path": "video/x/a.mp4", "frames": [
+        {"n": 0, "t": 1.0, "file": "frames/a/0.jpg"}, {"n": 1, "t": 2.0, "file": "frames/b/0.jpg"},
+    ]}
+    (layout.results / "frames/a").mkdir(parents=True)
+    (layout.results / "frames/a/0.jpg").symlink_to(secret)
+    (layout.results / "frames/b").symlink_to(tmp_path, target_is_directory=True)
+    (tmp_path / "0.jpg").write_bytes(b"private")
+    assert frames_present(layout, item) == []
+
+    seen = []
+
+    class Backend:
+        model_id = "m"
+
+        def score_frames(self, paths):
+            seen.extend(paths)
+            return [{"scores": {}} for _ in paths]
+
+    ((_item, _frames, record),) = scored(Backend(), layout, [(item, item["frames"])], {}, {}, 1)
+    assert seen == [] and record["status"] == "error" and "frames cache" in record["error"]
+
+    def fake_ffmpeg(_source, target, *_args):
+        target.write_bytes(b"jpeg")
+        return True, None
+
+    monkeypatch.setattr(frames_module, "_ffmpeg", fake_ffmpeg)
+    _id, written, errors, _times = extract_item(str(tmp_path), item)
+    assert (written, errors) == (2, [])
+    assert secret.read_bytes() == b"private" and (tmp_path / "0.jpg").read_bytes() == b"private"
+    assert [frame["n"] for frame in frames_present(layout, item)] == [0, 1]

@@ -5,10 +5,9 @@ from __future__ import annotations
 import pytest
 
 from scanner.evaluation.folder_eval.describe_eval import MENTION_KEYS, evaluate_model
-from scanner.evaluation.folder_eval.paths import Layout
 from scanner.evaluation.folder_eval.scoring import score_item
 from scanner.evaluation.folder_eval.severity import SeverityMap, window_severity
-from tests.folder_eval_support import clip
+from tests.folder_eval_support import cached_layout, clip
 
 
 class _Describer:
@@ -28,7 +27,7 @@ def test_failed_description_turns_reach_describe_eval(tmp_path):
         {"scores": {"violence": 0.1}, "description": None, "describe": "failed"},
     ]
     record = score_item(
-        _Describer(outputs), Layout(tmp_path), item, item["frames"], {"*": 0.5}, None
+        _Describer(outputs), cached_layout(tmp_path, item), item, item["frames"], {"*": 0.5}, None
     )
     failed = record["frames"][1]
     assert failed["description"] is None and failed["describe"] == "failed"
@@ -47,7 +46,7 @@ def test_failed_description_turns_reach_describe_eval(tmp_path):
 def test_backends_without_descriptions_get_no_description_field(tmp_path):
     item = clip("a", "video/x", [], frames=1)
     record = score_item(
-        _Describer([{"scores": {}, "transcript": None}]), Layout(tmp_path), item,
+        _Describer([{"scores": {}, "transcript": None}]), cached_layout(tmp_path, item), item,
         item["frames"], {}, None,
     )
     assert record["frames"] == [{"n": 0, "scores": {}}]
@@ -126,7 +125,7 @@ def test_severity_metrics_exclude_and_count_unusable_predictions(tmp_path):
         {"scores": {}, "description": None, "describe": "failed", "severity": None},
     ]
     record = score_item(
-        _Describer(outputs), Layout(tmp_path), item, item["frames"], {"*": 0.5}, None
+        _Describer(outputs), cached_layout(tmp_path, item), item, item["frames"], {"*": 0.5}, None
     )
     assert record["frames"][1]["severity"] is None
     truth = {"violence": 2, "sex": 0, "nudity": 0, "drugs": 0}

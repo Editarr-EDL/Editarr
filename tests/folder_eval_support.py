@@ -13,3 +13,16 @@ def clip(identifier, folder, expected, frames=4, duration=8.0, scored=True, kind
         "frames": [{"n": n, "t": t, "file": f"frames/{identifier}/{n}.jpg"}
                    for n, t in enumerate(times)],
     }
+
+
+def cached_layout(root, *items):
+    """A Layout under `root` whose frames cache holds a file for every frame of `items`."""
+    from scanner.evaluation.folder_eval.paths import Layout
+
+    layout = Layout(root)
+    for item in items:
+        for frame in item["frames"]:
+            path = layout.results / frame["file"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"jpeg")
+    return layout

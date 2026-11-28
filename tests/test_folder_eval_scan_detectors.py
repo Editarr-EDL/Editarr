@@ -51,8 +51,8 @@ def test_scan_detector_is_unavailable_until_its_artifact_is_installed(monkeypatc
 
 
 def _scan_frame(monkeypatch, tmp_path, video_model):
-    from scanner.evaluation.folder_eval.paths import Layout
     from scanner.evaluation.folder_eval.scoring import score_item
+    from tests.folder_eval_support import cached_layout
 
     decision = decision_detection.FrameDecision(
         scores={McfCategoryFamily.VIOLENCE: 0.8}, thresholds={}, levels={}
@@ -63,7 +63,7 @@ def _scan_frame(monkeypatch, tmp_path, video_model):
     monkeypatch.setattr(decision_detection, "detector_for", lambda _model: detector)
     item = {"id": "a", "path": "films/F/a.mkv", "frames": [{"n": 0, "file": "frames/a/0.jpg"}]}
     backend = scan_detectors.ScanDetectorBackend(video_model)
-    record = score_item(backend, Layout(tmp_path), item, item["frames"], {}, None)
+    record = score_item(backend, cached_layout(tmp_path, item), item, item["frames"], {}, None)
     return record["frames"][0]
 
 

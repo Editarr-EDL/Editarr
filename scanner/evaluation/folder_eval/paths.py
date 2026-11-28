@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -72,6 +73,36 @@ def ensure_allowed(relative_path: str, data_root: Path) -> None:
     any probe, decode or model run."""
     if is_excluded(relative_path) or resolves_into_excluded(data_root, relative_path):
         raise PermissionError(f"Refusing to process excluded path: {relative_path}")
+
+
+def cached_frame_ok(results: Path, relative_file: str) -> bool:
+    """Whether `results/relative_file` is a usable cached frame: a non-empty regular file,
+    not a symlink, whose real path lies inside `results/frames` (so a planted link, or a
+    linked frame folder, never feeds another file to a model or the server)."""
+    path = results / relative_file
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    if not stat.S_ISREG(info.st_mode) or info.st_size == 0:
+        return False
+    frames = os.path.realpath(results / "frames")
+    return os.path.realpath(path).startswith(frames + os.sep)
+
+
+def ensure_frames_cached(results: Path, frames: list[dict[str, Any]]) -> None:
+    """Refuse to score frames that are not genuine cached frame files."""
+    for frame in frames:
+        if not cached_frame_ok(results, frame["file"]):
+            raise PermissionError(
+                f"Refusing frame {frame['file']}: not a regular file inside the frames cache"
+            )
+
+
+def has_symlink_below(root: Path, path: str | os.PathLike[str]) -> bool:
+    """Whether `path` (inside `root`) or any folder between them is a symlink."""
+    expected = os.path.join(os.path.realpath(root), os.path.relpath(path, root))
+    return os.path.realpath(path) != os.path.normpath(expected)
 
 
 def item_id(relative_path: str) -> str:

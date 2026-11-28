@@ -22,7 +22,13 @@ from .corrections import (
     save_correction,
     validate_request,
 )
-from .paths import EXCLUDED_DIRS, Layout, excluded_real_paths
+from .paths import (
+    EXCLUDED_DIRS,
+    RESULTS_DIR,
+    Layout,
+    excluded_real_paths,
+    has_symlink_below,
+)
 from .server_state import InventoryIndex, Summarizer
 from .summary import summarize
 
@@ -67,9 +73,15 @@ class ReviewHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def _excluded(self, fs_path: str) -> bool:
-        """Block excluded folders by request path and by resolved target (symlinks)."""
+        """Block excluded folders by request path and by resolved target (symlinks), and
+        any symlink inside `_results/` (generated files are never links, so a link there,
+        e.g. a planted frame, could only expose another file)."""
         relative = os.path.relpath(fs_path, self.directory).replace(os.sep, "/").casefold()
         if any(relative == d or relative.startswith(d + "/") for d in EXCLUDED_DIRS):
+            return True
+        results = RESULTS_DIR.casefold()
+        in_results = relative == results or relative.startswith(results + "/")
+        if in_results and has_symlink_below(self.server.layout.data_root, fs_path):
             return True
         resolved = os.path.realpath(fs_path).casefold()
         return any(

@@ -11,7 +11,14 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from .paths import Layout, ensure_allowed, matches_prefix, write_json
+from .paths import (
+    Layout,
+    cached_frame_ok,
+    ensure_allowed,
+    has_symlink_below,
+    matches_prefix,
+    write_json,
+)
 from .tonemap import NO_HDR_PATH, hdr_options, select_hdr_path
 
 log = logging.getLogger(__name__)
@@ -145,14 +152,21 @@ def extract_item(
     written = 0
     errors: list[str] = []
     times: dict[str, float] = {}
-    missing = [frame for frame in item["frames"] if not _cached(results / frame["file"])]
+    missing = [frame for frame in item["frames"] if not cached_frame_ok(results, frame["file"])]
     if missing and item.get("hdr") and hdr_path is None:
         return item["id"], 0, [NO_HDR_PATH], times
     item_hdr_path = hdr_path if item.get("hdr") else None
     start = probe_start_time(source) if missing else 0.0
     for frame in missing:
         target = results / frame["file"]
+        # Never write through, or keep, a symlink in the frames cache.
+        for link in (target, target.parent):
+            if link.is_symlink():
+                link.unlink()
         target.parent.mkdir(parents=True, exist_ok=True)
+        if has_symlink_below(results, target.parent):
+            errors.append(f"frame {frame['n']}: frame folder is linked outside the cache")
+            continue
         partial = target.with_name(f"{target.stem}.part.jpg")
         t = float(frame["t"])
         actual, error = _extract_frame(source, partial, item, t, item_hdr_path, start)
@@ -178,7 +192,8 @@ def _record_times(layout: Layout, times: dict[str, dict[str, float]]) -> None:
 
 
 def frames_present(layout: Layout, item: dict[str, Any]) -> list[dict[str, Any]]:
-    return [frame for frame in item["frames"] if (layout.results / frame["file"]).is_file()]
+    """Frames cached as genuine files (see `cached_frame_ok`); others count as missing."""
+    return [frame for frame in item["frames"] if cached_frame_ok(layout.results, frame["file"])]
 
 
 def extract_frames(

@@ -325,3 +325,22 @@ def test_port_in_use_raises_the_bind_error(data_root):
         taken.listen()
         with pytest.raises(OSError):
             ReviewServer(Layout(data_root), port=taken.getsockname()[1])
+
+
+def test_server_refuses_symlinks_in_the_frames_cache(server, data_root, tmp_path_factory):
+    outside = tmp_path_factory.mktemp("outside") / "secret.jpg"
+    outside.write_bytes(b"private")
+    frames = data_root / "_results" / "frames"
+    (frames / "real").mkdir(parents=True)
+    (frames / "real" / "0.jpg").write_bytes(b"jpeg")
+    (frames / "planted").mkdir()
+    (frames / "planted" / "0.jpg").symlink_to(outside)
+    (frames / "linked").symlink_to(outside.parent, target_is_directory=True)
+    (frames / "inner").mkdir()
+    (frames / "inner" / "0.jpg").symlink_to(frames / "real" / "0.jpg")
+    response, body = _request(server, "GET", "/_results/frames/real/0.jpg")
+    assert response.status == 200 and body == b"jpeg"
+    for path in ("/_results/frames/planted/0.jpg", "/_results/frames/linked/secret.jpg",
+                 "/_results/frames/inner/0.jpg"):
+        response, body = _request(server, "GET", path)
+        assert response.status == 404 and b"private" not in body, path

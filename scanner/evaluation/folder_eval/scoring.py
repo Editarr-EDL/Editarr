@@ -9,7 +9,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from typing import Any
 
 from .backends import Backend, BackendUnavailable
-from .paths import Layout, ensure_allowed
+from .paths import Layout, ensure_allowed, ensure_frames_cached
 from .results import aggregate
 
 log = logging.getLogger(__name__)
@@ -61,6 +61,7 @@ def score_item(
     try:
         # Inside the try: a refused (excluded) item is recorded as an error, never scored.
         ensure_allowed(item["path"], layout.data_root)
+        ensure_frames_cached(layout.results, frames)
         if batch is not None:
             outputs = batch[0]
         else:
@@ -165,6 +166,7 @@ def _scored_batch(backend, layout, pending, thresholds, done):
     for item, frames in pending:
         try:
             ensure_allowed(item["path"], layout.data_root)
+            ensure_frames_cached(layout.results, frames)
         except PermissionError as exc:
             yield item, frames, _error_record(backend, item, exc, 0.0)
             continue
