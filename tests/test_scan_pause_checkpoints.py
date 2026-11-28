@@ -4,7 +4,7 @@ from multiprocessing import get_context
 from pathlib import Path
 from threading import Event
 from time import monotonic, sleep
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -15,10 +15,10 @@ from scanner.persistence.repository.repository_checkpoints import commit_scan_st
 from scanner.persistence.repository.repository_queue import settle_stopped_scan_worker
 from scanner.persistence.repository.scan_pause import pause_scan_queue_item
 from scanner.persistence.write_lock import write_lock
-from scanner.pipeline import runner, runner_scenes
+from scanner.pipeline import runner, runner_scenes, runner_workers
 from scanner.pipeline.scenes import Scene
 from scanner.pipeline.visual_checkpoints import save_scene_checkpoint, scene_checkpoint_path
-from scanner.runtime.process_control import WorkerIdentity
+from scanner.runtime.process_control import ProcessControl, WorkerIdentity
 from scanner.runtime.worker_quit import ScanPauseRequested, ScanReservationLost
 from scanner.security.scan_jobs.authority import JobGate
 from tests.queue_support import _enqueue_scan, _queue_factory
@@ -207,6 +207,87 @@ def test_forced_worker_exit_replays_only_unpublished_scene(monkeypatch, tmp_path
     assert replayed == [1]
     assert [finding.start_seconds for finding in findings] == [0, 10]
     assert incomplete.is_file()
+
+
+def _wait_marker(path: Path) -> None:
+    deadline = monotonic() + 20
+    while not path.exists():
+        if monotonic() >= deadline:
+            raise TimeoutError(f"Missing checkpoint test marker {path.name}")
+        sleep(0.05)
+
+
+def _checkpoint_helper_after_launch(data_dir: Path, start_late: bool) -> None:
+    def run_visual(*_args, should_cancel, **_kwargs):
+        (data_dir / "entered").touch()
+        deadline = monotonic() + 20
+        while not should_cancel():
+            if monotonic() >= deadline:
+                raise TimeoutError("Checkpoint helper did not notice parent exit")
+            sleep(0.05)
+        (data_dir / "cancelled").touch()
+        # Retain the lease as though an in-progress fsync must still finish.
+        _wait_marker(data_dir / "release")
+        return []
+
+    (data_dir / "spawned").touch()
+    try:
+        if start_late:
+            _wait_marker(data_dir / "release")
+        with (
+            patch.object(runner_workers.settings, "data_dir", data_dir),
+            patch.object(runner_workers, "prepare_playable_video_stream", return_value="video.mkv"),
+            patch.object(runner_workers, "load_cached_scenes", return_value=None),
+            patch.object(runner, "_scan_visual_by_scene", run_visual),
+        ):
+            runner_workers._scan_visual_worker(
+                "video.mkv", "scan", str(data_dir / "work"), False, None, "qwen", 1, 0,
+                20, "fingerprint", "detector", Mock(), Event(), str(data_dir / "checkpoint"),
+                "owner-token",
+            )
+    finally:
+        (data_dir / "exited").touch()
+
+
+def _launch_checkpoint_owner(data_dir: Path, start_late: bool) -> None:
+    helper = get_context("spawn").Process(
+        target=_checkpoint_helper_after_launch, args=(data_dir, start_late)
+    )
+    helper.start()
+    helper.join()
+
+
+@pytest.mark.parametrize("start_late", [False, True])
+def test_dead_owner_does_not_leave_an_untracked_checkpoint_writer(tmp_path, start_late):
+    owner = get_context("spawn").Process(
+        target=_launch_checkpoint_owner, args=(tmp_path, start_late)
+    )
+    owner.start()
+    pid = owner.pid
+    control = ProcessControl()
+    try:
+        _wait_marker(tmp_path / ("spawned" if start_late else "entered"))
+        assert owner.is_alive()
+        owner.kill()
+        owner.join(timeout=5)
+        assert not owner.is_alive()
+        assert not control.worker_may_be_running(pid, None)
+        if not start_late:
+            _wait_marker(tmp_path / "cancelled")
+        assert control.attempt_may_be_running(
+            "scan", pid, None, "owner-token", data_dir=tmp_path
+        ) is (not start_late)
+    finally:
+        if owner.is_alive():
+            owner.kill()
+            owner.join(timeout=5)
+        (tmp_path / "release").touch()
+        owner.close()
+    _wait_marker(tmp_path / "exited")
+    assert (tmp_path / "entered").exists() is (not start_late)
+    assert not control.attempt_may_be_running(
+        "scan", pid, None, "owner-token", data_dir=tmp_path
+    )
 
 
 @pytest.mark.parametrize("deferred", [False, True])

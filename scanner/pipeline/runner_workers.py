@@ -3,6 +3,7 @@
 import multiprocessing as mp
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from queue import Empty
 
@@ -13,6 +14,7 @@ from scanner.pipeline.frames import prepare_playable_video_stream
 from scanner.pipeline.processes import ScanCancelledError
 from scanner.pipeline.scenes import Scene
 from scanner.runtime.process_control import enter_isolated_visual_worker
+from scanner.runtime.worker_checkpoint_lease import checkpoint_writer_lease
 from scanner.settings.config import settings
 
 _CANCELLATION_GRACE_SECONDS = 5.0
@@ -74,6 +76,7 @@ def _scan_visual_worker(
     queue: mp.Queue,
     cancel_event,
     checkpoint_dir_value: str | None = None,
+    checkpoint_worker_token: str | None = None,
 ) -> None:
     """Run a visual pass in a disposable process so model memory is released."""
     from scanner.pipeline import runner as root
@@ -82,24 +85,42 @@ def _scan_visual_worker(
     # mechanics to pipeline callers.
     enter_isolated_visual_worker()
 
+    parent = mp.parent_process()
+
+    def parent_alive() -> bool:
+        return parent.is_alive() if parent is not None else checkpoint_worker_token is None
+
+    def should_cancel() -> bool:
+        return cancel_event.is_set() or not parent_alive()
+
+    lease = (
+        checkpoint_writer_lease(settings.data_dir, video_id, checkpoint_worker_token)
+        if checkpoint_worker_token is not None else nullcontext()
+    )
     try:
-        work_dir = Path(work_dir_value)
-        scan_video_path = prepare_playable_video_stream(video_path, work_dir)
-        threshold = settings.scene_detection_threshold
-        cached_scene_data = load_cached_scenes(video_hash, threshold)
-        cached_scenes = (
-            [
-                Scene(
-                    start_seconds=float(item["start_seconds"]),
-                    end_seconds=float(item["end_seconds"]),
-                    index=int(item["index"]),
-                )
-                for item in cached_scene_data
-            ]
-            if cached_scene_data is not None
-            else None
-        )
-        with scoped_acquisition_cancellation(cancel_event.is_set):
+        with lease, scoped_acquisition_cancellation(should_cancel):
+            # Check after acquiring the lease. A delayed child that starts
+            # after its dead parent was reconciled cannot enter the writer.
+            if should_cancel():
+                raise ScanCancelledError("Scan cancelled")
+            work_dir = Path(work_dir_value)
+            scan_video_path = prepare_playable_video_stream(
+                video_path, work_dir, should_cancel=should_cancel
+            )
+            threshold = settings.scene_detection_threshold
+            cached_scene_data = load_cached_scenes(video_hash, threshold)
+            cached_scenes = (
+                [
+                    Scene(
+                        start_seconds=float(item["start_seconds"]),
+                        end_seconds=float(item["end_seconds"]),
+                        index=int(item["index"]),
+                    )
+                    for item in cached_scene_data
+                ]
+                if cached_scene_data is not None
+                else None
+            )
             findings = root._scan_visual_by_scene(
                 scan_video_path,
                 video_id,
@@ -126,16 +147,20 @@ def _scan_visual_worker(
                 progress_callback=lambda fraction, message: queue.put(
                     {"progress": (fraction, message)}
                 ),
-                should_cancel=cancel_event.is_set,
+                should_cancel=should_cancel,
                 video_model=video_model,
                 provenance_callback=lambda state: queue.put({"enrichment": state}),
                 **({"checkpoint_dir": Path(checkpoint_dir_value)} if checkpoint_dir_value else {}),
             )
         queue.put({"findings": [finding.model_dump(mode="json") for finding in findings]})
-    except AcquisitionCancelled:
+    except (AcquisitionCancelled, ScanCancelledError):
         queue.put({"cancelled": True})
     except Exception as exc:
         queue.put({"error": str(exc)})
+    finally:
+        if not parent_alive():
+            # Nothing can drain queued progress after the parent has exited.
+            queue.cancel_join_thread()
 
 
 def _scan_audio_isolated(
@@ -205,6 +230,7 @@ def _scan_visual_isolated(
     should_cancel: Callable[[], bool] | None = None,
     provenance_callback: Callable[[str], None] | None = None,
     checkpoint_dir: Path | None = None,
+    checkpoint_worker_token: str | None = None,
 ) -> list[FindingCreate]:
     """Run a heavyweight visual model in a short-lived process and relay progress."""
     from scanner.pipeline import runner as root
@@ -228,7 +254,8 @@ def _scan_visual_isolated(
             video_model,
             queue,
             cancel_event,
-            *((str(checkpoint_dir),) if checkpoint_dir is not None else ()),
+            str(checkpoint_dir) if checkpoint_dir is not None else None,
+            checkpoint_worker_token,
         ),
     )
     proc.start()

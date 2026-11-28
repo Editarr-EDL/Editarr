@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from subprocess import Popen
 
 from sqlalchemy.orm import Session
 
@@ -32,35 +33,62 @@ def _terminate_scan_worker(
     return bool(identity and root.PROCESS_CONTROL.force_stop(identity))
 
 
-def _recover_failed_scan_launch(db: Session, scan_id: str, error: str) -> None:
-    """Settle a reservation when no dedicated worker survived the launch."""
+def _recover_failed_scan_launch(
+    db: Session,
+    scan_id: str,
+    error: str,
+    *,
+    token: str,
+    process: Popen[bytes] | None,
+    identity: WorkerIdentity | None,
+) -> None:
+    """Drain a failed launch before releasing its worker reservation."""
     from scanner import api as root
-
-    db.expire_all()
-    if root.is_scan_cancellation_requested(db, scan_id):
-        root.update_scan_status(db, scan_id, "cancelled")
-        queue_item = root.get_scan_queue_item_by_scan_id(db, scan_id)
-        if queue_item:
-            root.remove_scan_queue_item(db, queue_item.queue_id)
-        return
-    queue_item = root.get_scan_queue_item_by_scan_id(db, scan_id)
-    if queue_item and queue_item.status == "pausing":
-        from scanner.persistence.repository.repository_queue import settle_stopped_scan_worker
-
-        worker = root.scan_worker_process(db, queue_item.queue_id)
-        settle_stopped_scan_worker(db, scan_id, token=worker[2] if worker else None)
-        return
-    if queue_item and queue_item.status == "orphaned" and queue_item.error_message:
-        # The worker can fail and close its endpoint before discovery finishes.
-        # Keep its concrete pipeline/startup error instead of replacing it with
-        # the controller's less informative observation that proof was unavailable.
-        return
-    root.mark_scan_orphaned(
-        db,
-        scan_id,
-        "Orphaned scan — worker could not start; ready to resume",
-        error,
+    from scanner.persistence.repository.repository_queue import settle_stopped_scan_worker
+    from scanner.persistence.repository.scan_worker_registration import (
+        record_unconfirmed_scan_worker_process,
     )
+
+    db.rollback()
+    if identity is not None:
+        # Registration itself can fail after authentication. Retain the proven PID
+        # in place of our provisional launcher, unless another PID was registered.
+        record_unconfirmed_scan_worker_process(
+            db, scan_id, token=token, pid=identity.pid, pgid=identity.process_group,
+            replace_launcher_pid=process.pid if process else None,
+        )
+        root._stop_discovered_worker(identity)
+    elif process is not None:
+        record_unconfirmed_scan_worker_process(
+            db, scan_id, token=token, pid=process.pid,
+            pgid=process.pid if root.os.name == "posix" else None,
+        )
+
+    queue_item = root.get_scan_queue_item_by_scan_id(db, scan_id)
+    worker = root.scan_worker_process(db, queue_item.queue_id) if queue_item else None
+    if worker is None or worker[2] != token:
+        return
+    pid, group, _, _status = worker
+    if identity is None:
+        # The interpreter can register itself just as discovery times out.
+        registered = root._worker_identity(scan_id, pid, group, token)
+        if registered is not None:
+            root._stop_discovered_worker(registered)
+        elif process is not None and pid == process.pid and process.poll() is None:
+            try:
+                process.terminate()
+            except OSError:
+                pass
+            if process.poll() is None:
+                return
+    if root.PROCESS_CONTROL.attempt_may_be_running(
+        scan_id, pid, group, token, data_dir=root.settings.data_dir
+    ):
+        return
+    if settle_stopped_scan_worker(
+        db, scan_id, token=token, expected_process=(pid, group), launch_error=error
+    ):
+        root.cleanup_worker_control_endpoint(scan_id, token)
 
 
 def _stop_discovered_worker(identity: WorkerIdentity) -> None:
@@ -101,6 +129,9 @@ def _admit_scan_job(scan_id: str) -> bool:
 def _launch_scan_worker(scan_id: str) -> bool:
     """Reserve a queued scan and start it through the ownership adapter."""
     from scanner import api as root
+    from scanner.persistence.repository.scan_worker_registration import (
+        record_unconfirmed_scan_worker_process,
+    )
 
     if (
         root.SCAN_QUEUE_STOP_EVENT.is_set()
@@ -127,11 +158,15 @@ def _launch_scan_worker(scan_id: str) -> bool:
         process = root.PROCESS_CONTROL.launch_worker(
             root.scan_worker_command(scan_id, token), scan_id, token, environment=environment
         )
+        process_group = process.pid if root.os.name == "posix" else None
+        record_unconfirmed_scan_worker_process(
+            db, scan_id, token=token, pid=process.pid, pgid=process_group,
+        )
         identity = root.PROCESS_CONTROL.discover_identity(
             scan_id,
             token,
             launcher_pid=process.pid,
-            process_group=process.pid if root.os.name == "posix" else None,
+            process_group=process_group,
             launcher_process=process,
         )
         if identity is None:
@@ -144,21 +179,14 @@ def _launch_scan_worker(scan_id: str) -> bool:
             pid=identity.pid,
             pgid=identity.process_group,
         ):
-            root._stop_discovered_worker(identity)
-            root._recover_failed_scan_launch(db, scan_id, "Worker process registration failed")
-            return False
+            raise RuntimeError("Worker process registration failed")
         root.logger.info("Dedicated scan worker for %s is ready (pid %s)", scan_id, identity.pid)
         return True
     except Exception as exc:
-        if identity is not None:
-            root._stop_discovered_worker(identity)
-        elif process is not None:
-            try:
-                process.terminate()
-            except OSError:
-                pass
         root.logger.exception("Could not launch dedicated Editarr worker for %s", scan_id)
-        root._recover_failed_scan_launch(db, scan_id, str(exc))
+        root._recover_failed_scan_launch(
+            db, scan_id, str(exc), token=token, process=process, identity=identity
+        )
         return False
     finally:
         db.close()
@@ -184,20 +212,22 @@ def _scan_queue_worker() -> None:
                     identity = (
                         root._worker_identity(active_item.id, *worker[:3]) if worker else None
                     )
-                    worker_is_alive = bool(identity)
-                    if active_item.status == "pausing" and worker:
-                        if identity:
-                            root.PROCESS_CONTROL.request_stop(identity)
-                        else:
-                            worker_is_alive = root.PROCESS_CONTROL.worker_may_be_running(
-                                *worker[:2]
-                            )
-                    if not worker_is_alive:
-                        if worker:
-                            root.cleanup_worker_control_endpoint(active_item.id, worker[2])
-                        settle_stopped_scan_worker(
-                            db, active_item.id, token=worker[2] if worker else None
+                    worker_is_alive = bool(identity) or bool(
+                        worker and root.PROCESS_CONTROL.attempt_may_be_running(
+                            active_item.id, *worker[:3], data_dir=root.settings.data_dir
                         )
+                    )
+                    if active_item.status == "pausing" and identity:
+                        root.PROCESS_CONTROL.request_stop(identity)
+                    if not worker_is_alive:
+                        settled = settle_stopped_scan_worker(
+                            db,
+                            active_item.id,
+                            token=worker[2] if worker else None,
+                            expected_process=worker[:2] if worker else (None, None),
+                        )
+                        if settled and worker:
+                            root.cleanup_worker_control_endpoint(active_item.id, worker[2])
                         active_item = root.get_active_scan_queue_item(db)
                         next_item = root.get_next_scan_queue(db)
             except Exception:

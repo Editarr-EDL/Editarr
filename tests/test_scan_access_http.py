@@ -110,6 +110,30 @@ def test_users_resume_their_own_interrupted_job(app, credential):
     assert app.calls == ["wake"]
 
 
+def test_resume_waits_for_an_interrupted_attempts_checkpoint_writer(app, monkeypatch, tmp_path):
+    from scanner.db import ScanRow
+    from scanner.runtime.worker_checkpoint_lease import checkpoint_writer_lease
+
+    scan_id, queue_id = app.seed_scan(USER, "user-interrupted", status="orphaned")
+    token = "interrupted-attempt"
+    monkeypatch.setattr(root.settings, "data_dir", tmp_path)
+    with app.accounts.factory() as db:
+        db.get(ScanRow, scan_id).worker_token = token
+        db.commit()
+    route = f"/api/scans/queue/{queue_id}/resume"
+    headers = app.accounts.unsafe_cookie(USER)
+
+    with checkpoint_writer_lease(tmp_path, scan_id, token):
+        refused = app.send("POST", route, headers)
+        assert refused.status_code == 409
+        assert app.scan(scan_id).worker_token == token
+        assert app.calls == []
+
+    assert app.send("POST", route, headers).json() == {"resumed": True}
+    assert app.scan(scan_id).worker_token is None
+    assert app.calls == ["wake"]
+
+
 @pytest.mark.parametrize("credential", CREDENTIALS)
 def test_pause_parks_own_job_and_uses_resume_authority(app, credential):
     own, own_queue = app.seed_scan(USER, "user-job")

@@ -15,7 +15,6 @@ def _secure_data_directory() -> None:
 def _recover_and_start_scan_queue_processing() -> None:
     """Run configured-instance recovery and start one scheduler for this lifecycle."""
     from scanner import api as root
-    from scanner.persistence.repository.scan_pause import is_scan_pause_requested
 
     with root.SCAN_QUEUE_ACTIVATION_LOCK:
         if root.SCAN_QUEUE_PROCESSING_ACTIVE:
@@ -26,19 +25,26 @@ def _recover_and_start_scan_queue_processing() -> None:
             root.recover_cancelled_scan_queue_items(db)
             root.recover_interrupted_credits_model_acquisitions(db)
             root.recover_terminal_scan_queue_items(db)
-            active_pids = set()
-            for scan_id, pid, pgid, token in root.scanning_scan_worker_processes(db):
+            active_attempts: set[tuple[str, str]] = set()
+            observed_attempts = {
+                scan_id: (pid, pgid, token)
+                for scan_id, pid, pgid, token in root.scanning_scan_worker_processes(db)
+            }
+            for scan_id, (pid, pgid, token) in observed_attempts.items():
                 identity = root._worker_identity(scan_id, pid, pgid, token)
-                if identity is not None:
-                    active_pids.add(identity.pid)
-                elif (
-                    is_scan_pause_requested(db, scan_id)
-                    and root.PROCESS_CONTROL.worker_may_be_running(pid, pgid)
+                if token is not None and (
+                    identity is not None
+                    or root.PROCESS_CONTROL.attempt_may_be_running(
+                        scan_id, pid, pgid, token, data_dir=root.settings.data_dir
+                    )
                 ):
-                    active_pids.add(pid)
-                else:
-                    root.cleanup_worker_control_endpoint(scan_id, token)
-            root.mark_orphaned_scan_workers(db, active_pids)
+                    active_attempts.add((scan_id, token))
+            recovered = root.mark_orphaned_scan_workers(
+                db, set(), active_attempts=active_attempts, observed_attempts=observed_attempts
+            )
+            for scan in recovered:
+                if scan.status in {"orphaned", "paused"} and scan.id in observed_attempts:
+                    root.cleanup_worker_control_endpoint(scan.id, observed_attempts[scan.id][2])
         finally:
             db.close()
         root.SCAN_QUEUE_STOP_EVENT.clear()

@@ -40,11 +40,16 @@ def mark_paused(row: ScanRow) -> None:
     row.progress_stage = "paused"
     row.progress_message = "Paused — ready to resume from the latest checkpoint"
     row.error_message = None
+    clear_worker_reservation(row)
+    row.updated_at = datetime.now(UTC)
+
+
+def clear_worker_reservation(row: ScanRow) -> None:
+    """Fence a stopped worker without changing its historical timing."""
     row.worker_pid = None
     row.worker_pgid = None
     row.worker_token = None
     row.worker_heartbeat_at = None
-    row.updated_at = datetime.now(UTC)
 
 
 def is_scan_pause_requested(db: Session, scan_id: str) -> bool:

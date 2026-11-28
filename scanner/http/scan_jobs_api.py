@@ -113,8 +113,13 @@ def api_pause_scan(queue_id: int, caller: ScanCaller = Depends(scan_caller)):
 
 @router.post("/api/scans/queue/{queue_id}/resume")
 def api_resume_orphaned_scan(queue_id: int, caller: ScanCaller = Depends(scan_caller)):
-    _queued_job(caller, queue_id, JOB_RESUME)
-    if not resume_orphaned_scan(caller.db, queue_id):
+    scan_id = _queued_job(caller, queue_id, JOB_RESUME)
+    worker = scan_worker_process(caller.db, queue_id)
+    if worker and worker[3] == "orphaned" and root.PROCESS_CONTROL.attempt_may_be_running(
+        scan_id, *worker[:3], data_dir=root.settings.data_dir
+    ):
+        raise HTTPException(409, "The previous scan attempt is still stopping")
+    if not worker or not resume_orphaned_scan(caller.db, queue_id, observed_attempt=worker[:3]):
         raise HTTPException(409, "Only a paused or interrupted scan can be resumed")
     root._start_scan_queue_worker_if_needed()
     return {"resumed": True}

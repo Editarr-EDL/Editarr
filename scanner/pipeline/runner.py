@@ -236,6 +236,7 @@ def run_scan(
     analyzed_audio_timing_callback=None,
     media_cache_key: str | None = None,
     stage_results_writer: Callable[[str, list[FindingCreate]], None] | None = None,
+    checkpoint_worker_token: str | None = None,
 ) -> str:
     """
     Run the full analysis pipeline on a video file.
@@ -435,6 +436,8 @@ def run_scan(
                     provenance_callback=lambda event: record_visual_enrichment(event),
                     should_cancel=should_cancel,
                     **({"checkpoint_dir": checkpoint_dir} if checkpoint_dir is not None else {}),
+                    **({"checkpoint_worker_token": checkpoint_worker_token}
+                       if checkpoint_worker_token is not None else {}),
                 )
                 emit("visual", 1.0, "Visual scan complete")
                 save_stage_results("visual", visual_findings)

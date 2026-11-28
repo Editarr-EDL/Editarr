@@ -338,6 +338,7 @@ def _run_scan_worker(scan_id: str, worker_token: str) -> int:
                         session, update_scan_duration, *args
                     ),
                     completed_stages=checkpoints,
+                    checkpoint_worker_token=worker_token,
                     stage_results_writer=partial(
                         gate.run, db, commit_scan_stage_results, item.id, worker_token
                     ),

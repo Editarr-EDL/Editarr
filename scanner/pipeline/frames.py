@@ -93,7 +93,9 @@ def probe_video_duration(path: Path, should_cancel=None) -> float:
     return duration
 
 
-def prepare_playable_video_stream(video_path: str, output_dir: Path) -> str:
+def prepare_playable_video_stream(
+    video_path: str, output_dir: Path, *, should_cancel: Callable[[], bool] | None = None,
+) -> str:
     """Create a video-only source when cover art precedes the real video stream."""
     try:
         import av
@@ -126,7 +128,8 @@ def prepare_playable_video_stream(video_path: str, output_dir: Path) -> str:
             "-an",
             str(normalized_path),
             "-y",
-        ]
+        ],
+        should_cancel=should_cancel,
     )
     return str(normalized_path)
 

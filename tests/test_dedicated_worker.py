@@ -313,6 +313,45 @@ def test_orphaned_worker_is_adopted_or_can_resume_from_checkpoints():
     db.close()
 
 
+@pytest.mark.parametrize("pause", [False, True])
+def test_startup_and_quit_settle_only_the_attempt_they_probed(pause):
+    from scanner.persistence.repository.scan_pause import pause_scan_queue_item
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as db:
+        scan, queued = _scan_with_queue(db)
+        token = "worker-token"
+        assert repository.reserve_scan_worker(db, scan.id, token=token)
+        if pause:
+            assert pause_scan_queue_item(db, queued.queue_id) == "pausing"
+        original_status = "pausing" if pause else "scanning"
+        before_registration = (None, None, token)
+        repository.mark_orphaned_scan_workers(
+            db, set(), active_attempts={(scan.id, token)},
+            observed_attempts={scan.id: before_registration},
+        )
+        assert db.get(ScanRow, scan.id).status == original_status
+
+        assert repository.record_scan_worker_process(db, scan.id, token=token, pid=42, pgid=42)
+        repository.mark_orphaned_scan_workers(
+            db, set(), observed_attempts={scan.id: before_registration},
+        )
+        assert not repository.mark_scan_orphaned(
+            db, scan.id, "Stopped", settle_pause=True, observed_attempt=before_registration
+        )
+        assert db.get(ScanRow, scan.id).status == original_status
+
+        assert repository.mark_scan_orphaned(
+            db, scan.id, "Stopped", settle_pause=True, observed_attempt=(42, 42, token)
+        )
+        row = db.get(ScanRow, scan.id)
+        assert row.status == ("paused" if pause else "orphaned")
+        assert row.worker_token is None
+        assert not repository.record_scan_worker_process(db, scan.id, token=token, pid=43, pgid=43)
+    engine.dispose()
+
+
 def test_worker_observes_a_cancellation_committed_by_another_session(monkeypatch):
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool

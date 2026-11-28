@@ -66,6 +66,8 @@ from scanner.runtime.process_control_windows import (
 )
 from scanner.runtime.runtime_paths import ensure_user_private_directory, get_runtime_paths
 
+from .worker_checkpoint_lease import checkpoint_writer_may_be_running
+
 # The endpoint is ready before pipeline startup, including in frozen builds.
 WORKER_START_TIMEOUT = 30.0
 GRACEFUL_STOP_TIMEOUT = 10.0
@@ -476,6 +478,15 @@ class ProcessControl:
             return False
         except PermissionError:
             return True
+
+    def attempt_may_be_running(
+        self, scan_id: str, pid: int | None, pgid: int | None, token: str | None,
+        *, data_dir: Path,
+    ) -> bool:
+        """Keep an attempt reserved while its worker or detached checkpoint writer is live."""
+        return self.worker_may_be_running(pid, pgid) or checkpoint_writer_may_be_running(
+            data_dir, scan_id, token
+        )
 
     def wait_for_exit(self, identity: WorkerIdentity, timeout: float) -> bool:
         deadline = time.monotonic() + timeout
