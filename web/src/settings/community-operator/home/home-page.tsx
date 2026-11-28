@@ -32,7 +32,7 @@ export function HomePage({ params }: { params: Record<string, string | null> }) 
   const now = new Date();
   return <section aria-labelledby="page-title">
     <PageHead eyebrow={now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
-      title={`${greeting(now.getHours())}, ${firstName(subject)}`} intro={data ? homeSummary(data, data.queueCounts.all) : " "}>
+      title={`${greeting(now.getHours())}, ${firstName(subject)}`} intro={data ? homeSummary(data) : " "}>
       <Segmented label="Period" value={period} options={periods} onChange={value => navigate(operatorLink("home", { period: value }))} />
     </PageHead>
     <DataState status={status} onRetry={refresh} />

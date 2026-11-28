@@ -36,8 +36,14 @@ export async function verifiedBackupFile(env: Env, db: SqlDatabase, runId: strin
 export function restoreCommands(stagedPath: string, sha256: string, volume: string): string[] {
   return [
     `${COMPOSE} stop community`,
-    `COMMUNITY_RESTORE_VOLUME=${volume} ${COMPOSE} run --rm --no-deps restore --confirm --source ${stagedPath} --sha256 ${sha256}`,
+    `COMMUNITY_RESTORE_VOLUME=${shellQuote(volume)} ${COMPOSE} run --rm --no-deps restore --confirm` +
+      ` --source ${shellQuote(stagedPath)} --sha256 ${shellQuote(sha256)}`,
   ];
+}
+
+/** POSIX-shell-quote one word; plain path-safe words stay readable, anything else is single-quoted. */
+export function shellQuote(value: string): string {
+  return /^[A-Za-z0-9_./:@%+=-]+$/.test(value) ? value : `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 /**

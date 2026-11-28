@@ -8,6 +8,9 @@ export interface OperatorRoute { page: OperatorPage; path: string[]; params: Rec
 type Params = Record<string, string | null | undefined>;
 
 const safe = /^[A-Za-z0-9_.=:-]{1,1024}$/;
+/** Keyset cursors are base64 (or base64url) of UTF-8 JSON, up to the service's 8192-character limit. */
+const cursor = /^[A-Za-z0-9+/=_-]{1,8192}$/;
+const cursorParams = new Set(["after", "before", "keysAfter", "filtersAfter", "submissionsAfter", "opsAfter"]);
 /** Pre-redesign views and where they now live. */
 const legacy: Record<string, string> = { overview: "home", recompute: "health", backup: "backups", operations: "health" };
 
@@ -18,8 +21,8 @@ export function operatorRoute(hash = window.location.hash): OperatorRoute {
   const first = segments[0] ?? "home";
   const params: Record<string, string | null> = {};
   for (const [name, raw] of url.searchParams) {
-    if (name === "q") params.q = raw.slice(0, 200);
-    else if (safe.test(raw)) params[name] = raw;
+    if (name === "q") params.q = raw.slice(0, 100);
+    else if ((cursorParams.has(name) ? cursor : safe).test(raw)) params[name] = raw;
   }
   if (legacy[first]) return { page: legacy[first] as OperatorPage, path: [], params };
   const page = (pages as readonly string[]).includes(first) ? first as OperatorPage : "home";

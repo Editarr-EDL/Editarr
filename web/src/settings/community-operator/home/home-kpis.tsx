@@ -1,5 +1,5 @@
 import type { OperatorHome } from "../../../api/api-community-operator-community";
-import { ago, bytes, count, delta, plural, until } from "../shared/format";
+import { age, ago, bytes, count, delta, plural, until } from "../shared/format";
 import { Sparkline } from "../shared/charts";
 
 function Delta({ value, previous, absolute }: { value: number; previous: number | null; absolute?: boolean }) {
@@ -24,7 +24,7 @@ export function HomeKpis({ kpis }: { kpis: OperatorHome["kpis"] }) {
       <Sparkline values={votes.total.series.map(point => point.v)} /></a>
     <a className={`kpi${openReports.count ? " alert" : ""}`} href="#/queue/reports"><span className="l">Open reports</span>
       <span className="v">{count(openReports.count)}</span>
-      <span className="d">{openReports.oldestAt ? `oldest ${ago(openReports.oldestAt).replace(" ago", "")}` : "none waiting"}
+      <span className="d">{openReports.oldestAt ? `oldest ${age(openReports.oldestAt)}` : "none waiting"}
         {openReports.versionLevel > 0 && ` · ${openReports.versionLevel} version-level`}</span></a>
     <a className={`kpi${lastBackup?.status === "failed" ? " alert" : ""}`} href="#/backups"><span className="l">Last backup</span>
       <span className={`v ${backupOk ? "ok" : "warn"}`}>{!lastBackup ? "Off" : backupOk ? "✓ Verified" : lastBackup.status === "running" ? "Running"
@@ -35,11 +35,10 @@ export function HomeKpis({ kpis }: { kpis: OperatorHome["kpis"] }) {
 }
 
 /** One-sentence state of the service for the greeting. */
-export function homeSummary(data: OperatorHome, waiting: number | null) {
-  const decisions = waiting ?? data.attention.length;
-  const oldest = data.attention.length ? Math.min(...data.attention.map(entry => entry.at)) : null;
+export function homeSummary(data: OperatorHome) {
+  const decisions = data.queueCounts.all, oldest = data.queueCounts.oldestAt;
   const backup = data.kpis.lastBackup;
-  return [decisions ? `${plural(decisions, "decision is", "decisions are")} waiting${oldest ? `, the oldest for ${ago(oldest).replace(" ago", "")}` : ""}.`
+  return [decisions ? `${plural(decisions, "decision is", "decisions are")} waiting${oldest ? `, the oldest for ${age(oldest)}` : ""}.`
     : "No decisions are waiting.",
   data.health.ready ? "The service is healthy" : "The service is not ready",
   backup?.status === "verified" && backup.at ? `and the last backup verified ${ago(backup.at)}.` : backup?.status === "failed" ? "and the last backup failed."

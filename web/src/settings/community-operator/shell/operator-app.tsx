@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOperatorQueue, type QueueCounts } from "../../../api/api-community-operator-community";
 import { readOperatorHealth, type OperatorHealth } from "../../../api/api-community-operator-system";
-import { OperatorAccessError, type OperatorSession } from "../runtime";
+import { accessFailureStatus } from "../../../api/api-community-operator";
+import type { OperatorSession } from "../runtime";
 import { age } from "../shared/format";
 import { OperatorContext, type OperatorServices } from "../shared/operator-data";
 import { operatorRoute, type OperatorRoute } from "../routes";
@@ -49,7 +50,7 @@ export function OperatorApp({ session, onAccessFailure, onReverify }: { session:
   useEffect(() => {
     const controller = new AbortController();
     const denied = (error: unknown) => {
-      if (!controller.signal.aborted && error instanceof OperatorAccessError && [401, 403].includes(error.status)) onAccessFailure(error.status);
+      if (!controller.signal.aborted && accessFailureStatus(error)) onAccessFailure(accessFailureStatus(error)!);
     };
     readOperatorQueue("all", null, controller.signal).then(page => { if (!controller.signal.aborted) setCounts(page.counts ?? null); }).catch(denied);
     readOperatorHealth(controller.signal).then(value => { if (!controller.signal.aborted) setHealth(value); }).catch(denied);

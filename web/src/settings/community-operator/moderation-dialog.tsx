@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { readOperatorInspection, readOperatorPage, OperatorMutationError,
+import { accessFailureStatus, readOperatorInspection, readOperatorPage, OperatorMutationError,
   type OperatorInspection, type OperatorPage, type OperatorResource } from "../../api/api-community-operator";
 import { writeOperatorAction, writeOperatorRecompute, type OperatorIntent,
   type RecomputeIntent } from "../../api/api-community-operator-actions";
@@ -39,11 +39,9 @@ export function useModeration({ onAccessFailure, onApplied }: { onAccessFailure:
     if (showing) return () => { if (opener.current?.isConnected) opener.current.focus(); };
   }, [showing]);
   const accessFailure = (error: unknown) => {
-    if (error instanceof OperatorMutationError && error.code === "moderation_ineligible") return false;
-    if (error instanceof OperatorAccessError && [401, 403].includes(error.status)) {
-      onAccessFailure(error.status); return true;
-    }
-    return false;
+    const denied = accessFailureStatus(error);
+    if (denied) onAccessFailure(denied);
+    return !!denied;
   };
   const begin = async ({ kind, targetId: id, contributorId }: ModerationTarget, command: OperatorActionKind, start: ModerationStart = {}) => {
     if (lock.current || review) return;
@@ -86,7 +84,7 @@ export function useModeration({ onAccessFailure, onApplied }: { onAccessFailure:
     } catch (error) {
       if (!active.current || accessFailure(error)) return;
       if (error instanceof OperatorAccessError && (error.status === 409 || error.status === 400 || error.status === 404 ||
-        (error instanceof OperatorMutationError && error.code === "moderation_ineligible"))) {
+        (error instanceof OperatorMutationError && error.status === 403))) {
         setReview(null); setUncertain(false);
         const code = error instanceof OperatorMutationError ? error.code : "";
         setMessage(code === "moderation_conflict" || (error.status === 409 && !code) ? "State conflict. Refresh and review before starting a new action." :

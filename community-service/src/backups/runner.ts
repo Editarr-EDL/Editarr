@@ -20,6 +20,16 @@ export const backupRunning = () => active !== null && active.runId !== 'housekee
 /** Wait for an in-flight backup; shutdown calls this before closing SQLite. */
 export async function backupDrain(): Promise<void> { await active?.done; }
 
+let closed = false;
+/**
+ * Shutdown: refuse every later backup start (`503 backups_shutting_down`) and housekeeping, then
+ * wait for an in-flight run. Call before draining requests; drain again just before closing SQLite.
+ */
+export function closeBackups(): Promise<void> {
+  closed = true;
+  return backupDrain();
+}
+
 function stamp(nowMs: number): string {
   return new Date(nowMs).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
@@ -59,7 +69,7 @@ async function execute(env: Env, db: SqlDatabase, runId: string, config: BackupC
  * progress) and prune old failed/pruned history. The maintenance loop calls this every minute.
  */
 export async function backupHousekeeping(env: Env, nowMs: number): Promise<void> {
-  if (active || !env.CATALOG_DB) return;
+  if (closed || active || !env.CATALOG_DB) return;
   const db = env.CATALOG_DB;
   let release!: () => void;
   active = { runId: 'housekeeping', done: new Promise<void>(resolve => { release = resolve; }) };
@@ -78,9 +88,10 @@ export async function backupHousekeeping(env: Env, nowMs: number): Promise<void>
  * Start a backup run under the single-flight lock and return its run ID once the `running` row
  * (and, for manual runs, the audit row) is committed; the snapshot continues in the background.
  * Throws `backup_running` (409) when a run is active, `backups_not_configured` (503) for a manual
- * run without `COMMUNITY_BACKUP_ROOT`.
+ * run without `COMMUNITY_BACKUP_ROOT`, and `backups_shutting_down` (503) once shutdown began.
  */
 export async function startBackup(env: Env, trigger: 'scheduled' | 'manual', actor: string | null, nowMs: number): Promise<string> {
+  if (closed) throw new BackupError('backups_shutting_down', 503);
   if (active) throw new BackupError('backup_running', 409);
   const runId = crypto.randomUUID();
   let release!: () => void;
@@ -108,8 +119,9 @@ export async function startBackup(env: Env, trigger: 'scheduled' | 'manual', act
  * without `COMMUNITY_BACKUP_ROOT`; a configured but unusable root is recorded as a failed run.
  */
 export async function scheduledBackup(env: Env, nowMs: number): Promise<void> {
-  if (active || !env.COMMUNITY_BACKUP_ROOT || !env.CATALOG_DB) return;
+  if (closed || active || !env.COMMUNITY_BACKUP_ROOT || !env.CATALOG_DB) return;
   await backupHousekeeping(env, nowMs);
+  if (closed) return;
   const config = await readBackupConfig(env.CATALOG_DB);
   if (!backupDue(config, await lastScheduledStart(env.CATALOG_DB), nowMs)) return;
   await startBackup(env, 'scheduled', null, nowMs);

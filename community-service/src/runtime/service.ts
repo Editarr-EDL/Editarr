@@ -6,9 +6,9 @@ import { loadReceiptSigner, receiptKeysSchema } from '../security/service-signer
 import { submissionLimitsSchema } from '../submissions/input';
 
 export { previewRetention } from '../retention/policy';
-import { backupDrain, scheduledBackup } from '../backups/runner';
+import { backupDrain, closeBackups, scheduledBackup } from '../backups/runner';
 /** Maintenance-loop hooks for UI-configured online backups. */
-export const backupScheduler = { tick: scheduledBackup, drain: backupDrain };
+export const backupScheduler = { tick: scheduledBackup, drain: backupDrain, close: closeBackups };
 
 export async function validateEnvironment(env: Env) {
   const origin = new URL(env.PUBLIC_ORIGIN ?? '');

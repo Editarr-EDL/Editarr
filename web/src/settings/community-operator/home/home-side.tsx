@@ -1,7 +1,7 @@
 import type { LeaderRow, OperatorHome } from "../../../api/api-community-operator-community";
 import { readOperatorTrend, type Trend } from "../../../api/api-community-operator-system";
 import { ago, bytes, count, plural, titleCase } from "../shared/format";
-import { useOperatorData } from "../shared/operator-data";
+import { optionalRead, useOperatorData } from "../shared/operator-data";
 import { Meter, Sparkline } from "../shared/charts";
 import { Avatar, PanelHead } from "../shared/ui";
 import { contributorLink } from "../routes";
@@ -22,7 +22,7 @@ export function TopContributors({ rows, period }: { rows: LeaderRow[]; period: s
 export function ServiceHealth({ health, now }: { health: OperatorHome["health"]; now: number }) {
   const { database, storage, lastRetention } = health;
   const trends = useOperatorData("home:trends", signal => Promise.all((["db", "storage", "denials"] as const)
-    .map(metric => readOperatorTrend(metric, "7d", signal).catch(() => null))));
+    .map(metric => optionalRead(readOperatorTrend(metric, "7d", signal)))));
   const [db, store, denied] = trends.data ?? [null, null, null];
   const used = storage.quotaBytes ? storage.payloadBytes / storage.quotaBytes : null;
   const failing = health.checks.filter(check => !check.ok);

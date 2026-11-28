@@ -81,7 +81,7 @@ function insightFixture(path: string, query: URLSearchParams): unknown {
   if (route === "contributors/leaderboard") return { ...leaderboardFixture, period: query.get("period") ?? "30d", metric: query.get("metric") ?? "accepted" };
   if (/^contributors\/[^/]+\/profile$/.test(route)) return profileFixture;
   if (route === "queue") return queueFixture(query.get("kind") ?? "all");
-  if (route === "search") return searchFixture;
+  if (route === "search") return { ...searchFixture, q: query.get("q") ?? "" };
   if (route === "audit") return auditPageFixture;
   if (route === "health") return healthFixture;
   if (route === "trends") return trendFixture(query.get("metric") ?? "db", query.get("period") ?? "30d");

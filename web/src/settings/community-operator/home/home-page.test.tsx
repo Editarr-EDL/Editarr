@@ -10,7 +10,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it("summarises the period, decisions, updates, leaders and service health", async () => {
   const fetcher = stubOperatorFetch();
   renderOperator(<HomePage params={{ period: "30d" }} />);
-  expect(await screen.findByText(/5 decisions are waiting, the oldest for 4 d\. The service is healthy and the last backup verified/)).toBeInTheDocument();
+  expect(await screen.findByText(/7 decisions are waiting, the oldest for 15 d\. The service is healthy and the last backup verified/)).toBeInTheDocument();
   expect(fetcher.mock.calls.some(([path]) => path === "/admin/v1/home?period=30d")).toBe(true);
   expect(screen.getByRole("button", { name: "30 days" })).toHaveAttribute("aria-pressed", "true");
   const attention = screen.getByRole("heading", { name: /Needs attention/ }).closest("section")!;
@@ -30,4 +30,18 @@ it("starts a reasoned action from a decision only after a fresh inspection", asy
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(fetcher.mock.calls.some(([path]) => path === "/admin/v1/moderation/report/r_gore")).toBe(true);
   await waitFor(() => expect(screen.getByRole("button", { name: "Confirm action" })).toBeDisabled());
+});
+
+it("ends the session when an optional trend read is denied", async () => {
+  stubOperatorFetch(path => path.startsWith("/admin/v1/trends") ? new Response("{}", { status: 403, headers: { "Content-Type": "application/json" } }) : undefined);
+  const { services } = renderOperator(<HomePage params={{}} />);
+  await waitFor(() => expect(services.onAccessFailure).toHaveBeenCalledWith(403));
+});
+
+it("still renders the health panel when a trend read fails for other reasons", async () => {
+  stubOperatorFetch(path => path.startsWith("/admin/v1/trends") ? new Response("{}", { status: 503, headers: { "Content-Type": "application/json" } }) : undefined);
+  const { services } = renderOperator(<HomePage params={{}} />);
+  expect(await screen.findByText("Ready · all checks pass")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("in 7 days").closest(".v")).toHaveTextContent("—"));
+  expect(services.onAccessFailure).not.toHaveBeenCalled();
 });

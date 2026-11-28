@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { OperatorMutationError } from "../../../api/api-community-operator";
+import { accessFailureStatus, OperatorMutationError } from "../../../api/api-community-operator";
 import { OperatorAccessError } from "../runtime";
 import { useOperator } from "../shared/operator-data";
 
@@ -37,9 +37,8 @@ export function useMutation() {
     send(controller.signal).then(result => { if (!controller.signal.aborted) { setFailed(false); setMessage(success(result)); } })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (error instanceof OperatorAccessError && [401, 403].includes(error.status) && !(error instanceof OperatorMutationError && error.status === 403)) {
-          onAccessFailure(error.status); return;
-        }
+        const denied = accessFailureStatus(error);
+        if (denied) { onAccessFailure(denied); return; }
         setFailed(true);
         setMessage(error instanceof OperatorMutationError ? `Refused: ${mutationMessage(error.code)}.` : error instanceof OperatorAccessError && error.status === 400
           ? "Refused: check the values and try again." : "Outcome unconfirmed. Refresh to see the current state before retrying.");

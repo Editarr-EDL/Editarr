@@ -13,11 +13,12 @@ const schedule = { hourly: "Hourly", every_6h: "Every 6 hours", daily: "Daily", 
 export function BackupsPage() {
   const { data, status, refresh } = useOperatorData("backups", readOperatorBackups);
   const mutation = useMutation();
+  // Poll while a run is in progress; re-arms after every settled read (fresh or stale) and never overlaps a pending one.
   useEffect(() => {
-    if (!data?.running) return;
+    if (!data?.running || status === "loading") return;
     const timer = window.setTimeout(refresh, 3000);
     return () => window.clearTimeout(timer);
-  }, [data]);
+  }, [data, status]);
   const last = data?.runs.find(run => run.status !== "running") ?? null;
   const kept = data?.runs.filter(run => run.status === "verified") ?? [];
   const runNow = () => mutation.run(writeOperatorBackupRun, () => { refresh(); return "Backup started. This page refreshes until it finishes."; });

@@ -4,6 +4,7 @@ import { readConfiguration, tunnelActor } from './environment.mjs';
 import { openDatabase, REPORTED_REFUSALS } from './schema.mjs';
 import { createHttpServer, operatorAssets } from './http.mjs';
 import { startMaintenance } from './maintenance.mjs';
+import { drainRuntime } from './lifecycle.mjs';
 
 /** The WAL file's size; 0 when it does not exist, null when it cannot be read. */
 function walBytes(databasePath) {
@@ -44,13 +45,12 @@ async function main() {
     const shutdown = () => {
       if (closing) return;
       closing = true;
-      const maintenanceDone = maintenance?.stop();
+      const drained = drainRuntime({ database, active, maintenance, backups: backupScheduler });
       const deadline = setTimeout(() => server.closeAllConnections(), 25000);
       deadline.unref();
       server.close(async () => {
-        await Promise.allSettled([...active, maintenanceDone]);
+        await drained;
         clearTimeout(deadline);
-        database.close();
       });
     };
     process.once('SIGTERM', shutdown);

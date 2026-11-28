@@ -33,7 +33,7 @@ for (const width of [320, 1440]) {
     test("home summarises KPIs, decisions, updates, leaders and health", async ({ page }) => {
       await mockOperatorApi(page);
       await page.goto("/admin/#/home");
-      await expect(page.getByText("5 decisions are waiting", { exact: false })).toBeVisible();
+      await expect(page.getByText("7 decisions are waiting, the oldest for 15 d", { exact: false })).toBeVisible();
       await expect(page.locator(".kpi").filter({ hasText: "Votes" })).toContainText("1,284");
       await expect(page.locator("section[aria-labelledby=home-attention] .tt").filter({ hasText: /Report · Inaccurate — Violence › Gore/ })).toBeVisible();
       await expect(page.locator("section[aria-labelledby=home-top]").getByRole("link", { name: /Mira Okafor/ })).toBeVisible();

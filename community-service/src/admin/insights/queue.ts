@@ -34,18 +34,29 @@ const versionImpact = (id: string) => `json_object('runtimeMs', (SELECT vi.runti
 /** Keyset bound shared by every source: `?1` is the cursor time (ms), `?2` the cursor ID, `?3` the limit. */
 const before = (at: string, id: string) => `(${at} < ?1 OR (${at} = ?1 AND ${id} < ?2))`;
 
+/** Quarantined filters, versions and submissions as `q(key, targetType, targetId, createdAt)`, read through partial indexes. */
+const quarantinedSet = `(SELECT 'filter:' || filter_id AS key, 'filter' AS targetType, filter_id AS targetId, NULL AS createdAt
+      FROM filter_registry WHERE quarantined = 1
+    UNION ALL SELECT 'version:' || version_id, 'version', version_id, created_at * 1000 FROM versions WHERE quarantined = 1
+    UNION ALL SELECT 'submission:' || submission_id, 'submission', submission_id, accepted_at * 1000
+      FROM version_acceptances WHERE quarantined = 1) q`;
+/** A quarantined resource waits since its latest applied quarantine action (else its creation). */
+const quarantinedAt = `coalesce(${latest('q.key', 'ma.created_at')}, q.createdAt, 0)`;
+/** Served-or-not master filter `f` that is disputed (disputes, or more down than up votes) and not quarantined. */
+const disputedWhere = `(f.disputes > 0 OR f.downvotes > f.upvotes)
+  AND NOT EXISTS (SELECT 1 FROM filter_registry r WHERE r.filter_id = f.filter_id AND r.quarantined = 1)`;
+/** A disputed filter waits since its latest vote event, else its version's latest revision. */
+const disputedAt = `coalesce((SELECT max(ve.created_at) * 1000 FROM vote_events ve WHERE ve.filter_id = f.filter_id),
+  (SELECT max(mr.generated_at) * 1000 FROM master_revisions mr WHERE mr.version_id = f.version_id), 0)`;
+
 // Quarantined resources take their time and reason from the latest applied quarantine action.
 const quarantinedSql = `SELECT * FROM (SELECT 'quarantined' AS kind, 'quarantined:' || q.key AS key, q.key AS id,
-    coalesce(${latest('q.key', 'ma.created_at')}, q.createdAt, 0) AS at, q.key AS resource, ${revision('q.key')} AS revision,
+    ${quarantinedAt} AS at, q.key AS resource, ${revision('q.key')} AS revision,
     q.targetType, q.targetId, ${latest('q.key', "json_object('actor', ma.actor, 'command', ma.command, 'reason', ma.reason, 'at', ma.created_at)")} AS action,
     CASE q.targetType WHEN 'submission' THEN (SELECT va.contributor_id FROM version_acceptances va WHERE va.submission_id = q.targetId) END AS reporter,
     CASE q.targetType WHEN 'filter' THEN ${filterImpact('q.targetId')} WHEN 'version' THEN ${versionImpact('q.targetId')}
       ELSE json_object('entries', (SELECT count(*) FROM submission_entries se WHERE se.submission_id = q.targetId)) END AS impact
-  FROM (SELECT 'filter:' || filter_id AS key, 'filter' AS targetType, filter_id AS targetId, NULL AS createdAt
-      FROM filter_registry WHERE quarantined = 1
-    UNION ALL SELECT 'version:' || version_id, 'version', version_id, created_at * 1000 FROM versions WHERE quarantined = 1
-    UNION ALL SELECT 'submission:' || submission_id, 'submission', submission_id, accepted_at * 1000
-      FROM version_acceptances WHERE quarantined = 1) q)
+  FROM ${quarantinedSet})
   WHERE ${before('at', 'key')} ORDER BY at DESC, key DESC LIMIT ?3`;
 
 /** Per-source SQL. Each reads an open set through its queue or partial index, then sorts newest first. */
@@ -68,27 +79,42 @@ const sources: Record<Source, string> = {
     WHERE ${before('at', 'key')} ORDER BY at DESC, key DESC LIMIT ?3`,
   quarantined: quarantinedSql,
   disputed: `SELECT * FROM (SELECT 'disputed' AS kind, 'disputed:' || f.filter_id AS key, f.filter_id AS id,
-      coalesce((SELECT max(ve.created_at) * 1000 FROM vote_events ve WHERE ve.filter_id = f.filter_id), 0) AS at,
+      ${disputedAt} AS at,
       'filter:' || f.filter_id AS resource, ${revision("'filter:' || f.filter_id")} AS revision, 'filter' AS targetType,
       f.filter_id AS targetId, ${filterImpact('f.filter_id')} AS impact
-    FROM master_filters f WHERE (f.disputes > 0 OR f.downvotes > f.upvotes)
-      AND NOT EXISTS (SELECT 1 FROM filter_registry r WHERE r.filter_id = f.filter_id AND r.quarantined = 1))
+    FROM master_filters f WHERE ${disputedWhere})
     WHERE ${before('at', 'key')} ORDER BY at DESC, key DESC LIMIT ?3`,
 };
-/** Open-decision counts per queue kind, in one statement. */
+/**
+ * Open-decision counts and oldest waiting time (epoch ms; null when empty) per queue kind, in one
+ * statement. Each kind reads its open set through the same queue or partial index as its list, and
+ * its time matches the list item's `at`.
+ */
 export function queueCountsStatement(db: SqlDatabase) {
   return db.prepare(`SELECT (SELECT count(*) FROM reports WHERE state = 'open') AS reports,
+    (SELECT min(created_at) * 1000 FROM reports WHERE state = 'open') AS reportsOldest,
     (SELECT count(*) FROM alias_suggestions WHERE state = 'pending') AS aliases,
+    (SELECT min(created_at) * 1000 FROM alias_suggestions WHERE state = 'pending') AS aliasesOldest,
     (SELECT count(*) FROM versions WHERE status = 'candidate') AS versions,
-    (SELECT count(*) FROM filter_registry WHERE quarantined = 1) + (SELECT count(*) FROM versions WHERE quarantined = 1)
-      + (SELECT count(*) FROM version_acceptances WHERE quarantined = 1) AS quarantined,
-    (SELECT count(*) FROM master_filters f WHERE (f.disputes > 0 OR f.downvotes > f.upvotes)
-      AND NOT EXISTS (SELECT 1 FROM filter_registry r WHERE r.filter_id = f.filter_id AND r.quarantined = 1)) AS disputed`);
+    (SELECT min(created_at) * 1000 FROM versions WHERE status = 'candidate') AS versionsOldest,
+    (SELECT count(*) FROM ${quarantinedSet}) AS quarantined,
+    (SELECT min(${quarantinedAt}) FROM ${quarantinedSet}) AS quarantinedOldest,
+    (SELECT count(*) FROM master_filters f WHERE ${disputedWhere}) AS disputed,
+    (SELECT min(${disputedAt}) FROM master_filters f WHERE ${disputedWhere}) AS disputedOldest`);
 }
-export type QueueCounts = Record<Source | 'all', number>;
-export function queueCounts(row: Record<string, number>): QueueCounts {
-  const counts = { reports: row.reports, aliases: row.aliases, versions: row.versions, quarantined: row.quarantined, disputed: row.disputed };
-  return { all: Object.values(counts).reduce((sum, value) => sum + Number(value), 0), ...counts };
+const SOURCES: Source[] = ['reports', 'aliases', 'versions', 'quarantined', 'disputed'];
+/** Open decisions per kind; `oldestAt` is the whole queue's oldest waiting time (epoch ms, null when empty). */
+export type QueueCounts = Record<Source | 'all', number> & { oldestAt: number | null };
+/** Oldest waiting time per kind and for the whole queue (epoch ms, null when that kind is empty). */
+export type QueueOldest = Record<Source | 'all', number | null>;
+export function queueCounts(row: Record<string, number | null>): QueueCounts {
+  const counts = Object.fromEntries(SOURCES.map(source => [source, Number(row[source])])) as Record<Source, number>;
+  return { all: SOURCES.reduce((sum, source) => sum + counts[source], 0), ...counts, oldestAt: queueOldest(row).all };
+}
+export function queueOldest(row: Record<string, number | null>): QueueOldest {
+  const oldest = Object.fromEntries(SOURCES.map(source => [source, row[`${source}Oldest`] ?? null])) as Record<Source, number | null>;
+  const present = Object.values(oldest).filter((value): value is number => value !== null);
+  return { all: present.length ? Math.min(...present) : null, ...oldest };
 }
 
 type Raw = Record<string, any>;
@@ -126,7 +152,8 @@ export async function queuePage(db: SqlDatabase, url: URL, now: number) {
   const query = parseQuery(url, code, { kind: z.enum(QUEUE_KINDS).optional(), after: cursorParam.optional() });
   const cursor = decodeCursor(query.after, ['n', 's'], code) as [number, string] | null;
   if (cursor && !/^(report|alias|version|quarantined|disputed):/.test(cursor[1])) throw new InsightQueryError(code);
-  const [counts, page] = await Promise.all([queueCountsStatement(db).first<Record<string, number>>(),
+  const [counts, page] = await Promise.all([queueCountsStatement(db).first<Record<string, number | null>>(),
     readQueue(db, query.kind ?? 'all', cursor, PAGE_SIZE)]);
-  return { version: 1, observedAt: now * 1000, kind: query.kind ?? 'all', counts: queueCounts(counts!), ...page };
+  const kind = query.kind ?? 'all', oldest = queueOldest(counts!);
+  return { version: 1, observedAt: now * 1000, kind, counts: queueCounts(counts!), oldest, oldestAt: oldest[kind], ...page };
 }

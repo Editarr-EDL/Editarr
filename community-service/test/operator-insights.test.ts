@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyGetKey } from 'jose';
 import { tunnelActor } from '../src/runtime/environment.mjs';
 import { operatorService } from '../src/admin/service';
+import { queueOldest } from '../src/admin/insights/queue';
 import { audit, seedInsights } from './helpers/insights';
 import { db, now } from './helpers/versions';
 
@@ -85,7 +86,12 @@ describe('home', () => {
   it('includes the top queue items, latest revisions, leaders, activity and health', async () => {
     const body = await read('home');
     expect(body.period).toBe('7d');
-    expect(body.queueCounts).toEqual({ all: 7, reports: 3, aliases: 1, versions: 1, quarantined: 1, disputed: 1 });
+    expect(body.queueCounts).toEqual({ all: 7, reports: 3, aliases: 1, versions: 1, quarantined: 1, disputed: 1,
+      oldestAt: (now - 10_800) * 1000 });
+    expect(body.queueOldest).toEqual({ all: (now - 10_800) * 1000, reports: (now - 10_800) * 1000, aliases: now * 1000,
+      versions: now * 1000, quarantined: (now - 60) * 1000, disputed: now * 1000 });
+    // The whole queue's oldest decision is older than any of the five attention items shown.
+    expect(Math.min(...body.attention.map((item: any) => item.at))).toBeGreaterThan(body.queueCounts.oldestAt);
     expect(body.attention).toHaveLength(5);
     expect(body.latestUpdates.length).toBeGreaterThan(0);
     expect(body.latestUpdates[0]).toMatchObject({ at: now * 1000, item: { title: expect.any(String) }, version: { label: expect.any(String) },
@@ -264,6 +270,10 @@ describe('community', () => {
 
   it('queues reports, aliases, candidates, quarantines and disputes with impact', async () => {
     const queue = await read('queue');
+    expect(queue).toMatchObject({ oldestAt: (now - 10_800) * 1000, counts: { all: 7, oldestAt: (now - 10_800) * 1000 },
+      oldest: { reports: (now - 10_800) * 1000, quarantined: (now - 60) * 1000, disputed: now * 1000 } });
+    expect(queueOldest({ reports: 0, reportsOldest: null })).toEqual({ all: null, reports: null, aliases: null, versions: null,
+      quarantined: null, disputed: null });
     const kinds = queue.items.map((item: any) => item.kind);
     expect(kinds.sort()).toEqual(['alias', 'disputed', 'quarantined', 'report', 'report', 'report', 'version']);
     const report = queue.items.find((item: any) => item.id === 'r_gore');
@@ -278,12 +288,13 @@ describe('community', () => {
       impact: { uploads: 1, contributors: 1 } });
     expect(queue.items.find((item: any) => item.kind === 'quarantined')).toMatchObject({ resource: `filter:${seed.gentle}`,
       at: (now - 60) * 1000, latestAction: { command: 'quarantine', reason: 'Seeded reason' } });
-    expect((await read('queue?kind=disputed')).items).toEqual([expect.objectContaining({ id: seed.gore })]);
+    expect(await read('queue?kind=disputed')).toMatchObject({ oldestAt: now * 1000, items: [expect.objectContaining({ id: seed.gore })] });
     await db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 20)
       INSERT INTO versions (version_id, work_id, status, trust, revision, created_seq, created_at, label_text)
       SELECT printf('v_cand_%02d', i), 'w_untitled', 'candidate', 0, 1, 1000 + i, ? - i, printf('cut %02d', i) FROM n`).bind(now - 50_000).run();
     const versions = await read('queue?kind=versions');
     expect(versions.counts.versions).toBe(21);
+    expect(versions.oldestAt).toBe((now - 50_020) * 1000);
     const tail = await read(`queue?kind=versions&after=${encodeURIComponent(versions.nextCursor)}`);
     expect(tail).toMatchObject({ nextCursor: null, items: [{ id: 'v_cand_20', item: { title: 'w_untitled' }, version: { label: 'cut 20' } }] });
   });
@@ -314,5 +325,16 @@ describe('community', () => {
     expect(all.at(-1)).toMatchObject({ actionId: 'old-0', resourceLabel: { id: 'v_gone_0', text: 'v_gone_0', version: { label: 'v_gone_0' } } });
     expect(all.map((item: any) => item.createdAt)).toEqual(all.map((item: any) => item.createdAt).sort((a: number, b: number) => b - a));
     expect(all.find((item: any) => item.command === 'recompute').resourceLabel).toMatchObject({ type: 'recompute', id: null, text: 'recompute' });
+  });
+
+  it('keeps contributors whose net votes received cancel their other activity on the leaderboard', async () => {
+    const receipt = await db.prepare('SELECT receipt_id FROM download_receipts LIMIT 1').first<{ receipt_id: string }>();
+    await db.prepare(`INSERT INTO filter_votes (filter_id, contributor_id, vote, receipt_id, excluded, updated_at)
+      VALUES (?, ?, 'down', ?, 0, ?)`).bind(seed.gore, seed.priya.contributorId, receipt!.receipt_id, now).run();
+    const board = await read('contributors/leaderboard?period=all');
+    // 1 accepted + 1 upload + 0 cast − 2 received sums to zero, yet Mira is active.
+    expect(board.items.find((item: any) => item.contributor.contributorId === seed.mira.contributorId))
+      .toMatchObject({ accepted: 1, uploads: 1, votesCast: 0, votesReceived: -2 });
+    expect(board.total).toBe(4);
   });
 });

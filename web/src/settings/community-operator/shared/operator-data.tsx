@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { QueueCounts } from "../../../api/api-community-operator-community";
+import { accessFailureStatus } from "../../../api/api-community-operator";
 import { OperatorAccessError } from "../runtime";
 
 /** App-wide operator services: access-failure handling, queue badge refresh and the topbar freshness clock. */
@@ -31,7 +32,8 @@ export function useOperatorData<T>(key: string, load: (signal: AbortSignal) => P
       if (typeof observed === "number") setObservedAt(observed);
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
-      if (error instanceof OperatorAccessError && [401, 403].includes(error.status)) { onAccessFailure(error.status); return; }
+      const denied = accessFailureStatus(error);
+      if (denied) { onAccessFailure(denied); return; }
       const missing = error instanceof OperatorAccessError && [400, 404].includes(error.status);
       setState(current => ({ key, data: missing || current.key !== key ? null : current.data,
         status: missing ? "missing" : current.key === key && current.data ? "stale" : "unavailable" }));
@@ -41,6 +43,11 @@ export function useOperatorData<T>(key: string, load: (signal: AbortSignal) => P
   const refresh = useCallback(() => setAttempt(value => value + 1), []);
   const current = state.key === key ? state : { key, data: null, status: "loading" as const };
   return { data: current.data, status: current.status, refresh };
+}
+
+/** Resolve an optional read to null when it fails, but rethrow access failures so the session ends as for any read. */
+export function optionalRead<T>(read: Promise<T>): Promise<T | null> {
+  return read.catch((error: unknown) => { if (accessFailureStatus(error)) throw error; return null; });
 }
 
 const messages: Record<DataStatus, string> = { loading: "Loading service data...", fresh: "Service snapshot loaded",

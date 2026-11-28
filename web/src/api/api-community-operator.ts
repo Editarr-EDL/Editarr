@@ -96,6 +96,17 @@ export async function operatorRequest<T>(path: string, check: Check, signal: Abo
 export class OperatorMutationError extends OperatorAccessError {
   constructor(status: number, public readonly code: string) { super(status); }
 }
+/** 403 codes that refuse one request (CSRF/origin checks, ineligible moderation) without revoking the operator session. */
+const requestRefusals = new Set(["operator_csrf_denied", "operator_origin_denied", "moderation_ineligible"]);
+/**
+ * The access-failure status (401 or 403) when `error` means the operator session is missing or no longer authorised,
+ * or null for anything a page should report inline (request-level refusals, backup_* codes, conflicts, network errors).
+ */
+export function accessFailureStatus(error: unknown): 401 | 403 | null {
+  if (!(error instanceof OperatorAccessError) || (error.status !== 401 && error.status !== 403)) return null;
+  if (error.status === 403 && error instanceof OperatorMutationError && (requestRefusals.has(error.code) || error.code.startsWith("backup_"))) return null;
+  return error.status;
+}
 const read = operatorRequest;
 const query = (values: Record<string, string | null | undefined>) => {
   const params = new URLSearchParams(Object.entries(values).filter((entry): entry is [string, string] => !!entry[1]));

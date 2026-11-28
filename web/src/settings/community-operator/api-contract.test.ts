@@ -5,6 +5,8 @@ import { readOperatorActivity, readOperatorAudit, readOperatorHome, readOperator
   readOperatorQueue } from "../../api/api-community-operator-community";
 import { readOperatorBackups, readOperatorHealth, readOperatorMaintenanceRuns, readOperatorTrend, trendMetrics, writeOperatorBackupConfig,
   writeOperatorBackupRun, writeOperatorBackupStage } from "../../api/api-community-operator-system";
+import { accessFailureStatus, OperatorMutationError } from "../../api/api-community-operator";
+import { OperatorAccessError } from "./runtime";
 import { operatorFixture } from "./test-fixtures";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -57,4 +59,15 @@ it("sends backup mutations with CSRF headers, exact bodies and no body for runs 
   await expect(writeOperatorBackupStage("bk-27", signal)).resolves.toMatchObject({ restoreVolume: "restore-bk-27" });
   expect(() => writeOperatorBackupConfig({ ...config, keepLast: 0 }, signal)).toThrow();
   expect(() => writeOperatorBackupStage("../x", signal)).toThrow();
+});
+
+it("treats 401 and authorization 403s as access failures and request-level refusals as inline errors", () => {
+  expect(accessFailureStatus(new OperatorAccessError(401))).toBe(401);
+  expect(accessFailureStatus(new OperatorAccessError(403))).toBe(403);
+  expect(accessFailureStatus(new OperatorMutationError(403, "operator_not_allowed"))).toBe(403);
+  expect(accessFailureStatus(new OperatorMutationError(403, "operator_token_invalid"))).toBe(403);
+  for (const code of ["operator_csrf_denied", "operator_origin_denied", "moderation_ineligible", "backup_running"])
+    expect(accessFailureStatus(new OperatorMutationError(403, code))).toBeNull();
+  expect(accessFailureStatus(new OperatorMutationError(409, "backup_running"))).toBeNull();
+  expect(accessFailureStatus(new TypeError("offline"))).toBeNull();
 });

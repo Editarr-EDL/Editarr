@@ -1,5 +1,5 @@
 /** Page-level operator fixtures (catalog, profile, audit, system) built from the shared insight entities. */
-import { activity, dayMs as d, filterRows, gore, goreLabel, healthBody, hourMs as h, items, leaders, now, people, queueCounts, queueItems,
+import { activity, dayMs as d, filterRows, gore, goreLabel, healthBody, hourMs as h, items, leaders, now, people, queueCounts, queueItems, queueOldest,
   token, updates, versions } from "./test-fixtures-insights";
 
 const envelope = { version: 1, observedAt: now };
@@ -95,9 +95,10 @@ export const auditFixture = { ...envelope, source: "service_database", items: [
   audit("a-exclude-sam", `vote:f_gore:${people.sam.contributorId}`, "exclude_vote", "Second account of a suspended contributor", now - 9 * d, "Sam Doyle's vote on violence › gore"),
   audit("a-merge-test", "version:v_glass_test", "merge_version", "Test upload from a developer build", now - 25 * d, "Glass Harbor (2011) · Test Cut", "conflict")],
   nextCursor: null };
-export const queueFixture = (kind: string) => ({ ...envelope, kind, counts: queueCounts,
-  items: kind === "all" ? queueItems.filter(entry => entry.kind !== "quarantined") : queueItems.filter(entry => `${entry.kind}s` === kind || (kind === "aliases" && entry.kind === "alias")
-    || (kind === "quarantined" && entry.kind === "quarantined") || (kind === "disputed" && entry.kind === "disputed")), nextCursor: null });
+const queueKinds: Record<string, string> = { reports: "report", aliases: "alias", versions: "version", quarantined: "quarantined", disputed: "disputed" };
+export const queueFixture = (kind: string) => ({ ...envelope, kind, counts: queueCounts, oldest: queueOldest,
+  oldestAt: queueOldest[kind as keyof typeof queueOldest] ?? null,
+  items: kind === "all" ? queueItems : queueItems.filter(entry => entry.kind === queueKinds[kind]), nextCursor: kind === "all" || kind === "reports" ? "cursor-next" : null });
 export const activityFixture = { ...envelope, kind: "all", items: activity, nextCursor: null };
 export const healthFixture = { ...envelope, ...healthBody };
 const trendPoints: Record<string, (i: number, r: number) => [number, number?]> = {

@@ -12,14 +12,17 @@ export type HomePeriod = "24h" | "7d" | "30d";
 export interface Kpi { value: number; previous: number; series: SeriesPoint[] }
 export type QueueKind = "all" | "reports" | "aliases" | "versions" | "quarantined" | "disputed";
 export const queueKinds: QueueKind[] = ["all", "reports", "aliases", "versions", "quarantined", "disputed"];
-export type QueueCounts = Record<QueueKind, number>;
+/** Open decisions per kind; `oldestAt` is the whole queue's oldest waiting time (epoch ms, null when empty). */
+export type QueueCounts = Record<QueueKind, number> & { oldestAt: number | null };
+/** The oldest waiting time per kind across the whole queue (epoch ms, null when that kind is empty). */
+export type QueueOldest = Record<QueueKind, number | null>;
 /** One open decision; `resource`/`revision` are the moderation target and its expected revision. */
 export interface QueueItem { kind: "report" | "alias" | "version" | "quarantined" | "disputed"; id: string; at: number;
   resource: string; revision: number; target: { type: string; id: string }; title: { targetType: string; text: string };
   item: ItemRef | null; version: VersionRef | null; filter: FilterLabel | null; reporter: ContributorRef | null;
   reason: string | null; quote: string | null; suggestion: { text: string; normalized: string } | null;
   impact: Record<string, number | null> | null; latestAction: { actor: string; command: string; reason: string; at: number } | null }
-export interface QueuePage extends OperatorList<QueueItem> { kind: QueueKind; counts: QueueCounts }
+export interface QueuePage extends OperatorList<QueueItem> { kind: QueueKind; counts: QueueCounts; oldest: QueueOldest; oldestAt: number | null }
 export interface Update extends RevisionDelta { at: number; item: ItemRef | null; version: VersionRef | null; filter: FilterLabel | null;
   revision: number; generatedAt: number; cause: RevisionCause | null }
 export interface LeaderRow { contributor: ContributorRef; rank: number; accepted: number; uploads: number; votesReceived: number;
@@ -32,7 +35,7 @@ export interface OperatorHome { version: 1; observedAt: number; period: HomePeri
   kpis: { activeContributors: Kpi; uploads: Kpi & { items: number }; votes: { total: Kpi; upShare: number | null };
     openReports: { count: number; oldestAt: number | null; versionLevel: number };
     lastBackup: { status: "running" | "verified" | "failed" | "pruned" | null; at: number | null; bytes: number | null; nextAt: number | null } | null };
-  queueCounts: QueueCounts; attention: QueueItem[]; latestUpdates: Update[]; topContributors: LeaderRow[]; activity: ActivityEvent[];
+  queueCounts: QueueCounts; queueOldest: QueueOldest; attention: QueueItem[]; latestUpdates: Update[]; topContributors: LeaderRow[]; activity: ActivityEvent[];
   health: Omit<OperatorHealth, "version" | "observedAt"> }
 export type ActivityKind = "all" | "uploads" | "votes" | "reports" | "moderation";
 export type LeaderPeriod = "7d" | "30d" | "all";
@@ -56,7 +59,9 @@ export interface AuditRow { actionId: string; actor: string; resource: string; t
   outcome: "applied" | "denied" | "conflict"; errorCode: string | null; expectedRevision: number; createdAt: number; resourceLabel: ResourceLabel }
 
 const at = nullable(number);
-const counts = fields({ all: number, reports: number, aliases: number, versions: number, quarantined: number, disputed: number });
+const counts = fields({ all: number, reports: number, aliases: number, versions: number, quarantined: number, disputed: number, oldestAt: nullable(number) });
+const oldest = fields({ all: nullable(number), reports: nullable(number), aliases: nullable(number), versions: nullable(number),
+  quarantined: nullable(number), disputed: nullable(number) });
 const kpi = { value: number, previous: number, series };
 export const queueItem = fields({ kind: oneOf("report", "alias", "version", "quarantined", "disputed"), id: text, at: number,
   resource: text, revision: number, target: fields({ type: text, id: text }), title: fields({ targetType: text, text }),
@@ -75,7 +80,7 @@ const home = fields({ ...envelope, period: oneOf("24h", "7d", "30d"),
   kpis: fields({ activeContributors: fields(kpi), uploads: fields({ ...kpi, items: number }), votes: fields({ total: fields(kpi), upShare: nullable(fraction) }),
     openReports: fields({ count: number, oldestAt: at, versionLevel: number }),
     lastBackup: nullable(fields({ status: nullable(oneOf("running", "verified", "failed", "pruned")), at, bytes: nullable(number), nextAt: at })) }),
-  queueCounts: counts, attention: array(queueItem, 5), latestUpdates: array(update, 5), topContributors: array(leaderRow, 5),
+  queueCounts: counts, queueOldest: oldest, attention: array(queueItem, 5), latestUpdates: array(update, 5), topContributors: array(leaderRow, 5),
   activity: array(activityEvent, 8), health: fields(healthFields) });
 const usage = fields({}, { allowed: fields({ occurrences: number, units: number, observedAt: number }),
   denied: fields({ occurrences: number, units: number, observedAt: number }), retried: fields({ occurrences: number, units: number, observedAt: number }) });
@@ -122,7 +127,7 @@ export function readOperatorProfile(contributorId: string, signal: AbortSignal) 
 }
 export const readOperatorQueue = (kind: QueueKind, after: string | null, signal: AbortSignal) =>
   operatorRequest<QueuePage>(`/admin/v1/queue${query({ kind: kind === "all" ? null : allowed(kind, queueKinds), after })}`,
-    listShape(queueItem, 100, { kind: text, counts }), signal, undefined, big);
+    listShape(queueItem, 100, { kind: text, counts, oldest, oldestAt: nullable(number) }), signal, undefined, big);
 export const readOperatorAudit = (after: string | null, signal: AbortSignal) =>
   operatorRequest<OperatorList<AuditRow> & { source: string }>(`/admin/v1/audit${query({ after })}`,
     listShape(auditRow, 100, { source: text }), signal, undefined, big);

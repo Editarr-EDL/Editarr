@@ -44,7 +44,7 @@ export async function readLeaderboard(db: SqlDatabase, since: number, metric: Le
       (SELECT count(*) FROM supported s JOIN reports r ON r.target_type = 'filter' AND r.target_id = s.f
         WHERE s.c = c.contributor_id AND r.created_at >= ?1) AS reportsAgainst
       FROM contributors c)
-    SELECT *, count(*) OVER () AS total FROM scores WHERE accepted + uploads + votesCast + votesReceived != 0
+    SELECT *, count(*) OVER () AS total FROM scores WHERE accepted > 0 OR uploads > 0 OR votesCast > 0 OR votesReceived != 0
     ORDER BY ${order[metric]}, contributorId LIMIT ?2 OFFSET ?3`).bind(since, limit, offset).all<Record<string, any>>();
   const items = rows.results.map((row, index): LeaderRow => ({
     contributor: { contributorId: row.contributorId, displayName: row.displayName }, rank: offset + index + 1,

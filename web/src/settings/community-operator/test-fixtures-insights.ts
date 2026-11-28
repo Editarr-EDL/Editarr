@@ -64,7 +64,9 @@ export const queueItems = [
     suggestion: null, impact: { served: 0, confidence: 0.6, upvotes: 0, downvotes: 0, disputes: 0, attestations: 1 },
     latestAction: { actor: "ryan@example.org", command: "quarantine", reason: "Duplicate of the 01:31:05 filter with wrong bounds", at: now - 6 * d } },
 ];
-export const queueCounts = { all: 5, reports: 2, aliases: 1, versions: 1, quarantined: 1, disputed: 1 };
+/** Whole-queue counts and oldest waits: one older report sits beyond the first page, so the oldest wait is 15 days. */
+export const queueCounts = { all: 7, reports: 3, aliases: 1, versions: 1, quarantined: 1, disputed: 1, oldestAt: now - 15 * d };
+export const queueOldest = { all: now - 15 * d, reports: now - 15 * d, aliases: now - 2 * d, versions: now - 3 * d, quarantined: now - 6 * d, disputed: now - 4 * d };
 const cause = (who: { contributorId: string; displayName: string }) => ({ kind: "upload", contributor: who });
 export const updates = [
   { at: now - 2 * h, item: items.arrival, version: versions.dc, filter: null, revision: 7, generatedAt: now - 2 * h, filters: 31, added: 3, removed: 1, retimed: 0,
@@ -115,6 +117,6 @@ export const homeFixture = { version: 1, observedAt: now, period: "7d",
   kpis: { activeContributors: { value: 29, previous: 25, series: series([22, 24, 23, 26, 25, 27, 29], d) }, uploads: { ...kpi([5, 7, 4, 8, 6, 9, 7], 41), items: 7 },
     votes: { total: kpi([160, 172, 158, 190, 181, 205, 218], 1189), upShare: 0.93 }, openReports: { count: 2, oldestAt: now - 18 * h, versionLevel: 1 },
     lastBackup: { status: "verified", at: now - 14.5 * h, bytes: 43830067, nextAt: now + 9.5 * h } },
-  queueCounts, attention: queueItems.slice(0, 5), latestUpdates: updates, topContributors: leaders.slice(0, 5), activity: activity.slice(0, 5),
+  queueCounts, queueOldest, attention: queueItems.slice(0, 5), latestUpdates: updates, topContributors: leaders.slice(0, 5), activity: activity.slice(0, 5),
   health: healthBody };
 export { d as dayMs, h as hourMs, token };

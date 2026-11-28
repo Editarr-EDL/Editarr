@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { OperatorMutationError } from "../../../api/api-community-operator";
+import { accessFailureStatus, OperatorMutationError } from "../../../api/api-community-operator";
 import { writeOperatorRecompute, type RecomputeIntent } from "../../../api/api-community-operator-actions";
 import { reasonText } from "../../../api/api-community-operator-checks";
 import { OperatorAccessError } from "../runtime";
@@ -30,9 +30,8 @@ export function RecomputeAll({ onAccessFailure }: { onAccessFailure: (status: nu
         `Batch recorded. Audit ID: ${result.jobId}. More versions remain after ${result.nextAfter}.`);
     } catch (error) {
       if (controller.signal.aborted) return;
-      if (error instanceof OperatorAccessError && [401, 403].includes(error.status)) {
-        onAccessFailure(error.status); return;
-      }
+      const denied = accessFailureStatus(error);
+      if (denied) { onAccessFailure(denied); return; }
       if (error instanceof OperatorMutationError || (error instanceof OperatorAccessError && error.status === 400)) {
         setSaved(null);
         setMessage(`Recompute refused${error instanceof OperatorMutationError ? ` (${error.code})` : ""}. No batch is confirmed.`);

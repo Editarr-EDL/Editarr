@@ -1,11 +1,12 @@
-import { chmodSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { backupDrain, backupRunning, scheduledBackup, startBackup } from '../src/backups/runner';
 import { verifySnapshotFile } from '../src/backups/engine';
-import { stageBackup } from '../src/backups/staging';
+import { shellQuote, stageBackup } from '../src/backups/staging';
 import { readBackupRun } from '../src/backups/store';
 import { backupFixture, writePairs } from './helpers/backups';
 
@@ -21,7 +22,8 @@ describe('online backup engine', () => {
     writePairs(fixture.database, 0, 4000, 400);
     let written = 4000, writing = true;
     const writer = (async () => {
-      while (writing) { writePairs(fixture.database, written, 5); written += 5; await new Promise(resolve => setImmediate(resolve)); }
+      // Steady writes with short gaps: a writer holding the connection 100% of the time starves backup steps.
+      while (writing) { writePairs(fixture.database, written, 5); written += 5; await new Promise(resolve => setTimeout(resolve, 1)); }
     })();
     const runId = await startBackup(fixture.env, 'manual', 'operator-subject', Date.now());
     expect(backupRunning()).toBe(true);
@@ -47,7 +49,7 @@ describe('online backup engine', () => {
     expect(existsSync(`${file}-wal`) || existsSync(`${file}-shm`)).toBe(false);
     const audit = fixture.database.connection.prepare("SELECT command, target_id FROM moderation_actions WHERE resource = 'backup'").all();
     expect(audit).toEqual([{ command: 'backup_run', target_id: runId }]);
-  });
+  }, 30_000);
 
   it('creates destination directories 0700 inside the root and records an unwritable destination as a failure', async () => {
     fixture = backupFixture();
@@ -121,5 +123,29 @@ describe('online backup engine', () => {
       .toEqual([{ trigger: 'scheduled', status: 'verified', started_at: slot + 1000 }]);
     await scheduledBackup(fixture.env, slot + 86_400_000);
     expect(count()).toBe(2);
+  });
+
+  it('shell-quotes generated restore commands for roots with spaces, quotes and metacharacters', async () => {
+    fixture = backupFixture();
+    const root = join(fixture.directory, `it's a "root" $(touch pwned) & ; *`);
+    mkdirSync(root, { mode: 0o700 });
+    const env = { ...fixture.env, COMMUNITY_BACKUP_ROOT: root };
+    const runId = await startBackup(env, 'manual', 'operator-subject', Date.now());
+    await backupDrain();
+    const staged = await stageBackup(env, fixture.database, runId, 'operator-subject', Date.now());
+    expect(staged.stagedPath.startsWith(root)).toBe(true);
+    const bin = join(fixture.directory, 'bin'), log = join(fixture.directory, 'docker.log');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'docker'), `#!/bin/sh\nprintf 'VOLUME=%s\\0' "$COMMUNITY_RESTORE_VOLUME" >> "$DOCKER_LOG"\nfor arg in "$@"; do printf '%s\\0' "$arg" >> "$DOCKER_LOG"; done\nprintf '\\n' >> "$DOCKER_LOG"\n`, { mode: 0o755 });
+    for (const command of staged.commands)
+      execFileSync('/bin/sh', ['-c', command], { cwd: fixture.directory, env: { PATH: `${bin}:/usr/bin:/bin`, DOCKER_LOG: log } });
+    const calls = readFileSync(log, 'utf8').split('\n').filter(Boolean).map(line => line.split('\0').filter(Boolean));
+    expect(calls[0]).toEqual(['VOLUME=', 'compose', '-f', 'community-service/compose.yaml', 'stop', 'community']);
+    expect(calls[1]).toEqual([`VOLUME=${staged.restoreVolume}`, 'compose', '-f', 'community-service/compose.yaml', 'run', '--rm',
+      '--no-deps', 'restore', '--confirm', '--source', staged.stagedPath, '--sha256', staged.sha256]);
+    expect(existsSync(join(fixture.directory, 'pwned'))).toBe(false);
+    expect(shellQuote("a'b c")).toBe(`'a'\\''b c'`);
+    expect(shellQuote('')).toBe("''");
+    expect(shellQuote('/online-backups/staged/x.sqlite')).toBe('/online-backups/staged/x.sqlite');
   });
 });

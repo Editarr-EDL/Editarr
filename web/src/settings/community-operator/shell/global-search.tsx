@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { accessFailureStatus } from "../../../api/api-community-operator";
 import { readOperatorSearch, type SearchResult } from "../../../api/api-community-operator-catalog";
-import { OperatorAccessError } from "../runtime";
 import { itemTitle, titleCase } from "../shared/format";
 import { useOperator } from "../shared/operator-data";
 import { contributorLink, itemLink, navigate, operatorLink } from "../routes";
@@ -39,25 +39,30 @@ export function GlobalSearch() {
     const controller = new AbortController();
     setState("loading");
     const timer = window.setTimeout(() => {
-      readOperatorSearch(value, controller.signal).then(found => { if (!controller.signal.aborted) { setResult(found); setState("idle"); } })
+      // Validation throws synchronously; route it through the promise so the state always settles.
+      Promise.resolve().then(() => readOperatorSearch(value, controller.signal))
+        .then(found => { if (!controller.signal.aborted) { setResult(found); setState("idle"); } })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return;
-          if (error instanceof OperatorAccessError && [401, 403].includes(error.status)) onAccessFailure(error.status);
+          const denied = accessFailureStatus(error);
+          if (denied) onAccessFailure(denied);
           else setState("error");
         });
     }, 220);
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [query]);
-  const links: { href: string; label: string; group: string }[] = result ? [
-    ...result.ids.map(hit => ({ href: idLink(hit.kind, hit.id), label: `${titleCase(hit.kind)} ${hit.id}${hit.label ? ` · ${hit.label}` : ""}`, group: "IDs" })),
-    ...result.items.map(item => ({ href: itemLink(item.workId), label: itemTitle(item), group: "Items" })),
-    ...result.contributors.map(person => ({ href: contributorLink(person.contributorId), label: person.displayName, group: "Contributors" })),
+  // Only the answer to the current query is shown or opened; an earlier query's hits never are.
+  const current = result && result.q === query.trim() ? result : null;
+  const links: { href: string; label: string; group: string }[] = current ? [
+    ...current.ids.map(hit => ({ href: idLink(hit.kind, hit.id), label: `${titleCase(hit.kind)} ${hit.id}${hit.label ? ` · ${hit.label}` : ""}`, group: "IDs" })),
+    ...current.items.map(item => ({ href: itemLink(item.workId), label: itemTitle(item), group: "Items" })),
+    ...current.contributors.map(person => ({ href: contributorLink(person.contributorId), label: person.displayName, group: "Contributors" })),
   ] : [];
   const close = () => { setOpen(false); setQuery(""); };
   const groups = [...new Set(links.map(link => link.group))];
   return <div className="gsearch" ref={box} onBlur={event => { if (!box.current?.contains(event.relatedTarget as Node)) setOpen(false); }}>
     <label htmlFor="operator-search" className="sr">Search titles, contributors or any ID</label>
-    <input id="operator-search" ref={input} type="search" placeholder="Search titles, contributors or any ID…" value={query} maxLength={200}
+    <input id="operator-search" ref={input} type="search" placeholder="Search titles, contributors or any ID…" value={query} maxLength={100}
       autoComplete="off" aria-controls={open && query.trim().length >= 2 ? "operator-search-results" : undefined}
       onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); setOpen(true); }}
       onKeyDown={event => {
@@ -66,9 +71,9 @@ export function GlobalSearch() {
       }} />
     <kbd aria-hidden="true">/</kbd>
     {open && query.trim().length >= 2 && <div className="search-pop" id="operator-search-results" role="region" aria-label="Search results">
-      {state === "loading" && <p className="muted" role="status">Searching…</p>}
+      {(state === "loading" || (state === "idle" && !current)) && <p className="muted" role="status">Searching…</p>}
       {state === "error" && <p role="alert">Search unavailable</p>}
-      {state === "idle" && result && !links.length && <p className="muted" role="status">No matches</p>}
+      {state === "idle" && current && !links.length && <p className="muted" role="status">No matches</p>}
       {groups.map(group => <div key={group}><h2 className="navtitle">{group}</h2><ul>{links.filter(link => link.group === group)
         .map(link => <li key={link.href + link.label}><a href={link.href} onClick={close}>{link.label}</a></li>)}</ul></div>)}
     </div>}

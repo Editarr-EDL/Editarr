@@ -61,7 +61,7 @@ export function ItemsPage({ params }: { params: Record<string, string | null> })
     </div>
     <div className="toolbar">
       <div className="search"><label htmlFor="items-filter" className="sr">Filter items by title or year</label>
-        <input id="items-filter" type="search" placeholder="Filter by title or year" value={draft} maxLength={200} onChange={event => setDraft(event.target.value)} /></div>
+        <input id="items-filter" type="search" placeholder="Filter by title or year" value={draft} maxLength={100} onChange={event => setDraft(event.target.value)} /></div>
       <div className="right"><span className="lbl sort-l" aria-hidden="true">Sort</span>
         <label htmlFor="items-sort" className="sr">Sort items</label>
         <select id="items-sort" className="btn sort-sel" value={sort} onChange={event => go(event.target.value as ItemSort)}>

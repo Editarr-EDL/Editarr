@@ -5,13 +5,15 @@ import { OperatorContext, type OperatorServices } from "./shared/operator-data";
 import { operatorFixture } from "./test-fixtures";
 
 /**
- * Stub `fetch` with the synthetic operator fixtures; `handle` may answer a request first (return a Response or a JSON
+ * Stub `fetch` with the synthetic operator fixtures; `handle` may answer a request first (return a Response, a pending
+ * Response promise or a JSON
  * value) and returns undefined to fall through. Returns the mock so tests can inspect calls.
  */
 export function stubOperatorFetch(handle?: (path: string, init?: RequestInit) => unknown) {
   const fetcher = vi.fn((path: string, init?: RequestInit) => {
     const custom = handle?.(path, init);
     if (custom instanceof Response) return Promise.resolve(custom);
+    if (custom instanceof Promise) return custom as Promise<Response>;
     if (custom !== undefined) return Promise.resolve(Response.json(custom));
     try { return Promise.resolve(Response.json(operatorFixture(path))); }
     catch { return Promise.resolve(Response.json({ error: { code: "resource_not_found" } }, { status: 404 })); }

@@ -20,7 +20,7 @@ export function QueuePage({ kind: requested, params }: { kind: string; params: R
   const moderation = useModeration({ onAccessFailure, onApplied: applied });
   const begin = (...args: Parameters<typeof moderation.begin>) => void moderation.begin(...args);
   const data = page.data, counts = data?.counts;
-  const oldest = data?.items.length ? Math.min(...data.items.map(entry => entry.at)) : null;
+  const oldest = data?.oldestAt ?? null;
   return <section aria-labelledby="page-title">
     <PageHead eyebrow="Moderate" title={queueLabels[kind]} intro="Newest first. Every action asks for a reason and is written to the audit log.">
       <nav className="actions" aria-label="Queue filter">{pills.filter(pill => pill !== "disputed" || (counts?.disputed ?? 0) > 0 || kind === "disputed")

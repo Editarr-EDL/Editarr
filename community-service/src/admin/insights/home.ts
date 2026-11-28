@@ -5,7 +5,7 @@ import { nextBackupAt, type BackupFrequency } from '../../backups/schedule';
 import { serviceHealth } from '../system/health';
 import { resolveLabels } from '../labels';
 import { parseQuery, PERIOD_SECONDS, type Period } from './query';
-import { queueCounts, queueCountsStatement, readQueue } from './queue';
+import { queueCounts, queueCountsStatement, queueOldest, readQueue } from './queue';
 import { readActivity } from './activity';
 import { readLeaderboard } from './leaderboard';
 import { summariseRevisions } from './revisions';
@@ -83,7 +83,7 @@ export async function home(db: SqlDatabase, env: Env, url: URL, now: number) {
       lastBackup: !config || (config.status === null && !nextAt) ? null
         : { status: config.status ?? null, at: config.at ?? null, bytes: config.bytes ?? null, nextAt },
     },
-    queueCounts: queueCounts(counts.results[0]),
+    queueCounts: queueCounts(counts.results[0]), queueOldest: queueOldest(counts.results[0]),
     attention: attention.items,
     latestUpdates: updates.map(({ versionId, ...update }) => ({ at: update.generatedAt, ...labels.target('version', versionId), ...update })),
     topContributors: leaders.items,

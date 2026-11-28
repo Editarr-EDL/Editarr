@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { stubOperatorFetch } from "../test-render";
-import { operatorRoute } from "../routes";
+import { operatorLink, operatorRoute } from "../routes";
 import { OperatorApp } from "./operator-app";
 
 beforeEach(() => { window.location.hash = "#/home"; });
@@ -15,7 +15,7 @@ it("routes hash changes (including back/forward) to pages and highlights the sid
   stubOperatorFetch(); mount();
   expect(await screen.findByRole("heading", { level: 1, name: /Good (morning|afternoon|evening), Ryan/ })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-  await waitFor(() => expect(screen.getByRole("link", { name: /^Reports/ })).toHaveTextContent("2"));
+  await waitFor(() => expect(screen.getByRole("link", { name: /^Reports/ })).toHaveTextContent("3"));
   go("#/queue/aliases");
   expect(await screen.findByRole("heading", { level: 1, name: "Alias suggestions" })).toBeInTheDocument();
   expect(within(screen.getByRole("navigation", { name: "Operator pages" })).getByRole("link", { name: /^Alias suggestions/ }))
@@ -41,6 +41,11 @@ it("parses routes, drops unsafe values and maps legacy views", () => {
     params: { version: "v_1", filter: "f_1", q: "Blue Comet" } });
   expect(operatorRoute("#/items/<x>?filter=<script>").path).toEqual([]);
   expect(operatorRoute("#/items?filter=<script>").params).toEqual({});
+  const cursor = "WyJhYitjZC9lZiIsMTJd+/9=";
+  const link = operatorLink("activity", { before: cursor, filter: "a+b" });
+  expect(operatorRoute(link).params).toEqual({ before: cursor });
+  expect(operatorRoute(`#/audit?after=${"A".repeat(8193)}`).params).toEqual({});
+  expect(operatorRoute("#/audit?after=bad%20cursor").params).toEqual({});
   expect(operatorRoute("#/versions?filter=candidate&selected=v_1")).toMatchObject({ page: "versions", params: { filter: "candidate", selected: "v_1" } });
   expect(["#/aliases", "#/reports", "#/contributors", "#/operations", "#/audit", "#/backup", "#/overview", "#/recompute"].map(hash => operatorRoute(hash).page))
     .toEqual(["aliases", "reports", "contributors", "health", "audit", "backups", "home", "health"]);
