@@ -1,6 +1,7 @@
 /* Model narrative output: descriptions, severity chips (vs expected severity) and transcripts.
    Text for sensitive (nudity/sex) items stays hidden behind the same reveal controls as images. */
-import { allLoaded, loadAllModels } from "./data.js";
+import { S, allLoaded, loadAllModels } from "./data.js";
+import { familyOf } from "./scoring.js";
 import { h, chip } from "./ui.js";
 import { isSensitive } from "./sensitivity.js";
 
@@ -16,16 +17,40 @@ function keySeverity(sev, key) {
   return toks.length ? Math.max(...toks) : null;
 }
 
-/** "violence 2/3" chip; with item.expected_severity for the key it adds ✓ (equal), ≈ (within 1) or ✗. */
+/* Highest level per key when the inventory predates `severity_max` (see severity_map.json). */
+const DEFAULT_MAX = { drugs: 2 };
+const severityMax = (key) => S.inv?.severity_max?.[key] ?? DEFAULT_MAX[key] ?? 3;
+
+/**
+ * Ground-truth severity for a film window with reviewer corrections applied, as in severity.py's window_severity:
+ * a family corrected absent is 0; a family or token corrected present keeps its tag level, or is unscored (null)
+ * without one. Unscored keys stay null, never 0; non-window items have none.
+ */
+export function expectedSeverity(item) {
+  const raw = item?.expected_severity;
+  if (!raw) return null;
+  const out = { ...raw }, corr = item.corr || {};
+  for (const key of Object.keys(out)) {
+    if (corr[key] === false) out[key] = 0;
+    else if (Object.entries(corr).some(([k, v]) => v === true && familyOf(k) === key)) out[key] = out[key] || null;
+  }
+  return out;
+}
+
+/** "violence 2/3" chip (drugs out of 2); with an expected level for the key it adds ✓ (equal), ≈ (within 1) or ✗. */
 function severityChip(key, value, item) {
-  const exp = item?.expected_severity?.[key];
-  let cls = `sev sev-${value ?? "na"}`, text = `${key} ${value ?? "–"}/3`, title = `Model severity for ${key}`;
-  if (Number.isFinite(exp)) {
-    const diff = value == null ? Infinity : Math.abs(value - exp);
+  const exp = expectedSeverity(item)?.[key];
+  let cls = `sev sev-${value ?? "na"}`, text = `${key} ${value ?? "–"}/${severityMax(key)}`, title = `Model severity for ${key}`;
+  if (Number.isFinite(exp) && value == null) {
+    // Not rated (or unusable): describe-eval counts it as unusable, not as a miss.
+    text += ` · exp ${exp}`;
+    title = `Model did not rate ${key}; expected ${exp}`;
+  } else if (Number.isFinite(exp)) {
+    const diff = Math.abs(value - exp);
     const [mark, kind, word] = diff === 0 ? ["✓", "match", "matches"] : diff === 1 ? ["≈", "close", "is within 1 of"] : ["✗", "miss", "differs from"];
     cls += ` sev-${kind}`;
     text += ` · exp ${exp} ${mark}`;
-    title = `Model severity ${value ?? "not rated"} ${word} expected ${exp}`;
+    title = `Model severity ${value} ${word} expected ${exp}`;
   }
   return chip(text, cls, title);
 }
@@ -35,7 +60,7 @@ export function severityChips(r, item) {
   if (!r?.severity) return null;
   const keys = new Set([
     ...Object.keys(r?.severity || {}).filter((k) => r.severity[k] > 0),
-    ...Object.keys(item.expected_severity || {}),
+    ...Object.entries(expectedSeverity(item) || {}).filter(([, v]) => Number.isFinite(v)).map(([k]) => k),
   ]);
   return keys.size ? h("span", { class: "chips" }, [...keys].sort().map((k) => severityChip(k, keySeverity(r?.severity, k), item))) : null;
 }
@@ -43,7 +68,8 @@ export function severityChips(r, item) {
 /** The most severe key as one chip (ties prefer a key with an expected severity, to show the comparison), or null. */
 export function maxSeverityChip(r, item) {
   let best = null;
-  const hasExp = (k) => Number.isFinite(item.expected_severity?.[k]);
+  const expected = expectedSeverity(item);
+  const hasExp = (k) => Number.isFinite(expected?.[k]);
   for (const [k, v] of Object.entries(r?.severity || {})) {
     if (v > 0 && (!best || v > best[1] || (v === best[1] && hasExp(k) && !hasExp(best[0])))) best = [k, v];
   }

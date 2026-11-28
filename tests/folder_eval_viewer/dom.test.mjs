@@ -23,6 +23,7 @@ async function viewer() {
     data: await import(new URL("data.js", VIEWER)),
     metrics: await import(new URL("metrics.js", VIEWER)),
     detail: await import(new URL("detail.js", VIEWER)),
+    narrative: await import(new URL("narrative.js", VIEWER)),
   };
   return mods;
 }
@@ -60,4 +61,13 @@ test("closing the detail returns focus to a link for the item", { skip }, async 
   assert.equal(document.activeElement.id, "path");
   detail.restoreDetailFocus("missing");
   assert.equal(document.activeElement, main);
+});
+
+test("severity chips use each key's scale and compare only to scored expectations", { skip }, async () => {
+  const { data, narrative } = await viewer();
+  data.S.inv = { severity_max: { violence: 3, sex: 3, nudity: 3, drugs: 2 } };
+  const item = { expected_severity: { violence: 2, sex: null, nudity: 0, drugs: 2 }, corr: null };
+  const chips = narrative.severityChips({ severity: { violence: 2, drugs: 1, sex: 3 } }, item);
+  const texts = [...chips.querySelectorAll(".chip")].map((c) => c.textContent);
+  assert.deepEqual(texts, ["drugs 1/2 · exp 2 ≈", "nudity –/3 · exp 0", "sex 3/3", "violence 2/3 · exp 2 ✓"]);
 });

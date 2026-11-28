@@ -2,9 +2,11 @@
 
 Levels come from each window's `source_tags` (the film tags overlapping it, padded like
 the film labels) through the editable ladders in `severity_map.json`; a key's level is
-the max over its tags. Reviewer corrections override presence: a family corrected
-absent is level 0, and a family (or one of its tokens) corrected present without a
-severity tag is unscored (None). Correcting only a token absent leaves the level as is.
+the max over its tags. A key whose family the window's labels mark present, but none of
+whose tags has a severity level (e.g. `violence/disturbing_images`), is unscored (None)
+rather than 0. Reviewer corrections override presence: a family corrected absent is
+level 0, and a family (or one of its tokens) corrected present without a severity tag
+is unscored (None). Correcting only a token absent leaves the level as is.
 """
 
 from __future__ import annotations
@@ -31,6 +33,11 @@ class SeverityMap:
         self.ambiguous = {
             key: frozenset(tags) for key, tags in payload.get("ambiguous", {}).items()
         }
+        for key, ladder in self.levels.items():
+            if key not in self.max_level or any(
+                not 0 <= level <= self.max_level[key] for level in ladder.values()
+            ):
+                raise ValueError(f"severity map: {key} levels must lie in 0..max_level")
 
     @classmethod
     def load(cls, path: Path = DEFAULT_SEVERITY_MAP_PATH) -> SeverityMap:
@@ -62,6 +69,10 @@ def window_severity(
     if "window" not in item:
         return None
     levels = severity_map.from_tags(item.get("source_tags", []))
+    present = {family_of(key) for key in item.get("expected", [])}
+    for key in levels:
+        if key in present and levels[key] == 0:
+            levels[key] = None  # labelled present, but no tag gives it a level
     if not corrections:
         return levels
     for key in levels:
@@ -80,8 +91,12 @@ def usable_level(value: Any, max_level: int) -> int | None:
 
 
 def quadratic_kappa(pairs: list[tuple[int, int]], levels: int) -> float | None:
-    """Quadratic-weighted Cohen's kappa over `levels` ordered classes (None if undefined)."""
-    if not pairs:
+    """Quadratic-weighted Cohen's kappa over `levels` ordered classes (0..levels-1).
+
+    None when undefined: no pairs, fewer than two classes, or no expected disagreement
+    (e.g. every truth and prediction in one class).
+    """
+    if not pairs or levels < 2:
         return None
     n = len(pairs)
     observed = [[0.0] * levels for _ in range(levels)]
@@ -105,7 +120,10 @@ def severity_metrics(
     and a usable predicted level. Windows with a truth level whose prediction is missing
     or out of range (an unusable reply) are counted as `unusable`, never coerced to a level.
     """
-    scored = [(t, usable_level(p, max_level)) for t, p in zip(truth, predicted, strict=True)]
+    scored = [
+        (usable_level(t, max_level), usable_level(p, max_level))
+        for t, p in zip(truth, predicted, strict=True)
+    ]
     pairs = [(t, p) for t, p in scored if t is not None and p is not None]
     unusable = sum(1 for t, p in scored if t is not None and p is None)
     if not pairs:

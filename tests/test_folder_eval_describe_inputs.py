@@ -141,3 +141,38 @@ def test_severity_metrics_exclude_and_count_unusable_predictions(tmp_path):
     assert severity["drugs"] == {
         "n": 0, "unusable": 2, "exact": None, "within_1": None, "kappa": None,
     }
+
+
+def test_kappa_and_metrics_handle_degenerate_inputs_and_per_key_scales():
+    from scanner.evaluation.folder_eval.severity import quadratic_kappa, severity_metrics
+
+    assert quadratic_kappa([], 4) is None
+    assert quadratic_kappa([(0, 0)], 1) is None
+    assert quadratic_kappa([(0, 0), (0, 0)], 4) is None  # one class: no expected disagreement
+    assert quadratic_kappa([(0, 0), (0, 2)], 3) == 0.0
+    assert quadratic_kappa([(0, 0), (2, 2)], 3) == 1.0
+    # drugs is 0-2: a 3 is unusable, and a truth level beyond the scale is never indexed.
+    drugs = severity_metrics([2, 2, 3, None], [3, 1, 1, 0], 2)
+    assert (drugs["n"], drugs["unusable"], drugs["within_1"]) == (1, 1, 1.0)
+
+
+def test_severity_map_rejects_levels_beyond_their_scale():
+    with pytest.raises(ValueError, match="drugs"):
+        SeverityMap({"levels": {"drugs": {"drugs/x": 3}}, "max_level": {"drugs": 2}})
+
+
+@pytest.mark.parametrize(
+    ("tags", "expected", "corrections", "truth"),
+    [
+        (["violence/graphic"], ["violence"], None, 2),
+        (["violence/disturbing_images"], ["violence"], None, None),  # present, no level
+        (["violence/violence_implied"], [], None, None),  # ambiguous
+        ([], [], None, 0),
+        (["violence/disturbing_images"], ["violence"], {"violence": False}, 0),
+        ([], [], {"violence/weapons": True}, None),
+        (["violence/gore"], ["violence"], {"violence/weapons": False}, 3),
+    ],
+)
+def test_window_severity_truth(tags, expected, corrections, truth):
+    window = {"id": "w", "window": [0, 10], "source_tags": tags, "expected": expected}
+    assert window_severity(window, corrections, SeverityMap.load())["violence"] == truth

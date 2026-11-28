@@ -225,9 +225,14 @@ def test_a_film_only_root_works_from_a_fresh_start(monkeypatch, tmp_path, clean_
     windows = json.loads(layout.inventory.read_text())["items"]
     assert windows and all("window" in item for item in windows)
 
-    # Re-inventorying a root without video/ keeps the film windows.
+    gore = next(item for item in windows if item["window"] == [10.0, 20.0])
+    assert gore["expected_severity"]["violence"] == 3  # tt1's gore tag
+    assert all(item["expected_severity"]["drugs"] == 0 for item in windows)
+
+    # Re-inventorying a root without video/ keeps the film windows and severity scales.
     assert folder_eval_cli.main([*base, "inventory"]) == 0
-    assert json.loads(layout.inventory.read_text())["items"] == windows
+    payload = json.loads(layout.inventory.read_text())
+    assert payload["items"] == windows and payload["severity_max"]["drugs"] == 2
     assert folder_eval_cli.main([*base, "sample"]) == 0
     assert folder_eval_cli.main([*base, "summarize"]) == 0
     assert json.loads(layout.summary.read_text())["models"] == {}

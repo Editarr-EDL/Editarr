@@ -17,6 +17,7 @@ from .film_labels import DEFAULT_TAG_MAP_PATH, Tag, TagMap
 from .film_sources import GROUND_TRUTH_COPY, FilmSourceError, FilmSources
 from .inventory import empty_inventory
 from .paths import FILMS_ROOT, Layout, resolves_into_excluded, write_json
+from .severity import SeverityMap, window_severity
 
 log = logging.getLogger(__name__)
 
@@ -174,6 +175,7 @@ def build_films(
     """
     config = json.loads(config_path.read_text(encoding="utf-8"))
     tag_map = TagMap.load(tag_map_path)
+    severity_map = SeverityMap.load()
     source = sources.ground_truth_dir
     movies = read_rows(source / "movies.csv")
     timestamps = read_rows(source / "tag_timestamps.csv")
@@ -214,6 +216,9 @@ def build_films(
             relative, folder, imdb_id, duration, tags, tag_map,
             window_s=window_s, offsets=offsets, hdr=hdr,
         )
+        for item in items:
+            # Uncorrected truth levels (None = unscored); the viewer applies corrections.
+            item["expected_severity"] = window_severity(item, None, severity_map)
         new_items.extend(items)
         positives = Counter(key for item in items if item["scored"] for key in item["expected"])
         report[folder] = {
@@ -236,6 +241,7 @@ def build_films(
     inventory = layout.load_inventory() if layout.inventory.is_file() else empty_inventory()
     kept = [item for item in inventory["items"] if not is_film_item(item)]
     inventory["items"] = kept + new_items
+    inventory["severity_max"] = severity_map.max_level
     write_json(layout.inventory, inventory)
     write_json(films_dir / "films_report.json", report)
     log.info("Inventory: %d clip items + %d film windows", len(kept), len(new_items))

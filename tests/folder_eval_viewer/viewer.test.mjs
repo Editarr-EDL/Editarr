@@ -91,3 +91,16 @@ test("general-token aliases are scored and corrected as their family", () => {
   assert.equal(itemCorrect(fight, ok(row.flagged), meta), true);
   assert.equal(itemCorrect(fight, ok(["violence", "violence/violence"]), { supports: ["violence", "violence/violence"] }), true);
 });
+
+test("expected severity applies corrections like severity.py and keeps unscored keys null", async () => {
+  const { expectedSeverity } = await import(new URL("narrative.js", VIEWER));
+  const raw = { violence: 2, sex: null, nudity: 0, drugs: 1 };
+  const window = (corr) => ({ expected_severity: raw, corr });
+  assert.equal(expectedSeverity({ id: "clip" }), null);
+  assert.deepEqual(expectedSeverity(window(null)), raw);
+  // Same cases as test_window_severity_truth: family absent → 0, token absent keeps the level,
+  // present without a tag level → unscored.
+  assert.deepEqual(expectedSeverity(window({ violence: false, "nudity/explicit": true, "drugs/drugs_illegal": false })),
+    { violence: 0, sex: null, nudity: null, drugs: 1 });
+  assert.deepEqual(expectedSeverity(window({ "sex/kissing": true })).sex, null);
+});

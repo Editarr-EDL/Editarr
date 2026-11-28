@@ -99,14 +99,13 @@ def plan_frame_times(kind: str, duration_s: float | None) -> list[float]:
     return [round(step * index + step / 2, 3) for index in range(MAX_FRAMES)]
 
 
-def _previous_items(layout: Layout) -> list[dict[str, Any]]:
+def _previous_inventory(layout: Layout) -> dict[str, Any]:
     if not layout.inventory.is_file():
-        return []
+        return {}
     try:
-        payload = json.loads(layout.inventory.read_text(encoding="utf-8"))
+        return json.loads(layout.inventory.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return []
-    return payload.get("items", [])
+        return {}
 
 
 def build_inventory(
@@ -175,11 +174,14 @@ def top_folder(path: str) -> str:
 
 
 def write_inventory(layout: Layout, rules: LabelRules) -> dict[str, Any]:
-    previous = _previous_items(layout)
+    previous_payload = _previous_inventory(layout)
+    previous = previous_payload.get("items", [])
     durations = {item["path"]: item.get("duration_s") for item in previous if "window" not in item}
     payload = build_inventory(layout.data_root, rules, previous=durations)
     # Film windows come from the `films` subcommand; keep them across re-inventories.
     payload["items"] += [item for item in previous if "window" in item]
+    if "severity_max" in previous_payload:
+        payload["severity_max"] = previous_payload["severity_max"]
     write_json(layout.inventory, payload)
     counts: dict[str, dict[str, int]] = {}
     for item in payload["items"]:

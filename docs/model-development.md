@@ -262,6 +262,11 @@ window is recorded as an error. Only whole clips fall back to their first frame.
 frame times are kept in `_results/frame_times.json`; frames cached by earlier versions
 are not rechecked, so delete a film's frames to re-extract them.
 
+Each film window also records its ground-truth severity per key (`expected_severity`,
+from `severity_map.json`; null where a tag is ambiguous or a labelled family has no
+severity tag). `describe-eval` and the viewer's severity chips compare against it after
+applying corrections; rerun `films` to add it to an older inventory.
+
 Relative paths in the local config resolve against the config's folder. A `--film`
 entry overrides the local config whichever key form either uses. `films` fails without
 changing the inventory when any listed film has no file or a key names no film in
