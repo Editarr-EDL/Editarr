@@ -14,7 +14,10 @@ let ready = null;
 
 /** Wire the global "Show sensitive images" checkbox, persisted in localStorage. */
 export function initSensitiveToggle(input) {
-  const apply = (on) => document.body.classList.toggle("show-sensitive", on);
+  const apply = (on) => {
+    document.body.classList.toggle("show-sensitive", on);
+    document.querySelectorAll("video.sensitive").forEach(syncPlaybackGuards);
+  };
   let on = false;
   try { on = localStorage.getItem(STORAGE_KEY) === "1"; } catch { /* storage unavailable */ }
   input.checked = on;
@@ -22,6 +25,38 @@ export function initSensitiveToggle(input) {
   input.addEventListener("change", () => {
     apply(input.checked);
     try { localStorage.setItem(STORAGE_KEY, input.checked ? "1" : "0"); } catch { /* ignore */ }
+  });
+}
+
+/**
+ * A hidden (blurred) video must not escape its blur: picture-in-picture, remote playback and the download menu
+ * render the raw stream outside the element's CSS filter, so they are disabled until it is revealed.
+ */
+function syncPlaybackGuards(el) {
+  if (el.tagName !== "VIDEO") return;
+  const guard = hidden(el);
+  el.toggleAttribute("disablepictureinpicture", guard);
+  el.toggleAttribute("disableremoteplayback", guard);
+  if (guard) el.setAttribute("controlslist", "nodownload noremoteplayback");
+  else el.removeAttribute("controlslist");
+  if (guard && document.pictureInPictureElement === el) document.exitPictureInPicture?.();
+}
+
+/**
+ * Make an "Open original" link respect the reveal state of a sensitive item: while its media is hidden, the first
+ * click reveals the in-page media (or, without one, asks for a second click) instead of opening the raw file.
+ * The decision is made at click time, after every model has loaded, so reused links stay correct.
+ */
+export function guardOriginalLink(link, item, media) {
+  if (link.dataset.guarded) return;
+  link.dataset.guarded = "1";
+  link.addEventListener("click", (e) => {
+    if (document.body.classList.contains("show-sensitive") || !isSensitive(item)) return;
+    if (media ? !hidden(media) : link.dataset.confirmed) return;
+    e.preventDefault();
+    if (media) { media.closest(".media-wrap")?.querySelector(".reveal")?.click(); return; }
+    link.dataset.confirmed = "1";
+    link.textContent = "Open sensitive original media ↗ (click again)";
   });
 }
 
@@ -39,15 +74,18 @@ export function protect(el, item) {
   if (!isSensitive(item)) {
     el.classList.remove("sensitive", "revealed");
     existing?.remove();
+    syncPlaybackGuards(el);
     return;
   }
   el.classList.add("sensitive");
+  syncPlaybackGuards(el);
   if (!wrap || existing) return;
   const btn = h("button", { type: "button", class: "btn reveal", "aria-pressed": "false", text: "Reveal" });
   btn.addEventListener("click", () => {
     const shown = el.classList.toggle("revealed");
     btn.setAttribute("aria-pressed", String(shown));
     btn.textContent = shown ? "Hide" : "Reveal";
+    syncPlaybackGuards(el);
   });
   wrap.append(btn);
   const link = el.closest('a[target="_blank"]');

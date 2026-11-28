@@ -2,12 +2,12 @@
 import { S, allLoaded, loadAllModels } from "./data.js";
 import { h, $, fill, fmt, fmtTime, fmtWindow, encPath, expectedChips, itemExtras } from "./ui.js";
 import { parseHash, withParams } from "./router.js";
-import { frameBlock, protect } from "./media.js";
+import { frameBlock, guardOriginalLink, protect } from "./media.js";
 import { frameTop } from "./results.js";
 import { modelCell } from "./folder-view.js";
 import { outcomeFor, supportsKey, wasAsked } from "./scoring.js";
 import { correctable, truthEditor } from "./correction-controls.js";
-import { frameNarrative, severityChips } from "./narrative.js";
+import { frameNarrative, protectedText, severityChips } from "./narrative.js";
 import { getScope, inSampleFrame, resultFor } from "./scope.js";
 
 const PLAYABLE = /\.(mp4|webm|m4v|mov)$/i;
@@ -45,8 +45,10 @@ function mediaSection(item) {
   const media = playable ? h("video", { controls: true, preload: "metadata", src: win ? `${base}#t=${win[0]},${win[1]}` : base, class: "media" })
     : IMAGE.test(item.path) ? h("img", { src: base, alt: item.path, class: "media" }) : null;
   const wrap = media ? h("div", { class: "media-wrap media-box" }, media) : null;
+  const original = h("a", { href, target: "_blank", rel: "noopener", text: "Open original media ↗" });
+  guardOriginalLink(original, item, media);
   const nodes = [
-    h("p", {}, h("a", { href, target: "_blank", rel: "noopener", text: "Open original media ↗" }),
+    h("p", {}, original,
       win ? h("span", { text: ` at ${fmtWindow(win)}${playable ? "" : " (seek manually)"}` }) : null,
       item.duration_s ? h("span", { class: "muted", text: ` · ${fmt(item.duration_s, 1)} s` }) : null,
       item.imdb_id ? [" · ", h("a", { href: `https://www.imdb.com/title/${encodeURIComponent(item.imdb_id)}/`, target: "_blank", rel: "noopener", text: item.imdb_id })] : null),
@@ -112,8 +114,10 @@ export async function syncDetail(itemId) {
       h("dl", {}, S.modelIds.map((id) => {
         const f = S.results[id].get(item.id)?.frames.find((x) => x.n === fr.n);
         const txt = f ? frameTop(f, S.metas[id], 3).map(([k, v]) => `${k} ${fmt(v)}`).join(", ") || "no scores" : "not run";
-        const extra = (f && f.labels.length ? ` [${f.labels.join(", ")}]` : "") + (f?.askedKeys ? ` · asked ${f.askedKeys.length} keys` : "");
-        return [h("dt", { text: S.metas[id].display_name || id }), h("dd", { class: f ? null : "muted" }, txt + extra, frameNarrative(item, f))];
+        const asked = f?.askedKeys ? ` · asked ${f.askedKeys.length} keys` : "";
+        // Raw detector labels (e.g. NudeNet's exposed-part classes) describe the content: hidden like descriptions.
+        const labels = f?.labels.length ? protectedText(item, h("span", { text: ` [${f.labels.join(", ")}]` }), "detector labels") : null;
+        return [h("dt", { text: S.metas[id].display_name || id }), h("dd", { class: f ? null : "muted" }, txt, labels, asked, frameNarrative(item, f))];
       }))))));
 }
 

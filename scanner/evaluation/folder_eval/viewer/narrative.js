@@ -101,6 +101,9 @@ function sensitiveText(item, content, what, block) {
   return wrap;
 }
 
+/** Inline text about an item's content (e.g. detector labels), hidden like descriptions when it is sensitive. */
+export const protectedText = (item, content, what) => sensitiveText(item, content, what, false);
+
 /** One-line description for a model-view card (escaped text; full text as a tooltip only if not sensitive). */
 export function descriptionLine(item, r) {
   if (!r?.description) return null;

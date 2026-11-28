@@ -25,6 +25,7 @@ async function viewer() {
     detail: await import(new URL("detail.js", VIEWER)),
     narrative: await import(new URL("narrative.js", VIEWER)),
     router: await import(new URL("router.js", VIEWER)),
+    media: await import(new URL("media.js", VIEWER)),
   };
   return mods;
 }
@@ -100,4 +101,71 @@ test("route changes set the title, and only page changes announce and move focus
   filter.focus();
   assert.equal(router.announceRoute(route("#/folder/video?scope=all&item=abc")), false); // detail owns focus
   assert.equal(document.activeElement, filter);
+});
+
+function sensitiveSetup(data, { loaded = true } = {}) {
+  Object.assign(data.S, { modelIds: ["nudenet"], results: loaded ? { nudenet: new Map([["s", { status: "ok", flagged: ["nudity"] }]]) } : {}, pending: {} });
+  document.body.className = "";
+  return { id: "s", expected: [], scored: true };
+}
+
+function mediaIn(ui, tag) {
+  const media = ui.h(tag, { class: "media" });
+  ui.h("div", { class: "media-wrap" }, media);
+  return media;
+}
+
+test("a hidden sensitive video cannot be shown through picture-in-picture or downloads", { skip }, async () => {
+  const { ui, data, media } = await viewer();
+  const item = sensitiveSetup(data);
+  const video = mediaIn(ui, "video");
+  media.protect(video, item);
+  assert.ok(video.classList.contains("sensitive"));
+  assert.ok(video.hasAttribute("disablepictureinpicture") && video.hasAttribute("disableremoteplayback"));
+  assert.match(video.getAttribute("controlslist"), /nodownload/);
+  video.closest(".media-wrap").querySelector(".reveal").click();
+  assert.ok(!video.hasAttribute("disablepictureinpicture") && !video.hasAttribute("controlslist"));
+});
+
+test("Open original media respects the reveal state", { skip }, async () => {
+  const { ui, data, media } = await viewer();
+  const item = sensitiveSetup(data);
+  const click = (link) => { const e = new window.MouseEvent("click", { cancelable: true }); link.dispatchEvent(e); return e.defaultPrevented; };
+
+  const img = mediaIn(ui, "img");
+  media.protect(img, item);
+  const withMedia = ui.h("a", { href: "../x.jpg", target: "_blank" });
+  media.guardOriginalLink(withMedia, item, img);
+  assert.equal(click(withMedia), true, "hidden: reveal first");
+  assert.ok(img.classList.contains("revealed"));
+  assert.equal(click(withMedia), false, "revealed: opens");
+
+  const noMedia = ui.h("a", { href: "../x.mkv", target: "_blank", text: "Open original media ↗" });
+  media.guardOriginalLink(noMedia, item, null);
+  assert.equal(click(noMedia), true);
+  assert.match(noMedia.textContent, /click again/);
+  assert.equal(click(noMedia), false);
+
+  const safe = ui.h("a", { href: "../y.jpg", target: "_blank" });
+  media.guardOriginalLink(safe, { id: "clean", expected: [] }, null);
+  assert.equal(click(safe), false);
+  document.body.classList.add("show-sensitive");
+  const shown = ui.h("a", { href: "../x.jpg", target: "_blank" });
+  media.guardOriginalLink(shown, item, null);
+  assert.equal(click(shown), false, "the global toggle shows everything");
+});
+
+test("content text stays hidden until every model has loaded, and for sensitive items", { skip }, async () => {
+  const { ui, data, narrative } = await viewer();
+  const clean = { id: "c", expected: [], scored: true };
+  sensitiveSetup(data, { loaded: false });
+  data.S.loadErrors = {};
+  globalThis.fetch = async () => ({ ok: false, status: 500, headers: { get: () => null } });
+  const pending = narrative.protectedText(clean, ui.h("span", { text: "FEMALE_BREAST_EXPOSED" }), "detector labels");
+  assert.ok(pending.classList.contains("sens-text"), "not yet known: hidden");
+  const item = sensitiveSetup(data);
+  const sensitive = narrative.protectedText(item, ui.h("span", { text: "label" }), "detector labels");
+  assert.ok(sensitive.classList.contains("sens-text"));
+  const text = ui.h("span", { text: "label" });
+  assert.equal(narrative.protectedText(clean, text, "detector labels"), text, "known and clean: shown");
 });
