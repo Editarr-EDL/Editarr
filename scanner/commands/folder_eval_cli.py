@@ -39,6 +39,7 @@ from scanner.evaluation.folder_eval.paths import (
     normalize_prefix,
 )
 from scanner.evaluation.folder_eval.run_config import ConfigMismatch
+from scanner.evaluation.folder_eval.run_lock import ModelBusy
 from scanner.evaluation.folder_eval.runner import run_model
 from scanner.evaluation.folder_eval.subsets import (
     DEFAULT_SEED,
@@ -236,14 +237,14 @@ def _run(args: argparse.Namespace) -> int:
                 subset=load_subset(layout, args.subset) if args.subset else None,
                 concurrency=args.concurrency, restart=args.restart,
             )
-        except (BackendUnavailable, ConfigMismatch) as exc:
+        except (BackendUnavailable, ConfigMismatch, ModelBusy) as exc:
             log.error("%s", exc)
             return 2
     if args.command == "all":
         for model_id in filter(None, (value.strip() for value in args.models.split(","))):
             try:
                 run_model(layout, model_id, limit=limit, only_folder=prefix)
-            except (BackendUnavailable, ConfigMismatch) as exc:
+            except (BackendUnavailable, ConfigMismatch, ModelBusy) as exc:
                 log.warning("Skipping %s: %s", model_id, exc)
     if args.command == "describe-eval":
         from scanner.evaluation.folder_eval.describe_eval import describe_eval

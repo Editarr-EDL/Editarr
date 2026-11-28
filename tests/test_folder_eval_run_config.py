@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -155,3 +160,50 @@ def test_restarts_in_the_same_instant_keep_every_archive(tmp_path, monkeypatch):
     assert jsonl.name.endswith("-4.bak") and meta.name.endswith("-4.bak")
     assert (layout.models / "m.meta.json.20261127T120000.123456Z-3.bak").read_text() == "unrelated"
     assert not (layout.models / "m.jsonl.20261127T120000.123456Z-3.bak").exists()
+
+
+def test_a_second_run_or_restart_of_a_busy_model_is_refused(tmp_path, monkeypatch, caplog):
+    from scanner.commands import folder_eval_cli as cli
+    from scanner.evaluation.folder_eval.run_lock import ModelBusy, model_lock
+
+    layout = _layout(tmp_path)
+    monkeypatch.setattr(runner, "create_backend", lambda _id: pytest.fail("loaded"))
+    monkeypatch.setenv("EDITARR_WORKER_MODEL_DOWNLOADS", "")
+    monkeypatch.setattr(backends, "_downloads_allowed", False)
+    with model_lock(layout, "fake"):
+        with pytest.raises(ModelBusy, match=f"process {os.getpid()}"):
+            runner.run_model(layout, "fake")
+        with pytest.raises(ModelBusy):
+            runner.run_model(layout, "fake", restart=True)
+        base = ["--data-root", str(tmp_path), "run", "--model", "fake"]
+        assert cli.main([*base, "--restart"]) == 2
+    assert "already being scored" in caplog.text
+    assert not list(layout.models.glob("fake.*"))  # nothing written or archived
+
+    monkeypatch.setattr(runner, "create_backend", lambda _id: _Backend())
+    runner.run_model(layout, "fake")  # the lock was released
+    assert len(_lines(layout)) == 2
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_a_killed_runs_lock_is_released_by_the_os(tmp_path, monkeypatch):
+    layout = _layout(tmp_path)
+    child = textwrap.dedent(f"""
+        import time
+        from scanner.evaluation.folder_eval.paths import Layout
+        from scanner.evaluation.folder_eval.run_lock import model_lock
+        with model_lock(Layout(__import__("pathlib").Path({str(tmp_path)!r})), "fake"):
+            print("locked", flush=True)
+            time.sleep(60)
+    """)
+    process = subprocess.Popen([sys.executable, "-c", child], stdout=subprocess.PIPE, text=True)
+    assert process.stdout.readline().strip() == "locked"
+    from scanner.evaluation.folder_eval.run_lock import ModelBusy
+
+    monkeypatch.setattr(runner, "create_backend", lambda _id: _Backend())
+    with pytest.raises(ModelBusy, match=f"process {process.pid}"):
+        runner.run_model(layout, "fake")
+    process.send_signal(signal.SIGKILL)
+    process.wait(timeout=30)
+    runner.run_model(layout, "fake")
+    assert len(_lines(layout)) == 2

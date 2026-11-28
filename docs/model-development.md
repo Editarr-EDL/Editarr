@@ -327,6 +327,9 @@ fingerprint. If they differ, or predate fingerprints, it stops (`all` skips the 
 and asks for `run --model ID --restart`, which renames `<id>.jsonl` and `<id>.meta.json`
 to `*.<UTC time>.bak` and starts again; or score the new configuration under another id.
 `summarize` flags a results file that still mixes configurations (`mixed_configs`).
+Only one `run` (or `all`) can score a model at a time: a run holds an OS lock on
+`_results/models/.<id>.lock` for its whole duration, including `--restart`, and a
+second run of that model stops with a message naming the process holding it.
 
 Each run records its throughput and memory in `_results/models/<id>.meta.json`:
 `server_peak_rss_mb` is the peak of a llama.cpp model server during the last run, and

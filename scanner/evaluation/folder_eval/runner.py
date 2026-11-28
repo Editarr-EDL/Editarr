@@ -14,6 +14,7 @@ from .paths import Layout, matches_prefix, open_append
 from .results import append_line, load_results, write_model_index
 from .run_config import FIELD as CONFIG_FIELD
 from .run_config import archive_results, check_resume, fingerprint, scoring_config
+from .run_lock import model_lock
 from .run_meta import process_peak_rss_mb, server_peak_rss_mb, write_meta
 from .scoring import resolve_concurrency, scored
 
@@ -83,8 +84,28 @@ def run_model(
 
     Resuming requires every stored line to carry the current scoring-configuration
     fingerprint (see `run_config`), else ConfigMismatch; `restart` first archives the
-    model's jsonl and meta.json and starts again.
+    model's jsonl and meta.json and starts again. The whole run holds the model's run
+    lock (see `run_lock`); a concurrent run of the same model raises ModelBusy.
     """
+    with model_lock(layout, model_id):
+        return _run_locked(
+            layout, model_id, limit=limit, only_folder=only_folder,
+            retry_errors=retry_errors, subset=subset, concurrency=concurrency,
+            restart=restart,
+        )
+
+
+def _run_locked(
+    layout: Layout,
+    model_id: str,
+    *,
+    limit: int | None,
+    only_folder: str | None,
+    retry_errors: bool,
+    subset: dict[str, list[int]] | None,
+    concurrency: int | None,
+    restart: bool,
+) -> dict[str, Any]:
     inventory = layout.load_inventory()
     if restart:
         for archived in archive_results(layout, model_id):
