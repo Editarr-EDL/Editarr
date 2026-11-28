@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "operator-access.spec.ts",
+  testMatch: /operator-(access|pages)\.spec\.ts/,
   fullyParallel: true,
   use: { baseURL: "http://127.0.0.1:5185", trace: "on-first-retry" },
   webServer: {

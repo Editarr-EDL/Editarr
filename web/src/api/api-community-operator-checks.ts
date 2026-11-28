@@ -23,3 +23,15 @@ export const fields = (shape: Record<string, Check>, optional: Record<string, Ch
 };
 export const array = (check: Check, max = 20): Check => value => Array.isArray(value) && value.length <= max && value.every(check);
 export const reasonText = (value: string) => !!value.trim() && value.length <= 1000 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value);
+/** A plain object of at most `max` scalar (string, number, boolean or null) values, such as run details. */
+export const scalars = (max = 50): Check => value => !!value && typeof value === "object" && !Array.isArray(value) &&
+  Object.keys(value).length <= max && Object.values(value).every(entry => entry === null || typeof entry === "boolean" ||
+    (typeof entry === "number" && Number.isFinite(entry)) || (typeof entry === "string" && entry.length <= 1000));
+export const finite: Check = value => typeof value === "number" && Number.isFinite(value);
+/** A boolean, also accepted as a SQLite 0/1 flag; read it with `!!value`. */
+export const bool: Check = value => typeof value === "boolean" || value === 0 || value === 1;
+const scalar = (entry: unknown) => entry === null || typeof entry === "boolean" ||
+  (typeof entry === "number" && Number.isFinite(entry)) || (typeof entry === "string" && entry.length <= 1000);
+/** Run details: a plain object of at most 50 scalars or short scalar arrays. */
+export const details: Check = value => !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length <= 50 &&
+  Object.values(value).every(entry => scalar(entry) || (Array.isArray(entry) && entry.length <= 50 && entry.every(scalar)));

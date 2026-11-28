@@ -1,5 +1,7 @@
-import type { OperatorPage, OperatorRow } from "../../api/api-community-operator";
-import { observedTime } from "./overview";
+import type { OperatorPage, OperatorRow } from "../../../api/api-community-operator";
+
+export const observedTime = (value: number | null) => value === null ? "Unknown" : new Date(value).toISOString();
+export const units = (value: number | null) => value === null ? "Unknown" : value.toLocaleString("en-US");
 
 const captions: Record<string, string> = { contributorId: "Contributor", displayName: "Public name", createdAt: "Created",
   operationId: "Operation", updatedAt: "Updated", reportId: "Report", note: "Private note", expectedRevision: "Expected revision",
@@ -29,8 +31,8 @@ export function Facts({ row }: { row: OperatorRow }) {
 export function OperatorTable({ label, page, inspect, first, next, unit = "page" }: { label: string; page: OperatorPage;
   inspect: (row: OperatorRow) => { href: string; id: string }; first: string | null; next: string | null; unit?: string }) {
   return <section aria-label={`${label} list`}><p className="operator-meta">{page.source} | Snapshot: {observedTime(page.observedAt)}</p>
-    {page.items.length === 0 ? <p>No records</p> : <div className="operator-table" role="region" aria-label={`${label} table`} tabIndex={0}>
-      <table><thead><tr><th>Inspect</th>{Object.keys(page.items[0]).map(key => <th key={key}>{caption(key)}</th>)}</tr></thead>
+    {page.items.length === 0 ? <p>No records</p> : <div className="tw" role="region" aria-label={`${label} table`} tabIndex={0}>
+      <table className="t"><thead><tr><th>Inspect</th>{Object.keys(page.items[0]).map(key => <th key={key}>{caption(key)}</th>)}</tr></thead>
         <tbody>{page.items.map(row => {
           const link = inspect(row);
           return <tr key={JSON.stringify(row)}><td><a href={link.href}>Inspect <span className="operator-sr-only">{link.id}</span></a></td>

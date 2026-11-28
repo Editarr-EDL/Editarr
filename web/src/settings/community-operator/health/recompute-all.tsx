@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { OperatorMutationError } from "../../api/api-community-operator";
-import { writeOperatorRecompute, type RecomputeIntent } from "../../api/api-community-operator-actions";
-import { reasonText } from "../../api/api-community-operator-checks";
-import { OperatorAccessError } from "./runtime";
+import { OperatorMutationError } from "../../../api/api-community-operator";
+import { writeOperatorRecompute, type RecomputeIntent } from "../../../api/api-community-operator-actions";
+import { reasonText } from "../../../api/api-community-operator-checks";
+import { OperatorAccessError } from "../runtime";
 
 /**
  * Recompute every non-merged version under the current policy. Each action recomputes one bounded
@@ -39,7 +39,7 @@ export function RecomputeAll({ onAccessFailure }: { onAccessFailure: (status: nu
       } else setMessage("Outcome unconfirmed. Retry only this saved batch; its ID, reason and cursor are unchanged.");
     } finally { if (!controller.signal.aborted) setBusy(false); }
   };
-  return <section aria-label="Recompute all versions"><h3>Recompute all versions</h3>
+  return <section aria-label="Recompute all versions" className="recompute-all"><h3>Recompute all versions</h3>
     <p className="operator-meta">Use after a MASTER_POLICY change. Each action recomputes up to 200 versions in version ID order
       and is audited; nothing changes for versions whose inputs did not change.</p>
     <form onSubmit={event => { event.preventDefault(); void run(); }}>
@@ -47,9 +47,9 @@ export function RecomputeAll({ onAccessFailure }: { onAccessFailure: (status: nu
       <textarea id="operator-recompute-reason" maxLength={1000} required value={reason}
         disabled={busy || !!saved} onChange={event => setReason(event.target.value)} />
       <div className="operator-action-bar">
-        <button disabled={busy || (!saved && !reasonText(reason))}>{busy ? "Recomputing..." : saved ? "Retry saved batch" :
+        <button className="btn danger" disabled={busy || (!saved && !reasonText(reason))}>{busy ? "Recomputing..." : saved ? "Retry saved batch" :
           after ? `Continue after ${after}` : "Recompute all versions"}</button>
-        {(saved || after) && !busy && <button type="button" onClick={() => { setSaved(null); setAfter(null); setMessage(""); }}>
+        {(saved || after) && !busy && <button type="button" className="btn" onClick={() => { setSaved(null); setAfter(null); setMessage(""); }}>
           {saved ? "Discard saved batch" : "Start over"}</button>}
       </div>
     </form>
