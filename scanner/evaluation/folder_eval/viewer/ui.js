@@ -28,6 +28,12 @@ export const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : "–");
 
 export function setStatus(text) { $("#status").textContent = text || ""; }
 
+/** Mark el as the current item (aria-current="page" by default) or clear it; an empty value would mean false. */
+export function setCurrent(el, on, value = "page") {
+  if (on) el.setAttribute("aria-current", value);
+  else el.removeAttribute("aria-current");
+}
+
 let toastTimer = null;
 /** Show a transient alert; inside the open detail dialog when there is one (its top layer would hide it). */
 export function toast(text, ms = 8000) {

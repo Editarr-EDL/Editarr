@@ -1,6 +1,6 @@
 /* Viewer entry point (loaded by app.js): routing between the model and folder views. */
-import { h, $, fill, setStatus } from "./ui.js";
-import { buildHash, parseHash, withParams } from "./router.js";
+import { h, $, fill, setCurrent, setStatus } from "./ui.js";
+import { announceRoute, buildHash, parseHash, withParams } from "./router.js";
 import { getScope, hasSample } from "./scope.js";
 import { S, loadBase } from "./data.js";
 import { loadCorrections } from "./corrections.js";
@@ -14,11 +14,12 @@ function route() { routing = routing.then(doRoute).catch(showError); return rout
 
 async function doRoute() {
   const r = parseHash();
-  $("#nav-model").toggleAttribute("aria-current", r.view !== "folder");
-  $("#nav-folder").toggleAttribute("aria-current", r.view === "folder");
+  setCurrent($("#nav-model"), r.view !== "folder");
+  setCurrent($("#nav-folder"), r.view === "folder");
   syncScopeControl(r);
   if (r.view === "folder") await showFolder(r);
   else await showModel(r);
+  announceRoute(parseHash()); // after rendering, which may have resolved the model id
   await syncDetail(r.params.get("item"));
 }
 

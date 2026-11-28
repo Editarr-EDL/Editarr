@@ -19,6 +19,7 @@ a { color: var(--accent); }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
 .skip-link { position: absolute; left: -999px; top: 0; background: var(--panel); padding: .5rem; z-index: 10; }
 .skip-link:focus { left: .5rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .muted { color: var(--muted); }
 .loading, .empty, .error { padding: 2rem; }
 .error { color: var(--fp); }

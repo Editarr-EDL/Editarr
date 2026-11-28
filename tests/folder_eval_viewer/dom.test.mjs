@@ -14,7 +14,7 @@ const VIEWER = new URL("../../scanner/evaluation/folder_eval/viewer/", import.me
 let mods = null;
 async function viewer() {
   if (mods) return mods;
-  const dom = new JSDOM('<!doctype html><body><main id="main" tabindex="-1"></main><dialog id="detail"></dialog><div id="status"></div><div id="toast" hidden></div></body>', { url: "http://localhost/_results/index.html" });
+  const dom = new JSDOM('<!doctype html><body><input id="filter"><p id="route-status"></p><main id="main" tabindex="-1"></main><dialog id="detail"></dialog><div id="status"></div><div id="toast" hidden></div></body>', { url: "http://localhost/_results/index.html" });
   for (const k of ["window", "document", "location", "history", "Node", "Event", "CSS"]) globalThis[k] = dom.window[k];
   globalThis.IntersectionObserver = class { observe() {} unobserve() {} };
   globalThis.localStorage = dom.window.localStorage;
@@ -24,6 +24,7 @@ async function viewer() {
     metrics: await import(new URL("metrics.js", VIEWER)),
     detail: await import(new URL("detail.js", VIEWER)),
     narrative: await import(new URL("narrative.js", VIEWER)),
+    router: await import(new URL("router.js", VIEWER)),
   };
   return mods;
 }
@@ -70,4 +71,33 @@ test("severity chips use each key's scale and compare only to scored expectation
   const chips = narrative.severityChips({ severity: { violence: 2, drugs: 1, sex: 3 } }, item);
   const texts = [...chips.querySelectorAll(".chip")].map((c) => c.textContent);
   assert.deepEqual(texts, ["drugs 1/2 · exp 2 ≈", "nudity –/3 · exp 0", "sex 3/3", "violence 2/3 · exp 2 ✓"]);
+});
+
+test("aria-current is set to a real value and cleared", { skip }, async () => {
+  const { ui } = await viewer();
+  const link = document.createElement("a");
+  ui.setCurrent(link, true);
+  assert.equal(link.getAttribute("aria-current"), "page");
+  ui.setCurrent(link, true, "true");
+  assert.equal(link.getAttribute("aria-current"), "true");
+  ui.setCurrent(link, false);
+  assert.equal(link.hasAttribute("aria-current"), false);
+});
+
+test("route changes set the title, and only page changes announce and move focus", { skip }, async () => {
+  const { router } = await viewer();
+  const route = (hash) => { location.hash = hash; return router.parseHash(); };
+  const filter = document.querySelector("#filter");
+  filter.focus();
+  assert.equal(router.announceRoute(route("#/model/siglip2?scope=all")), false); // first render
+  assert.equal(document.title, "Model siglip2 · Folder evaluation");
+  assert.equal(router.announceRoute(route("#/model/siglip2?scope=all&q=fight")), false);
+  assert.equal(document.activeElement, filter, "filter-only changes keep focus");
+  assert.equal(router.announceRoute(route("#/folder/video/ucf_crime?scope=all")), true);
+  assert.equal(document.activeElement, document.querySelector("#main"));
+  assert.equal(document.querySelector("#route-status").textContent, "Folder video/ucf_crime");
+  assert.equal(document.title, "Folder video/ucf_crime · Folder evaluation");
+  filter.focus();
+  assert.equal(router.announceRoute(route("#/folder/video?scope=all&item=abc")), false); // detail owns focus
+  assert.equal(document.activeElement, filter);
 });

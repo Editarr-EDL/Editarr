@@ -34,3 +34,28 @@ export function withParams(changes, replace) {
   history.replaceState(null, "", hash);
   window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
+
+/** Short name of the routed page, e.g. "Model siglip2" or "Folder video/ucf_crime". */
+export function routeName(r) {
+  return r.view === "folder" ? `Folder ${r.arg || "(all)"}` : `Model ${r.arg}`.trim();
+}
+
+let lastPage = null;
+
+/**
+ * After a route renders: set document.title and, when the page itself changed (view, model or folder — not just
+ * filters, paging or the detail dialog), announce it and move focus to #main. The first render keeps the
+ * browser's initial focus. Returns whether focus moved.
+ */
+export function announceRoute(r) {
+  document.title = `${routeName(r)} · Folder evaluation`;
+  const page = `${r.view}:${r.arg}`;
+  const changed = lastPage !== null && page !== lastPage;
+  lastPage = page;
+  if (!changed) return false;
+  const status = document.querySelector("#route-status");
+  if (status) status.textContent = routeName(r);
+  if (r.params.get("item")) return false;
+  document.querySelector("#main")?.focus();
+  return true;
+}

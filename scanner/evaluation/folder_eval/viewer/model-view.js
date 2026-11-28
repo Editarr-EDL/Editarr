@@ -1,6 +1,6 @@
 /* Model view: metrics, flagged items grouped by category key, filters and paging. */
 import { S, loadModel } from "./data.js";
-import { h, $, fill, fmt, chip, expectedChips, itemExtras, field, select, pager, debounce, syncControl, PAGE_SIZE } from "./ui.js";
+import { h, $, fill, fmt, chip, setCurrent, expectedChips, itemExtras, field, select, pager, debounce, syncControl, PAGE_SIZE } from "./ui.js";
 import { buildHash, hashWith, parseHash, withParams } from "./router.js";
 import { OUTCOMES, maxScore, outcomeClass, outcomeFor, predicted, scorableKeys, supportsKey, wasAsked } from "./scoring.js";
 import { defaultFrame, getScope, resultFor, scopedItems } from "./scope.js";
@@ -148,7 +148,7 @@ function updateModelList(id, p, scope) {
   syncControl("f-cat", p.cat || ""); syncControl("f-outcome", p.outcome || "flagged");
   $("#f-corr").checked = p.corr === "1";
   syncControl("f-folder", p.folder || ""); syncControl("f-q", p.q || ""); syncControl("f-sort", p.sort || "score_desc");
-  document.querySelectorAll(".groups a").forEach((a) => a.toggleAttribute("aria-current", a.dataset.cat === (p.cat || "")));
+  document.querySelectorAll(".groups a").forEach((a) => setCurrent(a, a.dataset.cat === (p.cat || ""), "true"));
   const box = $("#model-list");
   const items = scopedItems(scope);
   const missing = items.filter((i) => !resultFor(id, i.id, scope)).length;
