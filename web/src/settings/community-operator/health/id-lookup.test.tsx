@@ -7,7 +7,7 @@ import { IdLookup } from "./id-lookup";
 const reportId = "6f1c2b3a-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 beforeEach(() => { window.location.hash = "#/health"; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-const search = (ids: { kind: string; id: string; label: string }[]) => ({ version: 1, observedAt: 1, q: reportId, items: [], contributors: [], ids });
+const search = (ids: { kind: string; id: string; label: string }[], q = reportId) => ({ version: 1, observedAt: 1, q, items: [], contributors: [], ids });
 const lookUp = (value = reportId) => {
   fireEvent.change(screen.getByLabelText("Resource ID"), { target: { value } });
   fireEvent.click(screen.getByRole("button", { name: "Look up" }));
@@ -28,7 +28,7 @@ it("lists several matches, and offers the type chooser when nothing matches exac
   expect(screen.getByRole("link", { name: "Contributor · Mira" })).toBeInTheDocument();
   expect(screen.queryByText(/not exact/)).not.toBeInTheDocument();
   expect(window.location.hash).toBe("#/health");
-  cleanup(); stubOperatorFetch(() => search([]));
+  cleanup(); stubOperatorFetch(() => search([], "sub_1:e4"));
   renderOperator(<IdLookup />); lookUp("sub_1:e4");
   expect(await screen.findByRole("link", { name: "choose the resource type in the inspector" })).toHaveAttribute("href", "#/inspect?selected=sub_1%3Ae4");
 });
@@ -40,4 +40,25 @@ it("ends the session on a denied lookup and reports other failures inline", asyn
   cleanup(); stubOperatorFetch(() => new Response("{}", { status: 503, headers: { "Content-Type": "application/json" } }));
   renderOperator(<IdLookup />); lookUp();
   expect(await screen.findByRole("alert")).toHaveTextContent("Lookup unavailable");
+});
+
+it("aborts a pending lookup when the ID changes and never navigates to the earlier resource", async () => {
+  let release: (() => void) | null = null, signal: AbortSignal | undefined;
+  stubOperatorFetch((_path, init) => { signal = init?.signal ?? undefined;
+    return new Promise<Response>(resolve => { release = () => resolve(Response.json(search([{ kind: "report", id: reportId, label: "Old" }]))); }); });
+  renderOperator(<IdLookup />); lookUp();
+  await waitFor(() => expect(signal).toBeDefined());
+  fireEvent.change(screen.getByLabelText("Resource ID"), { target: { value: "f_other" } });
+  expect(signal?.aborted).toBe(true);
+  release!();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(window.location.hash).toBe("#/health");
+  expect(screen.getByRole("button", { name: "Look up" })).toBeEnabled();
+});
+
+it("ignores a response for a different query than the current input", async () => {
+  stubOperatorFetch(() => ({ ...search([{ kind: "report", id: reportId, label: "Other" }]), q: "something-else" }));
+  renderOperator(<IdLookup />); lookUp();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(window.location.hash).toBe("#/health");
 });

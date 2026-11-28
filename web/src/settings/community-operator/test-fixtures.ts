@@ -52,7 +52,8 @@ export function operatorFixture(target: string) {
   if (path.endsWith("/filters")) return pageFixture([filterRowFixture]);
   if (path.endsWith("/submissions")) return pageFixture([submissionRowFixture]);
   if (path === "/admin/v1/dashboard/contributors") return pageFixture([contributorFixture]);
-  if (path === "/admin/v1/dashboard/operations") return pageFixture([operationFixture]);
+  if (path === "/admin/v1/dashboard/operations") return query.get("after") ?
+    pageFixture([{ ...operationFixture, operationId: "operation-0", kind: "import", state: "failed" }]) : pageFixture([operationFixture], "WyJvcCJd+/=");
   if (path === "/admin/v1/dashboard/audit") return pageFixture([auditFixture]);
   if (path === "/admin/v1/reports") return { version: 1, reports: [reportFixture], nextCursor: null };
   if (path.endsWith("/usage")) return usageFixture;
@@ -85,7 +86,9 @@ function insightFixture(path: string, query: URLSearchParams): unknown {
   if (route === "audit") return auditPageFixture;
   if (route === "health") return healthFixture;
   if (route === "trends") return trendFixture(query.get("metric") ?? "db", query.get("period") ?? "30d");
-  if (route === "maintenance/runs") return runsFixture;
+  if (route === "maintenance/runs") return query.get("after") ? { ...runsFixture, items: [{ ...runsFixture.items[2], runId: "run-ret-old",
+    startedAt: runsFixture.items[2].startedAt - 86400000 * 3, outcome: "skipped", detail: { steps: 0, failedSteps: [] } }], nextCursor: null }
+    : { ...runsFixture, nextCursor: "WzE3MDAsInJ1bi1yZXQteCJd+/=" };
   if (route === "backups" || route === "backups/config") return backupsFixture;
   if (/^backups\/[^/]+\/stage$/.test(route)) return stagedFixture;
   return null;

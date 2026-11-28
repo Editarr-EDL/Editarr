@@ -2,6 +2,7 @@ import { readOperatorOverview, readOperatorPage } from "../../../api/api-communi
 import { operationColumns, RecordTable } from "../records/record-tables";
 import { count, dayTime, titleCase } from "../shared/format";
 import { DataState, useOperatorData } from "../shared/operator-data";
+import { HistoryPager } from "../shared/ui";
 import { operatorLink } from "../routes";
 
 const units = (value: number | null) => value === null ? "Unknown" : count(value);
@@ -34,12 +35,11 @@ export function ServiceRecords({ params }: { params: Record<string, string | nul
           <td>{when(value.observedAt)}</td></tr>)}</tbody></table></div>}
     {data && <p className="foot">Payload storage counted by the service: {count(data.storage.globalBytes)} bytes · database size, provider usage and
       provider-side backup status are not available to the service.</p>}
-    <div className="section-title"><h2>Operations log</h2><span className="muted small">Contributor publication, import and key operations, newest first</span></div>
+    <div className="section-title"><h2>Operations log</h2><span className="muted small">Contributor publication, import and key operations, newest first</span>
+      <HistoryPager label="Operations log pages" newest={opsAfter ? operatorLink("health", { ...params, opsAfter: null }) : null}
+        older={operations.data?.nextCursor ? operatorLink("health", { ...params, opsAfter: operations.data.nextCursor }) : null} /></div>
     <DataState status={operations.status} onRetry={operations.refresh} />
     {operations.data && <RecordTable label="Operations log" rows={operations.data.items} columns={operationColumns}
       idOf={row => `${row.contributorId}:${row.kind}:${row.operationId}`} />}
-    <p className="foot">{opsAfter && <a href={operatorLink("health", { ...params, opsAfter: null })}>First operations page</a>}
-      {opsAfter && operations.data?.nextCursor && " · "}
-      {operations.data?.nextCursor && <a href={operatorLink("health", { ...params, opsAfter: operations.data.nextCursor })}>Next operations page</a>}</p>
   </>;
 }

@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderOperator, stubOperatorFetch, pinFixtureClock } from "../test-render";
+import { operatorRoute } from "../routes";
 import { HealthPage } from "./health-page";
 
 beforeEach(() => pinFixtureClock());
@@ -20,4 +21,20 @@ it("shows readiness checks, accessible trend charts for the routed period and re
   expect(await screen.findByText("Batch limit")).toBeInTheDocument();
   expect(screen.getByText(/Last full recompute/)).toHaveTextContent("13 versions");
   expect(screen.getByRole("region", { name: "Recompute all versions" })).toBeInTheDocument();
+});
+
+it("pages retention sweeps and the operations log with validated routed cursors", async () => {
+  const fetcher = stubOperatorFetch();
+  renderOperator(<HealthPage params={{}} />);
+  const runs = await screen.findByRole("navigation", { name: "Retention sweep pages" });
+  expect(within(runs).getByRole("link", { name: "Older" })).toHaveAttribute("href", "#/health?runsAfter=WzE3MDAsInJ1bi1yZXQteCJd%2B%2F%3D");
+  expect(within(runs).queryByRole("link", { name: "Newest" })).not.toBeInTheDocument();
+  const ops = await screen.findByRole("navigation", { name: "Operations log pages" });
+  expect(within(ops).getByRole("link", { name: "Older" })).toHaveAttribute("href", "#/health?opsAfter=WyJvcCJd%2B%2F%3D");
+  cleanup();
+  renderOperator(<HealthPage params={operatorRoute("#/health?runsAfter=WzE3MDAsInJ1bi1yZXQteCJd%2B%2F%3D&period=7d").params} />);
+  expect(await screen.findByText("Skipped")).toBeInTheDocument();
+  const older = await screen.findByRole("navigation", { name: "Retention sweep pages" });
+  expect(within(older).getByRole("link", { name: "Newest" })).toHaveAttribute("href", "#/health?period=7d");
+  expect(fetcher.mock.calls.some(([path]) => path === "/admin/v1/maintenance/runs?kind=retention&after=WzE3MDAsInJ1bi1yZXQteCJd%2B%2F%3D")).toBe(true);
 });

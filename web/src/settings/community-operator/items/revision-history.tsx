@@ -1,7 +1,7 @@
 import type { Revision } from "../../../api/api-community-operator-catalog";
 import { clockTime, shortDate } from "../shared/format";
 import { RevisionCauseText, RevisionChanges } from "../shared/revision";
-import { PanelHead } from "../shared/ui";
+import { HistoryPager, PanelHead } from "../shared/ui";
 
 /**
  * One page of immutable master revisions, newest first, with what changed and why. `older` links to the next page
@@ -12,8 +12,7 @@ export function RevisionHistory({ revisions, label, older, newest, busy }: { rev
   const sorted = [...revisions].sort((a, b) => b.revision - a.revision);
   return <section className="card revs" aria-labelledby="revisions-title" aria-busy={busy}>
     <PanelHead title={<span id="revisions-title">Revision history</span>} note={`${label} master set · each revision is an immutable snapshot`}>
-      {(older || newest) && <nav className="actions" aria-label="Revision history pages">
-        {newest && <a className="btn sm" href={newest}>Newest</a>}{older && <a className="btn sm" href={older}>Older</a>}</nav>}
+      <HistoryPager label="Revision history pages" older={older} newest={newest} />
     </PanelHead>
     {sorted.length ? <ol className="rev-list">{sorted.map(revision => <li key={revision.revision} className={`rev-item${revision.current ? " cur" : ""}`}>
       <span className="rn">rev {revision.revision}</span>

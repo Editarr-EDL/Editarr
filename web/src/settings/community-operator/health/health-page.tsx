@@ -1,7 +1,7 @@
 import { readOperatorHealth, readOperatorMaintenanceRuns, trendMetrics, type TrendPeriod } from "../../../api/api-community-operator-system";
 import { ago, dayTime, duration, titleCase } from "../shared/format";
 import { DataState, useOperatorData } from "../shared/operator-data";
-import { PageHead, Segmented } from "../shared/ui";
+import { HistoryPager, PageHead, Segmented } from "../shared/ui";
 import { navigate, operatorLink } from "../routes";
 import { ServiceRecords } from "./service-records";
 import { Tools } from "./tools";
@@ -14,11 +14,12 @@ const outcomes = { ok: ["ok", "✓ Complete"], batch_limit: ["cand", "Batch limi
 export function HealthPage({ params }: { params: Record<string, string | null> }) {
   const period = (periods.some(([value]) => value === params.period) ? params.period : "30d") as TrendPeriod;
   const health = useOperatorData("health", readOperatorHealth);
-  const runs = useOperatorData("runs:retention", signal => readOperatorMaintenanceRuns("retention", null, signal));
+  const runsAfter = params.runsAfter ?? null;
+  const runs = useOperatorData(`runs:retention:${runsAfter}`, signal => readOperatorMaintenanceRuns("retention", runsAfter, signal));
   const data = health.data;
   return <section aria-labelledby="page-title">
     <PageHead eyebrow="System" title="Health & tools" intro="Readiness, storage and maintenance over time. Figures marked ¹ are counted by the service and not provider-verified.">
-      <Segmented label="Period" value={period} options={periods} onChange={value => navigate(operatorLink("health", { period: value }))} />
+      <Segmented label="Period" value={period} options={periods} onChange={value => navigate(operatorLink("health", { ...params, period: value }))} />
     </PageHead>
     <DataState status={health.status} onRetry={health.refresh} />
     {data && <div className={`status-card${data.ready ? "" : " bad"}`}>
@@ -30,7 +31,9 @@ export function HealthPage({ params }: { params: Record<string, string | null> }
       <button type="button" className="btn" onClick={() => { health.refresh(); runs.refresh(); }}>Re-check</button>
     </div>}
     <div className="trends">{trendMetrics.map(metric => <TrendCard key={`${metric}:${period}`} metric={metric} period={period} />)}</div>
-    <div className="section-title"><h2>Retention sweeps</h2><span className="muted small">Durable records and payloads are never deleted; each sweep prunes
+    <div className="section-title"><h2>Retention sweeps</h2>
+      <HistoryPager label="Retention sweep pages" newest={runsAfter ? operatorLink("health", { ...params, runsAfter: null }) : null}
+        older={runs.data?.nextCursor ? operatorLink("health", { ...params, runsAfter: runs.data.nextCursor }) : null} /><span className="muted small">Durable records and payloads are never deleted; each sweep prunes
       bounded batches of expired rows.</span></div>
     <div className="tw" role="region" aria-label="Retention sweeps table" tabIndex={0}><table className="t ret"><caption className="sr">Retention sweeps</caption>
       <thead><tr><th scope="col">Ran</th><th scope="col" className="r">Duration</th><th scope="col" className="r">Steps</th><th scope="col">Result</th></tr></thead>

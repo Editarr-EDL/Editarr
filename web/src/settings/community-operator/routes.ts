@@ -10,7 +10,7 @@ type Params = Record<string, string | null | undefined>;
 const safe = /^[A-Za-z0-9_.=:-]{1,1024}$/;
 /** Keyset cursors are base64 (or base64url) of UTF-8 JSON, up to the service's 8192-character limit. */
 const cursor = /^[A-Za-z0-9+/=_-]{1,8192}$/;
-const cursorParams = new Set(["after", "before", "keysAfter", "filtersAfter", "submissionsAfter", "opsAfter"]);
+const cursorParams = new Set(["after", "before", "keysAfter", "filtersAfter", "submissionsAfter", "opsAfter", "runsAfter"]);
 /** Pre-redesign views and where they now live. */
 const legacy: Record<string, string> = { overview: "home", recompute: "health", backup: "backups", operations: "health" };
 

@@ -34,7 +34,8 @@ export function useMutation() {
     if (pending.current) return;
     const controller = new AbortController();
     pending.current = controller; setBusy(true); setMessage("");
-    send(controller.signal).then(result => { if (!controller.signal.aborted) { setFailed(false); setMessage(success(result)); } })
+    // Wrappers validate synchronously; run `send` in a continuation so a throw still settles the form.
+    Promise.resolve().then(() => send(controller.signal)).then(result => { if (!controller.signal.aborted) { setFailed(false); setMessage(success(result)); } })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         const denied = accessFailureStatus(error);

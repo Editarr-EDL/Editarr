@@ -13,16 +13,18 @@ export function IdLookup() {
   const { onAccessFailure } = useOperator();
   const [id, setId] = useState("");
   const [state, setState] = useState<{ kind: "idle" | "busy" | "none" | "error" } | { kind: "many"; hits: SearchId[] }>({ kind: "idle" });
-  const pending = useRef<AbortController | null>(null);
+  const pending = useRef<AbortController | null>(null), current = useRef("");
   useEffect(() => () => pending.current?.abort(), []);
   const value = id.trim();
+  current.current = value;
   const lookup = () => {
     if (!value || state.kind === "busy") return;
     pending.current?.abort();
     const controller = new AbortController(); pending.current = controller;
     setState({ kind: "busy" });
     Promise.resolve().then(() => readOperatorSearch(value, controller.signal)).then(result => {
-      if (controller.signal.aborted) return;
+      // A response for an earlier input must never navigate.
+      if (controller.signal.aborted || result.q !== current.current || value !== current.current) return;
       const hits = result.ids.filter(hit => hit.id === value);
       if (hits.length === 1) { setState({ kind: "idle" }); navigate(searchIdLink(hits[0].kind, hits[0].id)); }
       else setState(hits.length ? { kind: "many", hits } : { kind: "none" });
@@ -37,7 +39,7 @@ export function IdLookup() {
     <form className="inline" onSubmit={event => { event.preventDefault(); lookup(); }}>
       <label htmlFor="tools-lookup" className="sr">Resource ID</label>
       <input id="tools-lookup" className="mono" value={id} maxLength={100} placeholder="Any version, filter, report… ID"
-        onChange={event => { setId(event.target.value); setState({ kind: "idle" }); }} />
+        onChange={event => { pending.current?.abort(); pending.current = null; setId(event.target.value); setState({ kind: "idle" }); }} />
       <button className="btn primary" disabled={!value || state.kind === "busy"}>{state.kind === "busy" ? "Looking up…" : "Look up"}</button></form>
     {state.kind === "many" && <div className="result" role="status">This ID matches several resources:<ul>{state.hits.map(hit =>
       <li key={hit.kind}><a href={searchIdLink(hit.kind, hit.id)}>{titleCase(hit.kind)} · {hit.label}</a></li>)}</ul></div>}

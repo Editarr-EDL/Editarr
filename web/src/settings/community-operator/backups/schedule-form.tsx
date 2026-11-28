@@ -16,8 +16,25 @@ export function configErrors(config: BackupConfig) {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(config.atUtc)) errors.atUtc = "Use 24-hour HH:MM, for example 03:30.";
   if (!Number.isInteger(config.keepLast) || config.keepLast < 1 || config.keepLast > 365) errors.keepLast = "Keep between 1 and 365 backups.";
   if (!Number.isInteger(config.keepWeekly) || config.keepWeekly < 0 || config.keepWeekly > 104) errors.keepWeekly = "Keep between 0 and 104 weekly backups.";
-  if (config.destination.startsWith("/") || config.destination.split("/").includes("..")) errors.destination = "Use a folder inside the backup root, without .. or a leading /.";
+  const destination = destinationError(config.destination);
+  if (destination) errors.destination = destination;
   return errors;
+}
+const segment = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$/;
+/**
+ * The service's destination rules (normalizeDestination) for a folder relative to the backup root: at most 512 characters,
+ * no control characters or backslashes, no leading "/" or "..", up to 4 segments of letters, digits, ".", "_" or "-",
+ * and not inside the reserved "staged" folder. Returns a message, or null when valid ("" is the root itself).
+ */
+export function destinationError(value: string) {
+  const rest = value.trim();
+  if (rest.length > 512 || /[\u0000-\u001f\u007f\\]/.test(rest)) return "Use letters, digits, '.', '_', '-' and '/' only.";
+  if (rest.startsWith("/") || rest.split("/").includes("..")) return "Use a folder inside the backup root, without .. or a leading /.";
+  const parts = rest.split("/").filter(Boolean);
+  if (parts.length > 4) return "Use at most 4 folder levels.";
+  if (parts.some(part => !segment.test(part))) return "Each folder name uses letters, digits, '.', '_' or '-' and does not start with '.'.";
+  if (parts[0] === "staged") return "The staged folder is reserved for restores.";
+  return null;
 }
 
 /** The backup schedule form: frequency, time, retention, destination inside the configured root and integrity check. */

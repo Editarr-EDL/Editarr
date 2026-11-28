@@ -36,3 +36,9 @@ export function PanelHead({ title, note, children, level = 2 }: { title: ReactNo
 export function Votes({ up, down }: { up: number; down: number }) {
   return <span className="num"><span className="up">▲{up}</span> <span className="down">▼{down}</span></span>;
 }
+/** "Newest" / "Older" links for a keyset-paged history; renders nothing on a single page. */
+export function HistoryPager({ label, older, newest }: { label: string; older: string | null; newest: string | null }) {
+  if (!older && !newest) return null;
+  return <nav className="actions" aria-label={label}>{newest && <a className="btn sm" href={newest}>Newest</a>}
+    {older && <a className="btn sm" href={older}>Older</a>}</nav>;
+}

@@ -148,6 +148,10 @@ for (const width of [320, 1440]) {
         /Uploads per bucket/, /Votes per bucket/, /Master downloads over 30 d/])
         await expect(page.getByRole("img", { name })).toHaveAttribute("aria-label", /lowest .+ highest .+ latest/);
       await expect(page.getByRole("table", { name: "Retention sweeps" }).getByText("Batch limit")).toBeVisible();
+      await page.getByRole("navigation", { name: "Retention sweep pages" }).getByRole("link", { name: "Older" }).click();
+      await expect(page.getByRole("table", { name: "Retention sweeps" }).getByText("Skipped")).toBeVisible();
+      await page.getByRole("navigation", { name: "Retention sweep pages" }).getByRole("link", { name: "Newest" }).click();
+      await expect(page.getByRole("table", { name: "Retention sweeps" }).getByText("Batch limit")).toBeVisible();
       await page.getByRole("button", { name: "7 days" }).click();
       await expect(page.getByRole("img", { name: /Database size over 7 d/ })).toBeVisible();
       await expect(page).toHaveURL(/period=7d/);
