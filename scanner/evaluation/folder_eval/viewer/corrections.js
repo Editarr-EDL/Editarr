@@ -156,6 +156,7 @@ async function send(id, edit) {
     if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || `HTTP ${res.status}`);
     C.confirmed[id] = json.corrections || {};
     if (json.updated_at) C.docUpdatedAt = json.updated_at;
+    if (json.audit_logged === false) toast(`The correction for ${edit.key} was saved, but its audit-log entry could not be written.`);
   } catch (err) {
     error = err;
   }

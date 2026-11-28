@@ -344,3 +344,63 @@ def test_server_refuses_symlinks_in_the_frames_cache(server, data_root, tmp_path
                  "/_results/frames/inner/0.jpg"):
         response, body = _request(server, "GET", path)
         assert response.status == 404 and b"private" not in body, path
+
+
+def test_a_failed_audit_append_rolls_the_correction_back(data_root, monkeypatch):
+    from scanner.evaluation.folder_eval import corrections as module
+
+    layout = Layout(data_root)
+    save_correction(layout, "a", "violence", True)
+    before = (layout.results / "corrections.json").read_text()
+
+    def failing_write(_descriptor, _data):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(module.os, "write", failing_write)
+    with pytest.raises(module.CorrectionNotSaved, match="disk full"):
+        save_correction(layout, "a", "violence", False)
+    assert (layout.results / "corrections.json").read_text() == before
+
+    real_write_json = module.write_json
+    calls = []
+
+    def write_once(path, payload):
+        calls.append(path)
+        if len(calls) > 1:
+            raise OSError("read-only")
+        real_write_json(path, payload)
+
+    monkeypatch.setattr(module, "write_json", write_once)
+    with pytest.raises(module.CorrectionUnaudited):
+        save_correction(layout, "b", "violence", True)
+    assert "b" in json.loads((layout.results / "corrections.json").read_text())["items"]
+
+
+def test_api_reports_failure_only_when_nothing_was_committed(server, data_root, monkeypatch):
+    from scanner.evaluation.folder_eval import corrections as module
+    from scanner.evaluation.folder_eval import server as server_module
+
+    requested = []
+    monkeypatch.setattr(server.summarizer, "request", lambda: requested.append(1))
+    log_file = data_root / "_results" / "corrections.log.jsonl"
+    log_file.unlink(missing_ok=True)
+    log_file.symlink_to(data_root / "video" / "x" / "a.mp4")
+    body = {"item_id": "a", "key": "violence", "value": True}
+    response, payload = _request(server, "POST", "/_api/corrections", body)
+    assert response.status == 500 and not json.loads(payload)["ok"]
+    assert not (data_root / "_results" / "corrections.json").exists() and requested == []
+
+    log_file.unlink()
+
+    def unaudited(*_args, **_kwargs):
+        layout = Layout(data_root)
+        payload = module.load_corrections(layout)
+        payload["items"]["a"] = {"violence": True}
+        module.write_json(module.corrections_path(layout), payload)
+        raise module.CorrectionUnaudited("audit entry and restore failed")
+
+    monkeypatch.setattr(server_module, "save_correction", unaudited)
+    response, payload = _request(server, "POST", "/_api/corrections", body)
+    result = json.loads(payload)
+    assert response.status == 200 and result["ok"] and result["audit_logged"] is False
+    assert result["corrections"] == {"violence": True} and requested == [1]

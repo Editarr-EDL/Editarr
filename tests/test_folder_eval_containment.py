@@ -74,15 +74,16 @@ def test_links_at_the_destination_are_replaced_or_refused_never_followed(tmp_pat
 
 
 def test_corrections_log_never_appends_through_a_link(tmp_path, outside):
-    from scanner.evaluation.folder_eval.corrections import save_correction
+    from scanner.evaluation.folder_eval.corrections import CorrectionNotSaved, save_correction
 
     layout = _root(tmp_path)
     layout.results.mkdir()
     layout.inventory.write_text(json.dumps({"items": [{"id": "a", "expected": []}]}))
     (layout.results / "corrections.log.jsonl").symlink_to(outside / "keep.txt")
-    with pytest.raises(OSError):
+    with pytest.raises(CorrectionNotSaved, match="audit log unavailable"):
         save_correction(layout, "a", "violence", True)
     assert (outside / "keep.txt").read_text() == "original"
+    assert not (layout.results / "corrections.json").exists()  # nothing committed
 
 
 def test_viewer_install_replaces_linked_files(tmp_path, outside):

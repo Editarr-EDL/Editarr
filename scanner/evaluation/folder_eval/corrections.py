@@ -140,13 +140,29 @@ def validate_request(body: Any, known_ids) -> tuple[str, str, bool | None, str |
     return item_id, key, value, note
 
 
+class CorrectionNotSaved(RuntimeError):
+    """The change was not committed: corrections.json is unchanged."""
+
+
+class CorrectionUnaudited(RuntimeError):
+    """The change is in corrections.json, but neither its audit entry nor the rollback
+    could be written."""
+
+
 def save_correction(
     layout: Layout, item_id: str, key: str, value: bool | None, note: str | None = None
 ) -> dict[str, bool]:
-    """Persist one validated change atomically, append it to the audit log, and return
-    the item's normalised map. Thread-safe within the process."""
+    """Persist one validated change and its audit entry; return the item's normalised map.
+
+    The audit log is opened and validated before corrections.json changes; if appending
+    the entry still fails, corrections.json is restored, so a change is either committed
+    with its audit entry or not at all (CorrectionNotSaved). CorrectionUnaudited means
+    even the restore failed and the change stands without an entry. Thread-safe within
+    the process.
+    """
     with _LOCK:
         payload = load_corrections(layout)
+        original = json.loads(json.dumps(payload))
         items = payload["items"]
         previous = items.get(item_id, {}).get(key)
         item_map = normalise(items.get(item_id, {}), key, value)
@@ -155,7 +171,6 @@ def save_correction(
         else:
             items.pop(item_id, None)
         payload["updated_at"] = _now()
-        write_json(corrections_path(layout), payload)
         entry: dict[str, Any] = {
             "at": payload["updated_at"], "item_id": item_id, "key": key,
             "value": value, "previous": previous,
@@ -163,9 +178,26 @@ def save_correction(
         if note:
             entry["note"] = note
         data = (json.dumps(entry, separators=(",", ":")) + "\n").encode("utf-8")
-        descriptor = open_append(layout.results / LOG_FILE)
         try:
-            os.write(descriptor, data)
+            descriptor = open_append(layout.results / LOG_FILE)
+        except OSError as exc:
+            raise CorrectionNotSaved(f"audit log unavailable: {exc}") from exc
+        try:
+            try:
+                write_json(corrections_path(layout), payload)
+            except OSError as exc:
+                raise CorrectionNotSaved(f"could not write corrections: {exc}") from exc
+            try:
+                if os.write(descriptor, data) != len(data):
+                    raise OSError("short write to the audit log")
+            except OSError as exc:
+                try:
+                    write_json(corrections_path(layout), original)
+                except OSError as restore_error:
+                    raise CorrectionUnaudited(
+                        f"audit entry failed ({exc}) and the restore failed ({restore_error})"
+                    ) from exc
+                raise CorrectionNotSaved(f"audit entry failed: {exc}") from exc
         finally:
             os.close(descriptor)
         return item_map

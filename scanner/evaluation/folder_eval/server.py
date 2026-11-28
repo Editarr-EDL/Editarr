@@ -16,6 +16,8 @@ from urllib.parse import urlsplit
 
 from .corrections import (
     CorrectionError,
+    CorrectionNotSaved,
+    CorrectionUnaudited,
     correction_count,
     effective_expected,
     load_corrections,
@@ -180,7 +182,19 @@ class ReviewHandler(SimpleHTTPRequestHandler):
         except CorrectionError as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
             return
-        item_map = save_correction(self.server.layout, item_id, key, value, note)
+        audit_logged = True
+        try:
+            item_map = save_correction(self.server.layout, item_id, key, value, note)
+        except CorrectionNotSaved as exc:
+            # Nothing changed: the only case reported as a failure.
+            log.error("correction not saved: %s", exc)
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"correction not saved: {exc}")
+            return
+        except CorrectionUnaudited as exc:
+            log.error("correction saved without an audit entry: %s", exc)
+            item_map = load_corrections(self.server.layout)["items"].get(item_id, {})
+            audit_logged = False
+        # corrections.json changed: refresh the summary.
         self.server.summarizer.request()
         self._json(HTTPStatus.OK, {
             "ok": True,
@@ -188,6 +202,7 @@ class ReviewHandler(SimpleHTTPRequestHandler):
             "corrections": item_map,
             "effective_expected": effective_expected(expected[item_id], item_map),
             "summary_pending": True,
+            "audit_logged": audit_logged,
         })
 
     def _same_origin(self) -> bool:
