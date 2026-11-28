@@ -80,12 +80,12 @@ def frame_reference_ok(item_id: str, relative_file: str) -> bool:
     relative, POSIX, no `..`, `.` or empty parts, so it can never point elsewhere."""
     if not isinstance(relative_file, str) or "\\" in relative_file:
         return False
-    parts = PurePosixPath(relative_file).parts
+    # Split the raw text: PurePosixPath would silently drop `.` and empty parts.
+    parts = relative_file.split("/")
     return (
-        not relative_file.startswith("/")
-        and len(parts) == 3
-        and parts[:2] == ("frames", item_id)
-        and parts[2] not in ("", ".", "..")
+        len(parts) == 3
+        and parts[:2] == ["frames", item_id]
+        and all(part not in ("", ".", "..") for part in parts[1:])
     )
 
 

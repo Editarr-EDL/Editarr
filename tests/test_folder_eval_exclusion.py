@@ -231,10 +231,12 @@ def test_frame_references_outside_their_item_folder_are_refused(tmp_path, monkey
     for reference in (
         "../video/nude/decoy.jpg", "frames/../../video/nude/decoy.jpg", str(tmp_path / "x.jpg"),
         "frames/b/0.jpg", "frames/a/../b/0.jpg", "frames/a", "frames\\a\\0.jpg",
+        "frames/a/./0.jpg", "frames//a/0.jpg", "/frames/a/0.jpg",
     ):
         assert not frame_reference_ok("a", reference), reference
         assert not cached_frame_ok(layout.results, "a", reference), reference
     assert frame_reference_ok("a", "frames/a/0.jpg")
+    assert not frame_reference_ok("..", "frames/../0.jpg")
 
     item = {"id": "a", "path": "video/x/a.mp4",
             "frames": [{"n": 0, "t": 1.0, "file": "../video/nude/decoy.jpg"}]}
