@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from contextlib import closing
 from typing import Any
 
 from .backends import BackendUnavailable, create_backend
@@ -135,30 +136,34 @@ def _score_pending(
     index = 0
     try:
         descriptor = os.open(output, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        # closing(): if the loop body fails (e.g. a write error) or is interrupted, the
+        # generator's executor cancels queued items and joins running ones here, before
+        # the caller closes the backend those threads still use.
         try:
-            results = scored(backend, layout, pending, thresholds, done, workers)
-            for index, (item, frames, record) in enumerate(results, start=1):
-                append_line(descriptor, record)
-                if record["status"] == "ok":
-                    frame_count += len(frames)
-                    scoring_ms += record["elapsed_ms"]
-                else:
-                    errors += 1
-                    log.warning("%s %s: %s", model_id, item["path"], record["error"])
-                now = time.perf_counter()
-                if now - last_log >= 10 or index == len(pending):
-                    last_log = now
-                    eta = (now - started) / index * (len(pending) - index)
-                    log.info(
-                        "%s %d/%d items, %d frames, %d errors, %.1f ms/frame, eta %.0fs",
-                        model_id,
-                        index,
-                        len(pending),
-                        frame_count,
-                        errors,
-                        scoring_ms / frame_count if frame_count else 0.0,
-                        eta,
-                    )
+            scoring = scored(backend, layout, pending, thresholds, done, workers)
+            with closing(scoring) as results:
+                for index, (item, frames, record) in enumerate(results, start=1):
+                    append_line(descriptor, record)
+                    if record["status"] == "ok":
+                        frame_count += len(frames)
+                        scoring_ms += record["elapsed_ms"]
+                    else:
+                        errors += 1
+                        log.warning("%s %s: %s", model_id, item["path"], record["error"])
+                    now = time.perf_counter()
+                    if now - last_log >= 10 or index == len(pending):
+                        last_log = now
+                        eta = (now - started) / index * (len(pending) - index)
+                        log.info(
+                            "%s %d/%d items, %d frames, %d errors, %.1f ms/frame, eta %.0fs",
+                            model_id,
+                            index,
+                            len(pending),
+                            frame_count,
+                            errors,
+                            scoring_ms / frame_count if frame_count else 0.0,
+                            eta,
+                        )
         finally:
             os.close(descriptor)
     except BackendUnavailable:

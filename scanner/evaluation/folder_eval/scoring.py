@@ -136,8 +136,9 @@ def scored(
                     yield item, frames, future.result()
                 submit()
         finally:
-            for future in running:
-                future.cancel()
+            # Also runs when the consumer closes this generator: drop queued work and wait
+            # for running items, so no thread still uses the backend afterwards.
+            pool.shutdown(wait=True, cancel_futures=True)
 
 
 def _error_record(backend: Backend, item: dict[str, Any], error: Exception, elapsed_ms: float):

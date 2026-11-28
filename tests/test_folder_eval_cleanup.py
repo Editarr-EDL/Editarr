@@ -188,3 +188,55 @@ def test_sigterm_stops_a_running_llama_server(tmp_path):
         time.sleep(0.1)
     os.kill(server_pid, signal.SIGKILL)
     pytest.fail("llama-server survived SIGTERM")
+
+
+def test_backend_closes_only_after_in_flight_scoring_ends_when_a_write_fails(
+    tmp_path, monkeypatch
+):
+    import json
+    import threading
+
+    from scanner.evaluation.folder_eval.paths import Layout
+    from tests.folder_eval_support import clip
+
+    layout = Layout(tmp_path)
+    items = [clip(f"i{n}", "video/x", [], frames=1) for n in range(6)]
+    for item in items:
+        target = layout.results / item["frames"][0]["file"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"x")
+    layout.inventory.write_text(json.dumps({"items": items}), encoding="utf-8")
+    lock = threading.Lock()
+    state = {"started": 0, "finished": 0, "in_flight": 0, "at_close": None}
+
+    class Slow:
+        model_id = "fake"
+        default_concurrency = 3
+
+        def meta(self):
+            return {"model_id": "fake", "thresholds": {"*": 0.5}}
+
+        def score_frames(self, paths):
+            with lock:
+                state["started"] += 1
+                state["in_flight"] += 1
+            time.sleep(0.01 if paths[0].parent.name == "i0" else 0.4)
+            with lock:
+                state["in_flight"] -= 1
+                state["finished"] += 1
+            return [{"scores": {}}]
+
+        def close(self):
+            with lock:
+                state["at_close"] = (state["in_flight"], state["started"], state["finished"])
+
+    def failing_append(_descriptor, _record):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner, "create_backend", lambda _id: Slow())
+    monkeypatch.setattr(runner, "append_line", failing_append)
+    with pytest.raises(OSError, match="disk full"):
+        runner.run_model(layout, "fake", concurrency=3)
+    in_flight, started, finished = state["at_close"]
+    assert in_flight == 0 and started == finished
+    assert started < len(items)  # queued items were cancelled, not scored
