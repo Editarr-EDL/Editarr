@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .labels import FAMILY_TOKENS, family_of, is_valid_key, with_families
-from .paths import Layout, write_json
+from .paths import Layout, open_append, write_json
 
 CORRECTIONS_FILE = "corrections.json"
 LOG_FILE = "corrections.log.jsonl"
@@ -163,9 +163,7 @@ def save_correction(
         if note:
             entry["note"] = note
         data = (json.dumps(entry, separators=(",", ":")) + "\n").encode("utf-8")
-        descriptor = os.open(
-            layout.results / LOG_FILE, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644
-        )
+        descriptor = open_append(layout.results / LOG_FILE)
         try:
             os.write(descriptor, data)
         finally:

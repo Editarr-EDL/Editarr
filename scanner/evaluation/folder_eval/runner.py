@@ -10,7 +10,7 @@ from typing import Any
 
 from .backends import BackendUnavailable, create_backend
 from .frames import frames_present
-from .paths import Layout, matches_prefix
+from .paths import Layout, matches_prefix, open_append
 from .results import append_line, load_results, write_model_index
 from .run_config import FIELD as CONFIG_FIELD
 from .run_config import archive_results, check_resume, fingerprint, scoring_config
@@ -150,7 +150,7 @@ def _score_pending(
     last_log = started
     index = 0
     try:
-        descriptor = os.open(output, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        descriptor = open_append(output)
         # closing(): if the loop body fails (e.g. a write error) or is interrupted, the
         # generator's executor cancels queued items and joins running ones here, before
         # the caller closes the backend those threads still use.

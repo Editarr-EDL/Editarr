@@ -86,8 +86,9 @@ def cached_frame_ok(results: Path, relative_file: str) -> bool:
         return False
     if not stat.S_ISREG(info.st_mode) or info.st_size == 0:
         return False
-    frames = os.path.realpath(results / "frames")
-    return os.path.realpath(path).startswith(frames + os.sep)
+    # No link anywhere from `_results` (inclusive) down to the file, e.g. a linked
+    # `_results/frames` whose target holds planted images.
+    return not has_symlink_below(results.parent, path)
 
 
 def ensure_frames_cached(results: Path, frames: list[dict[str, Any]]) -> None:
@@ -162,12 +163,36 @@ class Layout:
         return json.loads(self.inventory.read_text(encoding="utf-8"))
 
 
+def ensure_results_destination(path: Path) -> None:
+    """Refuse to write `path` when it lies in a `_results` tree redirected by a symlink:
+    `_results` itself or any folder between it and `path`. A link at `path` itself is
+    replaced by atomic writes and refused by `open_append`, never followed.
+
+    Checked right before writing; the data root is assumed to be writable only by its
+    owner, so this guards against leftover or planted links, not a concurrent attacker.
+    """
+    root = next((parent for parent in path.parents if parent.name == RESULTS_DIR), None)
+    if root is not None and has_symlink_below(root.parent, path.parent):
+        raise PermissionError(f"Refusing to write through a symlink in {RESULTS_DIR}: {path}")
+
+
+def open_append(path: Path) -> int:
+    """Open `path` for single-write appends without following a symlink at `path`."""
+    ensure_results_destination(path)
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    if os.path.islink(path):  # platforms without O_NOFOLLOW
+        raise PermissionError(f"Refusing to append through a symlink: {path}")
+    return os.open(path, flags, 0o644)
+
+
 def write_json(path: Path, payload: Any) -> None:
     """Write indented JSON atomically so readers never see a half-written file.
 
-    Each write uses its own private temporary file, so the CLI and the review server
-    may replace the same file concurrently.
+    Each write uses its own private temporary file in the same (checked) folder, so the
+    CLI and the review server may replace the same file concurrently.
     """
+    ensure_results_destination(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_results_destination(path)
     data = (json.dumps(payload, indent=2) + "\n").encode("utf-8")
     atomic_write_bytes(path, data, prefix=f".{path.name}-", suffix=".part", mode=0o644)

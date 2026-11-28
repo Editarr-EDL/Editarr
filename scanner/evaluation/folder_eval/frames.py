@@ -163,8 +163,9 @@ def extract_item(
         for link in (target, target.parent):
             if link.is_symlink():
                 link.unlink()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if has_symlink_below(results, target.parent):
+        if not has_symlink_below(results.parent, target.parent.parent):
+            target.parent.mkdir(parents=True, exist_ok=True)
+        if has_symlink_below(results.parent, target.parent):
             errors.append(f"frame {frame['n']}: frame folder is linked outside the cache")
             continue
         partial = target.with_name(f"{target.stem}.part.jpg")

@@ -145,7 +145,12 @@ def _link(target: Path, link: Path) -> None:
 def _copy_ground_truth(source: Path, destination: Path, imdb_ids: set[str]) -> None:
     if source.resolve() == destination.resolve():
         return
+    if destination.is_symlink():
+        raise PermissionError(f"Refusing to copy ground truth into a symlink: {destination}")
     destination.mkdir(parents=True, exist_ok=True)
+    for name in (*GROUND_TRUTH_FILES, "tags.csv"):
+        if (destination / name).is_symlink():  # replace a link, never write through it
+            (destination / name).unlink()
     for name in GROUND_TRUTH_FILES:
         if not (source / name).is_file():
             continue
