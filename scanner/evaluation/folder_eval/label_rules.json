@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "description": "Ordered rules; the first matching pattern (regex on the evaluation_data-relative path) sets expected keys. Directory segments equal to an MCF family, MCF token, or synonym add keys for every path. scored=false items are shown but excluded from metrics.",
+  "synonyms": {
+    "gore": ["violence", "fear/hemophobia"],
+    "blood": ["fear/hemophobia"],
+    "gunshots": ["violence/weapons"],
+    "threatening": ["violence/emotionalViolence"],
+    "fire": ["fear/fire"]
+  },
+  "rules": [
+    {"name": "ucf-normal", "pattern": "^video/ucf_crime/test_videos/Normal/", "expected": []},
+    {
+      "name": "ucf-violence",
+      "pattern": "^video/ucf_crime/test_videos/(Fighting|Assault|Abuse|Arrest|Robbery)/",
+      "expected": ["violence"]
+    },
+    {"name": "ucf-shooting", "pattern": "^video/ucf_crime/test_videos/Shooting/", "expected": ["violence/weapons"]},
+    {"name": "ucf-explosion", "pattern": "^video/ucf_crime/test_videos/Explosion/", "expected": ["fear/explosion"]},
+    {"name": "ucf-arson", "pattern": "^video/ucf_crime/test_videos/Arson/", "expected": ["fear/fire"]},
+    {"name": "ucf-accident", "pattern": "^video/ucf_crime/test_videos/RoadAccidents/", "expected": ["fear/accident"]},
+    {
+      "name": "ucf-property-crime",
+      "pattern": "^video/ucf_crime/test_videos/(Shoplifting|Stealing|Burglary|Vandalism)/",
+      "expected": []
+    },
+    {"name": "hockey-fight", "pattern": "^video/hockey_fight/videos/fi[^/]*$", "expected": ["violence/punching"]},
+    {"name": "hockey-no-fight", "pattern": "^video/hockey_fight/videos/no[^/]*$", "expected": []},
+    {"name": "movies-fight", "pattern": "^video/movies_fight/videos/fights/", "expected": ["violence"]},
+    {"name": "movies-no-fight", "pattern": "^video/movies_fight/videos/noFights/", "expected": []},
+    {
+      "name": "xd-violence",
+      "pattern": "^video/xd_violence/videos/[^/]*_label_(?P<codes>[A-Za-z0-9-]+)\\.[^./]+$",
+      "codes": {
+        "A": [],
+        "B1": ["violence/punching"],
+        "B2": ["violence/weapons"],
+        "B4": ["violence"],
+        "B5": ["violence"],
+        "B6": ["fear/accident"],
+        "G": ["fear/explosion"]
+      },
+      "ignore_codes": ["0"]
+    },
+    {"name": "vsd-non-violence", "pattern": "^video/Violent Scene Dataset/Non_Violence\\(No-V\\)/", "expected": []},
+    {
+      "name": "vsd-violence",
+      "pattern": "^video/Violent Scene Dataset/Violence_Level(1Moderate\\(Mo-V\\)|2Extreme\\(Ex-V\\))/",
+      "expected": ["violence"]
+    },
+    {"name": "nsfw-v1-clean", "pattern": "^video/nsfw_dataset_v1/(neutral|drawings)/", "expected": []},
+    {"name": "nsfw-v1-explicit", "pattern": "^video/nsfw_dataset_v1/(porn|hentai)/", "expected": ["nudity", "sex"]},
+    {"name": "nsfw-v1-suggestive", "pattern": "^video/nsfw_dataset_v1/sexy/", "expected": [], "scored": false},
+    {
+      "name": "vsd-undetermined",
+      "pattern": "^video/Violent Scene Dataset/Violence_Undetermined",
+      "expected": ["violence"],
+      "scored": false
+    }
+  ]
+}

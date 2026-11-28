@@ -10,7 +10,9 @@ Only calls on the imported `scanner.http.background` module are the helper; a
 local variable that happens to share its name is not. Request-scoped asyncio
 tasks are awaited and drained before the response, so they run with the
 request's own principal. The standalone Qwen replay CLI serves a separate
-loopback app, with shutdown handling for its two named background sites.
+loopback app, with shutdown handling for its two named background sites. The
+folder evaluation CLI runs outside Editarr's server and scan worker, and owns
+and stops its own workers, model servers and loopback review server.
 
 `SYSTEM_WORK_CALLERS` names the one place each `SystemWork` reason may be used,
 so a handler cannot borrow a system reason for work a user started.
@@ -32,6 +34,7 @@ REQUEST_SCOPED = "request-scoped: awaited and drained inside the request"
 SYSTEM = "system: schedule, startup, or launcher with no initiating user"
 WORKER = "worker process: runs under the scan's JobGate"
 LOCAL_REPLAY = "standalone replay CLI: owned and reaped by the loopback app"
+FOLDER_EVALUATION = "standalone evaluation CLI: owned and stopped by the command"
 PRIMITIVES = frozenset(
     {"Thread", "Timer", "Process", "Popen", "create_task", "ensure_future", "run_in_executor"}
     | {"add_task", "start_soon", "submit", "BackgroundTask"}
@@ -43,6 +46,16 @@ LOCAL_REPLAY_SITES = {
         LOCAL_REPLAY,
     ),
     ("scanner/http/qwen_language_replay_web.py", "create_app.run", "Thread"): (1, LOCAL_REPLAY),
+}
+
+FOLDER_EVALUATION_SITES = {
+    (f"scanner/evaluation/folder_eval/{path}", function, primitive): (1, FOLDER_EVALUATION)
+    for path, function, primitive in (
+        ("decision/llama_server.py", "LlamaServerProcess._start", "Popen"),
+        ("frames.py", "extract_frames", "submit"),
+        ("scoring.py", "scored.submit", "submit"),
+        ("server_state.py", "Summarizer.__init__", "Thread"),
+    )
 }
 
 SITES: dict[tuple[str, str, str], tuple[int, str]] = {
@@ -78,7 +91,7 @@ SITES: dict[tuple[str, str, str], tuple[int, str]] = {
     ("scanner/pipeline/processes.py", "run_command", "Thread"): (1, WORKER),
     ("scanner/pipeline/runner_workers.py", "_scan_audio_isolated", "Process"): (1, WORKER),
     ("scanner/pipeline/runner_workers.py", "_scan_visual_isolated", "Process"): (1, WORKER),
-} | LOCAL_REPLAY_SITES
+} | LOCAL_REPLAY_SITES | FOLDER_EVALUATION_SITES
 
 SYSTEM_WORK_CALLERS: dict[SystemWork, set[tuple[str, str]]] = {
     SystemWork.SCAN_DISPATCH: {("scanner/http/api_queue.py", "_start_scan_queue_worker_if_needed")},

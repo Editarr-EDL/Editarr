@@ -87,6 +87,33 @@ def test_qwen_chains_the_evaluated_questions_in_one_conversation(tmp_path):
     )
 
 
+def test_qwen_conversation_accepts_a_frame_path_or_a_decoded_image(monkeypatch, tmp_path):
+    seen = []
+    modules = {
+        "mlx_vlm.utils": SimpleNamespace(
+            prepare_inputs=lambda _processor, images, **_kwargs: seen.append(images[0])
+            or {"input_ids": "ids"}
+        ),
+        "mlx_vlm.models.cache": SimpleNamespace(make_prompt_cache=lambda _language: []),
+    }
+    monkeypatch.setattr(
+        qwen_detector, "require_dependency", lambda name, *_args: modules.get(name)
+    )
+    embedded = SimpleNamespace(inputs_embeds="embeds", to_dict=lambda: {})
+    model = SimpleNamespace(
+        language_model=SimpleNamespace(),
+        config=SimpleNamespace(),
+        get_input_embeddings=lambda *_args, **_kwargs: embedded,
+    )
+    conversation = qwen_detector.QwenConversation(model, SimpleNamespace(tokenizer=None))
+    monkeypatch.setattr(conversation, "_forward", lambda *_args: "step")
+    image, frame = Image.new("RGB", (4, 4)), tmp_path / "frame.jpg"
+
+    assert conversation.begin("prompt", frame) == "step"
+    assert conversation.begin("prompt", image) == "step"
+    assert seen == [str(frame), image]
+
+
 @pytest.mark.parametrize(
     ("video_model", "artifact"),
     [("qwen3-vl-8b", "qwen3-vl-8b-instruct-4bit"), ("qwen3-vl-4b", "qwen3-vl-4b-instruct-4bit")],

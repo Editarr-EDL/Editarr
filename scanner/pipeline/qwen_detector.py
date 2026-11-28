@@ -100,8 +100,11 @@ class QwenConversation:
             if hasattr(language, attribute):
                 setattr(language, attribute, None)
 
-    def begin(self, prompt: str, image: Path) -> Step:
-        """Encode the frame and prompt into a fresh cache."""
+    def begin(self, prompt: str, image: Path | object) -> Step:
+        """Encode the frame and prompt into a fresh cache.
+
+        ``image`` is a frame path or an already decoded (e.g. downscaled) PIL image.
+        """
         utils = require_dependency("mlx_vlm.utils", "mlx-vlm", "The Qwen3-VL detector requires")
         cache = require_dependency(
             "mlx_vlm.models.cache", "mlx-vlm", "The Qwen3-VL detector requires"
@@ -109,7 +112,7 @@ class QwenConversation:
         self._reset_positions()
         inputs = utils.prepare_inputs(
             self.processor,
-            images=[str(image)],
+            images=[str(image) if isinstance(image, Path) else image],
             prompts=[prompt],
             image_token_index=getattr(self.model.config, "image_token_index", None),
         )

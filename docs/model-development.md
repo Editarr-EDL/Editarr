@@ -195,6 +195,154 @@ latency, and peak process memory. Keep clean frames as well as reviewed
 positives in the corpus; a corpus made only from prior model flags cannot
 measure false positives.
 
+## Folder-structure evaluation harness
+
+`editarr-evaluate-folder` (also `python -m scanner.evaluation.folder_eval`) scores local
+detectors, decision models and VLMs against labels taken from a folder of public
+datasets and real films, and serves a static viewer for reviewing and correcting them.
+It needs only the project dependencies plus `ffmpeg` and `ffprobe` on `PATH`; it never
+downloads datasets or films, and downloads model weights only with `--allow-downloads`.
+
+### Data root
+
+All inputs and outputs live in one data root. Without `--data-root` it is
+`$EDITARR_EVAL_DATA_ROOT`, else `evaluation_data/` at the repository root in a source
+checkout, else `evaluation_data/` in the working directory. `/evaluation_data/` is
+git-ignored: datasets, films, local configuration and results are not redistributable
+and must never be committed.
+
+```text
+evaluation_data/
+  video/<dataset>/...        clips and images; labels come from the folder path
+  films/<Title (Year)>/      symlinks created by `films` (do not add files here)
+  films.local.json           optional local film paths (see below)
+  _results/                  inventory, frames, model results, summary and viewer
+```
+
+Provision datasets by unpacking them under `video/` with their published folder
+layouts; `video/` is optional, and a films-only root can start with `films`. [`label_rules.json`](../scanner/evaluation/folder_eval/label_rules.json) maps
+paths to MCF keys for `ucf_crime`, `hockey_fight`, `movies_fight`, `xd_violence`,
+`Violent Scene Dataset` and `nsfw_dataset_v1`; any folder named after an MCF family,
+token or synonym (for example `video/mine/violence/`) also labels its contents.
+`video/nude/` is unvetted scraped content and is never listed, decoded, scored or served,
+including through symlinks or film paths that resolve into it.
+
+### Films and ground truth
+
+Film windows (10 s, frames at 2.5 s and 7.5 s) are labelled from a ground-truth CSV
+directory containing `movies.csv` (`imdb_id`, `name`, `title_main`, `year`,
+`duration_sec`) and `tag_timestamps.csv` (`imdb_id`, `category`, `tag_name`,
+`start_approx`, `end_approx`), plus optional `movie_tags.csv` and `tags.csv`.
+[`films.json`](../scanner/evaluation/folder_eval/films.json) lists the films by title,
+year and IMDb id only; supply your own legally obtained copies and the CSV directory.
+They resolve in this order, highest first:
+
+1. `films --film IMDB_ID=PATH` (repeatable; the key may also be `Title (Year)`) and
+   `films --ground-truth-dir DIR`;
+2. `EDITARR_EVAL_GROUND_TRUTH_DIR` (ground truth only);
+3. a local JSON config: `films --local-config PATH`, else `$EDITARR_EVAL_FILMS_LOCAL`,
+   else `<data root>/films.local.json`;
+4. for the ground truth only, the filtered copy a previous `films` run left in
+   `films/ground_truth/`.
+
+```json
+{
+  "ground_truth_dir": "ground-truth-csv",
+  "films": {"tt1034415": "movies/Suspiria.mkv", "Hardcore Henry (2015)": "movies/hh.mkv"}
+}
+```
+
+HDR (PQ or HLG) films are tone-mapped to SDR while extracting frames: with VideoToolbox
+on macOS, else with ffmpeg's `zscale` and `tonemap` filters, else with `libplacebo`. When
+ffmpeg has none of these, `frames` records an error for the HDR windows rather than
+extracting washed-out frames. Each film-window frame is decoded with input seeking that
+keeps source timestamps, and its actual time must fall inside the window: an overshooting
+seek is retried from earlier seek points, and a frame that cannot be decoded within its
+window is recorded as an error. Only whole clips fall back to their first frame. Decoded
+frame times are kept in `_results/frame_times.json`; frames cached by earlier versions
+are not rechecked, so delete a film's frames to re-extract them.
+
+Each film window also records its ground-truth severity per key (`expected_severity`,
+from `severity_map.json`; null where a tag is ambiguous or a labelled family has no
+severity tag). `describe-eval` and the viewer's severity chips compare against it after
+applying corrections; rerun `films` to add it to an older inventory.
+
+Relative paths in the local config resolve against the config's folder. A `--film`
+entry overrides the local config whichever key form either uses. `films` fails without
+changing the inventory when any listed film has no file or a key names no film in
+`films.json`.
+
+### Models
+
+`run --model ID` accepts `nudenet`, `siglip2`, `siglip2-gore`, the shipped decision
+detectors `scan-d1-3b`, `scan-qwen3-vl-8b` and `scan-qwen3-vl-4b`, and the evaluation-only
+llama.cpp and MLX ids in
+[`decision/`](../scanner/evaluation/folder_eval/decision/) (for example `d1-3b-f512`,
+`qwen3vl-8b`, `qwen3vl-8b-mlx-desc`). By default `run` and `all` refuse downloads for
+the whole process, from the moment the command starts: `nudenet`, `siglip2`,
+`siglip2-gore` and the `scan-*` ids use Editarr artifacts already installed from model
+settings and verified locally, and a missing artifact or failed
+acquisition is reported as unavailable (`run` exits with status 2, `all` skips the
+model). `--allow-downloads` lets those ids acquire missing Editarr artifacts. The
+llama.cpp and MLX ids never download; fetch their weights as described below.
+
+The llama.cpp ids read GGUF weights from `<models dir>/<model>/`, where the models dir is
+`$EDITARR_DECISION_MODELS_DIR`, else `evaluation/llama-cpp` under Editarr's model cache
+(`EDITARR_MODEL_CACHE`, or the platform cache directory). The unavailable message prints
+the `hf download` command for missing weights. `llama-server` is
+`$EDITARR_LLAMA_SERVER`; else, for every id except the original `d1-omni-2b`, `d1-3b`
+and `clef-flash`, the newest `llama.cpp-b<build>/*/llama-server` release unpacked in the
+models dir; else `llama-server` on `PATH`. `EDITARR_DM_STAGE2_THRESHOLD`, `EDITARR_DM_IMAGE_LONG_EDGE`
+and `EDITARR_CASCADE_DESCRIBER` tune the decision ids, as described in their modules.
+
+### Subcommands
+
+| Command | Purpose |
+| --- | --- |
+| `inventory` | List media, probe durations and apply the label rules |
+| `films` | Link films, copy their ground-truth rows and add film windows |
+| `frames` | Extract frames with ffmpeg (resumable; `--only-folder`, `--limit`, `--workers`) |
+| `sample` | Write the stratified `decision_sample` subset |
+| `film-subset` | Write a stratified subset of decision-sample film windows |
+| `run` | Score frames with one model (resumable; `--subset`, `--concurrency`, `--retry-errors`, `--restart`, `--allow-downloads`) |
+| `summarize` | Write `summary.json` and `models/index.json` |
+| `describe-eval` | Judge descriptions with d1-3B and compare severity levels |
+| `viewer` | Copy the static viewer into `_results/` |
+| `serve` | Serve the data root with the corrections API |
+| `all` | `inventory`, `frames`, every available model, `summarize` and `viewer` (`--allow-downloads`) |
+
+```bash
+uv run editarr-evaluate-folder inventory
+uv run editarr-evaluate-folder frames
+uv run editarr-evaluate-folder run --model siglip2
+uv run editarr-evaluate-folder summarize
+uv run editarr-evaluate-folder viewer
+uv run editarr-evaluate-folder serve --port 8765
+```
+
+Every result line and `models/<id>.meta.json` record a fingerprint of the scoring
+configuration: the backend, artifact, runtime build, thresholds, stage-2 threshold, image
+long edge and question set. `run` resumes only when all stored lines match the current
+fingerprint. If they differ, or predate fingerprints, it stops (`all` skips the model)
+and asks for `run --model ID --restart`, which renames `<id>.jsonl` and `<id>.meta.json`
+to `*.<UTC time>.bak` and starts again; or score the new configuration under another id.
+`summarize` flags a results file that still mixes configurations (`mixed_configs`).
+Only one `run` (or `all`) can score a model at a time: a run holds an OS lock on
+`_results/models/.<id>.lock` for its whole duration, including `--restart`, and a
+second run of that model stops with a message naming the process holding it.
+
+Each run records its throughput and memory in `_results/models/<id>.meta.json`:
+`server_peak_rss_mb` is the peak of a llama.cpp model server during the last run, and
+`process_peak_rss_mb` is the harness process's lifetime high-water mark, which under
+`all` includes the models scored before it.
+
+Open `http://127.0.0.1:8765/_results/index.html`. `serve` binds only to 127.0.0.1
+(`--port 0` picks a free port) and rejects other `Host` headers, cross-site `Origin` or
+`Sec-Fetch-Site` values, non-JSON or oversized correction bodies, and excluded paths,
+including symlinks that resolve into them. Reviewer corrections are stored in
+`_results/corrections.json` and applied when the summary is rebuilt. Any other static
+file server shows the viewer read-only.
+
 ## Closing-credits evaluation
 
 The MTS credits detector has a CC0 authored observation corpus and deterministic generated
