@@ -1,6 +1,10 @@
 """Explicit pausing retains safe checkpoints for later workers."""
 
+from multiprocessing import get_context
+from pathlib import Path
 from threading import Event
+from time import monotonic, sleep
+from unittest.mock import patch
 
 import pytest
 
@@ -13,6 +17,7 @@ from scanner.persistence.repository.scan_pause import pause_scan_queue_item
 from scanner.persistence.write_lock import write_lock
 from scanner.pipeline import runner, runner_scenes
 from scanner.pipeline.scenes import Scene
+from scanner.pipeline.visual_checkpoints import save_scene_checkpoint, scene_checkpoint_path
 from scanner.runtime.process_control import WorkerIdentity
 from scanner.runtime.worker_quit import ScanPauseRequested, ScanReservationLost
 from scanner.security.scan_jobs.authority import JobGate
@@ -133,6 +138,75 @@ def test_incomplete_stage_commit_cannot_leave_findings_to_duplicate_on_retry():
             commit_scan_stage_results(db, scan.id, "missing", "visual", [_finding(scan.id, 3)])
         assert not repository.get_scan_findings(db, scan.id).findings
         assert repository.scan_checkpoint_stages(db, scan.id) == set()
+
+
+def _stall_checkpoint_publish(complete: Path, incomplete: Path, ready: Path) -> None:
+    save_scene_checkpoint(complete, [_finding("scan", 0)])
+
+    def before_replace(_source, destination):
+        assert destination == incomplete
+        ready.touch()
+        sleep(30)
+        raise TimeoutError("Checkpoint writer was not terminated")
+
+    # The bytes exist in the synced temporary file as soon as replace is reached.
+    with patch("scanner.runtime.durability.os.replace", before_replace):
+        save_scene_checkpoint(incomplete, [_finding("scan", 10)])
+
+
+def test_forced_worker_exit_replays_only_unpublished_scene(monkeypatch, tmp_path):
+    scenes = [
+        Scene(index=0, start_seconds=0, end_seconds=10),
+        Scene(index=1, start_seconds=10, end_seconds=20),
+    ]
+    checkpoints = tmp_path / "checkpoints"
+    checkpoints.mkdir()
+    complete, incomplete = [
+        scene_checkpoint_path(checkpoints, scene, phase="complete") for scene in scenes
+    ]
+    ready = tmp_path / "before-replace"
+    writer = get_context("spawn").Process(
+        target=_stall_checkpoint_publish, args=(complete, incomplete, ready)
+    )
+    writer.start()
+    try:
+        deadline = monotonic() + 15
+        while not ready.is_file():
+            assert writer.is_alive() and monotonic() < deadline, "Checkpoint writer did not start"
+            sleep(0.05)
+    finally:
+        if writer.is_alive():
+            writer.kill()
+        writer.join(timeout=5)
+        returncode = writer.exitcode
+        writer.close()
+    assert returncode not in (None, 0)
+    assert complete.is_file()
+    assert not incomplete.exists()
+    assert list(checkpoints.glob(f".{incomplete.name}-*"))
+
+    replayed = []
+
+    def sample(_video_path, scene, _directory, **_kwargs):
+        replayed.append(scene.index)
+        return [(tmp_path / "frame.jpg", scene.start_seconds)]
+
+    monkeypatch.setattr(runner_scenes, "defer_descriptions", lambda *_: False)
+    monkeypatch.setattr(runner, "get_video_frame_interval", lambda *_: 0.5)
+    monkeypatch.setattr(runner, "sample_scene_frames", sample)
+    monkeypatch.setattr(runner, "scan_frames", lambda frames, scan_id, **_: [
+        _finding(scan_id, frames[0][1])
+    ])
+    monkeypatch.setattr(runner, "summarize_flagged_segments", lambda findings, *_, **_kw: findings)
+
+    findings = runner._scan_visual_by_scene(
+        "video.mkv", "scan", tmp_path / "retry", False, None,
+        cached_scenes=scenes, checkpoint_dir=checkpoints,
+    )
+
+    assert replayed == [1]
+    assert [finding.start_seconds for finding in findings] == [0, 10]
+    assert incomplete.is_file()
 
 
 @pytest.mark.parametrize("deferred", [False, True])
