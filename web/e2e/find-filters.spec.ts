@@ -12,6 +12,14 @@ const scan = {
   duration_seconds: 5700, finding_count: 2, error_message: null, mcf_document: null,
   created_at: "2026-10-04T00:00:00Z", updated_at: "2026-10-04T00:00:00Z",
 };
+const recordedRevision = "a".repeat(40);
+const scanWithProvenance = {
+  ...scan,
+  stage_coverage: [{
+    stage: "audio.transcription", execution_id: "example", status: "complete",
+    model_id: "whisper", model_revision: recordedRevision, effective_settings: { language: "en" },
+  }],
+};
 const existing = { ...scan, id: "existing-local", scan_id: 2, name: "Already linked" };
 const unchecked = { ...scan, id: "unchecked-local", scan_id: 8, name: "Leave unassociated" };
 
@@ -40,7 +48,7 @@ for (const width of [320, 1440]) {
       searches.push(route.request().postDataJSON());
       return json(route, { media_item_id: "resolved-target", matches: [
         { scan: existing, match_reason: "quick_hash", already_associated: true },
-        { scan, match_reason: "scene_release", already_associated: false },
+        { scan: scanWithProvenance, match_reason: "scene_release", already_associated: false },
         { scan: unchecked, match_reason: "file_name", already_associated: false },
       ] });
     });
@@ -79,6 +87,11 @@ for (const width of [320, 1440]) {
     expect(contentFits).toBe(true);
     await page.screenshot({ path: `test-results/css47-found-${width}.png`, fullPage: true });
     await page.screenshot({ path: `test-results/recover-scans-dialog-${width}.png`, fullPage: true });
+    const provenance = dialog.locator("details").filter({ hasText: `Local provenance: ${scan.name}` });
+    await provenance.locator("summary").click();
+    await expect(provenance.getByText(`Revision: ${recordedRevision}`)).toBeVisible();
+    await expect(provenance).not.toContainText("audio.transcription: complete");
+    expect(await provenance.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     await expect(trigger).toBeFocused();

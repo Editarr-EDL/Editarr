@@ -54,10 +54,17 @@ export function FindFiltersDialog({
         {versions && <p>{versions}</p>}
         {stages.length > 0 && <p>Coverage: {stages.map((stage) => `${stage.stage}: ${stage.status}`).join("; ")}</p>}
         <p>Analyzed audio: {scan.analyzed_audio_selection ? audioTrackLabel(scan.analyzed_audio_selection.track) : "Unknown analyzed track"}</p>
-        {stages.map((stage) => <div key={`${stage.stage}:${stage.execution_id}`}>
-          <p>{stage.stage}: {stage.model_id || "Unknown model"}; revision: {stage.model_revision || "Unknown"}</p>
-          <p>Effective settings: {stage.effective_settings ? JSON.stringify(stage.effective_settings) : "Unknown"}</p>
-        </div>)}
+        {scan.stage_coverage?.map((stage) => {
+          const settings = stage.effective_settings;
+          const hasSettings = settings != null && Object.keys(settings).length > 0;
+          if (stage.status === "unknown" || (!stage.model_id && !stage.model_revision && !hasSettings)) return null;
+          return <div key={`${stage.stage}:${stage.execution_id}`}>
+            <p><strong>{stage.stage}</strong></p>
+            {stage.model_id && <p>Model: {stage.model_id}</p>}
+            {stage.model_revision && <p>Revision: {stage.model_revision}</p>}
+            {hasSettings && <p>Effective settings: {JSON.stringify(settings)}</p>}
+          </div>;
+        })}
       </details>;
     })}
     <div className="button-row">
