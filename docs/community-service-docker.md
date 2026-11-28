@@ -382,6 +382,17 @@ may require a user session. Arrange operator access and UPS-assisted orderly shu
 accordingly. Verify UID 1000 readability after host/engine updates without printing
 configuration or secret contents. Check local restart and live provider connectivity independently.
 
+### Operator UI known limitations
+
+- The item runtime timeline has no vote-heat row, and moderation queue cards have no
+  closest-version hint; the operator API does not provide either yet.
+- A revision's change details (added, removed, retimed, recategorised) are blank when
+  retention has already pruned the stored snapshots for that revision and the one before it.
+- The Items list and the contributor leaderboard aggregate across the whole catalog on
+  each request, so they slow down as the catalog grows. Precomputed rollups would be needed
+  for large catalogs.
+- Any allowlisted operator can download a full online backup of the database.
+
 ## Verification
 
 ```sh
