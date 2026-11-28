@@ -9,6 +9,7 @@ import pytest
 
 from scanner.evaluation.folder_eval.paths import Layout
 from scanner.evaluation.folder_eval.results import load_results
+from scanner.evaluation.folder_eval.run_config import fingerprint, scoring_config
 from scanner.evaluation.folder_eval.summary import summarize_model
 from tests.folder_eval_support import clip
 
@@ -38,10 +39,6 @@ def test_run_subset_scores_only_missing_subset_frames(tmp_path, monkeypatch):
         (layout.results / frame["file"]).parent.mkdir(parents=True, exist_ok=True)
         (layout.results / frame["file"]).write_bytes(b"x")
     layout.inventory.write_text(json.dumps({"items": [item]}), encoding="utf-8")
-    layout.models.mkdir(parents=True)
-    layout.model_jsonl("fake").write_text(json.dumps(
-        {"id": "a", "status": "ok", "frames": [{"n": 1, "scores": {"violence": 0.2}}]}
-    ) + "\n", encoding="utf-8")
     calls: list[list[str]] = []
 
     class Fake:
@@ -56,6 +53,12 @@ def test_run_subset_scores_only_missing_subset_frames(tmp_path, monkeypatch):
 
         def close(self):
             pass
+
+    layout.models.mkdir(parents=True)
+    layout.model_jsonl("fake").write_text(json.dumps(
+        {"id": "a", "status": "ok", "frames": [{"n": 1, "scores": {"violence": 0.2}}],
+         "config": fingerprint(scoring_config(Fake()))}
+    ) + "\n", encoding="utf-8")
 
     monkeypatch.setattr(runner, "create_backend", lambda _model_id: Fake())
     runner.run_model(layout, "fake", subset={"a": [1, 2]})
@@ -133,17 +136,21 @@ def test_run_retries_items_recorded_as_unavailable_by_older_runs(tmp_path, monke
     from scanner.evaluation.folder_eval import runner
 
     layout = _runner_layout(tmp_path)
-    layout.model_jsonl("fake").write_text(
-        json.dumps({"id": "a", "status": "error", "error": "RuntimeError: unavailable: x"})
-        + "\n"
-        + json.dumps({"id": "b", "status": "error", "error": "ValueError: bad answer"})
-        + "\n",
-        encoding="utf-8",
-    )
 
     class Working(_UnavailableBackend):
         def score_frames(self, paths):
             return [{"scores": {"violence": 0.9}} for _ in paths]
+
+    config = fingerprint(scoring_config(Working()))
+    layout.model_jsonl("fake").write_text(
+        json.dumps({"id": "a", "status": "error", "error": "RuntimeError: unavailable: x",
+                    "config": config})
+        + "\n"
+        + json.dumps({"id": "b", "status": "error", "error": "ValueError: bad answer",
+                      "config": config})
+        + "\n",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(runner, "create_backend", lambda _model_id: Working())
     stats = runner.run_model(layout, "fake")

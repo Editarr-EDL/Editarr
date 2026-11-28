@@ -16,6 +16,7 @@ from typing import Any
 
 from .backends import Backend
 from .paths import Layout, write_json
+from .run_config import fingerprint
 
 
 def process_peak_rss_mb() -> float:
@@ -60,9 +61,16 @@ def wall_ms_per_frame(meta: dict[str, Any]) -> float | None:
     return (meta.get("last_run") or {}).get("wall_ms_per_frame")
 
 
-def write_meta(layout: Layout, backend: Backend, stats: dict[str, Any]) -> None:
+def write_meta(
+    layout: Layout, backend: Backend, stats: dict[str, Any], config: dict[str, Any] | None = None
+) -> None:
+    """Write meta.json: backend meta, last-run stats, throughput and, when given, the
+    scoring configuration and its fingerprint (as recorded on every result line)."""
     path = layout.model_meta(backend.model_id)
     meta = backend.meta()
+    if config is not None:
+        meta["config"] = config
+        meta["config_fingerprint"] = fingerprint(config)
     previous = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     meta["process_peak_rss_mb"] = stats["process_peak_rss_mb"]
     memory = f"harness process peak RSS {stats['process_peak_rss_mb']} MiB (process lifetime)"

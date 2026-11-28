@@ -304,7 +304,7 @@ and `EDITARR_CASCADE_DESCRIBER` tune the decision ids, as described in their mod
 | `frames` | Extract frames with ffmpeg (resumable; `--only-folder`, `--limit`, `--workers`) |
 | `sample` | Write the stratified `decision_sample` subset |
 | `film-subset` | Write a stratified subset of decision-sample film windows |
-| `run` | Score frames with one model (resumable; `--subset`, `--concurrency`, `--retry-errors`, `--allow-downloads`) |
+| `run` | Score frames with one model (resumable; `--subset`, `--concurrency`, `--retry-errors`, `--restart`, `--allow-downloads`) |
 | `summarize` | Write `summary.json` and `models/index.json` |
 | `describe-eval` | Judge descriptions with d1-3B and compare severity levels |
 | `viewer` | Copy the static viewer into `_results/` |
@@ -319,6 +319,14 @@ uv run editarr-evaluate-folder summarize
 uv run editarr-evaluate-folder viewer
 uv run editarr-evaluate-folder serve --port 8765
 ```
+
+Every result line and `models/<id>.meta.json` record a fingerprint of the scoring
+configuration: the backend, artifact, runtime build, thresholds, stage-2 threshold, image
+long edge and question set. `run` resumes only when all stored lines match the current
+fingerprint. If they differ, or predate fingerprints, it stops (`all` skips the model)
+and asks for `run --model ID --restart`, which renames `<id>.jsonl` and `<id>.meta.json`
+to `*.<UTC time>.bak` and starts again; or score the new configuration under another id.
+`summarize` flags a results file that still mixes configurations (`mixed_configs`).
 
 Each run records its throughput and memory in `_results/models/<id>.meta.json`:
 `server_peak_rss_mb` is the peak of a llama.cpp model server during the last run, and

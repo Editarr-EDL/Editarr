@@ -121,7 +121,10 @@ function buildModelShell(id, scope) {
           meta.runtime ? chip(meta.runtime, "") : null,
           meta.artifact ? h("span", { class: "muted", text: meta.artifact }) : null,
           meta.thresholds ? h("span", { class: "muted", text: "thresholds: " + Object.entries(meta.thresholds).map(([k, v]) => `${k}=${v}`).join(", ") }) : null,
-          meta.notes ? h("p", { class: "muted", text: meta.notes }) : null)),
+          meta.notes ? h("p", { class: "muted", text: meta.notes }) : null,
+          S.summary?.models?.[id]?.mixed_configs
+            ? h("p", { class: "error", role: "note", text: "These results mix scoring configurations; rerun this model with `run --restart`." })
+            : null)),
       metricsTable(id, scope)),
     h("div", { class: "model-layout" },
       h("nav", { class: "groups", "aria-label": "Categories" },

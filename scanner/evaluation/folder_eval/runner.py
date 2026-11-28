@@ -12,6 +12,8 @@ from .backends import BackendUnavailable, create_backend
 from .frames import frames_present
 from .paths import Layout, matches_prefix
 from .results import append_line, load_results, write_model_index
+from .run_config import FIELD as CONFIG_FIELD
+from .run_config import archive_results, check_resume, fingerprint, scoring_config
 from .run_meta import process_peak_rss_mb, server_peak_rss_mb, write_meta
 from .scoring import resolve_concurrency, scored
 
@@ -69,6 +71,7 @@ def run_model(
     retry_errors: bool = False,
     subset: dict[str, list[int]] | None = None,
     concurrency: int | None = None,
+    restart: bool = False,
 ) -> dict[str, Any]:
     """Score pending inventory items with one model, resuming from its jsonl.
 
@@ -77,8 +80,15 @@ def run_model(
     `concurrency` scores that many items in parallel (decision backends only; default:
     the backend's `default_concurrency`). Model downloads follow
     `backends.configure_model_downloads`.
+
+    Resuming requires every stored line to carry the current scoring-configuration
+    fingerprint (see `run_config`), else ConfigMismatch; `restart` first archives the
+    model's jsonl and meta.json and starts again.
     """
     inventory = layout.load_inventory()
+    if restart:
+        for archived in archive_results(layout, model_id):
+            log.info("%s: archived %s", model_id, archived.name)
     output = layout.model_jsonl(model_id)
     done = load_results(output)
     selected = [
@@ -103,9 +113,11 @@ def run_model(
     load_started = time.perf_counter()
     backend = create_backend(model_id)
     try:
+        config = scoring_config(backend)
+        check_resume(layout.model_jsonl(model_id), model_id, fingerprint(config))
         return _score_pending(
             layout, backend, model_id, pending, done, concurrency,
-            round((time.perf_counter() - load_started) * 1000, 1),
+            round((time.perf_counter() - load_started) * 1000, 1), config,
         )
     finally:
         # Every exit path (errors, BackendUnavailable, KeyboardInterrupt, SystemExit from
@@ -122,8 +134,11 @@ def _score_pending(
     done: dict[str, dict[str, Any]],
     concurrency: int | None,
     load_ms: float,
+    config: dict[str, Any],
 ) -> dict[str, Any]:
-    """Score `pending` with a loaded backend, appending lines and writing meta.json."""
+    """Score `pending` with a loaded backend, appending lines (each with the config
+    fingerprint) and writing meta.json."""
+    config_id = fingerprint(config)
     output = layout.model_jsonl(model_id)
     thresholds = backend.meta().get("thresholds", {})
     workers = resolve_concurrency(backend, concurrency)
@@ -143,6 +158,7 @@ def _score_pending(
             scoring = scored(backend, layout, pending, thresholds, done, workers)
             with closing(scoring) as results:
                 for index, (item, frames, record) in enumerate(results, start=1):
+                    record[CONFIG_FIELD] = config_id
                     append_line(descriptor, record)
                     if record["status"] == "ok":
                         frame_count += len(frames)
@@ -187,5 +203,5 @@ def _score_pending(
             "server_peak_rss_mb": server_peak_rss_mb(backend),
         }
         if frame_count or errors:
-            write_meta(layout, backend, stats)
+            write_meta(layout, backend, stats, config)
     return stats

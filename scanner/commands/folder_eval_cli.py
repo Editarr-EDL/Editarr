@@ -38,6 +38,7 @@ from scanner.evaluation.folder_eval.paths import (
     default_data_root,
     normalize_prefix,
 )
+from scanner.evaluation.folder_eval.run_config import ConfigMismatch
 from scanner.evaluation.folder_eval.runner import run_model
 from scanner.evaluation.folder_eval.subsets import (
     DEFAULT_SEED,
@@ -112,6 +113,12 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run", help="Score frames with one model (resumable)")
     run.add_argument("--model", required=True, help="Model id, e.g. nudenet or siglip2")
     run.add_argument("--retry-errors", action="store_true", help="Re-score errored items")
+    run.add_argument(
+        "--restart",
+        action="store_true",
+        help="Archive the model's results (<id>.jsonl/.meta.json → *.<time>.bak) and start "
+        "again; needed when the scoring configuration changed",
+    )
     run.add_argument(
         "--subset", help="Only score a subset's frames (any name in _results/subsets/)"
     )
@@ -227,16 +234,16 @@ def _run(args: argparse.Namespace) -> int:
                 layout, args.model, limit=limit, only_folder=prefix,
                 retry_errors=args.retry_errors,
                 subset=load_subset(layout, args.subset) if args.subset else None,
-                concurrency=args.concurrency,
+                concurrency=args.concurrency, restart=args.restart,
             )
-        except BackendUnavailable as exc:
+        except (BackendUnavailable, ConfigMismatch) as exc:
             log.error("%s", exc)
             return 2
     if args.command == "all":
         for model_id in filter(None, (value.strip() for value in args.models.split(","))):
             try:
                 run_model(layout, model_id, limit=limit, only_folder=prefix)
-            except BackendUnavailable as exc:
+            except (BackendUnavailable, ConfigMismatch) as exc:
                 log.warning("Skipping %s: %s", model_id, exc)
     if args.command == "describe-eval":
         from scanner.evaluation.folder_eval.describe_eval import describe_eval

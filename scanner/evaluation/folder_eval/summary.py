@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,7 @@ from .inventory import top_folder
 from .labels import family_of
 from .paths import Layout, write_json
 from .results import load_results, write_model_index
+from .run_config import stored_fingerprints
 from .run_meta import wall_ms_per_frame
 from .subsets import (
     DECISION_SAMPLE,
@@ -24,6 +26,8 @@ from .subsets import (
     restrict_results,
     subset_names,
 )
+
+log = logging.getLogger(__name__)
 
 
 def metric_row(pairs: list[tuple[bool, bool]]) -> dict[str, Any]:
@@ -183,6 +187,15 @@ def build_summary(layout: Layout, corrections: dict[str, Any]) -> dict[str, Any]
         meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
         results = load_results(layout.model_jsonl(model_id), meta.get("thresholds") or {})
         models[model_id] = summarize_model(items, results, meta)
+        configs = stored_fingerprints(layout.model_jsonl(model_id))
+        models[model_id]["config_fingerprints"] = sorted(str(value) for value in configs)
+        if len(configs) > 1:
+            # Older runs mixed configurations in one file; metrics combine them.
+            models[model_id]["mixed_configs"] = True
+            log.warning(
+                "%s: results mix scoring configurations %s; rerun with `run --restart`",
+                model_id, models[model_id]["config_fingerprints"],
+            )
         # Every model keeps a decision_sample section (the viewer expects it); other
         # subsets appear only for models with results on their items.
         sections = {}
