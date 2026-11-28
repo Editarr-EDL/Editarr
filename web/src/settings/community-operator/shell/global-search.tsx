@@ -3,17 +3,7 @@ import { accessFailureStatus } from "../../../api/api-community-operator";
 import { readOperatorSearch, type SearchResult } from "../../../api/api-community-operator-catalog";
 import { itemTitle, titleCase } from "../shared/format";
 import { useOperator } from "../shared/operator-data";
-import { contributorLink, itemLink, navigate, operatorLink } from "../routes";
-import type { OperatorResource } from "../../../api/api-community-operator";
-
-const resources = new Set<string>(["filter", "attestation", "submission", "contributor", "version", "vote", "report", "alias_suggestion"]);
-/** Where an exact-ID search hit opens. */
-function idLink(kind: string, id: string) {
-  if (kind === "work" || kind === "item") return itemLink(id);
-  if (kind === "contributor") return contributorLink(id);
-  if (kind === "filter") return operatorLink(`filters/${id}`);
-  return resources.has(kind) ? operatorLink("inspect", { kind: kind as OperatorResource, selected: id }) : operatorLink("inspect");
-}
+import { contributorLink, itemLink, navigate, searchIdLink } from "../routes";
 
 /** Top-bar search over titles, contributors and exact IDs. "/" focuses it; Enter opens the first result. */
 export function GlobalSearch() {
@@ -54,7 +44,7 @@ export function GlobalSearch() {
   // Only the answer to the current query is shown or opened; an earlier query's hits never are.
   const current = result && result.q === query.trim() ? result : null;
   const links: { href: string; label: string; group: string }[] = current ? [
-    ...current.ids.map(hit => ({ href: idLink(hit.kind, hit.id), label: `${titleCase(hit.kind)} ${hit.id}${hit.label ? ` · ${hit.label}` : ""}`, group: "IDs" })),
+    ...current.ids.map(hit => ({ href: searchIdLink(hit.kind, hit.id), label: `${titleCase(hit.kind)} ${hit.id}${hit.label ? ` · ${hit.label}` : ""}`, group: "IDs" })),
     ...current.items.map(item => ({ href: itemLink(item.workId), label: itemTitle(item), group: "Items" })),
     ...current.contributors.map(person => ({ href: contributorLink(person.contributorId), label: person.displayName, group: "Contributors" })),
   ] : [];

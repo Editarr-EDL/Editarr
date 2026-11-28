@@ -59,7 +59,8 @@ for (const width of [320, 1440]) {
       await expect(page).toHaveURL(/filter=f_gore/);
       const card = page.getByRole("complementary", { name: "Violence › Gore" });
       await expect(card.getByText("Ends about four seconds early", { exact: false })).toBeVisible();
-      await expect(card.getByText("3 of 4 counted")).toBeVisible();
+      await expect(card.getByText("3 of 5 counted")).toBeVisible();
+      await expect(card.getByText(/implicit coverage negative/)).toBeVisible();
       await expect(page.getByRole("img", { name: /./ }).or(page.locator("svg.track")).first()).toBeVisible();
       await card.getByRole("button", { name: "Exclude Ana Ruiz's down vote" }).click();
       const dialog = page.getByRole("dialog");
@@ -67,6 +68,13 @@ for (const width of [320, 1440]) {
       await expectAccessible(page);
       await dialog.getByRole("button", { name: "Confirm action" }).click(); await expect(dialog).toHaveCount(0);
       expect(writes).toMatchObject([{ command: "exclude_vote", resource: "vote", targetId: "f_gore", contributorId: "c-ana", expectedRevision: 0 }]);
+      const history = page.getByRole("region", { name: "Revision history" });
+      await history.getByRole("link", { name: "Older" }).click();
+      await expect(page).toHaveURL(/before=WzJd%2B%2F%3D%3D/);
+      await expect(history.getByText("rev 1", { exact: true })).toBeVisible();
+      await expect(card).toBeVisible();
+      await history.getByRole("link", { name: "Newest" }).click();
+      await expect(history.getByText("current", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: /Theatrical/ }).click();
       await expect(page).toHaveURL(/version=v_arrival_th/);
       await expectNoOverflow(page, width);

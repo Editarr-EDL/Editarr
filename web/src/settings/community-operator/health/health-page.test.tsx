@@ -1,10 +1,11 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
-import { renderOperator, stubOperatorFetch } from "../test-render";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { renderOperator, stubOperatorFetch, pinFixtureClock } from "../test-render";
 import { HealthPage } from "./health-page";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+beforeEach(() => pinFixtureClock());
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("shows readiness checks, accessible trend charts for the routed period and retention sweeps", async () => {
   const fetcher = stubOperatorFetch();

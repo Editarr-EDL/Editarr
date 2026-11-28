@@ -1,13 +1,14 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, screen, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { pageFixture, suggestionFixture, versionRowFixture } from "../test-fixtures";
-import { renderOperator, stubOperatorFetch } from "../test-render";
+import { renderOperator, stubOperatorFetch, pinFixtureClock } from "../test-render";
 import { AllContributors } from "../contributors/all-contributors";
 import { ServiceRecords } from "../health/service-records";
 import { RecordsPage } from "./records-page";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+beforeEach(() => pinFixtureClock());
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("lists versions by status with readable columns, paging and the selected version's inspection", async () => {
   const fetcher = stubOperatorFetch(path => path.startsWith("/admin/v1/versions?") ?

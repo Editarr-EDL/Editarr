@@ -34,7 +34,7 @@ export const itemDetailFixture = { ...envelope,
   versions: [detailVersion(itemRows[0].versions[0], 0.88, 6, 22, [people.theo, people.ana]),
     detailVersion(itemRows[0].versions[1], 0.92, 9, 31, [people.mira, people.jonas, people.priya, people.theo, people.ana, people.kenji, people.lena]),
     detailVersion(itemRows[0].versions[2], 0.41, 2, 29, [people.lena, people.kenji])] };
-const revision = (revisionNumber: number, at: number, delta: number[], cause: object) => ({ revision: revisionNumber, generatedAt: at, filters: 31,
+const revision = (revisionNumber: number, at: number, delta: (number | null)[], cause: object) => ({ revision: revisionNumber, generatedAt: at, filters: 31,
   added: delta[0], removed: delta[1], retimed: delta[2], recategorised: delta[3], cause, current: revisionNumber === 7 });
 export const versionDetailFixture = { ...envelope, item: items.arrival,
   versionInfo: { ...versions.dc, status: "confirmed", mergedInto: null, quarantined: false, runtimeMs: 8072000, trust: 0.92, revision: 7 },
@@ -44,8 +44,12 @@ export const versionDetailFixture = { ...envelope, item: items.arrival,
     revision(5, now - 13 * d, [0, 1, 0, 0], { kind: "moderation", actor: "ryan@example.org", command: "quarantine" }),
     revision(4, now - 20 * d, [6, 0, 0, 0], { kind: "upload", contributor: people.jonas }),
     revision(3, now - 34 * d, [2, 0, 0, 1], { kind: "upload", contributor: people.priya }),
-    { ...revision(1, now - 53 * d, [0, 0, 0, 0], { kind: "upload", contributor: people.theo }), filters: null, added: null, removed: null, retimed: null, recategorised: null }],
-  revisionsNextCursor: null };
+    revision(2, now - 45 * d, [0, 0, null, null], { kind: "upload", contributor: people.ana })],
+  revisionsNextCursor: "WzJd+/==" };
+/** The older page (`before=WzJd+/==`): the founding revision, whose earlier snapshot is gone. */
+export const olderRevisionsFixture = { ...versionDetailFixture, revisionsNextCursor: null,
+  revisions: [{ ...revision(1, now - 53 * d, [0, 0, 0, 0], { kind: "upload", contributor: people.theo }), filters: null, added: null, removed: null,
+    retimed: null, recategorised: null }] };
 const vote = (who: { contributorId: string; displayName: string }, direction: string, at: number, excluded = false) => ({ contributor: who, vote: direction,
   excluded, revision: 7, at, moderation: token(`vote:f_gore:${who.contributorId}`, excluded ? 1 : 0) });
 const attest = (who: { contributorId: string; displayName: string }, submissionId: string, at: number, extra: object) => ({ contributor: who, submissionId, entryId: "e4",
@@ -58,7 +62,9 @@ export const filterContextFixture = { ...envelope, filter: gore, item: items.arr
   attestations: [attest(people.mira, "sub_mira7", now - 2 * h, { manualReview: true, locallyVerified: true }),
     attest(people.jonas, "sub_jonas4", now - 20 * d, { tier: 2, origin: "model", modelVersion: "3.2", startMs: 3729400, endMs: 3750800 }),
     attest(people.priya, "sub_priya3", now - 34 * d, { tier: 2, implicit: true, origin: "download" }),
-    attest(people.theo, "sub_theo1", now - 53 * d, { kind: "dispute", counted: false, tier: 2, endMs: 3755000 })],
+    attest(people.theo, "sub_theo1", now - 53 * d, { kind: "dispute", counted: false, tier: 2, endMs: 3755000 }),
+    attest(people.omar, "sub_omar2", now - 8 * d, { entryId: "cov:f_gore", kind: "coverage_negative", implicit: true, counted: false, tier: 2,
+      startMs: null, endMs: null, alignedStartMs: null, alignedEndMs: null, origin: null })],
   reports: [{ reportId: "r_gore", contributor: people.ana, reason: "inaccurate", note: "Ends about four seconds early; the scene continues until 01:02:35.",
     state: "open", at: now - 21 * h, moderation: token("report:r_gore") }],
   moderation: [{ actionId: "a-exclude-sam", actor: "ryan@example.org", resource: `vote:f_gore:${people.sam.contributorId}`, command: "exclude_vote",

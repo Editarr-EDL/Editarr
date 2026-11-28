@@ -1,5 +1,5 @@
 import { activityFixture, auditFixture as auditPageFixture, backupsFixture, filterContextFixture, healthFixture, itemDetailFixture, itemsFixture, leaderboardFixture,
-  profileFixture, queueFixture, runsFixture, stagedFixture, searchFixture, trendFixture, versionDetailFixture } from "./test-fixtures-pages";
+  profileFixture, queueFixture, runsFixture, stagedFixture, searchFixture, trendFixture, versionDetailFixture, olderRevisionsFixture } from "./test-fixtures-pages";
 import { homeFixture } from "./test-fixtures-insights";
 
 export const operatorTimestamp = Date.parse("2026-11-25T12:00:00Z");
@@ -75,7 +75,7 @@ function insightFixture(path: string, query: URLSearchParams): unknown {
   if (route === "home") return { ...homeFixture, period: query.get("period") ?? "7d" };
   if (route === "items") return itemsFixture;
   if (/^items\/[^/]+$/.test(route)) return itemDetailFixture;
-  if (/^items\/[^/]+\/versions\/[^/]+$/.test(route)) return versionDetailFixture;
+  if (/^items\/[^/]+\/versions\/[^/]+$/.test(route)) return query.get("before") ? olderRevisionsFixture : versionDetailFixture;
   if (/^filters\/[^/]+\/context$/.test(route)) return filterContextFixture;
   if (route === "activity") return activityFixture;
   if (route === "contributors/leaderboard") return { ...leaderboardFixture, period: query.get("period") ?? "30d", metric: query.get("metric") ?? "accepted" };

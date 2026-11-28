@@ -1,7 +1,10 @@
 import type { RevisionCause, RevisionDelta } from "../../../api/api-community-operator-labels";
 import { contributorLink } from "../routes";
 
-/** "+3 filters, −1, 2 retimed" coloured by change kind; "no served change" when nothing moved. */
+/**
+ * "+3 filters, −1, 2 retimed" coloured by change kind. "No served change" only when every delta is known to be zero;
+ * unknown (null) deltas add "other changes unavailable" so a pruned snapshot is never reported as unchanged.
+ */
 export function RevisionChanges({ delta }: { delta: RevisionDelta }) {
   if ([delta.added, delta.removed, delta.retimed, delta.recategorised].every(value => value === null))
     return <span className="muted">{delta.filters === null ? "changes unavailable" : `${delta.filters} served filters`}</span>;
@@ -11,8 +14,9 @@ export function RevisionChanges({ delta }: { delta: RevisionDelta }) {
     delta.retimed ? <span key="t" className="chg">{delta.retimed} retimed</span> : null,
     delta.recategorised ? <span key="c" className="chg">{delta.recategorised} recategorised</span> : null,
   ].filter(Boolean);
-  if (!parts.length) return <span className="muted">no served change</span>;
-  return <span>{parts.flatMap((part, index) => index ? [", ", part] : [part])}</span>;
+  const unknown = [delta.added, delta.removed, delta.retimed, delta.recategorised].some(value => value === null);
+  if (!parts.length) return <span className="muted">{unknown ? "no known changes; other changes unavailable" : "no served change"}</span>;
+  return <span>{parts.flatMap((part, index) => index ? [", ", part] : [part])}{unknown && <span className="muted">; other changes unavailable</span>}</span>;
 }
 
 /** Why a revision happened: an upload (linked contributor), an operator action or vote movement. */

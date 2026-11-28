@@ -1,22 +1,25 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 import { operatorFixture } from "../src/settings/community-operator/test-fixtures";
+import { now } from "../src/settings/community-operator/test-fixtures-insights";
 
 export const operatorCsp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 
 /** Serve the operator page with the production CSP and pin the clock to the fixture time. */
 export async function strictOperatorPage(page: Page) {
-  await page.clock.setFixedTime(new Date("2026-11-27T18:00:00Z"));
+  await page.clock.setFixedTime(new Date(now));
   await page.route("**/admin/", async route => {
     const response = await route.fetch();
     await route.fulfill({ response, headers: { ...response.headers(), "Content-Security-Policy": operatorCsp } });
   });
 }
 /**
- * Answer operator API reads from the synthetic fixtures; `handle` may answer first (return a value to send as JSON,
+ * Pin the page clock to the fixture time and answer operator API reads from the synthetic fixtures; `handle` may answer first (return a value to send as JSON,
  * or a full fulfil options object with `status`), and returns undefined to fall through.
  */
 export async function mockOperatorApi(page: Page, handle?: (path: string, method: string, body: unknown) => unknown) {
+  // Relative ages in the fixtures ("15 d", "Today · 03:30") are pinned to the fixture clock, not the real date.
+  await page.clock.setFixedTime(new Date(now));
   await page.route("**/admin/v1/**", route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname + url.search;
     const custom = handle?.(path, request.method(), request.method() === "GET" ? null : request.postDataJSON());

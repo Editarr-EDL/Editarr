@@ -53,12 +53,14 @@ export function FilterCard({ context, fresh, onApplied }: { context: FilterConte
       <ul className="rows">{attestations.map(entry => <li className="row" key={`${entry.submissionId}:${entry.entryId ?? ""}`}>
         <Avatar person={entry.contributor} /><div className="grow"><a className="actor" href={contributorLink(entry.contributor.contributorId)}>
           {entry.contributor.displayName}</a> · {attestationOrigin(entry)}
-          {entry.kind !== "support" && <span className="warn-text"> · {entry.kind.replace(/_/g, " ")}</span>}
+          {entry.kind !== "support" && !entry.implicit && <span className="warn-text"> · {entry.kind.replace(/_/g, " ")}</span>}
           {!entry.counted && <span className="warn-text"> · not counted</span>}{entry.quarantined && <span className="chip bad mini">quarantined</span>}
           <div>{[entry.at ? shortDate(entry.at) : null, entry.tier !== null ? `tier ${entry.tier}` : null,
-            entry.implicit ? "implicit support" : `${timecode(entry.startMs)}–${timecode(entry.endMs)}`].filter(Boolean).join(" · ")} ·{" "}
-            <a href={operatorLink("inspect", { kind: "attestation", selected: `${entry.submissionId}:${entry.entryId}` })}>
-              Inspect<span className="sr"> {entry.contributor.displayName}'s attestation</span></a></div></div></li>)}
+            entry.implicit ? `implicit ${entry.kind === "coverage_negative" ? "coverage negative" : "support"}`
+              : `${timecode(entry.startMs)}–${timecode(entry.endMs)}`].filter(Boolean).join(" · ")}
+            {/* Implicit attestations have no submission entry to inspect. */}
+            {!entry.implicit && <>{" · "}<a href={operatorLink("inspect", { kind: "attestation", selected: `${entry.submissionId}:${entry.entryId}` })}>
+              Inspect<span className="sr"> {entry.contributor.displayName}'s attestation</span></a></>}</div></div></li>)}
         {!attestations.length && <li className="muted small">No attesting uploads.</li>}</ul>
     </section>
     <section className="sec" aria-labelledby="filter-reports"><h3 id="filter-reports">Reports <small>{open.length} open</small></h3>

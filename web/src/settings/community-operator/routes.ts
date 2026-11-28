@@ -37,8 +37,9 @@ export function operatorLink(path: string, params: Params = {}) {
 /** Push a new history entry for a hash link. */
 export function navigate(href: string) { window.location.hash = href.slice(1); }
 
-export const itemLink = (workId: string, versionId?: string | null, filterId?: string | null) =>
-  operatorLink(`items/${workId}`, { version: versionId, filter: filterId });
+/** An item page, optionally with a version, selected filter and revision-history cursor (`before`). */
+export const itemLink = (workId: string, versionId?: string | null, filterId?: string | null, before?: string | null) =>
+  operatorLink(`items/${workId}`, { version: versionId, filter: filterId, before });
 export const contributorLink = (contributorId: string) => operatorLink("contributors", { selected: contributorId });
 /** Where a resource is shown: filters on their item, contributors in their profile, versions/reports/suggestions in their lists, others in the inspector. */
 export function resourceLink(kind: OperatorResource, id: string, contributor?: string) {
@@ -48,4 +49,11 @@ export function resourceLink(kind: OperatorResource, id: string, contributor?: s
   if (kind === "report") return operatorLink("reports", { selected: id });
   if (kind === "alias_suggestion") return operatorLink("aliases", { filter: "all", selected: id });
   return operatorLink("inspect", { kind, selected: id, contributor });
+}
+
+const searchKinds = new Set(["filter", "attestation", "submission", "contributor", "version", "vote", "report", "alias_suggestion"]);
+/** Where an exact-ID search hit of `kind` (from `GET /admin/v1/search` `ids`) opens. */
+export function searchIdLink(kind: string, id: string) {
+  if (kind === "work" || kind === "item") return itemLink(id);
+  return searchKinds.has(kind) ? resourceLink(kind as OperatorResource, id) : operatorLink("inspect");
 }

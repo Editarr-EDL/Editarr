@@ -1,10 +1,11 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, screen, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
-import { renderOperator, stubOperatorFetch } from "../test-render";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { renderOperator, stubOperatorFetch, pinFixtureClock } from "../test-render";
 import { ContributorsPage } from "./contributors-page";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+beforeEach(() => pinFixtureClock());
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("ranks contributors by accepted filters and profiles the selection with account actions", async () => {
   const fetcher = stubOperatorFetch();

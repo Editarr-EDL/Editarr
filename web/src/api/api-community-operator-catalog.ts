@@ -36,6 +36,9 @@ export interface FilterContext { version: 1; observedAt: number; filter: FilterS
 export interface SearchId { kind: string; id: string; label: string }
 export interface SearchResult { version: 1; observedAt: number; q: string; items: ItemRef[]; contributors: ContributorRef[]; ids: SearchId[] }
 
+/** A submission entry ID, or the synthetic `cov:<filterId>` of an implicit coverage-negative attestation. */
+const attestationEntry = (value: unknown) => identifier(value) ||
+  (typeof value === "string" && value.startsWith("cov:") && identifier(value.slice(4)));
 const big = { maxBytes: 4194304 };
 const status = oneOf("confirmed", "candidate", "merged_into"), at = nullable(number);
 const versionFields = { versionId: identifier, label: text, status, quarantined: boolean, runtimeMs: nullable(number), revision: number };
@@ -61,7 +64,7 @@ const versionDetail = fields({ ...envelope, item: itemRef,
 const filterContext = fields({ ...envelope, filter: filterStats, item: nullable(itemRef), versionLabel: nullable(versionRef),
   votes: array(fields({ contributor: contributorRef, vote: oneOf("up", "down"), excluded: boolean, revision: nullable(number), at,
     moderation: moderationToken }), 200),
-  attestations: array(fields({ contributor: contributorRef, submissionId: identifier, entryId: identifier, kind: text, implicit: boolean,
+  attestations: array(fields({ contributor: contributorRef, submissionId: identifier, entryId: attestationEntry, kind: text, implicit: boolean,
     counted: boolean, tier: nullable(number), at, startMs: nullable(integer), endMs: nullable(integer), alignedStartMs: nullable(integer),
     alignedEndMs: nullable(integer), origin: nullable(text), manualReview: nullable(boolean), locallyVerified: nullable(boolean),
     modelVersion: nullable(text), ignoredReason: nullable(text), quarantined: boolean }), 200),

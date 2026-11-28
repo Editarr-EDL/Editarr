@@ -1,10 +1,10 @@
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { renderOperator, stubOperatorFetch } from "../test-render";
+import { renderOperator, stubOperatorFetch, pinFixtureClock } from "../test-render";
 import { GlobalSearch } from "./global-search";
 
-beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); window.location.hash = "#/home"; });
+beforeEach(() => { pinFixtureClock(true); window.location.hash = "#/home"; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("never shows or opens an earlier query's results while a new query is pending", async () => {

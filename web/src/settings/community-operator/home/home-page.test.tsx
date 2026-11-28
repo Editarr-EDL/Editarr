@@ -1,11 +1,11 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { enableDialogs, renderOperator, stubOperatorFetch } from "../test-render";
+import { enableDialogs, renderOperator, stubOperatorFetch, pinFixtureClock } from "../test-render";
 import { HomePage } from "./home-page";
 
-beforeEach(enableDialogs);
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+beforeEach(() => { pinFixtureClock(); enableDialogs(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("summarises the period, decisions, updates, leaders and service health", async () => {
   const fetcher = stubOperatorFetch();

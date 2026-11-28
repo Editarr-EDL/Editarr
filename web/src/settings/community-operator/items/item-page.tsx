@@ -5,7 +5,8 @@ import { DataState, useOperator, useOperatorData } from "../shared/operator-data
 import { Poster } from "../shared/ui";
 import { itemLink, navigate } from "../routes";
 import { FilterCard } from "./filter-card";
-import { FilterTable, RevisionHistory } from "./filter-table";
+import { FilterTable } from "./filter-table";
+import { RevisionHistory } from "./revision-history";
 import { RuntimeTimeline } from "./runtime-timeline";
 import { VersionActions } from "./version-actions";
 
@@ -18,6 +19,11 @@ export function ItemPage({ workId, params }: { workId: string; params: Record<st
   const selected = versions.find(version => version.versionId === params.version) ?? confirmed[0] ?? versions[0] ?? null;
   const versionId = selected?.versionId ?? null, filterId = params.filter ?? null;
   const detail = useOperatorData(`version:${workId}:${versionId}`, signal => readOperatorVersionDetail(workId, versionId!, signal), !!versionId);
+  // Older revision pages load separately so the timeline and filter table stay in place while history pages.
+  const before = params.before ?? null;
+  const history = useOperatorData(`version:${workId}:${versionId}:before:${before}`,
+    signal => readOperatorVersionDetail(workId, versionId!, signal, before), !!versionId && !!before);
+  const revisions = before ? history.data : detail.data;
   const context = useOperatorData(`filter:${filterId}`, signal => readOperatorFilterContext(filterId!, signal), !!filterId);
   useEffect(() => { if (item.data) document.getElementById("page-title")?.focus({ preventScroll: true }); }, [!!item.data]);
   const refresh = () => { item.refresh(); detail.refresh(); context.refresh(); refreshCounts(); };
@@ -59,7 +65,10 @@ export function ItemPage({ workId, params }: { workId: string; params: Record<st
           {detail.data && selected && <>
             <RuntimeTimeline filters={detail.data.filters} runtimeMs={selected.runtimeMs} selected={filterId} href={filterHref} revision={selected.revision} />
             <FilterTable filters={detail.data.filters} selected={filterId} href={filterHref} />
-            <RevisionHistory revisions={detail.data.revisions} label={versionName(selected)} />
+            {before && <DataState status={history.status} onRetry={history.refresh} />}
+            {revisions && <RevisionHistory revisions={revisions.revisions} label={versionName(selected)} busy={before ? history.status === "loading" : false}
+              older={revisions.revisionsNextCursor ? itemLink(workId, versionId, filterId, revisions.revisionsNextCursor) : null}
+              newest={before ? itemLink(workId, versionId, filterId) : null} />}
           </>}
         </div>
         <div className="col">

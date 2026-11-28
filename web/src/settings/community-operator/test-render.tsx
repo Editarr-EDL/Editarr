@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 import { OperatorContext, type OperatorServices } from "./shared/operator-data";
 import { operatorFixture } from "./test-fixtures";
+import { now } from "./test-fixtures-insights";
 
 /**
  * Stub `fetch` with the synthetic operator fixtures; `handle` may answer a request first (return a Response, a pending
@@ -29,4 +30,11 @@ export function renderOperator(ui: ReactNode, services: Partial<OperatorServices
 /** Make `HTMLDialogElement.showModal` work in jsdom. */
 export function enableDialogs() {
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } });
+}
+/**
+ * Pin the clock to the fixture time so relative ages ("15 d", "2 h ago") never depend on the real date; time still advances.
+ * Pair with `vi.useRealTimers()` in cleanup. Pass `timers` to fake timers too (for polling and debounce tests).
+ */
+export function pinFixtureClock(timers = false) {
+  vi.useFakeTimers({ now, shouldAdvanceTime: true, ...(timers ? {} : { toFake: ["Date"] }) });
 }

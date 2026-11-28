@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readOperatorQueue, type QueueCounts } from "../../../api/api-community-operator-community";
 import { readOperatorHealth, type OperatorHealth } from "../../../api/api-community-operator-system";
 import { accessFailureStatus } from "../../../api/api-community-operator";
@@ -27,6 +27,7 @@ function useNarrow() {
 export function OperatorApp({ session, onAccessFailure, onReverify }: { session: OperatorSession;
   onAccessFailure: (status: number) => void; onReverify: () => void }) {
   const [route, setRoute] = useState<OperatorRoute>(() => operatorRoute());
+  const page = useRef(route);
   const [drawer, setDrawer] = useState(false);
   const [counts, setCounts] = useState<QueueCounts | null>(null);
   const [health, setHealth] = useState<OperatorHealth | null>(null);
@@ -35,7 +36,12 @@ export function OperatorApp({ session, onAccessFailure, onReverify }: { session:
   const [, setTick] = useState(0);
   const narrow = useNarrow();
   useEffect(() => {
-    const changed = () => { setRoute(operatorRoute()); setDrawer(false); window.scrollTo?.(0, 0); };
+    const changed = () => {
+      const next = operatorRoute();
+      // Scroll to the top for a new page; parameter changes on the same page (filters, history pages) keep the position.
+      if (next.page !== page.current.page || next.path.join("/") !== page.current.path.join("/")) window.scrollTo?.(0, 0);
+      page.current = next; setRoute(next); setDrawer(false);
+    };
     window.addEventListener("hashchange", changed);
     const timer = window.setInterval(() => setTick(value => value + 1), 10000);
     return () => { window.removeEventListener("hashchange", changed); window.clearInterval(timer); };

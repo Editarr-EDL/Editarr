@@ -1,12 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { stubOperatorFetch } from "../test-render";
+import { stubOperatorFetch, pinFixtureClock } from "../test-render";
 import { operatorLink, operatorRoute } from "../routes";
 import { OperatorApp } from "./operator-app";
 
-beforeEach(() => { window.location.hash = "#/home"; });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+beforeEach(() => { pinFixtureClock(); window.location.hash = "#/home"; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const mount = (onAccessFailure = vi.fn()) => render(<OperatorApp session={{ version: 1, subject: "ryan@example.org" }}
   onAccessFailure={onAccessFailure} onReverify={vi.fn()} />);
 const go = (hash: string) => act(() => { window.location.hash = hash; window.dispatchEvent(new HashChangeEvent("hashchange")); });
